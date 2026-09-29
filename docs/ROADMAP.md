@@ -8,12 +8,12 @@
 | M1 | Kiracılık ve kimlik | Kayıt/giriş, şirket kurulumu, RBAC, RLS, denetim izi, uygulama kabuğu, i18n, sektöre göre menü |
 | M2 | Ayarlar | Para birimi ve kur, KDV oranları (doğrulama alanlı), mali dönemler, özel kodlar, boşluksuz numaralama |
 | M3 | Genel muhasebe | Hesap planı, yevmiye (taslak/kaydet/ters kayıt/dövizli), dönem kilidi, mizan, hesap ekstresi |
+| M4 | Cari | Müşteri/tedarikçi kartı, cari kontrol hesabı kuralı, ekstre, vadeye göre yaşlandırma, açık kalemler (FIFO); Merkez Bankası XML kur içe aktarma; Türkçe sıralama/arama |
 
 ## MVP'ye kalan (Çekirdek ERP)
 
 | # | Kilometre taşı | İçerik |
 |---|---|---|
-| M4 | Cari | Müşteri/tedarikçi kartı, ekstre, açık kalemler, yaşlandırma |
 | M5 | Stok | Stok kartı, depo, hareketler, ağırlıklı ortalama maliyet, sayım |
 | M6 | Fatura ve irsaliye | Satış/alış/gider/iade → stok + cari + yevmiyeye otomatik kayıt |
 | M7 | Kasa ve banka | Tahsilat/ödeme, virman, döviz alım-satım, kur farkı kâr/zararı, eşleştirme |

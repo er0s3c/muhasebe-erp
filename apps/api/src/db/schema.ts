@@ -260,6 +260,45 @@ export const fiscalPeriods = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Cari (müşteri / tedarikçi)
+// ---------------------------------------------------------------------------
+
+export const parties = pgTable(
+  'parties',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    kind: text().notNull().default('customer'),
+    taxNumber: text(),
+    taxOffice: text(),
+    phone: text(),
+    email: text(),
+    address: text(),
+    currencyCode: text()
+      .notNull()
+      .default('TRY')
+      .references(() => currencies.code),
+    creditLimit: money(),
+    paymentTermDays: integer().notNull().default(0),
+    notes: text(),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('parties_company_code_uq').on(t.companyId, t.code),
+    unique('parties_id_company_uq').on(t.id, t.companyId),
+    index('parties_name_idx').on(t.companyId, t.name),
+    check('parties_kind_ck', sql`${t.kind} in ('customer','supplier','both')`),
+    check('parties_term_ck', sql`${t.paymentTermDays} between 0 and 365`),
+  ],
+);
+
+
+// ---------------------------------------------------------------------------
 // Genel muhasebe
 // ---------------------------------------------------------------------------
 
@@ -276,11 +315,14 @@ export const accounts = pgTable(
     parentId: uuid(),
     isPostable: boolean().notNull().default(true),
     currencyCode: text().references(() => currencies.code),
+    /** Cari kontrol hesabı: 'receivable' (müşteri, 120) / 'payable' (tedarikçi, 320). Alt hesaplar devralır. */
+    partyControl: text(),
     isActive: boolean().notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [
     unique('accounts_company_code_uq').on(t.companyId, t.code),
+    check('accounts_party_control_ck', sql`${t.partyControl} in ('receivable','payable')`),
     unique('accounts_id_company_uq').on(t.id, t.companyId),
     foreignKey({
       name: 'accounts_parent_fk',
@@ -368,8 +410,10 @@ export const journalLines = pgTable(
     /** Yönetim raporlama para birimi karşılığı; şirkette tanımlı değilse null. */
     debitReporting: money(),
     creditReporting: money(),
-    /** Cari kartı bağı: M4'te FK eklenecek. */
+    /** Cari kontrol hesabı satırlarında zorunlu, diğerlerinde yasak (DB tetikleyicisi denetler). */
     partyId: uuid(),
+    /** Yaşlandırma vadeye göre yapılır; yoksa fiş tarihi kullanılır. */
+    dueDate: date({ mode: 'string' }),
   },
   (t) => [
     foreignKey({
@@ -382,8 +426,14 @@ export const journalLines = pgTable(
       columns: [t.accountId, t.companyId],
       foreignColumns: [accounts.id, accounts.companyId],
     }),
+    foreignKey({
+      name: 'journal_lines_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
     unique('journal_lines_entry_line_uq').on(t.entryId, t.lineNo),
     index('journal_lines_account_idx').on(t.companyId, t.accountId),
+    index('journal_lines_party_idx').on(t.companyId, t.partyId),
     check(
       'journal_lines_side_ck',
       sql`${t.debit} >= 0 and ${t.credit} >= 0 and ((${t.debit} > 0) <> (${t.credit} > 0))`,

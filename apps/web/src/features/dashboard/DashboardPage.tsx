@@ -1,5 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-import { ArrowRight, CheckCircle2, Circle, FileEdit, FileCheck2, Scale } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Circle, FileEdit, FileCheck2, Scale, TrendingDown, TrendingUp } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -10,7 +10,7 @@ import { cn } from '../../lib/cn';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCQuery, useCompanyApi } from '../../lib/queries';
 import { useSession } from '../../lib/session';
-import type { JournalListItem, Member, TaxRate, TrialBalanceData } from '../../lib/types';
+import type { AgingReport, JournalListItem, Member, TaxRate, TrialBalanceData } from '../../lib/types';
 
 interface Step {
   key: string;
@@ -45,10 +45,13 @@ export function DashboardPage() {
   const canLedger = can('ledger.read');
   const canReports = can('reports.read');
   const canMembers = can('members.manage');
+  const canParties = can('parties.read');
 
   const { data: posted } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'posted'], `/api/journal-entries?status=posted&limit=200&from=${year}-01-01`, { enabled: canLedger });
   const { data: drafts } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'drafts'], '/api/journal-entries?status=draft&limit=200', { enabled: canLedger });
   const { data: tb } = useCQuery<TrialBalanceData>(['dashboard', 'tb'], `/api/reports/trial-balance?from=${year}-01-01&to=${today}&currency=base`, { enabled: canReports });
+  const { data: recv } = useCQuery<AgingReport>(['dashboard', 'recv'], `/api/reports/party-aging?type=receivable&asOf=${today}`, { enabled: canParties });
+  const { data: pay } = useCQuery<AgingReport>(['dashboard', 'pay'], `/api/reports/party-aging?type=payable&asOf=${today}`, { enabled: canParties });
   const { data: taxes } = useCQuery<{ taxRates: TaxRate[] }>(['dashboard', 'tax'], '/api/tax-rates');
   const { data: members } = useCQuery<{ members: Member[] }>(['dashboard', 'members'], '/api/company/members', { enabled: canMembers });
 
@@ -102,6 +105,17 @@ export function DashboardPage() {
                 tone={balanced === null ? 'brand' : balanced ? 'success' : 'danger'}
               />
             )}
+          </div>
+        )}
+
+        {canParties && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Link to="/parties/aging" className="block rounded-xl transition-shadow hover:shadow-pop" aria-label={t('dashboard.receivables')}>
+              <Kpi icon={<TrendingUp className="size-5" />} label={t('dashboard.receivables')} value={recv ? `${money(recv.totals.total)} ${company.baseCurrency}` : '—'} tone="success" />
+            </Link>
+            <Link to="/parties/aging" className="block rounded-xl transition-shadow hover:shadow-pop" aria-label={t('dashboard.payables')}>
+              <Kpi icon={<TrendingDown className="size-5" />} label={t('dashboard.payables')} value={pay ? `${money(pay.totals.total)} ${company.baseCurrency}` : '—'} tone="warning" />
+            </Link>
           </div>
         )}
 

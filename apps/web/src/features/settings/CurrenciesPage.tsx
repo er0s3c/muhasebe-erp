@@ -1,5 +1,5 @@
-import { Coins, RefreshCw, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Coins, FileUp, Landmark, RefreshCw, Trash2 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CURRENCY_CODES, todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
@@ -14,6 +14,13 @@ import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { Rate } from '../../lib/types';
+
+interface ImportResult {
+  date: string;
+  announcementNo: string | null;
+  imported: { currency: string; buy: string; sell: string }[];
+  skipped: string[];
+}
 
 export function CurrenciesPage() {
   const { t } = useTranslation();
@@ -50,6 +57,30 @@ export function CurrenciesPage() {
   const remove = useCMutation((id: string, call) => call(`/api/exchange-rates/${id}`, { method: 'DELETE' }), [['rates']]);
   const backfill = useCMutation((_: void, call) => call<{ updated: number; stillMissing: number }>('/api/ledger/backfill-reporting', { method: 'POST' }), [['trial-balance'], ['rates']]);
 
+  const importRates = useCMutation(
+    (v: { source: 'kktcmb'; date?: string } | { source: 'xml'; xml: string }, call) =>
+      call<ImportResult>('/api/exchange-rates/import', { method: 'POST', body: v }),
+    [['rates'], ['dashboard']],
+  );
+  const fileRef = useRef<HTMLInputElement>(null);
+  const onImported = (r: ImportResult) =>
+    toast.success(
+      t('settings.currencies.imported', {
+        source: `KKTCMB${r.announcementNo ? ` ${r.announcementNo}` : ''}`,
+        date: formatDateTR(r.date),
+        summary: r.imported.map((i) => `${i.currency} ${money(i.buy, 4)}`).join(' · '),
+      }),
+    );
+  const importFromBank = () =>
+    importRates.mutate(
+      { source: 'kktcmb', ...(date !== todayIso() ? { date } : {}) },
+      { onSuccess: onImported, onError: (e) => toast.error(errorMessage(e)) },
+    );
+  const importFromFile = async (file: File) => {
+    if (file.size > 500_000) return toast.error(t('errors.RATE_XML_INVALID'));
+    importRates.mutate({ source: 'xml', xml: await file.text() }, { onSuccess: onImported, onError: (e) => toast.error(errorMessage(e)) });
+  };
+
   const anyFilled = Object.values(values).some((v) => v.buy !== '');
 
   return (
@@ -63,27 +94,52 @@ export function CurrenciesPage() {
             <CardHeader
               title={t('settings.currencies.quickEntry')}
               action={
-                company.reportingCurrency ? (
-                  <Button
-                    size="sm"
-                    loading={backfill.isPending}
-                    onClick={() =>
-                      backfill.mutate(undefined, {
-                        onSuccess: (r) => toast.success(t('settings.currencies.backfilled', { updated: r.updated, missing: r.stillMissing })),
-                        onError: (e) => toast.error(errorMessage(e)),
-                      })
-                    }
-                  >
-                    <RefreshCw className="size-3.5" aria-hidden />
-                    {t('settings.currencies.backfill')}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Button size="sm" loading={importRates.isPending} onClick={importFromBank}>
+                    <Landmark className="size-3.5" aria-hidden />
+                    {t('settings.currencies.importKktcmb')}
                   </Button>
-                ) : undefined
+                  <Button size="sm" disabled={importRates.isPending} onClick={() => fileRef.current?.click()}>
+                    <FileUp className="size-3.5" aria-hidden />
+                    {t('settings.currencies.importFile')}
+                  </Button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".xml,text/xml,application/xml"
+                    className="sr-only"
+                    aria-label={t('settings.currencies.importFile')}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) void importFromFile(file);
+                    }}
+                  />
+                  {company.reportingCurrency && (
+                    <Button
+                      size="sm"
+                      loading={backfill.isPending}
+                      onClick={() =>
+                        backfill.mutate(undefined, {
+                          onSuccess: (r) => toast.success(t('settings.currencies.backfilled', { updated: r.updated, missing: r.stillMissing })),
+                          onError: (e) => toast.error(errorMessage(e)),
+                        })
+                      }
+                    >
+                      <RefreshCw className="size-3.5" aria-hidden />
+                      {t('settings.currencies.backfill')}
+                    </Button>
+                  )}
+                </div>
               }
             />
             <div className="p-5">
-              <Field label={t('settings.currencies.rateDate')} className="mb-5 max-w-48">
-                {(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}
-              </Field>
+              <div className="mb-5 flex flex-wrap items-end gap-x-6 gap-y-2">
+                <Field label={t('settings.currencies.rateDate')} className="w-48">
+                  {(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}
+                </Field>
+                <p className="max-w-xl pb-2 text-xs text-muted">{t('settings.currencies.importInfo')}</p>
+              </div>
               <div className="grid gap-4 md:grid-cols-3">
                 {foreign.map((code) => {
                   const last = latest[code];

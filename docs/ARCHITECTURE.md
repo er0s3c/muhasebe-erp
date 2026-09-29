@@ -39,6 +39,18 @@ Tek veritabanı, tek API. Sektöre özgü davranış ayrı dağıtımlarla deği
 - Kur arama: doğrudan → ters (1/kur) → defter para birimi üzerinden üçgenleme. Kayıtlı kur en fazla 10 gün eskiyse geçerlidir (hafta sonu/bayram payı); aksi halde `FX_RATE_MISSING`.
 - **Raporlama para birimi tutarı türetilmiş yönetim verisidir:** kur yoksa kayıt engellenmez, tutar `NULL` kalır. Mizan eksik satır sayısını uyarır; kur girildikten sonra `POST /api/ledger/backfill-reporting` doldurur.
 
+## Cari (müşteri/tedarikçi)
+
+- Cari hareket ayrı bir defter değildir: **cari kontrol hesabı** (`accounts.party_control` = `receivable` için 120, `payable` için 320; alt hesaplar devralır) satırları bir cariye (`journal_lines.party_id`) bağlanır. Böylece tek doğruluk kaynağı yevmiye defteridir.
+- Kural hem uygulamada (`prepareLines`: `PARTY_REQUIRED`, `PARTY_NOT_ALLOWED`, `PARTY_KIND_MISMATCH`, `PARTY_INACTIVE`) hem de veritabanında (`journal_lines_guard`) uygulanır; başka şirketin carisine bağlanmak bileşik yabancı anahtarla (`(party_id, company_id)`) imkânsızdır.
+- **Bakiye** = borç − alacak (defter para birimi). Ekstre yürüyen bakiye ve para birimi bazında (orijinal tutar) bakiye verir; taslaklar hesaba girmez, ters kayıt aynı cariye işler.
+- **Açık kalem ve yaşlandırma** (`modules/parties/aging.ts`, saf fonksiyon): alacak tarafında borç satırları, borç tarafında alacak satırları "kalem"dir; karşı taraf toplamı en eski **vadeden** (yoksa fiş tarihinden) başlayarak uygulanır (FIFO). Uygulanamayan fazla ödeme "avans" olarak ayrı gösterilir. Kovalar: vadesi gelmemiş, 1–30, 31–60, 61–90, 90+ gün. Fatura–tahsilat elle eşleştirme (M7) bu hesabın üstüne gelecek.
+- **Türkçe sıralama/arama:** cari listesi `COLLATE "tr-TR-x-icu"` ile sıralanır ve arar (Ç, Ğ, İ, Ö, Ş, Ü doğru yerde; İ→i, I→ı). PostgreSQL'in ICU desteğiyle derlenmiş olması gerekir (resmî Docker imajı, Ubuntu/Debian paketleri ve EDB kurucusunda vardır).
+
+## Kur içe aktarma
+
+`POST /api/exchange-rates/import`: `{ source: 'kktcmb', date? }` resmî adresten indirir, `{ source: 'xml', xml }` yüklenen dosyayı kullanır. İndirme fonksiyonu (`app.rateFetcher`) test için değiştirilebilir. Ayrıntı ve güvenlik notları: [LEGAL-NOTES.md](LEGAL-NOTES.md) §6.
+
 ## Sektör/modül yalıtımı
 
 `packages/shared/src/module-registry.ts` tek doğruluk kaynağıdır: her modül `{key, sectors, status}`; menü öğeleri `{module, permission}` taşır.

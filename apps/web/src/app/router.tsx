@@ -47,6 +47,14 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="core.parties" />,
+                children: [
+                  { path: 'parties', ...page(() => import('../features/parties/PartiesPage'), 'PartiesPage') },
+                  { path: 'parties/aging', ...page(() => import('../features/parties/PartyAgingPage'), 'PartyAgingPage') },
+                  { path: 'parties/:id', ...page(() => import('../features/parties/PartyDetailPage'), 'PartyDetailPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="core.settings" />,
                 children: [
                   { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage') },

@@ -26,7 +26,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         })
         .from(memberships)
         .innerJoin(users, eq(users.id, memberships.userId))
-        .orderBy(users.fullName);
+        .orderBy(sql`${users.fullName} collate "tr-TR-x-icu"`);
       return { members: rows };
     }),
   );

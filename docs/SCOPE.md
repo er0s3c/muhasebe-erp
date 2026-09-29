@@ -33,10 +33,12 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 
 | İşlev | Durum |
 |---|---|
-| Cari kart (kimlik, vergi, iletişim, para birimi, limit) ve hızlı kart girişi | 🔜 M4 |
-| Cari ekstre, hareket dökümü, yaşlandırma, açık kalemler | 🔜 M4 |
-| Tahsilat ve ödeme kaydı; fatura ile eşleştirme, kısmi/fazla ödeme, avans | 🔜 M4/M7 |
-| Borç/alacak dekontu (mahsup), devir işlemleri | 🔜 M4 |
+| Cari kart (kimlik, vergi, iletişim, para birimi, kredi limiti, vade) — müşteri/tedarikçi/her ikisi | ✅ |
+| Cari ekstre (yürüyen bakiye, para birimi bazında bakiye), vadeye göre yaşlandırma, açık kalemler (FIFO) | ✅ |
+| Cari kontrol hesabı kuralı: 120/320 satırlarında cari zorunlu, diğer hesaplarda yasak (uygulama + veritabanı) | ✅ |
+| Tahsilat/ödeme kaydı yevmiye ile girilebilir; fatura ile **elle eşleştirme**, kur farkı | 🔜 M7 |
+| Fazla ödeme/avans yaşlandırmada ayrı gösterilir | ✅ |
+| Borç/alacak dekontu (mahsup) yevmiye ile; devir işlemleri | 🔜 M8/M9 |
 | Cari özel fiyat/iskonto | ⏳ |
 | Personel cari ve avans takibi | ⏳ (bordro ile) |
 
@@ -81,7 +83,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 |---|---|
 | Elle kur girişi (alış/satış), tarihe göre arama, üçgenleme | ✅ |
 | Kurdan eksik raporlama tutarlarını sonradan doldurma | ✅ |
-| Kurların resmî kaynaktan otomatik çekilmesi | ⏳ Faz C ⚠️ |
+| Merkez Bankası kurlarını resmî adresten getir veya XML dosyası yükle (elle tetiklenir) | ✅ ⚠️ kullanım şartı doğrulanmadı |
+| Kurların zamanlanmış otomatik çekimi | ⏳ ⚠️ |
 | Tarih aralıklı KDV oranları, doğrulama işareti | ✅ ⚠️ oranlar doğrulanmadı |
 | KDV/stopaj/BSİV beyannameleri | ⏳ Faz C ⚠️ |
 

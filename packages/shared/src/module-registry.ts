@@ -21,6 +21,7 @@ export interface ModuleDef {
 export const MODULES: readonly ModuleDef[] = [
   { key: 'core.dashboard', labelKey: 'modules.dashboard', sectors: 'all', status: 'available' },
   { key: 'core.ledger', labelKey: 'modules.ledger', sectors: 'all', status: 'available' },
+  { key: 'core.parties', labelKey: 'modules.parties', sectors: 'all', status: 'available' },
   { key: 'core.settings', labelKey: 'modules.settings', sectors: 'all', status: 'available' },
   {
     key: 'construction.projects',
@@ -36,7 +37,7 @@ export const MODULES: readonly ModuleDef[] = [
   },
 ];
 
-export type NavGroupKey = 'overview' | 'accounting' | 'settings';
+export type NavGroupKey = 'overview' | 'parties' | 'accounting' | 'settings';
 
 export interface NavItemDef {
   key: string;
@@ -51,6 +52,7 @@ export interface NavItemDef {
 
 export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
   { key: 'overview', labelKey: 'nav.groups.overview' },
+  { key: 'parties', labelKey: 'nav.groups.parties' },
   { key: 'accounting', labelKey: 'nav.groups.accounting' },
   { key: 'settings', labelKey: 'nav.groups.settings' },
 ];
@@ -63,6 +65,24 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     icon: 'layout-dashboard',
     group: 'overview',
     module: 'core.dashboard',
+  },
+  {
+    key: 'parties',
+    labelKey: 'nav.parties',
+    path: '/parties',
+    icon: 'contact',
+    group: 'parties',
+    module: 'core.parties',
+    permission: 'parties.read',
+  },
+  {
+    key: 'party-aging',
+    labelKey: 'nav.partyAging',
+    path: '/parties/aging',
+    icon: 'hourglass',
+    group: 'parties',
+    module: 'core.parties',
+    permission: 'parties.read',
   },
   {
     key: 'journal',

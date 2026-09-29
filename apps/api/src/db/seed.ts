@@ -8,10 +8,11 @@
  */
 import { hash } from '@node-rs/argon2';
 import { eq } from 'drizzle-orm';
-import { applyRate, isoYear, todayIso, toDbRate, type CreateJournalInput } from '@erp/shared';
+import { applyRate, isoYear, todayIso, toDbRate, type CreateJournalInput, type CreatePartyInput } from '@erp/shared';
 import { loadConfig } from '../config';
 import { createDb, withContext, type Tx } from './client';
 import { customCodes, exchangeRates, memberships, organizations, users } from './schema';
+import { createParty } from '../modules/parties/service';
 import { createAccount, listAccounts } from '../modules/ledger/accounts';
 import {
   createJournalEntry,
@@ -35,13 +36,21 @@ const { db } = handle;
 const today = todayIso();
 const year = isoYear(today);
 const pad = (n: number) => String(n).padStart(2, '0');
+const addDays = (iso: string, days: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
 const date = (m: number, d: number) => `${year}-${pad(m)}-${pad(d)}`;
 
-/** Yıl başından bugüne doğrusal seyreden gösterge kurları (yalnızca demo). */
+/**
+ * Yıl başından bugüne doğrusal seyreden kurlar (yalnızca demo). Bitiş değerleri, Merkez Bankası'nın
+ * 29/09/2026 tarihli XML dosyasındaki Döviz Alış kurlarıdır; başlangıç değerleri uydurmadır.
+ */
 const RATE_TREND = {
-  GBP: { start: 38.5, end: 41.2 },
-  EUR: { start: 33.0, end: 35.6 },
-  USD: { start: 30.5, end: 33.1 },
+  GBP: { start: 57.0, end: 64.7268 },
+  EUR: { start: 49.0, end: 55.6307 },
+  USD: { start: 43.0, end: 48.9008 },
 } as const;
 type Foreign = keyof typeof RATE_TREND;
 
@@ -83,7 +92,7 @@ type Side = 'debit' | 'credit';
 interface Spec {
   on: string;
   text: string;
-  lines: [code: string, side: Side, amount: string, opts?: { cur?: Foreign; desc?: string }][];
+  lines: [code: string, side: Side, amount: string, opts?: { cur?: Foreign; desc?: string; party?: string; dueDays?: number }][];
   post?: boolean;
   reverseOn?: string;
 }
@@ -139,12 +148,9 @@ async function main() {
 
     await seedRates(tx, company.id, userId);
 
-    // Alt hesaplar
+    // Alt hesaplar (cari hesapları 120/320 üzerinde cari kartlarıyla tutulur)
     await createAccount(tx, company.id, { code: '102.001', name: 'KTB TL Vadesiz' });
     await createAccount(tx, company.id, { code: '102.002', name: 'KTB GBP Hesabı', currencyCode: 'GBP' });
-    await createAccount(tx, company.id, { code: '320.001', name: 'Demir Çelik A.Ş.' });
-    await createAccount(tx, company.id, { code: '320.002', name: 'Hazır Beton Ltd.' });
-    await createAccount(tx, company.id, { code: '120.001', name: 'Daire Alıcıları' });
 
     const byCode = new Map((await listAccounts(tx)).map((a) => [a.code, a.id]));
     const acc = (code: string) => {
@@ -152,6 +158,20 @@ async function main() {
       if (!id) throw new Error(`Hesap yok: ${code}`);
       return id;
     };
+
+    const partyDefs: Record<string, Partial<CreatePartyInput> & Pick<CreatePartyInput, 'name' | 'kind'>> = {
+      ali: { name: 'Ali Yılmaz', kind: 'customer', phone: '0533 111 22 33', paymentTermDays: 30, notes: 'A Blok 3. kat daire alıcısı' },
+      sarah: { name: 'Sarah Thompson', kind: 'customer', phone: '+44 7700 900123', email: 'sarah@example.com', paymentTermDays: 30, notes: 'B Blok 1. kat daire alıcısı' },
+      demir: { name: 'Demir Çelik A.Ş.', kind: 'supplier', taxNumber: '7654321', taxOffice: 'Lefkoşa', phone: '0392 222 33 44', paymentTermDays: 60 },
+      beton: { name: 'Hazır Beton Ltd.', kind: 'supplier', taxNumber: '7654322', taxOffice: 'Girne', paymentTermDays: 30 },
+      oto: { name: 'Lefkoşa Otomotiv Ltd.', kind: 'supplier', taxNumber: '7654323', taxOffice: 'Lefkoşa', paymentTermDays: 30 },
+      usta: { name: 'Mehmet Usta (kalıp taşeronu)', kind: 'both', phone: '0542 333 44 55' },
+    };
+    const partyId = new Map<string, string>();
+    for (const [key, def] of Object.entries(partyDefs)) {
+      const p = await createParty(tx, company.id, { currencyCode: 'TRY', paymentTermDays: 0, ...def });
+      partyId.set(key, p.id);
+    }
 
     await tx.insert(customCodes).values([
       { companyId: company.id, scope: 'account', code: 'ŞNT', name: 'Şantiye giderleri' },
@@ -166,25 +186,25 @@ async function main() {
       { on: date(1, 12), text: 'Arsa alımı (Girne, 2 dönüm)', lines: [['250', 'debit', '1800000'], ['102.001', 'credit', '1800000']] },
       {
         on: date(1, 20), text: 'İnşaat demiri alımı — Demir Çelik A.Ş.',
-        lines: [['150', 'debit', '420000'], ['191', 'debit', '67200'], ['320.001', 'credit', '487200']],
+        lines: [['150', 'debit', '420000'], ['191', 'debit', '67200'], ['320', 'credit', '487200', { party: 'demir', dueDays: 60 }]],
       },
-      { on: date(2, 3), text: 'Satıcıya ödeme — Demir Çelik A.Ş.', lines: [['320.001', 'debit', '300000'], ['102.001', 'credit', '300000']] },
+      { on: date(2, 3), text: 'Satıcıya ödeme — Demir Çelik A.Ş.', lines: [['320', 'debit', '300000', { party: 'demir' }], ['102.001', 'credit', '300000']] },
       {
         on: date(2, 14), text: 'Yurt dışı yatırımcıdan GBP avans',
         lines: [['102.002', 'debit', '50000', { cur: 'GBP' }], ['340', 'credit', '__GBP50000__']],
       },
       {
         on: date(3, 8), text: 'Daire satışı — A Blok 3. kat',
-        lines: [['120.001', 'debit', '1160000'], ['600', 'credit', '1000000'], ['391', 'credit', '160000']],
+        lines: [['120', 'debit', '1160000', { party: 'ali', dueDays: 30 }], ['600', 'credit', '1000000'], ['391', 'credit', '160000']],
       },
-      { on: date(3, 25), text: 'Daire satışı tahsilatı (ilk taksit)', lines: [['102.001', 'debit', '500000'], ['120.001', 'credit', '500000']] },
+      { on: date(3, 25), text: 'Daire satışı tahsilatı (ilk taksit)', lines: [['102.001', 'debit', '500000'], ['120', 'credit', '500000', { party: 'ali' }]] },
       {
         on: date(4, 4), text: 'Şantiye ofisi kirası',
         lines: [['770', 'debit', '45000'], ['191', 'debit', '7200'], ['102.001', 'credit', '52200']],
       },
       {
         on: date(4, 18), text: 'Şantiye aracı alımı',
-        lines: [['254', 'debit', '850000'], ['191', 'debit', '136000'], ['320.001', 'credit', '986000']],
+        lines: [['254', 'debit', '850000'], ['191', 'debit', '136000'], ['320', 'credit', '986000', { party: 'oto', dueDays: 30 }]],
       },
       { on: date(5, 2), text: 'Nisan personel ödemeleri', lines: [['770', 'debit', '180000'], ['102.001', 'credit', '180000']] },
       {
@@ -193,12 +213,12 @@ async function main() {
       },
       {
         on: date(7, 15), text: 'Daire satışı — B Blok 1. kat',
-        lines: [['120.001', 'debit', '2320000'], ['600', 'credit', '2000000'], ['391', 'credit', '320000']],
+        lines: [['120', 'debit', '2320000', { party: 'sarah', dueDays: 30 }], ['600', 'credit', '2000000'], ['391', 'credit', '320000']],
       },
-      { on: date(8, 3), text: 'Daire satışı tahsilatı (B Blok)', lines: [['102.001', 'debit', '1000000'], ['120.001', 'credit', '1000000']] },
+      { on: date(8, 3), text: 'Daire satışı tahsilatı (B Blok)', lines: [['102.001', 'debit', '1000000'], ['120', 'credit', '1000000', { party: 'sarah' }]] },
       {
         on: date(8, 20), text: 'Hazır beton alımı — Hazır Beton Ltd.',
-        lines: [['150', 'debit', '260000'], ['191', 'debit', '41600'], ['320.002', 'credit', '301600']],
+        lines: [['150', 'debit', '260000'], ['191', 'debit', '41600'], ['320', 'credit', '301600', { party: 'beton', dueDays: 30 }]],
       },
       {
         on: date(9, 12), text: 'Hatalı gider kaydı (ters çevrilecek)',
@@ -225,6 +245,8 @@ async function main() {
           debit: side === 'debit' ? value : '0',
           credit: side === 'credit' ? value : '0',
           ...(cur !== 'TRY' ? { fxRate: String(gbpFx) } : {}),
+          ...(opts?.party ? { partyId: partyId.get(opts.party)! } : {}),
+          ...(opts?.party && opts.dueDays !== undefined ? { dueDate: addDays(s.on, opts.dueDays) } : {}),
         };
       }) as CreateJournalInput['lines'];
 

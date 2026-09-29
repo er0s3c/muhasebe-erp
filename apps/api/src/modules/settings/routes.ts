@@ -18,6 +18,7 @@ import { currencies, customCodes, exchangeRates, taxRates } from '../../db/schem
 import { tenantRoute } from '../../http/context';
 import { badRequest, notFound } from '../../http/errors';
 import { closePeriod, generatePeriods, listPeriods, reopenPeriod } from './periods';
+import { importKktcmbRates, parseKktcmbXml } from './kktcmb';
 import { findRate } from './rates';
 
 const idParam = z.object({ id: uuid });
@@ -120,6 +121,24 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
         .parse(req.query);
       const rate = await findRate(tx, q.from, q.to, q.date, company.baseCurrency);
       return { from: q.from, to: q.to, date: q.date, rate: rate ? toDbRate(rate) : null };
+    }),
+  );
+
+  /**
+   * Merkez Bankası kurlarını içe aktarır: resmî adresten (source: 'kktcmb', isteğe bağlı tarih) ya da
+   * yüklenen XML dosyasından (source: 'xml'). Aynı gün için tekrar çalıştırmak güvenlidir.
+   */
+  app.post(
+    '/api/exchange-rates/import',
+    tenantRoute(app, settings('rates.manage'), async ({ tx, req, user, company }) => {
+      const body = z
+        .discriminatedUnion('source', [
+          z.object({ source: z.literal('kktcmb'), date: isoDate.optional() }),
+          z.object({ source: z.literal('xml'), xml: z.string().min(50).max(500_000) }),
+        ])
+        .parse(req.body);
+      const xml = body.source === 'xml' ? body.xml : await app.rateFetcher(body.date);
+      return importKktcmbRates(tx, { companyId: company.id, userId: user.id }, parseKktcmbXml(xml));
     }),
   );
 

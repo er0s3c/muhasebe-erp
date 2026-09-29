@@ -98,7 +98,12 @@ async function main() {
   await page.getByLabel('Borç 2').fill('19.200,00');
   // "Satır ekle": farkı kapatacak alacak tutarı otomatik hazırlanır
   await page.getByRole('button', { name: 'Satır ekle' }).click();
-  await pick(3, '320.002');
+  await pick(3, '320');
+  // Cari hesap (320): satır bir cariye bağlanır
+  const partyBox = page.getByRole('combobox', { name: 'Cari 3' });
+  await partyBox.click();
+  await partyBox.fill('Hazır');
+  await page.getByRole('listbox').getByRole('option').first().click();
   await page.getByText('Dengeli', { exact: true }).waitFor();
   await settle(page, 600);
   await shot(page, '06-yevmiye-formu');
@@ -122,8 +127,27 @@ async function main() {
   await settle(page, 700);
   await shot(page, '10-hesap-ekstresi');
 
+  // Cari
+  await go('/parties', '22-cariler', 'Cari hesaplar');
+  await page.getByRole('cell', { name: /Ali Yılmaz/ }).click();
+  await page.getByRole('heading', { name: 'Ali Yılmaz', level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '23-cari-ekstre');
+  await page.getByRole('tab', { name: 'Açık kalemler' }).click();
+  await settle(page, 700);
+  await shot(page, '24-cari-acik-kalemler');
+  await go('/parties/aging', '25-yaslandirma-alacak', 'Cari yaşlandırma raporu');
+  await page.getByRole('tab', { name: 'Borçlar' }).click();
+  await settle(page, 700);
+  await shot(page, '26-yaslandirma-borc');
+
   // Ayarlar
   await go('/settings/currencies', '11-kurlar', 'Para birimi ve kurlar');
+  // Merkez Bankası XML dosyasından içe aktarma (resmî örnek dosya)
+  await page.getByLabel('XML dosyası yükle').setInputFiles('apps/api/test/fixtures/kktcmb-gunluk.xml');
+  await page.getByText(/kurları yüklendi/).waitFor();
+  await settle(page, 400);
+  await shot(page, '11b-kur-xml-yuklendi');
   await go('/settings/tax-rates', '12-kdv-oranlari', 'KDV oranları');
   await go('/settings/periods', '13-donemler', 'Mali dönemler');
   await go('/settings/custom-codes', '14-ozel-kodlar', 'Özel kodlar');
@@ -166,7 +190,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);

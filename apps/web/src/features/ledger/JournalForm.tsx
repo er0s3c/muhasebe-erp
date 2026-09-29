@@ -13,8 +13,8 @@ import { Sheet } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
-import { useCMutation, useCQuery, useCompanyApi } from '../../lib/queries';
-import type { Account, JournalEntry } from '../../lib/types';
+import { useCMutation, useCQuery, useCan, useCompanyApi } from '../../lib/queries';
+import type { Account, JournalEntry, PartyListRow } from '../../lib/types';
 
 interface LineState {
   key: number;
@@ -24,10 +24,13 @@ interface LineState {
   debit: string;
   credit: string;
   fxRate: string;
+  /** Cari kontrol hesabı (120, 320…) satırlarında zorunlu */
+  partyId: string;
+  dueDate: string;
 }
 
 let lineKey = 1;
-const emptyLine = (currency: string): LineState => ({ key: lineKey++, accountId: '', description: '', currency, debit: '', credit: '', fxRate: '' });
+const emptyLine = (currency: string): LineState => ({ key: lineKey++, accountId: '', description: '', currency, debit: '', credit: '', fxRate: '', partyId: '', dueDate: '' });
 
 interface Props {
   open: boolean;
@@ -45,6 +48,15 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
   const base = company.baseCurrency;
 
   const { data: accountsData } = useCQuery<{ accounts: Account[] }>(['accounts'], '/api/accounts');
+  const canParties = useCan()('parties.read');
+  const { data: partiesData } = useCQuery<{ parties: PartyListRow[] }>(['parties', 'options'], '/api/parties?limit=500&active=true', {
+    enabled: open && canParties,
+  });
+  /** Hesap türüne uygun cariler: 120 -> müşteri, 320 -> tedarikçi ("her ikisi" ikisinde de) */
+  const partyOptionsFor = (control: 'receivable' | 'payable'): ComboOption[] =>
+    (partiesData?.parties ?? [])
+      .filter((p) => (control === 'receivable' ? p.kind !== 'supplier' : p.kind !== 'customer'))
+      .map((p) => ({ value: p.id, label: p.name, keywords: p.code, hint: p.code }));
   const [date, setDate] = useState(todayIso());
   const [description, setDescription] = useState('');
   const [lines, setLines] = useState<LineState[]>([]);
@@ -68,6 +80,8 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
           debit: Number(l.debit) > 0 ? trimZeros(l.debit) : '',
           credit: Number(l.credit) > 0 ? trimZeros(l.credit) : '',
           fxRate: l.currencyCode !== base ? trimZeros(l.fxRate) : '',
+          partyId: l.partyId ?? '',
+          dueDate: l.dueDate ?? '',
         })),
       );
     } else {
@@ -145,6 +159,8 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
             ...(l.debit ? { debit: l.debit } : {}),
             ...(l.credit ? { credit: l.credit } : {}),
             ...(l.currency !== base && l.fxRate ? { fxRate: l.fxRate } : {}),
+            ...(l.partyId ? { partyId: l.partyId } : {}),
+            ...(l.partyId && l.dueDate ? { dueDate: l.dueDate } : {}),
           })),
       };
       const res = initial
@@ -152,7 +168,8 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
         : await c<{ entry: JournalEntry }>('/api/journal-entries', { method: 'POST', body });
       return res.entry;
     },
-    [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger']],
+    // Cari bakiye/ekstre/yaşlandırma da defterden hesaplandığı için birlikte yenilenir
+    [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger'], ['parties'], ['party'], ['party-aging']],
   );
 
   const submit = (post: boolean) => {
@@ -162,6 +179,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
     if (!description.trim()) return setFieldError(t('ledger.journal.description'));
     if (filled.length < 2) return setFieldError(t('ledger.journal.minLines'));
     if (filled.some((l) => !l.debit && !l.credit)) return setFieldError(t('common.amount'));
+    if (filled.some((l) => accountById.get(l.accountId)?.partyControl && !l.partyId)) return setFieldError(t('ledger.journal.partyRequired'));
     save.mutate(
       { post },
       {
@@ -258,7 +276,13 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                     aria-label={`${t('ledger.journal.account')} ${i + 1}`}
                     onChange={(v) => {
                       const a = accountById.get(v);
-                      patch(l.key, { accountId: v, ...(a?.currencyCode ? { currency: a.currencyCode } : {}) });
+                      // Hesap türü değişirse önceki cari/vade geçersizleşir
+                      const resetParty = (a?.partyControl ?? null) !== (acc?.partyControl ?? null);
+                      patch(l.key, {
+                        accountId: v,
+                        ...(a?.currencyCode ? { currency: a.currencyCode } : {}),
+                        ...(resetParty ? { partyId: '', dueDate: '' } : {}),
+                      });
                     }}
                   />
                   <Input
@@ -309,6 +333,30 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                   >
                     <X className="size-4" />
                   </button>
+                  {acc?.partyControl && (
+                    <div className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-brand-soft/60 px-3 py-2 lg:mt-1">
+                      <span className="text-xs font-medium text-muted" title={t('ledger.journal.partyControlHint')}>
+                        {t('ledger.journal.party')}
+                      </span>
+                      <Combobox
+                        className="min-w-56 flex-1"
+                        options={partyOptionsFor(acc.partyControl)}
+                        value={l.partyId || null}
+                        placeholder={t('ledger.journal.pickParty')}
+                        aria-label={`${t('ledger.journal.party')} ${i + 1}`}
+                        disabled={!canParties}
+                        onChange={(v) => patch(l.key, { partyId: v })}
+                      />
+                      <span className="text-xs font-medium text-muted">{t('ledger.journal.dueDate')}</span>
+                      <Input
+                        type="date"
+                        className="w-40"
+                        value={l.dueDate}
+                        onChange={(e) => patch(l.key, { dueDate: e.target.value })}
+                        aria-label={`${t('ledger.journal.dueDate')} ${i + 1}`}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}

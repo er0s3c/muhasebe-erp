@@ -8,6 +8,8 @@ export const PERMISSIONS = [
   'ledger.read',
   'ledger.post',
   'ledger.close_period',
+  'parties.read',
+  'parties.manage',
   'reports.read',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -29,11 +31,14 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'ledger.read',
     'ledger.post',
     'ledger.close_period',
+    'parties.read',
+    'parties.manage',
     'reports.read',
   ],
-  sales: ['settings.read'],
+  // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
+  sales: ['settings.read', 'parties.read', 'parties.manage'],
   site_manager: ['settings.read'],
-  viewer: ['settings.read', 'ledger.read', 'reports.read'],
+  viewer: ['settings.read', 'ledger.read', 'parties.read', 'reports.read'],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {

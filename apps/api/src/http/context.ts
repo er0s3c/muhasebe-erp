@@ -21,6 +21,8 @@ declare module 'fastify' {
   interface FastifyInstance {
     db: Db;
     config: Config;
+    /** Merkez Bankası kur XML'ini indirir; testlerde değiştirilebilir. */
+    rateFetcher: (isoDate?: string) => Promise<string>;
   }
 }
 declare module '@fastify/jwt' {

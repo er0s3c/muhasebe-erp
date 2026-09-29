@@ -276,7 +276,7 @@ describe('genel muhasebe', async () => {
       c.post('/api/journal-entries', { entryDate: d, description: 'Kayıt', lines, post: p });
     await post(day(1, 5), [tl(ids['100']!, 'debit', '1000'), tl(ids['500']!, 'credit', '1000')]);
     await post(day(1, 20), [tl(ids['102']!, 'debit', '300'), tl(ids['100']!, 'credit', '300')]);
-    await post(day(2, 10), [tl(ids['320']!, 'debit', '50'), tl(ids['102']!, 'credit', '50')]);
+    await post(day(2, 10), [tl(ids['336']!, 'debit', '50'), tl(ids['102']!, 'credit', '50')]);
     // Taslak sonuca girmez
     await post(day(2, 11), [tl(ids['100']!, 'debit', '9999'), tl(ids['500']!, 'credit', '9999')], false);
 
@@ -285,7 +285,7 @@ describe('genel muhasebe', async () => {
     // Şubat raporu: Ocak hareketleri açılış bakiyesi olur
     expect(row('100')).toMatchObject({ opening: '700.0000', debit: '0.0000', credit: '0.0000', closing: '700.0000' });
     expect(row('102')).toMatchObject({ opening: '300.0000', credit: '50.0000', closing: '250.0000' });
-    expect(row('320')).toMatchObject({ debit: '50.0000', closing: '50.0000' });
+    expect(row('336')).toMatchObject({ debit: '50.0000', closing: '50.0000' });
     // Grup satırı alt hesapları toplar (10 = 100 + 102)
     expect(row('10')).toMatchObject({ opening: '1000.0000', closing: '950.0000', isPostable: false });
     expect(row('1').closing).toBe('950.0000'); // sınıf toplamı
@@ -318,7 +318,7 @@ describe('genel muhasebe', async () => {
     const post = (d: string, lines: any[]) =>
       c.post('/api/journal-entries', { entryDate: d, description: `Kayıt ${d}`, lines, post: true });
     await post(day(1, 10), [tl(sub.id, 'debit', '1000'), tl(ids['500']!, 'credit', '1000')]);
-    await post(day(2, 5), [tl(ids['320']!, 'debit', '200'), tl(sub.id, 'credit', '200')]);
+    await post(day(2, 5), [tl(ids['336']!, 'debit', '200'), tl(sub.id, 'credit', '200')]);
     await post(day(2, 15), [tl(sub.id, 'debit', '75.25'), tl(ids['600']!, 'credit', '75.25')]);
 
     // Üst hesap (100) seçilince alt hesap hareketleri de gelir

@@ -9,11 +9,21 @@ import type { Db } from './db/client';
 import { errorHandler } from './http/errors';
 import { authRoutes } from './modules/auth/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
+import { partyRoutes } from './modules/parties/routes';
+import { fetchKktcmbXml } from './modules/settings/kktcmb';
 import { settingsRoutes } from './modules/settings/routes';
 import { memberRoutes } from './modules/tenancy/members';
 import { tenancyRoutes } from './modules/tenancy/routes';
 
-export async function buildApp(opts: { db: Db; config: Config; logger?: boolean }): Promise<FastifyInstance> {
+export interface BuildAppOptions {
+  db: Db;
+  config: Config;
+  logger?: boolean;
+  /** Varsayılan: resmî Merkez Bankası adresinden indirir (sertifika doğrulaması açık). */
+  rateFetcher?: (isoDate?: string) => Promise<string>;
+}
+
+export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: opts.logger ?? opts.config.NODE_ENV !== 'test',
     trustProxy: true,
@@ -22,6 +32,7 @@ export async function buildApp(opts: { db: Db; config: Config; logger?: boolean 
 
   app.decorate('db', opts.db);
   app.decorate('config', opts.config);
+  app.decorate('rateFetcher', opts.rateFetcher ?? fetchKktcmbXml);
 
   await app.register(helmet);
   await app.register(cors, {
@@ -48,6 +59,7 @@ export async function buildApp(opts: { db: Db; config: Config; logger?: boolean 
   await app.register(memberRoutes);
   await app.register(settingsRoutes);
   await app.register(ledgerRoutes);
+  await app.register(partyRoutes);
 
   return app;
 }

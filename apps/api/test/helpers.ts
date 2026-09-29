@@ -13,10 +13,10 @@ export interface TestApp {
 }
 
 /** Test dosyası başına bir uygulama örneği; dosya bitince kapanır. */
-export async function makeApp(): Promise<TestApp> {
+export async function makeApp(opts: { rateFetcher?: (isoDate?: string) => Promise<string> } = {}): Promise<TestApp> {
   const config = loadConfig();
   const handle = createDb(config.DATABASE_URL);
-  const app = await buildApp({ db: handle.db, config, logger: false });
+  const app = await buildApp({ db: handle.db, config, logger: false, ...opts });
   await app.ready();
   afterAll(async () => {
     await app.close();

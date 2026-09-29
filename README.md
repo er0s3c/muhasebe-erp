@@ -2,18 +2,20 @@
 
 KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef sektör inşaat ve taahhüt; market ve ticaret modülleri aynı çekirdeğin üstüne eklenecek şekilde tasarlandı.
 
-**Durum:** Çekirdek ERP'nin ilk dilimi hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe). Cari, stok, fatura ve kasa/banka sıradaki adımlar: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
+**Durum:** Çekirdek ERP'nin ilk dilimi hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe, cari). Stok, fatura ve kasa/banka sıradaki adımlar: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Neler var?
 
 - **Çok şirketli, yalıtılmış veri:** her satır bir şirkete aittir; PostgreSQL satır düzeyi güvenlik (RLS) uygulama hatası olsa bile başka şirketin verisini göstermez.
 - **Değiştirilemez defter:** kaydedilen yevmiye değiştirilemez ve silinemez; düzeltme ters kayıtla yapılır. Borç=alacak, dönem kilidi ve hesap kuralları veritabanında da denetlenir.
 - **Çoklu para birimi:** TL, GBP, EUR, USD. Dövizli satırlar işlem tarihindeki kurdan çevrilir; yönetim raporlaması için ikinci bir para birimi tutulabilir.
+- **Cari hesaplar:** müşteri/tedarikçi kartı, ekstre, vadeye göre yaşlandırma, açık kalemler; cari kontrol hesabına (120/320) cari olmadan kayıt atılamaz.
+- **Kur:** elle giriş ya da KKTC Merkez Bankası XML'inden içe aktarma (resmî adres veya dosya yükleme).
 - **Rol bazlı yetki, sektöre göre menü, denetim izi, Türkçe arayüz** (çoklu dil altyapılı), açık/koyu tema, `Ctrl+K` komut paleti.
 
 ## Hızlı başlangıç
 
-Gereksinimler: Node.js 22+, PostgreSQL 16 (ya da Docker).
+Gereksinimler: Node.js 22+, PostgreSQL 16 (ya da Docker). PostgreSQL'in ICU desteği gerekir (Türkçe sıralama için `tr-TR-x-icu`); resmî Docker imajı ve yaygın paketlerde vardır.
 
 ```bash
 npm install
@@ -27,7 +29,10 @@ docker compose up -d db
 # 2) Şema
 npm run db:migrate
 
-# 3) Çalıştır: API http://localhost:3000, web http://localhost:5173
+# 3) (İsteğe bağlı) demo verisi: örnek inşaat şirketi, cariler, kurlar, bir yıllık yevmiye
+npm run db:seed        # giriş: demo@ornek.local / Demo-Sifre-123
+
+# 4) Çalıştır: API http://localhost:3000, web http://localhost:5173
 npm run dev
 ```
 
@@ -40,6 +45,8 @@ npm run dev
 | `npm run e2e` | Playwright uçtan uca testleri (`PW_CHROMIUM_PATH` ile hazır Chromium gösterilebilir) |
 | `npm run lint` / `npm run typecheck` | Kod kalitesi |
 | `npm run db:generate` | Drizzle şemasından yeni migration üretir |
+| `npm run db:seed` | Demo verisi yükler (üretimde çalışmaz) |
+| `npm run tour` | Demo verisiyle tüm ekranların ekran görüntüsünü alır, mobilde yatay taşmayı denetler |
 | `npm run licenses` | Bağımlılık lisanslarını denetler |
 
 ## Yapı

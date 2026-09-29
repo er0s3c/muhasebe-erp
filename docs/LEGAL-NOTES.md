@@ -42,7 +42,7 @@ Kapsam belgesi yapay zekâ (Gemini) çıktısıdır. Aşağıdaki maddeleri bağ
 | KIB-TEK trafo katkı payı | daire başı £1.200–£2.500 | Doğrulanmadı |
 | Yabancı işçi teminatı | kişi başı 250 € | Doğrulanmadı |
 | Sosyal güvenlik teşviği | D1/D3 bordro tipleri, %100/%80 prim teşviki | Doğrulanmadı |
-| Kur kaynağı | KKTC Merkez Bankası gösterge kurları her iş günü 15:30 | Doğrulanmadı; otomatik kur çekme yazılmadı, kur elle girilir |
+| Kur kaynağı | KKTC Merkez Bankası gösterge kurları her iş günü 15:30 | **Kısmen doğrulandı:** kurumun "Döviz kurlarına erişim" sayfası (kullanıcının yapıştırdığı metin) XML adreslerini doğruluyor: güncel `https://www.mb.gov.ct.tr/kur/gunluk.xml`, tarihli `https://www.mb.gov.ct.tr/kur/tarih/YYYYMMDD` (XML: 09/04/2011'den itibaren). Örnek dosyada yalnızca tarih ve duyuru no var, **yayın saati yok** (15:30 iddiası doğrulanmadı). Yeniden dağıtım/kullanım şartı okunmadı |
 | Kurumlar | MŞ32 raporu, İnşaat Encümeni sınıf karneleri ve m² kapasiteleri | Doğrulanmadı |
 
 ### Tasarım ilkesi
@@ -56,3 +56,14 @@ Yeni şirkete yüklenen hesap planı genel Tekdüzen Hesap Planı yapısına day
 ## 5. Kişisel veriler
 
 Sistem kişi adı, e-posta, ileride kimlik/pasaport ve bordro verisi işleyecektir. Üretime almadan önce KKTC'nin kişisel verilerin korunmasına ilişkin mevzuatı için hukuki değerlendirme yapılmalı; yedekleme, saklama süresi ve veri dışa aktarma politikaları yazılı hâle getirilmelidir.
+
+## 6. Merkez Bankası kur verisi
+
+`apps/api/src/modules/settings/kktcmb.ts`, kurumun XML biçimini **gerçek bir örnek dosyaya** (29/09/2026, duyuru 2026/182; `apps/api/test/fixtures/kktcmb-gunluk.xml`) göre ayrıştırır.
+
+- Alış = `Doviz_Alis`, Satış = `Doviz_Satis`. Efektif kurlar okunur ama saklanmaz. Kur, `Birim` alanına bölünerek tek birime çevrilir (örn. JPY için Birim = 100).
+- Yalnızca sistemin desteklediği GBP, EUR, USD alınır; diğerleri atlanır.
+- Sunucu yalnızca sabit resmî adrese bağlanır (kullanıcı girdisinden adres kurulmaz), **TLS sertifika doğrulaması asla kapatılmaz**. Kurumun sitesi bazı güvenlik yazılımlarında (örn. Kaspersky) uyarı verebilir; sunucu sertifika zincirini doğrulayamazsa içe aktarma hata verir ve kullanıcı XML'i dosya olarak yükleyebilir. Zincir eksikse çözüm, eksik CA'yı `NODE_EXTRA_CA_CERTS` ile vermektir, doğrulamayı kapatmak değil.
+- XML'de `DOCTYPE`/`ENTITY` bulunması, 500 KB üstü boyut, geçersiz tarih/sayı/birim reddedilir (XXE ve varlık şişirme savunması).
+- **Yapılacak:** ticari kullanımdan önce kurumun veri kullanım/yeniden yayın koşullarını yazılı olarak kontrol edin; otomatik zamanlanmış çekim yalnızca bu doğrulamadan ve yayın saati netleştikten sonra eklenmeli.
+

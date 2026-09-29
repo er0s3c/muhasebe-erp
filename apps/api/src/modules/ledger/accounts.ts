@@ -6,6 +6,15 @@ import { accounts, journalLines } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { CHART_TEMPLATE } from './chart-template';
 
+/**
+ * Cari kontrol hesapları: bu hesaplara atılan her satır bir cariye bağlanmalıdır.
+ * Alt hesaplar (120.001…) üst hesabın türünü devralır.
+ */
+const PARTY_CONTROL_CODES: Record<string, 'receivable' | 'payable'> = {
+  '120': 'receivable',
+  '320': 'payable',
+};
+
 export async function seedChartOfAccounts(tx: Tx, companyId: string): Promise<void> {
   const ids = new Map<string, string>(CHART_TEMPLATE.map((r) => [r.code, uuidv7()]));
   await tx.insert(accounts).values(
@@ -17,6 +26,7 @@ export async function seedChartOfAccounts(tx: Tx, companyId: string): Promise<vo
       type: accountTypeForCode(r.code),
       parentId: r.parentCode ? ids.get(r.parentCode)! : null,
       isPostable: r.isPostable,
+      partyControl: PARTY_CONTROL_CODES[r.code] ?? null,
     })),
   );
 }
@@ -67,6 +77,7 @@ export async function createAccount(tx: Tx, companyId: string, input: CreateAcco
       type: accountTypeForCode(input.code),
       parentId: parent?.id ?? null,
       currencyCode: input.currencyCode ?? parent?.currencyCode ?? null,
+      partyControl: parent?.partyControl ?? null,
       isPostable: true,
     })
     .returning();

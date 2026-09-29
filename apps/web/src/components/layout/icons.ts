@@ -3,8 +3,10 @@ import {
   Building2,
   CalendarDays,
   Circle,
+  Contact,
   Coins,
   FileText,
+  Hourglass,
   LayoutDashboard,
   ListTree,
   Percent,
@@ -27,6 +29,8 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   tags: Tags,
   users: Users,
   'building-2': Building2,
+  contact: Contact,
+  hourglass: Hourglass,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

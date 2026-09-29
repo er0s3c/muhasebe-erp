@@ -7,12 +7,15 @@ import {
   todayIso,
   toDbAmount,
   toDbRate,
+  partyKindFits,
+  type PartyControlType,
+  type PartyKind,
   type CreateJournalInput,
   type JournalLineInput,
   type MoneyValue,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { accounts, fiscalPeriods, journalEntries, journalLines } from '../../db/schema';
+import { accounts, fiscalPeriods, journalEntries, journalLines, parties } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { findPeriodForDate } from '../settings/periods';
@@ -55,6 +58,8 @@ interface PreparedLine {
   creditBase: MoneyValue;
   debitReporting: MoneyValue | null;
   creditReporting: MoneyValue | null;
+  partyId: string | null;
+  dueDate: string | null;
 }
 
 export interface ReportingLine {
@@ -101,6 +106,12 @@ async function prepareLines(
   const found = await tx.select().from(accounts).where(inArray(accounts.id, accountIds));
   const byId = new Map(found.map((a) => [a.id, a]));
 
+  const partyIds = [...new Set(lines.map((l) => l.partyId).filter((p): p is string => !!p))];
+  const partyRows = partyIds.length
+    ? await tx.select().from(parties).where(inArray(parties.id, partyIds))
+    : [];
+  const partyById = new Map(partyRows.map((p) => [p.id, p]));
+
   const rateCache = new Map<string, MoneyValue>();
   const getRate = async (from: string, to: string) => {
     const key = `${from}>${to}`;
@@ -139,6 +150,27 @@ async function prepareLines(
       );
     }
 
+    // Cari kuralları: kontrol hesabında cari zorunlu, diğerlerinde yasak (DB tetikleyicisi de denetler)
+    if (account.partyControl) {
+      if (!line.partyId) {
+        throw unprocessable(`${label}: ${account.code} cari hesabı için cari seçilmeli`, 'PARTY_REQUIRED');
+      }
+      const party = partyById.get(line.partyId);
+      if (!party) throw unprocessable(`${label}: cari bulunamadı`, 'PARTY_NOT_FOUND');
+      if (!party.isActive) throw unprocessable(`${label}: ${party.name} carisi pasif`, 'PARTY_INACTIVE');
+      if (!partyKindFits(party.kind as PartyKind, account.partyControl as PartyControlType)) {
+        throw unprocessable(
+          `${label}: ${party.name} carisi bu hesap türüyle uyumlu değil (${account.code})`,
+          'PARTY_KIND_MISMATCH',
+        );
+      }
+    } else if (line.partyId) {
+      throw unprocessable(`${label}: ${account.code} hesabında cari kullanılamaz`, 'PARTY_NOT_ALLOWED');
+    }
+    if (line.dueDate && !line.partyId) {
+      throw unprocessable(`${label}: vade tarihi yalnızca cari satırlarda kullanılabilir`, 'DUE_DATE_WITHOUT_PARTY');
+    }
+
     const debit = dec(line.debit);
     const credit = dec(line.credit);
     if (debit.decimalPlaces() > 2 || credit.decimalPlaces() > 2) {
@@ -168,6 +200,8 @@ async function prepareLines(
       creditBase,
       debitReporting: reportingRate ? applyRate(debitBase, reportingRate) : null,
       creditReporting: reportingRate ? applyRate(creditBase, reportingRate) : null,
+      partyId: line.partyId ?? null,
+      dueDate: line.dueDate ?? null,
     });
   }
   balanceReporting(prepared);
@@ -189,6 +223,8 @@ function toRows(entryId: string, companyId: string, lines: PreparedLine[]) {
     creditBase: toDbAmount(l.creditBase),
     debitReporting: l.debitReporting ? toDbAmount(l.debitReporting) : null,
     creditReporting: l.creditReporting ? toDbAmount(l.creditReporting) : null,
+    partyId: l.partyId,
+    dueDate: l.dueDate,
   }));
 }
 
@@ -333,6 +369,7 @@ export async function reverseJournalEntry(
       debitReporting: l.creditReporting,
       creditReporting: l.debitReporting,
       partyId: l.partyId,
+      dueDate: l.dueDate,
     })),
   );
 
@@ -380,9 +417,14 @@ export async function getJournalEntry(tx: Tx, id: string) {
       creditBase: journalLines.creditBase,
       debitReporting: journalLines.debitReporting,
       creditReporting: journalLines.creditReporting,
+      partyId: journalLines.partyId,
+      partyCode: parties.code,
+      partyName: parties.name,
+      dueDate: journalLines.dueDate,
     })
     .from(journalLines)
     .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+    .leftJoin(parties, eq(parties.id, journalLines.partyId))
     .where(eq(journalLines.entryId, id))
     .orderBy(asc(journalLines.lineNo));
   return { ...entry, lines };

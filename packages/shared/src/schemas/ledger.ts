@@ -55,6 +55,10 @@ export const journalLineSchema = z
     credit: moneyString.default('0'),
     /** Verilmezse işlem tarihindeki kayıtlı kur kullanılır. */
     fxRate: rateString.optional(),
+    /** Cari kontrol hesabında (120, 320…) zorunlu; diğer hesaplarda yasak. */
+    partyId: uuid.optional(),
+    /** Yalnızca cari satırlarda; yaşlandırma vadeye göre yapılır, yoksa fiş tarihi. */
+    dueDate: isoDate.optional(),
   })
   .refine(
     (l) => (Number(l.debit) > 0) !== (Number(l.credit) > 0),

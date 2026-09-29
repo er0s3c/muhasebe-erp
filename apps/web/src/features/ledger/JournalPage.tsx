@@ -1,7 +1,7 @@
 import { BookOpen, Pencil, Plus, RotateCcw, Send, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -199,7 +199,7 @@ function JournalDetail({
     setRevDate(todayIso());
   }, [id]);
 
-  const inval = [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger']];
+  const inval = [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger'], ['parties'], ['party'], ['party-aging']];
   const post = useCMutation((_: void, call) => call<{ entry: JournalEntry }>(`/api/journal-entries/${id}/post`, { method: 'POST' }), inval);
   const remove = useCMutation((_: void, call) => call(`/api/journal-entries/${id}`, { method: 'DELETE' }), inval);
   const reverse = useCMutation(
@@ -291,6 +291,14 @@ function JournalDetail({
                       <Td>
                         <span className="font-mono text-[13px]">{l.accountCode}</span>
                         <span className="ml-2 text-muted">{l.accountName}</span>
+                        {l.partyId && (
+                          <span className="mt-0.5 block text-xs">
+                            <Link to={`/parties/${l.partyId}`} className="font-medium text-brand hover:underline">
+                              {l.partyName}
+                            </Link>
+                            {l.dueDate && <span className="ml-2 text-muted">{t('parties.detail.dueDate')}: {formatDateTR(l.dueDate)}</span>}
+                          </span>
+                        )}
                       </Td>
                       <Td className="text-muted">{l.description}</Td>
                       {showForeign && (
