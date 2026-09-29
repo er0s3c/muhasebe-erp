@@ -230,7 +230,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
         </div>
 
         <section aria-label={t('ledger.journal.lines')}>
-          <div className="mb-2 grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_84px_minmax(0,1fr)_minmax(0,1fr)_88px_32px] items-end gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted max-lg:hidden">
+          <div className="mb-2 grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_96px_minmax(0,1fr)_minmax(0,1fr)_88px_32px] items-end gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted max-lg:hidden">
             <span>{t('ledger.journal.account')}</span>
             <span>{t('ledger.journal.lineDescription')}</span>
             <span>{t('common.currency')}</span>
@@ -248,7 +248,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
               return (
                 <div
                   key={l.key}
-                  className="grid grid-cols-2 items-center gap-2 rounded-lg border border-border p-2 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_84px_minmax(0,1fr)_minmax(0,1fr)_88px_32px] lg:border-0 lg:p-0"
+                  className="grid grid-cols-2 items-center gap-2 rounded-lg border border-border p-2 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_96px_minmax(0,1fr)_minmax(0,1fr)_88px_32px] lg:border-0 lg:p-0"
                 >
                   <Combobox
                     className="col-span-2 lg:col-span-1"
@@ -268,6 +268,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                     aria-label={`${t('ledger.journal.lineDescription')} ${i + 1}`}
                   />
                   <Select
+                    className="px-2 pr-6"
                     value={l.currency}
                     disabled={locked}
                     onChange={(e) => patch(l.key, { currency: e.target.value, fxRate: '' })}

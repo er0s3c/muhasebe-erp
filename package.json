@@ -21,7 +21,7 @@
     "db:migrate": "npm run db:migrate -w @erp/api",
     "db:seed": "npm run db:seed -w @erp/api",
     "e2e": "playwright test",
-    "licenses": "license-checker-rseidelsohn --production --summary --onlyAllow \"MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0;MIT-0;Unlicense;CC-BY-4.0\" --excludePackages \"muhasebe-erp;@erp/api;@erp/web;@erp/shared\""
+    "licenses": "license-checker-rseidelsohn --start . --summary --onlyAllow \"MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0;MIT-0;Unlicense;CC-BY-4.0;OFL-1.1;MPL-2.0;CC-BY-3.0;(MIT AND CC-BY-3.0)\" --excludePackages \"muhasebe-erp@0.1.0;@erp/api@0.1.0;@erp/web@0.1.0;@erp/shared@0.1.0\""
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

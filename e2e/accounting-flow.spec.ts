@@ -48,7 +48,8 @@ test('kayıt → şirket kurulumu → kur girişi → dövizli yevmiye → mizan
     const box = page.getByRole('combobox', { name: `Hesap ${index}` });
     await box.click();
     await box.fill(search);
-    await page.getByRole('option').first().click();
+    // Yalnızca açılan hesap listesindeki seçenek (para birimi <select> seçenekleri değil)
+    await page.getByRole('listbox').getByRole('option').first().click();
   };
   // GBP kısıtlı banka hesabı yok; genel banka hesabında GBP satırı kullanılır
   await pickAccount(1, '102');
@@ -103,5 +104,6 @@ test('sektör yalıtımı: başka şirketin verisi görünmez, koyu tema ve komu
   // Koyu tema
   await page.getByRole('button', { name: 'Tema' }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
+  await page.waitForTimeout(400); // renk geçişleri (transition-colors) bitsin
   await shot(page, '08-dark-theme');
 });

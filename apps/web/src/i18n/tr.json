@@ -145,7 +145,7 @@
     },
     "trialBalance": {
       "title": "Mizan", "subtitle": "Seçilen dönemin borç, alacak ve bakiye toplamları. Taslak kayıtlar dahil edilmez.",
-      "run": "Raporu getir", "view": "Görünüm", "withGroups": "Gruplarla", "accountsOnly": "Yalnızca hesaplar",
+      "run": "Raporu getir", "accountName": "Hesap adı", "view": "Görünüm", "withGroups": "Gruplarla", "accountsOnly": "Yalnızca hesaplar",
       "opening": "Açılış bakiyesi", "periodDebit": "Dönem borç", "periodCredit": "Dönem alacak", "closingDebit": "Borç bakiyesi",
       "closingCredit": "Alacak bakiyesi", "grandTotal": "Genel toplam", "balanced": "Mizan dengeli: borç ve alacak eşit",
       "unbalanced": "Mizan dengesiz: fark {{amount}}", "empty": "Bu aralıkta hareket yok", "basis": "Para birimi",

@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
+import { PageLoading } from '../components/ui/Feedback';
 import { NotFoundPage } from '../features/NotFoundPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
@@ -18,6 +19,7 @@ function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, n
 export const router = createBrowserRouter([
   {
     element: <PublicOnly />,
+    hydrateFallbackElement: <PageLoading />,
     children: [
       { path: '/login', element: <LoginPage /> },
       { path: '/register', element: <RegisterPage /> },
@@ -25,6 +27,7 @@ export const router = createBrowserRouter([
   },
   {
     element: <RequireAuth />,
+    hydrateFallbackElement: <PageLoading />,
     children: [
       { path: '/company/new', element: <CreateCompanyPage /> },
       {

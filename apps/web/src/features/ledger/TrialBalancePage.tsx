@@ -144,7 +144,7 @@ export function TrialBalancePage() {
                   <thead>
                     <tr>
                       <Th className="w-36">{t('common.code')}</Th>
-                      <Th>{t('ledger.accountLedger.pick')}</Th>
+                      <Th>{t('ledger.trialBalance.accountName')}</Th>
                       <Th num>{t('ledger.trialBalance.opening')}</Th>
                       <Th num>{t('ledger.trialBalance.periodDebit')}</Th>
                       <Th num>{t('ledger.trialBalance.periodCredit')}</Th>
@@ -160,7 +160,7 @@ export function TrialBalancePage() {
                           <Td className="font-mono text-[13px]" style={{ paddingLeft: `${1 + (withGroups ? levelOf(r.code) : 0) * 1.1}rem` }}>
                             {r.code}
                           </Td>
-                          <Td>{r.name}</Td>
+                          <Td className="min-w-56">{r.name}</Td>
                           <Td num>
                             <Net value={r.opening} />
                           </Td>
