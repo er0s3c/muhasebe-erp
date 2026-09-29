@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://erp_app:erp_app@localhost:5432/erp_dev
+      MIGRATION_DATABASE_URL: postgres://erp:erp@localhost:5432/erp_dev
+      JWT_SECRET: ci-only-secret-ci-only-secret-32chars
+      CORS_ORIGIN: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Roller ve veritabanları
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f infra/postgres/init.sql
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tip denetimi
+        run: npm run typecheck
+
+      - name: Birim ve entegrasyon testleri (gerçek PostgreSQL, RLS dahil)
+        run: npm test
+
+      - name: Lisans denetimi (yalnızca izinli lisanslar)
+        run: npm run licenses
+
+      - name: Web derlemesi
+        run: npm run build
+
+      - name: Uçtan uca testler
+        run: |
+          npm run db:migrate
+          npx playwright install --with-deps chromium
+          npm run e2e
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screens
+          path: test-results/
+          if-no-files-found: ignore

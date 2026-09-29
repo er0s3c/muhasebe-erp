@@ -1,0 +1,102 @@
+import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
+
+export class AppError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+    public readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
+export const badRequest = (message: string, code = 'BAD_REQUEST', details?: unknown) =>
+  new AppError(400, code, message, details);
+export const unauthorized = (message = 'Oturum geçersiz veya süresi dolmuş') =>
+  new AppError(401, 'UNAUTHORIZED', message);
+export const forbidden = (message = 'Bu işlem için yetkiniz yok', code = 'FORBIDDEN') =>
+  new AppError(403, code, message);
+export const notFound = (what = 'Kayıt') => new AppError(404, 'NOT_FOUND', `${what} bulunamadı`);
+export const conflict = (message: string, code = 'CONFLICT') => new AppError(409, code, message);
+export const unprocessable = (message: string, code: string, details?: unknown) =>
+  new AppError(422, code, message, details);
+
+/** pg hatasına (Drizzle sarmalayıcısının `cause`'u dahil) ulaşır. */
+function pgError(err: unknown): { code?: string; message: string; constraint?: string } | null {
+  let cur: unknown = err;
+  for (let i = 0; i < 4 && cur; i++) {
+    if (typeof cur === 'object' && cur !== null && 'code' in cur && typeof (cur as { code: unknown }).code === 'string') {
+      const c = cur as { code: string; message: string; constraint?: string };
+      if (/^[0-9A-Z]{5}$/.test(c.code)) return c;
+    }
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
+export function errorHandler(
+  err: FastifyError | Error,
+  req: FastifyRequest,
+  reply: FastifyReply,
+): void {
+  if (err instanceof AppError) {
+    void reply
+      .status(err.status)
+      .send({ error: { code: err.code, message: err.message, details: err.details } });
+    return;
+  }
+
+  if (err instanceof z.ZodError) {
+    void reply.status(400).send({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Geçersiz istek verisi',
+        details: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      },
+    });
+    return;
+  }
+
+  const pg = pgError(err);
+  if (pg?.code === 'ERP01') {
+    // Veritabanı iş kuralı tetikleyicilerimiz (değiştirilemez defter vb.)
+    void reply
+      .status(422)
+      .send({ error: { code: 'LEDGER_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === '23505') {
+    void reply
+      .status(409)
+      .send({ error: { code: 'DUPLICATE', message: 'Bu kayıt zaten mevcut', details: pg.constraint } });
+    return;
+  }
+  if (pg?.code === '23514') {
+    void reply
+      .status(422)
+      .send({ error: { code: 'CONSTRAINT_VIOLATION', message: 'Değer izin verilen aralığın dışında', details: pg.constraint } });
+    return;
+  }
+  if (pg?.code === '23503') {
+    void reply
+      .status(409)
+      .send({ error: { code: 'REFERENCED', message: 'İlişkili kayıtlar nedeniyle işlem yapılamaz' } });
+    return;
+  }
+
+  const fastifyStatus = (err as FastifyError).statusCode;
+  if (fastifyStatus && fastifyStatus >= 400 && fastifyStatus < 500) {
+    void reply
+      .status(fastifyStatus)
+      .send({ error: { code: (err as FastifyError).code ?? 'BAD_REQUEST', message: err.message } });
+    return;
+  }
+
+  req.log.error({ err }, 'beklenmeyen hata');
+  void reply
+    .status(500)
+    .send({ error: { code: 'INTERNAL', message: 'Beklenmeyen bir hata oluştu' } });
+}

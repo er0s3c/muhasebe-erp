@@ -1,0 +1,37 @@
+{
+  "name": "muhasebe-erp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,green \"npm:dev -w @erp/api\" \"npm:dev -w @erp/web\"",
+    "build": "npm run build -w @erp/web",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "db:generate": "npm run db:generate -w @erp/api",
+    "db:migrate": "npm run db:migrate -w @erp/api",
+    "db:seed": "npm run db:seed -w @erp/api",
+    "e2e": "playwright test",
+    "licenses": "license-checker-rseidelsohn --production --summary --onlyAllow \"MIT;ISC;BSD-2-Clause;BSD-3-Clause;Apache-2.0;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0;MIT-0;Unlicense;CC-BY-4.0\" --excludePackages \"muhasebe-erp;@erp/api;@erp/web;@erp/shared\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "concurrently": "^10.0.5",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "license-checker-rseidelsohn": "^4.4.2",
+    "prettier": "^3.9.9",
+    "typescript-eslint": "^8.71.0"
+  }
+}

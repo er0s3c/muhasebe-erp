@@ -1,0 +1,179 @@
+{
+  "app": { "name": "Muhasebe ERP", "tagline": "KKTC işletmeleri için sade ve güçlü muhasebe" },
+  "common": {
+    "save": "Kaydet", "cancel": "Vazgeç", "delete": "Sil", "edit": "Düzenle", "add": "Ekle", "close": "Kapat",
+    "search": "Ara", "loading": "Yükleniyor…", "retry": "Tekrar dene", "yes": "Evet", "no": "Hayır",
+    "actions": "İşlemler", "status": "Durum", "date": "Tarih", "description": "Açıklama", "amount": "Tutar",
+    "currency": "Para birimi", "code": "Kod", "name": "Ad", "total": "Toplam", "difference": "Fark",
+    "from": "Başlangıç", "to": "Bitiş", "all": "Tümü", "active": "Aktif", "inactive": "Pasif",
+    "confirmDelete": "Bu kaydı silmek istediğinize emin misiniz?", "saved": "Kaydedildi", "deleted": "Silindi",
+    "optional": "İsteğe bağlı", "unverified": "Doğrulanmamış", "verified": "Doğrulandı", "today": "Bugün",
+    "year": "Yıl", "month": "Ay", "export": "CSV olarak indir", "debit": "Borç", "credit": "Alacak",
+    "balance": "Bakiye", "opening": "Açılış", "closing": "Kapanış", "noResults": "Sonuç bulunamadı",
+    "somethingWrong": "Bir şeyler ters gitti", "notAvailable": "Bu bölüm şirketinizde etkin değil",
+    "reportingCurrencyNote": "Raporlama para birimi", "baseCurrencyNote": "Defter para birimi"
+  },
+  "months": ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"],
+  "roles": {
+    "owner": "Sahip", "admin": "Yönetici", "accountant": "Muhasebeci", "sales": "Satış",
+    "site_manager": "Şantiye şefi", "viewer": "İzleyici"
+  },
+  "sectors": { "CONSTRUCTION": "İnşaat ve taahhüt", "RETAIL_MARKET": "Market ve perakende", "COMMERCE": "Ticaret" },
+  "modules": {
+    "dashboard": "Genel bakış", "ledger": "Muhasebe", "settings": "Ayarlar",
+    "constructionProjects": "Şantiye ve projeler", "retailPos": "Hızlı satış (POS)"
+  },
+  "nav": {
+    "groups": { "overview": "Genel", "accounting": "Muhasebe", "settings": "Ayarlar" },
+    "dashboard": "Genel bakış", "journal": "Yevmiye kayıtları", "accounts": "Hesap planı",
+    "trialBalance": "Mizan", "accountLedger": "Hesap ekstresi", "company": "Şirket bilgileri",
+    "members": "Kullanıcılar", "currencies": "Para birimi ve kurlar", "taxRates": "KDV oranları",
+    "periods": "Mali dönemler", "customCodes": "Özel kodlar"
+  },
+  "shell": {
+    "search": "Ara veya komut yaz…", "searchShort": "Ara", "commandPalette": "Komut paleti",
+    "typeToSearch": "Sayfa veya işlem ara", "pages": "Sayfalar", "quickActions": "Hızlı işlemler",
+    "newJournal": "Yeni yevmiye kaydı", "enterRates": "Kur gir", "theme": "Tema", "themeLight": "Açık tema",
+    "themeDark": "Koyu tema", "logout": "Çıkış yap", "changePassword": "Şifre değiştir", "switchCompany": "Şirket değiştir",
+    "newCompany": "Yeni şirket ekle", "collapse": "Menüyü daralt", "expand": "Menüyü genişlet", "openMenu": "Menüyü aç",
+    "skipToContent": "İçeriğe geç"
+  },
+  "auth": {
+    "loginTitle": "Hesabınıza giriş yapın", "loginSubtitle": "Muhasebenize kaldığınız yerden devam edin.",
+    "registerTitle": "Ücretsiz hesap oluşturun", "registerSubtitle": "Birkaç dakikada ilk şirketinizi kurun.",
+    "email": "E-posta", "password": "Şifre", "passwordHint": "En az 10 karakter", "fullName": "Ad soyad",
+    "organizationName": "Firma / kuruluş adı", "login": "Giriş yap", "register": "Hesap oluştur",
+    "noAccount": "Hesabınız yok mu?", "haveAccount": "Zaten hesabınız var mı?", "invalid": "E-posta veya şifre hatalı",
+    "features": ["Çoklu para birimi: TL, GBP, EUR, USD", "Değiştirilemez defter ve denetim izi", "Şirketler arası tam veri yalıtımı"],
+    "currentPassword": "Mevcut şifre", "newPassword": "Yeni şifre", "passwordChanged": "Şifreniz değiştirildi. Diğer oturumlar kapatıldı."
+  },
+  "onboarding": {
+    "title": "İlk şirketinizi kuralım", "subtitle": "Hesap planı, mali dönemler ve KDV oranları sizin için hazırlanır.",
+    "companyName": "Şirket unvanı", "sector": "Faaliyet alanı", "sectorHint": "Menüde hangi modüllerin görüneceğini belirler.",
+    "baseCurrency": "Defter para birimi", "baseCurrencyHint": "Yasal kayıtlar bu para biriminde tutulur.",
+    "reportingCurrency": "Yönetim raporlama para birimi", "reportingNone": "Kullanma",
+    "reportingHint": "Yönetim raporları için ikinci bir para birimi. Kur girildikçe otomatik hesaplanır.",
+    "taxNumber": "Vergi numarası", "taxOffice": "Vergi dairesi", "create": "Şirketi oluştur",
+    "whatHappens": "Kurulumda neler hazırlanır?",
+    "items": ["Tekdüzen hesap planı başlangıç şablonu", "Bu yılın 12 aylık mali dönemi", "KDV oranları (doğrulama bekler)", "Sizin için sahip yetkisi"]
+  },
+  "dashboard": {
+    "greeting": "Merhaba, {{name}}", "subtitle": "{{company}} için genel durum",
+    "setupTitle": "Kurulum kontrol listesi", "setupDone": "Tamamlandı",
+    "stepRates": "Bugünün döviz kurlarını girin", "stepRatesDesc": "Dövizli işlemler ve raporlama para birimi için gerekir.",
+    "stepVat": "KDV oranlarını mali müşavirinizle doğrulayın", "stepVatDesc": "Başlangıç oranları resmi kaynaktan doğrulanmamıştır.",
+    "stepJournal": "İlk yevmiye kaydınızı girin", "stepJournalDesc": "Açılış bakiyeleri için de kullanabilirsiniz.",
+    "stepTeam": "Ekip arkadaşlarınızı ekleyin", "stepTeamDesc": "Muhasebeci, satış veya izleyici olarak yetkilendirin.",
+    "postedEntries": "Kaydedilen yevmiye", "draftEntries": "Taslak yevmiye", "ledgerBalance": "Defter dengesi",
+    "balanced": "Dengeli", "unbalanced": "Fark var", "recentEntries": "Son yevmiye kayıtları", "noEntries": "Henüz kayıt yok",
+    "viewAll": "Tümünü gör", "todayRates": "Bugünün kurları", "rateMissing": "Girilmemiş"
+  },
+  "settings": {
+    "company": {
+      "title": "Şirket bilgileri", "subtitle": "Unvan ve vergi bilgileri. Para birimleri kurulumdan sonra değiştirilemez.",
+      "taxNumber": "Vergi numarası", "taxOffice": "Vergi dairesi", "sector": "Faaliyet alanı", "enabledModules": "Etkin modüller",
+      "baseCurrency": "Defter para birimi", "reportingCurrency": "Raporlama para birimi", "readOnly": "Bilgileri değiştirmek için sahip yetkisi gerekir."
+    },
+    "members": {
+      "title": "Kullanıcılar ve yetkiler", "subtitle": "Kimin neyi görebileceğini rol belirler.", "add": "Kullanıcı ekle",
+      "role": "Rol", "email": "E-posta", "fullName": "Ad soyad", "initialPassword": "İlk şifre",
+      "initialPasswordHint": "Kullanıcıya iletin; giriş yaptıktan sonra değiştirmesini isteyin. Kullanıcı zaten kuruluşunuzdaysa boş bırakın.",
+      "removeConfirm": "Kullanıcının bu şirketteki erişimi kaldırılsın mı?", "added": "Kullanıcı eklendi", "removed": "Erişim kaldırıldı",
+      "roleUpdated": "Rol güncellendi", "you": "Siz",
+      "roleHelp": {
+        "owner": "Her şey, şirket ayarları dahil", "admin": "Her şey; şirketi silme/devretme hariç",
+        "accountant": "Yevmiye, hesap planı, kurlar, dönem kapatma, raporlar", "sales": "Şimdilik yalnızca genel bakış",
+        "site_manager": "Şimdilik yalnızca genel bakış", "viewer": "Kayıt ve raporları görür, değiştiremez"
+      }
+    },
+    "currencies": {
+      "title": "Para birimi ve kurlar", "subtitle": "Dövizli yevmiye satırları işlem tarihindeki kayıtlı kurdan çevrilir.",
+      "quickEntry": "Kur girişi", "rateDate": "Tarih", "buy": "Alış", "sell": "Satış", "sellHint": "Boşsa alış kuru kullanılır",
+      "pair": "Kur çifti", "source": "Kaynak", "history": "Kur geçmişi", "noRates": "Henüz kur girilmemiş",
+      "noRatesDesc": "Dövizli kayıt yapmak ve raporlama para birimini hesaplamak için önce kur girin.",
+      "saved": "Kur kaydedildi", "deleted": "Kur silindi", "unit": "1 {{from}} =", "backfill": "Eksik raporlama tutarlarını hesapla",
+      "backfilled": "{{updated}} satır güncellendi, {{missing}} satır hâlâ eksik",
+      "info": "Kur en fazla 10 gün öncesine kadar geçerli sayılır (hafta sonu ve bayram tatilleri için). Daha eskiyse yeniden kur girmeniz istenir.",
+      "manual": "Elle giriş"
+    },
+    "taxRates": {
+      "title": "KDV oranları", "subtitle": "Oranlar tarih aralıklıdır; değişiklikler geçmiş kayıtları etkilemez.",
+      "warnTitle": "Bazı oranlar doğrulanmamış",
+      "warnBody": "Başlangıç oranları kapsam belgesinden alınmıştır ve resmi kaynaktan doğrulanmamıştır. Mali müşavirinizle kontrol edip “Doğrula” ile onaylayın.",
+      "rate": "Oran (%)", "validFrom": "Geçerlilik başı", "validTo": "Geçerlilik sonu", "openEnded": "Süresiz", "verify": "Doğrula",
+      "verifiedBy": "Doğrulayan kişi / kurum", "sourceNote": "Kaynak notu", "sourceNoteHint": "Örn. Resmi Gazete tarihi ve sayısı",
+      "add": "Oran ekle", "added": "Oran eklendi", "verifiedMsg": "Oran doğrulandı olarak işaretlendi", "verifyTitle": "Oranı doğrula",
+      "verifyDesc": "Bu oranın resmi kaynaktan doğrulandığını onaylıyorsunuz. Kayıt denetim izine işlenir."
+    },
+    "periods": {
+      "title": "Mali dönemler", "subtitle": "Kapalı döneme kayıt atılamaz. Kapatmadan önce taslak yevmiyeler kaydedilmeli veya silinmelidir.",
+      "addYear": "Yıl ekle", "yearAdded": "{{year}} dönemleri oluşturuldu", "open": "Açık", "closed": "Kapalı", "close": "Dönemi kapat",
+      "reopen": "Yeniden aç", "closedMsg": "Dönem kapatıldı", "reopenedMsg": "Dönem yeniden açıldı",
+      "closeConfirm": "{{period}} dönemi kapatılsın mı? Bu döneme yeni kayıt atılamayacak.",
+      "reopenConfirm": "{{period}} dönemi yeniden açılsın mı?"
+    },
+    "customCodes": {
+      "title": "Özel kodlar", "subtitle": "Kayıtları kendi ölçütlerinizle gruplamak için kullanılır.",
+      "scopes": { "account": "Hesap", "transaction": "İşlem", "party": "Cari", "item": "Stok" },
+      "empty": "Bu kapsamda özel kod yok", "added": "Kod eklendi"
+    }
+  },
+  "ledger": {
+    "accounts": {
+      "title": "Hesap planı", "subtitle": "Tekdüzen başlangıç şablonu yüklendi; şirketinize göre alt hesaplar açabilirsiniz.",
+      "templateWarn": "Bu şablon KKTC mevzuatına göre doğrulanmamıştır. Kullanmadan önce mali müşavirinizle gözden geçirin.",
+      "add": "Hesap ekle", "searchPlaceholder": "Kod veya ada göre ara", "onlyPostable": "Yalnızca kayıt atılabilenler",
+      "postable": "Kayıt atılabilir", "group": "Grup", "fxOnly": "Yalnızca dövizli", "codeHint": "Örn. 120.001 (üst hesap: 120)",
+      "currencyLimit": "Para birimi kısıtı", "noLimit": "Kısıtsız", "added": "Hesap eklendi", "updated": "Hesap güncellendi",
+      "types": { "asset": "Varlık", "liability": "Yükümlülük", "equity": "Özkaynak", "income": "Gelir", "expense": "Gider", "cost": "Maliyet", "memo": "Nazım" },
+      "deactivate": "Pasifleştir", "activate": "Aktifleştir"
+    },
+    "journal": {
+      "title": "Yevmiye kayıtları", "subtitle": "Kaydedilen yevmiye değiştirilemez; düzeltmeler ters kayıtla yapılır.",
+      "new": "Yeni yevmiye", "edit": "Yevmiyeyi düzenle", "entryNo": "Fiş no", "draft": "Taslak", "posted": "Kaydedildi",
+      "reversed": "Ters çevrildi", "reversal": "Ters kayıt", "all": "Tümü", "total": "Tutar", "noEntries": "Kayıt bulunamadı",
+      "noEntriesDesc": "Filtreleri değiştirin veya ilk yevmiyenizi girin.",
+      "date": "Fiş tarihi", "description": "Açıklama", "lines": "Satırlar", "account": "Hesap", "lineDescription": "Satır açıklaması",
+      "fxRate": "Kur", "fxRateHint": "Boşsa kayıtlı kur", "addLine": "Satır ekle", "removeLine": "Satırı sil",
+      "saveDraft": "Taslak kaydet", "post": "Kaydet ve muhasebeleştir", "draftSaved": "Taslak kaydedildi", "postedMsg": "Yevmiye kaydedildi: {{no}}",
+      "diffBalanced": "Dengeli", "diffUnbalanced": "Borç ve alacak eşit değil: fark {{amount}}", "totalsBase": "Toplam ({{currency}})",
+      "reverse": "Ters kayıt oluştur", "reverseTitle": "Ters kayıt", "reverseDesc": "Borç ve alacak yer değiştirir; orijinal kayıt korunur ve iki kayıt birbirine bağlanır.",
+      "reverseDate": "Ters kayıt tarihi", "reversedMsg": "Ters kayıt oluşturuldu: {{no}}", "reversedBy": "Ters kayıt", "reversalOf": "Şu kaydın tersi",
+      "deleteDraft": "Taslağı sil", "draftDeleted": "Taslak silindi", "postNow": "Muhasebeleştir", "detail": "Yevmiye detayı",
+      "minLines": "En az iki satır gerekli", "pickAccount": "Hesap seçin", "baseAmount": "Defter tutarı", "created": "Oluşturuldu",
+      "fxMissing": "Kur bulunamadı — Ayarlar > Para birimi ve kurlar", "enterFx": "Kur gir"
+    },
+    "trialBalance": {
+      "title": "Mizan", "subtitle": "Seçilen dönemin borç, alacak ve bakiye toplamları. Taslak kayıtlar dahil edilmez.",
+      "run": "Raporu getir", "view": "Görünüm", "withGroups": "Gruplarla", "accountsOnly": "Yalnızca hesaplar",
+      "opening": "Açılış bakiyesi", "periodDebit": "Dönem borç", "periodCredit": "Dönem alacak", "closingDebit": "Borç bakiyesi",
+      "closingCredit": "Alacak bakiyesi", "grandTotal": "Genel toplam", "balanced": "Mizan dengeli: borç ve alacak eşit",
+      "unbalanced": "Mizan dengesiz: fark {{amount}}", "empty": "Bu aralıkta hareket yok", "basis": "Para birimi",
+      "base": "Defter ({{currency}})", "reporting": "Raporlama ({{currency}})", "noReporting": "Raporlama para birimi tanımlı değil",
+      "missingTitle": "{{count}} satırın raporlama tutarı eksik",
+      "missingBody": "Kur girilmediği için bu satırlar raporlama para biriminde hesaplanamadı. Kur girdikten sonra yeniden hesaplayın."
+    },
+    "accountLedger": {
+      "title": "Hesap ekstresi", "subtitle": "Bir hesabın (ve alt hesaplarının) hareketleri, yürüyen bakiyeyle.",
+      "pick": "Hesap seçin", "pickPrompt": "Ekstre için bir hesap seçin", "entryNo": "Fiş no", "opening": "Açılış bakiyesi",
+      "closing": "Kapanış bakiyesi", "totals": "Dönem toplamı", "empty": "Bu aralıkta hareket yok", "fx": "Döviz tutarı"
+    }
+  },
+  "errors": {
+    "UNAUTHORIZED": "Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.",
+    "FORBIDDEN": "Bu işlem için yetkiniz yok.",
+    "MODULE_DISABLED": "Bu bölüm şirketinizde etkin değil.",
+    "INVALID_CREDENTIALS": "E-posta veya şifre hatalı.",
+    "EMAIL_TAKEN": "Bu e-posta adresi zaten kayıtlı.",
+    "PERIOD_MISSING": "Bu tarih için mali dönem tanımlı değil. Ayarlar > Mali dönemler bölümünden yılı ekleyin.",
+    "PERIOD_CLOSED": "Bu dönem kapalı; kayıt atılamaz.",
+    "PERIOD_HAS_DRAFTS": "Dönemde taslak yevmiye var. Önce kaydedin veya silin.",
+    "FX_RATE_MISSING": "Bu tarih için döviz kuru bulunamadı. Önce kur girin.",
+    "ACCOUNT_CODE_TAKEN": "Bu hesap kodu zaten kullanılıyor.",
+    "LEDGER_RULE_VIOLATION": "Muhasebe kuralı ihlali",
+    "VALIDATION_ERROR": "Lütfen işaretli alanları kontrol edin.",
+    "DUPLICATE": "Bu kayıt zaten mevcut.",
+    "INTERNAL": "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.",
+    "NETWORK": "Sunucuya ulaşılamadı. Bağlantınızı kontrol edin."
+  }
+}
