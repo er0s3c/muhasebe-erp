@@ -64,7 +64,7 @@ export function AppShell() {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full print:block print:h-auto">
       <a href="#main" className="sr-only z-[70] rounded-md bg-surface px-3 py-2 focus:not-sr-only focus:fixed focus:left-3 focus:top-3">
         {t('shell.skipToContent')}
       </a>
@@ -74,7 +74,7 @@ export function AppShell() {
       )}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-surface transition-[transform,width] duration-200 lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-surface transition-[transform,width] duration-200 print:hidden lg:static lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           collapsed && 'lg:w-[68px]',
         )}
@@ -83,7 +83,7 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur [box-shadow:var(--shadow-subtle)] sm:px-6">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur [box-shadow:var(--shadow-subtle)] print:hidden sm:px-6">
           <button className="rounded-md p-2 text-muted hover:bg-surface-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label={t('shell.openMenu')}>
             <Menu className="size-5" />
           </button>
@@ -103,7 +103,7 @@ export function AppShell() {
           </div>
         </header>
 
-        <main id="main" className="flex-1 overflow-y-auto">
+        <main id="main" className="flex-1 overflow-y-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-8 sm:py-8">
             <Outlet />
           </div>

@@ -1,5 +1,6 @@
 import { ArrowLeftRight, ChevronRight, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { STOCK_DOC_TYPES } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
@@ -30,7 +31,16 @@ export function MovementsPage() {
   const [limit, setLimit] = useState(PAGE);
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
   useEffect(() => setLimit(PAGE), [type, warehouseId, from, to]);
+  // Fatura ya da yevmiyeden (?open=<id>) gelindiyse belgeyi aç
+  useEffect(() => {
+    const open = params.get('open');
+    if (open) {
+      setOpenId(open);
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
 
   const qs = new URLSearchParams({ limit: String(limit) });
   if (type) qs.set('type', type);

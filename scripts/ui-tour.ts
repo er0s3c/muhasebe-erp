@@ -173,6 +173,27 @@ async function main() {
   await shot(page, '37-sayim-detay');
   await go('/inventory/warehouses', '38-depolar', 'Depolar');
 
+  // Fatura
+  await go('/invoices/sales', '40-satis-faturalari', 'Satış faturaları');
+  await page.getByRole('row', { name: /B Blok 1\. kat seramik/ }).click();
+  await page.getByRole('heading', { name: /^SF-/, level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '41-fatura-detay-gbp');
+  await go('/invoices/purchases', '42-alis-faturalari', 'Alış ve gider faturaları');
+  await page.getByRole('row', { name: /LO-388/ }).click();
+  await page.getByRole('heading', { name: /^AF-/, level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '43-alis-faturasi-detay-eur');
+  await go('/invoices/sales', '44-satis-listesi-tumu', 'Satış faturaları');
+  await page.getByRole('row', { name: /Ek boya siparişi/ }).click();
+  await page.getByRole('heading', { name: /Satış faturası \(taslak\)/, level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '45-taslak-fatura-duzenle');
+  await go('/invoices/new?type=sales', '46-yeni-satis-faturasi', 'Satış faturası');
+  await go('/invoices/vat-summary', '47-kdv-ozeti', 'KDV özeti');
+  await go('/settings/account-mapping', '48-hesap-esleme', 'Hesap eşlemesi');
+  await go('/accounting/journal', '49-yevmiye-kaynakli', 'Yevmiye kayıtları');
+
   // Ayarlar
   await go('/settings/currencies', '11-kurlar', 'Para birimi ve kurlar');
   // Merkez Bankası XML dosyasından içe aktarma (resmî örnek dosya)
@@ -222,7 +243,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);

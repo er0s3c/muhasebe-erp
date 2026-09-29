@@ -7,10 +7,12 @@ import {
   isoDate,
   reverseJournalSchema,
   trialBalanceQuerySchema,
+  updateAccountMappingsSchema,
   updateAccountSchema,
   uuid,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { unprocessable } from '../../http/errors';
 import { createAccount, listAccounts, updateAccount } from './accounts';
 import {
   backfillReporting,
@@ -23,6 +25,7 @@ import {
   updateDraftEntry,
   type LedgerCtx,
 } from './journal';
+import { listMappings, updateMappings } from './mappings';
 import { accountLedger, trialBalance } from './reports';
 
 const idParam = z.object({ id: uuid });
@@ -60,6 +63,19 @@ export const ledgerRoutes: FastifyPluginAsync = async (app) => {
       const { id } = idParam.parse(req.params);
       return { account: await updateAccount(tx, id, updateAccountSchema.parse(req.body)) };
     }),
+  );
+
+  // ---- Hesap eşlemesi: otomatik yevmiyede kullanılan hesaplar --------------
+  app.get(
+    '/api/account-mappings',
+    tenantRoute(app, ledger('ledger.read'), async ({ tx }) => ({ mappings: await listMappings(tx) })),
+  );
+
+  app.put(
+    '/api/account-mappings',
+    tenantRoute(app, ledger('accounts.manage'), async ({ tx, req, company }) => ({
+      mappings: await updateMappings(tx, company.id, updateAccountMappingsSchema.parse(req.body)),
+    })),
   );
 
   // ---- Yevmiye ----------------------------------------------------------
@@ -128,6 +144,12 @@ export const ledgerRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, ledger('ledger.post'), async (c) => {
       const { id } = idParam.parse(c.req.params);
       const input = reverseJournalSchema.parse(c.req.body ?? {});
+      // Fatura/stok belgesi gibi bir kaynaktan doğan kayıt tek başına ters çevrilirse kaynak belge
+      // ile yevmiye ayrışır; ters kayıt kaynak belgeden (iptal/ters belge) yapılır.
+      const { sourceType } = await getJournalEntry(c.tx, id);
+      if (sourceType) {
+        throw unprocessable('Bu yevmiye bir belgeden otomatik oluşturuldu; ters kaydı ilgili belgeden (fatura iptali, ters stok belgesi) yapın', 'ENTRY_HAS_SOURCE', { sourceType });
+      }
       const entry = await reverseJournalEntry(c.tx, toLedgerCtx(c), id, input);
       void c.reply.code(201);
       return { entry };

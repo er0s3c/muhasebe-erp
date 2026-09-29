@@ -325,8 +325,17 @@ describe('stok', async () => {
 
     expect((await c.post(`/api/stock-documents/${out.id}/reverse`, { docDate: day(3, 3) })).json().error.code).toBe('STOCK_DOC_ALREADY_REVERSED');
     expect((await c.post(`/api/stock-documents/${rev.json().document.id}/reverse`, { docDate: day(3, 3) })).json().error.code).toBe('STOCK_DOC_IS_REVERSAL');
-    // Ters belge de bir hareket sayılır: ilk alış hâlâ ters çevrilemez
-    expect((await c.post(`/api/stock-documents/${first.id}/reverse`, { docDate: day(3, 4) })).json().error.code).toBe('STOCK_DOC_HAS_LATER_MOVEMENTS');
+    // Çıkış ve ters belgesi çifti ürünün durumunu (miktar, değer) olduğu gibi bıraktı: sonradan hareket
+    // sayılmaz, ilk alış yine tam geri alınır
+    const back = await c.post(`/api/stock-documents/${first.id}/reverse`, { docDate: day(3, 4) });
+    expect(back.statusCode).toBe(200);
+    expect(await info(c, a.id)).toMatchObject({ qty: '0.0000', value: '0.0000' });
+
+    // Ters çevrilmemiş bir hareket ise engellemeye devam eder
+    const b = await mkItem(c, 'Kireç');
+    const firstB = (await receipt(c, day(3, 5), main.id, b.id, '10', '10')).json().document;
+    await issue(c, day(3, 6), main.id, b.id, '1');
+    expect((await c.post(`/api/stock-documents/${firstB.id}/reverse`, { docDate: day(3, 7) })).json().error.code).toBe('STOCK_DOC_HAS_LATER_MOVEMENTS');
   });
 
   it('stok defteri değiştirilemez: tetikleyiciler (sahip rolüyle) ve yetkiler (erp_app) UPDATE/DELETE reddeder', async () => {
@@ -553,22 +562,25 @@ describe('stok', async () => {
     await putRate(c, day(3, 25), 'GBP', '50');
     expect((await report(`asOf=${day(3, 31)}`)).totals).toMatchObject({ reportingCurrency: 'GBP', reportingValue: '5.0000' });
 
-    // Muhasebe mutabakatı: 153'e 200 borç yazılınca fark 250 − 200 = 50
-    expect((await report(`asOf=${day(3, 31)}`)).ledger).toMatchObject({ accountsBalance: '0.0000', stockValue: '250.0000', difference: '250.0000' });
+    // Muhasebe mutabakatı: elle girilen stok belgeleri otomatik yevmiye ürettiği için stok defteri
+    // ile 150–157 hesap bakiyesi baştan tutar (fark 0).
+    expect((await report(`asOf=${day(3, 31)}`)).ledger).toMatchObject({ accountsBalance: '250.0000', stockValue: '250.0000', difference: '0.0000' });
+    // Girişler 1 Mart'ta: 10 Mart itibarıyla hesap bakiyesi 300, çıkış (20 Mart) henüz yok
+    expect((await report(`asOf=${day(3, 10)}`)).ledger).toMatchObject({ accountsBalance: '300.0000', stockValue: '300.0000', difference: '0.0000' });
+
+    // Stok hesabına elle yevmiye ile 200 borç yazılırsa fark görünür: 250 − 450 = −200
     const ids = await accountIds(app, s.token, company.id);
     const je = await c.post('/api/journal-entries', {
       entryDate: day(3, 15),
-      description: 'Stok açılış bakiyesi',
+      description: 'Stok hesabına elle kayıt',
       lines: [
-        { accountId: ids['153']!, currency: 'TRY', debit: '200' },
+        { accountId: ids['150']!, currency: 'TRY', debit: '200' },
         { accountId: ids['100']!, currency: 'TRY', credit: '200' },
       ],
       post: true,
     });
     expect(je.statusCode).toBe(201);
-    expect((await report(`asOf=${day(3, 31)}`)).ledger).toMatchObject({ accountsBalance: '200.0000', stockValue: '250.0000', difference: '50.0000' });
-    // Yevmiye tarihinden önceki bir tarihte hesap bakiyesi henüz yok
-    expect((await report(`asOf=${day(3, 10)}`)).ledger.accountsBalance).toBe('0.0000');
+    expect((await report(`asOf=${day(3, 31)}`)).ledger).toMatchObject({ accountsBalance: '450.0000', stockValue: '250.0000', difference: '-200.0000' });
 
     // Genel bakış özeti
     const summary = (await c.get('/api/inventory/summary')).json();

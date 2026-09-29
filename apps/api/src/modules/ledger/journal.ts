@@ -21,6 +21,17 @@ import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { findRate, requireRate } from '../settings/rates';
 
+/**
+ * Otomatik yevmiyede (fatura, stok belgesi) satırın defter para birimi tutarı önceden hesaplanmış
+ * olabilir: fişin dengesi satır satır yuvarlamadan etkilenmesin diye. Kullanıcı girişinde kullanılmaz.
+ */
+export type AutoJournalLine = JournalLineInput & { debitBase?: string; creditBase?: string };
+
+export interface SourceRef {
+  type: string;
+  id: string;
+}
+
 export interface LedgerCtx {
   companyId: string;
   userId: string;
@@ -83,7 +94,7 @@ async function prepareLines(
   tx: Tx,
   ctx: LedgerCtx,
   entryDate: string,
-  lines: readonly JournalLineInput[],
+  lines: readonly AutoJournalLine[],
 ): Promise<PreparedLine[]> {
   const accountIds = [...new Set(lines.map((l) => l.accountId))];
   const found = await tx.select().from(accounts).where(inArray(accounts.id, accountIds));
@@ -170,8 +181,8 @@ async function prepareLines(
       fx = await getRate(line.currency, ctx.baseCurrency);
     }
 
-    const debitBase = applyRate(debit, fx);
-    const creditBase = applyRate(credit, fx);
+    const debitBase = line.debitBase !== undefined ? dec(line.debitBase) : applyRate(debit, fx);
+    const creditBase = line.creditBase !== undefined ? dec(line.creditBase) : applyRate(credit, fx);
     prepared.push({
       accountId: line.accountId,
       description: line.description ?? null,
@@ -211,7 +222,12 @@ function toRows(entryId: string, companyId: string, lines: PreparedLine[]) {
   }));
 }
 
-export async function createJournalEntry(tx: Tx, ctx: LedgerCtx, input: CreateJournalInput) {
+export async function createJournalEntry(
+  tx: Tx,
+  ctx: LedgerCtx,
+  input: Omit<CreateJournalInput, 'lines'> & { lines: readonly AutoJournalLine[] },
+  opts: { source?: SourceRef } = {},
+) {
   const period = await requireOpenPeriod(tx, input.entryDate);
   const lines = await prepareLines(tx, ctx, input.entryDate, input.lines);
 
@@ -222,6 +238,8 @@ export async function createJournalEntry(tx: Tx, ctx: LedgerCtx, input: CreateJo
       entryDate: input.entryDate,
       periodId: period.id,
       description: input.description,
+      sourceType: opts.source?.type ?? null,
+      sourceId: opts.source?.id ?? null,
       createdBy: ctx.userId,
     })
     .returning({ id: journalEntries.id });
@@ -302,7 +320,7 @@ export async function reverseJournalEntry(
   tx: Tx,
   ctx: LedgerCtx,
   id: string,
-  opts: { entryDate?: string; description?: string },
+  opts: { entryDate?: string; description?: string; source?: SourceRef },
 ) {
   const [original] = await tx.select().from(journalEntries).where(eq(journalEntries.id, id));
   if (!original) throw notFound('Yevmiye');
@@ -331,6 +349,8 @@ export async function reverseJournalEntry(
       entryDate: date,
       periodId: period.id,
       description: opts.description ?? `Ters kayıt: ${original.entryNo} — ${original.description}`,
+      sourceType: opts.source?.type ?? original.sourceType,
+      sourceId: opts.source?.id ?? original.sourceId,
       reversalOfId: id,
       createdBy: ctx.userId,
     })
@@ -374,6 +394,8 @@ export async function getJournalEntry(tx: Tx, id: string) {
       status: journalEntries.status,
       reversalOfId: journalEntries.reversalOfId,
       reversedById: journalEntries.reversedById,
+      sourceType: journalEntries.sourceType,
+      sourceId: journalEntries.sourceId,
       postedAt: journalEntries.postedAt,
       createdAt: journalEntries.createdAt,
       periodYear: fiscalPeriods.year,
@@ -437,6 +459,8 @@ export async function listJournalEntries(tx: Tx, q: ListEntriesQuery) {
       status: journalEntries.status,
       reversalOfId: journalEntries.reversalOfId,
       reversedById: journalEntries.reversedById,
+      sourceType: journalEntries.sourceType,
+      sourceId: journalEntries.sourceId,
       totalBase: sql<string>`coalesce(sum(${journalLines.debitBase}), 0)`,
     })
     .from(journalEntries)

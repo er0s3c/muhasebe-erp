@@ -1,0 +1,200 @@
+import { z } from 'zod';
+import { dec } from '../money';
+import type { Sector } from '../module-registry';
+import { currencyCode, isoDate, rateString, uuid } from './common';
+import { ITEM_UNITS, positiveQuantity, unitCostString } from './inventory';
+
+// --- Fatura türleri ----------------------------------------------------------
+
+export const INVOICE_TYPES = ['sales', 'purchase', 'expense', 'sales_return', 'purchase_return'] as const;
+export type InvoiceType = (typeof INVOICE_TYPES)[number];
+
+export const INVOICE_STATUSES = ['draft', 'posted', 'cancelled'] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+
+export type InvoiceSide = 'sales' | 'purchases';
+
+export interface InvoiceTypeMeta {
+  /** Boşluksuz numara öneki (SF-2026-000001). */
+  prefix: string;
+  side: InvoiceSide;
+  /** Cari satırın kontrol hesabı türü. */
+  control: 'receivable' | 'payable';
+  /** Stoklu (mal) satır taşıyabilir mi? Gider faturası taşıyamaz. */
+  stock: boolean;
+  isReturn: boolean;
+  /** İade türünde bağlanabileceği orijinal fatura türü. */
+  returnOf?: InvoiceType;
+}
+
+export const INVOICE_TYPE_META: Record<InvoiceType, InvoiceTypeMeta> = {
+  sales: { prefix: 'SF', side: 'sales', control: 'receivable', stock: true, isReturn: false },
+  sales_return: { prefix: 'SIF', side: 'sales', control: 'receivable', stock: true, isReturn: true, returnOf: 'sales' },
+  purchase: { prefix: 'AF', side: 'purchases', control: 'payable', stock: true, isReturn: false },
+  expense: { prefix: 'GF', side: 'purchases', control: 'payable', stock: false, isReturn: false },
+  purchase_return: { prefix: 'AIF', side: 'purchases', control: 'payable', stock: true, isReturn: true, returnOf: 'purchase' },
+};
+
+/** Tedarikçi fatura numarası gerektiren türler (mükerrer girişi de bununla yakalarız). */
+export const EXTERNAL_NO_REQUIRED: readonly InvoiceType[] = ['purchase', 'expense', 'purchase_return'];
+
+export const invoiceTypesOf = (side: InvoiceSide): InvoiceType[] =>
+  INVOICE_TYPES.filter((t) => INVOICE_TYPE_META[t].side === side);
+
+// --- Hesap eşlemesi ----------------------------------------------------------
+
+/**
+ * Otomatik yevmiyede kullanılan hesaplar. Şirket kurulurken varsayılanlar yüklenir; Ayarlar'dan
+ * değiştirilir. Varsayılanlar genel Tekdüzen yapıya dayanır ve mali müşavirce DOĞRULANMAMIŞTIR.
+ */
+export const ACCOUNT_MAPPING_KEYS = [
+  'receivable',
+  'payable',
+  'sales_revenue',
+  'sales_return',
+  'cogs',
+  'stock',
+  'vat_output',
+  'vat_input',
+  'default_expense',
+  'stock_gain',
+  'stock_loss',
+  'consumption',
+  'opening_offset',
+] as const;
+export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
+
+export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, string> {
+  return {
+    receivable: '120',
+    payable: '320',
+    sales_revenue: '600',
+    sales_return: '610',
+    cogs: '621',
+    // İnşaatta stok ağırlıkla ilk madde ve malzemedir; ticaret/perakendede ticari mal.
+    stock: sector === 'CONSTRUCTION' ? '150' : '153',
+    vat_output: '391',
+    vat_input: '191',
+    default_expense: '632',
+    stock_gain: '649',
+    stock_loss: '659',
+    consumption: '710',
+    opening_offset: '500',
+  };
+}
+
+export const updateAccountMappingsSchema = z.object({
+  // Kısmi güncelleme: yalnızca gönderilen anahtarlar değişir
+  mappings: z.partialRecord(z.enum(ACCOUNT_MAPPING_KEYS), uuid),
+});
+export type UpdateAccountMappingsInput = z.infer<typeof updateAccountMappingsSchema>;
+
+// --- Fatura girişi -----------------------------------------------------------
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .transform((v) => (v === '' ? undefined : v))
+    .optional();
+
+/** Yüzde: 0–100, en çok 4 ondalık. */
+export const percentString = z
+  .string()
+  .regex(/^\d{1,3}(\.\d{1,4})?$/, 'Geçersiz oran')
+  .refine((v) => dec(v).lte(100), 'Oran 100\'ü aşamaz');
+
+export const invoiceLineSchema = z.object({
+  /** Boşsa serbest satır (hizmet, gider…): açıklama ve hesap ile girilir. */
+  itemId: uuid.nullable().optional(),
+  description: z.string().trim().min(1, 'Açıklama gerekli').max(300),
+  quantity: positiveQuantity,
+  unit: z.enum(ITEM_UNITS).nullable().optional(),
+  /** Fatura para biriminde birim fiyat (KDV dahil faturada KDV dahil). */
+  unitPrice: unitCostString,
+  discountPct: percentString.default('0'),
+  /** Şirketin KDV oranı kodu; boşsa KDV yok (%0). */
+  vatCode: z.string().trim().max(20).nullable().optional(),
+  /** Serbest satırda gelir/gider hesabı; boşsa eşlemedeki varsayılan kullanılır. */
+  accountId: uuid.nullable().optional(),
+  /** İade faturasında, iade edilen orijinal fatura satırı. */
+  sourceLineId: uuid.nullable().optional(),
+});
+export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
+
+const invoiceBase = z.object({
+  partyId: uuid,
+  invoiceDate: isoDate,
+  /** Boşsa fatura tarihi + carinin vade günü. */
+  dueDate: isoDate.nullable().optional(),
+  /** Tedarikçinin fatura numarası (alış/gider/alış iadesi için zorunlu). */
+  externalNo: optionalText(40),
+  /** Boşsa carinin para birimi. */
+  currency: currencyCode.optional(),
+  /** Verilmezse fatura tarihindeki kayıtlı kur kullanılır. */
+  fxRate: rateString.optional(),
+  /** Birim fiyatlar KDV dahil mi? */
+  vatIncluded: z.boolean().default(false),
+  /** Stoklu satır varsa zorunlu; boşsa varsayılan depo. */
+  warehouseId: uuid.nullable().optional(),
+  /** İade faturası: bağlı orijinal fatura (isteğe bağlı). */
+  returnOfId: uuid.nullable().optional(),
+  description: optionalText(300),
+  lines: z.array(invoiceLineSchema).min(1, 'En az bir satır gerekli').max(300),
+  /** true ise taslak beklemeden kaydedilir ve muhasebeleştirilir. */
+  post: z.boolean().default(false),
+});
+
+type InvoiceBase = z.infer<typeof invoiceBase>;
+
+function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx) {
+  if (doc.dueDate && doc.dueDate < doc.invoiceDate) {
+    ctx.addIssue({ code: 'custom', path: ['dueDate'], message: 'Vade tarihi fatura tarihinden önce olamaz' });
+  }
+  if (doc.type) {
+    const meta = INVOICE_TYPE_META[doc.type];
+    if (doc.returnOfId && !meta.isReturn) {
+      ctx.addIssue({ code: 'custom', path: ['returnOfId'], message: 'Orijinal fatura yalnızca iade faturasında seçilir' });
+    }
+    doc.lines.forEach((l, i) => {
+      if (l.sourceLineId && !meta.isReturn) {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'sourceLineId'], message: 'Satır bağı yalnızca iade faturasında kullanılır' });
+      }
+      if (l.sourceLineId && !doc.returnOfId) {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'sourceLineId'], message: 'Satır bağı için orijinal fatura seçilmeli' });
+      }
+    });
+  }
+}
+
+export const createInvoiceSchema = invoiceBase.extend({ type: z.enum(INVOICE_TYPES) }).superRefine(refine);
+export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
+
+/** Taslağı tümüyle değiştirir; tür değiştirilemez. */
+export const updateInvoiceSchema = invoiceBase.superRefine((doc, ctx) => refine(doc, ctx));
+export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
+
+export const cancelInvoiceSchema = z.object({
+  /** İptal (ters kayıt) tarihi; boşsa bugün. */
+  date: isoDate.optional(),
+  reason: z.string().trim().min(3, 'İptal nedeni gerekli').max(300),
+});
+export type CancelInvoiceInput = z.infer<typeof cancelInvoiceSchema>;
+
+export const listInvoicesQuerySchema = z.object({
+  side: z.enum(['sales', 'purchases']).optional(),
+  type: z.enum(INVOICE_TYPES).optional(),
+  status: z.enum(INVOICE_STATUSES).optional(),
+  partyId: uuid.optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  /** Fatura no, tedarikçi fatura no, cari adı/kodu. */
+  query: z.string().trim().max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListInvoicesQuery = z.infer<typeof listInvoicesQuerySchema>;
+
+export const vatSummaryQuerySchema = z.object({ from: isoDate, to: isoDate });
+export type VatSummaryQuery = z.infer<typeof vatSummaryQuerySchema>;

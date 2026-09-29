@@ -50,7 +50,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Depolar, giriş/çıkış/transfer/devir hareketleri; ters belge | ✅ |
 | Sarf, fire, sayım ve sayım farkı | ✅ |
 | Hareketli ağırlıklı ortalama maliyet, dövizli alış maliyeti, negatif stok ayarı, stok değerleme | ✅ |
-| Stok değeri ↔ muhasebe (150–157) mutabakatı; stok hareketinden otomatik yevmiye | ✅ mutabakat · 🔜 M6 yevmiye |
+| Stok değeri ↔ muhasebe (150–157) mutabakatı; stok hareketinden otomatik yevmiye | ✅ |
 | Stok durumu (tarih anı), kart ekstresi, kritik seviye | ✅ |
 | Stok kâr/zarar ve diğer rapor seti | 🔜 M8 |
 | Seri no takibi, emanet stok, barkod yazdırma | ⏳ |
@@ -60,12 +60,15 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 
 | İşlev | Durum |
 |---|---|
-| Satış, alış ve gider faturası; iade | 🔜 M6 |
-| İrsaliye ve faturaya dönüştürme; toplu fatura | 🔜 M6 |
-| Faturadan stok, cari ve yevmiye kaydının otomatik oluşması | 🔜 M6 |
-| Faturanın muhasebe fişi (mahsup) önizlemesi | 🔜 M6 |
+| Satış, alış ve gider faturası; satış ve alış iadesi (orijinal faturaya bağlı, kalan miktar denetimli) | ✅ |
+| Faturadan stok, cari ve yevmiye kaydının otomatik oluşması; iptal (ters kayıt) | ✅ |
+| Hesap eşlemesi (gelir, maliyet, stok, KDV, gider, fire, sarf hesapları) | ✅ ⚠️ varsayılanlar doğrulanmadı |
+| KDV hariç/dahil fiyat, iskonto, dövizli fatura, KDV özeti | ✅ ⚠️ oranlar doğrulanmadı |
+| Elle girilen stok belgelerinin ve sayımın otomatik yevmiyesi | ✅ |
+| Faturanın yazdırılabilir görünümü (iç belge) | ✅ ⚠️ yasal fatura biçimi doğrulanmadı |
+| İrsaliye ve faturaya dönüştürme; toplu fatura | 🔜 M6b |
 | Excel ile fatura/irsaliye içe aktarma | 🔜 M8 |
-| Gider kartları ve gider raporları | 🔜 M6 |
+| Gider kartları ve gider raporları | ⏳ |
 | İthalat maliyet dağıtımı (navlun, gümrük, liman) | ⏳ Faz B |
 | e-Fatura entegrasyonu | ⏳ Faz C ⚠️ |
 

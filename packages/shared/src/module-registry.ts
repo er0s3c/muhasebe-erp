@@ -23,6 +23,7 @@ export const MODULES: readonly ModuleDef[] = [
   { key: 'core.ledger', labelKey: 'modules.ledger', sectors: 'all', status: 'available' },
   { key: 'core.parties', labelKey: 'modules.parties', sectors: 'all', status: 'available' },
   { key: 'core.inventory', labelKey: 'modules.inventory', sectors: 'all', status: 'available' },
+  { key: 'core.invoices', labelKey: 'modules.invoices', sectors: 'all', status: 'available' },
   { key: 'core.settings', labelKey: 'modules.settings', sectors: 'all', status: 'available' },
   {
     key: 'construction.projects',
@@ -38,7 +39,7 @@ export const MODULES: readonly ModuleDef[] = [
   },
 ];
 
-export type NavGroupKey = 'overview' | 'parties' | 'stock' | 'accounting' | 'settings';
+export type NavGroupKey = 'overview' | 'parties' | 'invoices' | 'stock' | 'accounting' | 'settings';
 
 export interface NavItemDef {
   key: string;
@@ -54,6 +55,7 @@ export interface NavItemDef {
 export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
   { key: 'overview', labelKey: 'nav.groups.overview' },
   { key: 'parties', labelKey: 'nav.groups.parties' },
+  { key: 'invoices', labelKey: 'nav.groups.invoices' },
   { key: 'stock', labelKey: 'nav.groups.stock' },
   { key: 'accounting', labelKey: 'nav.groups.accounting' },
   { key: 'settings', labelKey: 'nav.groups.settings' },
@@ -85,6 +87,33 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'parties',
     module: 'core.parties',
     permission: 'parties.read',
+  },
+  {
+    key: 'sales-invoices',
+    labelKey: 'nav.salesInvoices',
+    path: '/invoices/sales',
+    icon: 'receipt',
+    group: 'invoices',
+    module: 'core.invoices',
+    permission: 'invoices.read',
+  },
+  {
+    key: 'purchase-invoices',
+    labelKey: 'nav.purchaseInvoices',
+    path: '/invoices/purchases',
+    icon: 'receipt-text',
+    group: 'invoices',
+    module: 'core.invoices',
+    permission: 'invoices.read',
+  },
+  {
+    key: 'vat-summary',
+    labelKey: 'nav.vatSummary',
+    path: '/invoices/vat-summary',
+    icon: 'percent',
+    group: 'invoices',
+    module: 'core.invoices',
+    permission: 'reports.read',
   },
   {
     key: 'items',
@@ -211,6 +240,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'settings',
     module: 'core.settings',
     permission: 'settings.read',
+  },
+  {
+    key: 'account-mapping',
+    labelKey: 'nav.accountMapping',
+    path: '/settings/account-mapping',
+    icon: 'link-2',
+    group: 'settings',
+    module: 'core.settings',
+    permission: 'accounts.manage',
   },
   {
     key: 'custom-codes',

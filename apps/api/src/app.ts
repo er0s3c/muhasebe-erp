@@ -9,6 +9,7 @@ import type { Db } from './db/client';
 import { errorHandler } from './http/errors';
 import { authRoutes } from './modules/auth/routes';
 import { inventoryRoutes } from './modules/inventory/routes';
+import { invoiceRoutes } from './modules/invoices/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
@@ -62,6 +63,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(ledgerRoutes);
   await app.register(partyRoutes);
   await app.register(inventoryRoutes);
+  await app.register(invoiceRoutes);
 
   return app;
 }

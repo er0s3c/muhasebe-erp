@@ -13,6 +13,7 @@ import { notFound, unprocessable } from '../../http/errors';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { loadItemStates, loadWarehouseQty, lockItems } from './balances';
+import { journalStockDocument } from './journal';
 import { insertDocument, loadStockableItems, type StockCtx } from './documents';
 import { StockPlanner } from './planner';
 import { requireActiveWarehouse } from './warehouses';
@@ -240,6 +241,7 @@ export async function postStockCount(tx: Tx, ctx: StockCtx, id: string) {
           planner.rows,
         )
       : null;
+  if (doc) await journalStockDocument(tx, ctx, doc, planner.rows);
 
   for (const line of counted) {
     const d = diffs.get(line.itemId)!;

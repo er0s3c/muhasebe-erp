@@ -10,7 +10,7 @@ import { cn } from '../../lib/cn';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCQuery, useCompanyApi } from '../../lib/queries';
 import { useSession } from '../../lib/session';
-import type { AgingReport, InventorySummary, JournalListItem, Member, TaxRate, TrialBalanceData } from '../../lib/types';
+import type { AgingReport, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData } from '../../lib/types';
 
 interface Step {
   key: string;
@@ -77,6 +77,8 @@ export function DashboardPage() {
   const canParties = can('parties.read');
   const canInventory = can('inventory.read');
   const { data: stockSummary } = useCQuery<InventorySummary>(['dashboard', 'stock'], '/api/inventory/summary', { enabled: canInventory });
+  const canInvoices = can('invoices.read');
+  const { data: invSummary } = useCQuery<InvoiceSummary>(['dashboard', 'invoices'], '/api/invoices/summary', { enabled: canInvoices });
 
   const { data: posted } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'posted'], `/api/journal-entries?status=posted&limit=200&from=${year}-01-01`, { enabled: canLedger });
   const { data: drafts } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'drafts'], '/api/journal-entries?status=draft&limit=200', { enabled: canLedger });
@@ -143,6 +145,13 @@ export function DashboardPage() {
               ? [
                   { key: 'recv', label: t('dashboard.receivables'), value: recv ? `${money(recv.totals.total)} ${company.baseCurrency}` : '—', to: '/parties/aging' },
                   { key: 'pay', label: t('dashboard.payables'), value: pay ? `${money(pay.totals.total)} ${company.baseCurrency}` : '—', to: '/parties/aging' },
+                ]
+              : []),
+            ...(canInvoices
+              ? [
+                  { key: 'monthSales', label: t('dashboard.monthSales'), value: invSummary ? `${money(invSummary.salesNet)} ${company.baseCurrency}` : '—', to: '/invoices/sales' },
+                  { key: 'monthPurchases', label: t('dashboard.monthPurchases'), value: invSummary ? `${money(invSummary.purchasesNet)} ${company.baseCurrency}` : '—', to: '/invoices/purchases' },
+                  { key: 'draftInvoices', label: t('dashboard.draftInvoices'), value: invSummary ? invSummary.draftCount : '—', to: '/invoices/sales', tone: invSummary && invSummary.draftCount > 0 ? ('warning' as const) : undefined },
                 ]
               : []),
             ...(canInventory

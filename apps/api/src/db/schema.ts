@@ -353,7 +353,7 @@ export const journalEntries = pgTable(
     periodId: uuid().notNull(),
     description: text().notNull(),
     status: text().notNull().default('draft'),
-    /** Otomatik kaydı üreten belge (fatura, tahsilat...) — ileride doldurulur. */
+    /** Otomatik kaydı üreten belge: 'invoice' (fatura), 'stock_document' (stok belgesi)… Ters kayıtlar da kaynağını taşır. */
     sourceType: text(),
     sourceId: uuid(),
     reversalOfId: uuid(),
@@ -383,6 +383,10 @@ export const journalEntries = pgTable(
       foreignColumns: [t.id, t.companyId],
     }),
     index('journal_entries_date_idx').on(t.companyId, t.entryDate),
+    // Bir kaynak (fatura, stok belgesi) için tek asıl yevmiye; ters kayıtlar (reversal_of_id dolu) hariç
+    uniqueIndex('journal_entries_source_uq')
+      .on(t.companyId, t.sourceType, t.sourceId)
+      .where(sql`${t.sourceId} is not null and ${t.reversalOfId} is null`),
     check('journal_entries_status_ck', sql`${t.status} in ('draft','posted')`),
     check(
       'journal_entries_posted_ck',
@@ -731,5 +735,213 @@ export const stockCountLines = pgTable(
       foreignColumns: [items.id, items.companyId],
     }),
     check('stock_count_lines_qty_ck', sql`${t.countedQty} is null or ${t.countedQty} >= 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Hesap eşlemesi ve fatura
+// ---------------------------------------------------------------------------
+
+/** Otomatik yevmiyede kullanılan hesaplar (anahtarlar: shared ACCOUNT_MAPPING_KEYS). */
+export const accountMappings = pgTable(
+  'account_mappings',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    key: text().notNull(),
+    accountId: uuid().notNull(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('account_mappings_uq').on(t.companyId, t.key),
+    foreignKey({
+      name: 'account_mappings_account_fk',
+      columns: [t.accountId, t.companyId],
+      foreignColumns: [accounts.id, accounts.companyId],
+    }),
+    check(
+      'account_mappings_key_ck',
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset')`,
+    ),
+  ],
+);
+
+export const invoices = pgTable(
+  'invoices',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** sales | purchase | expense | sales_return | purchase_return */
+    type: text().notNull(),
+    status: text().notNull().default('draft'),
+    /** Kaydedilene kadar null; boşluksuz seri (türe göre önek) kaydetme anında atanır. */
+    invoiceNo: text(),
+    /** Tedarikçinin fatura numarası (alış/gider/alış iadesi). */
+    externalNo: text(),
+    invoiceDate: date({ mode: 'string' }).notNull(),
+    dueDate: date({ mode: 'string' }),
+    partyId: uuid().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    /** Fatura para biriminden defter para birimine; kaydetme anında kesinleşir (defter para biriminde 1). */
+    fxRate: rate(),
+    vatIncluded: boolean().notNull().default(false),
+    warehouseId: uuid(),
+    /** İade faturasında bağlı orijinal fatura. */
+    returnOfId: uuid(),
+    description: text(),
+    /** Fatura para biriminde toplamlar (satır toplamlarının toplamı). */
+    netTotal: money().notNull().default('0'),
+    vatTotal: money().notNull().default('0'),
+    grossTotal: money().notNull().default('0'),
+    /** Defter para birimi karşılıkları; kaydetme anında yazılır. */
+    netTotalBase: money(),
+    vatTotalBase: money(),
+    grossTotalBase: money(),
+    journalEntryId: uuid(),
+    /** Stoklu satır varsa faturadan doğan stok belgesi. */
+    stockDocumentId: uuid(),
+    postedAt: timestamp({ withTimezone: true }),
+    postedBy: uuid().references(() => users.id),
+    cancelledAt: timestamp({ withTimezone: true }),
+    cancelledBy: uuid().references(() => users.id),
+    cancelReason: text(),
+    cancelJournalEntryId: uuid(),
+    cancelStockDocumentId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('invoices_id_company_uq').on(t.id, t.companyId),
+    unique('invoices_no_uq').on(t.companyId, t.invoiceNo),
+    // Aynı tedarikçiden aynı fatura numarası iki kez işlenemez (taslaklar hariç)
+    uniqueIndex('invoices_external_no_uq')
+      .on(t.companyId, t.partyId, t.externalNo)
+      .where(sql`${t.externalNo} is not null and ${t.status} <> 'draft'`),
+    index('invoices_date_idx').on(t.companyId, t.type, t.invoiceDate),
+    index('invoices_party_idx').on(t.companyId, t.partyId),
+    foreignKey({
+      name: 'invoices_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    foreignKey({
+      name: 'invoices_warehouse_fk',
+      columns: [t.warehouseId, t.companyId],
+      foreignColumns: [warehouses.id, warehouses.companyId],
+    }),
+    foreignKey({
+      name: 'invoices_return_of_fk',
+      columns: [t.returnOfId, t.companyId],
+      foreignColumns: [t.id, t.companyId],
+    }),
+    foreignKey({
+      name: 'invoices_journal_fk',
+      columns: [t.journalEntryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    foreignKey({
+      name: 'invoices_stock_document_fk',
+      columns: [t.stockDocumentId, t.companyId],
+      foreignColumns: [stockDocuments.id, stockDocuments.companyId],
+    }),
+    foreignKey({
+      name: 'invoices_cancel_journal_fk',
+      columns: [t.cancelJournalEntryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    foreignKey({
+      name: 'invoices_cancel_stock_document_fk',
+      columns: [t.cancelStockDocumentId, t.companyId],
+      foreignColumns: [stockDocuments.id, stockDocuments.companyId],
+    }),
+    check(
+      'invoices_type_ck',
+      sql`${t.type} in ('sales','purchase','expense','sales_return','purchase_return')`,
+    ),
+    check('invoices_status_ck', sql`${t.status} in ('draft','posted','cancelled')`),
+    check(
+      'invoices_posted_ck',
+      sql`${t.status} = 'draft' or (${t.invoiceNo} is not null and ${t.postedAt} is not null and ${t.journalEntryId} is not null and ${t.fxRate} is not null and ${t.grossTotalBase} is not null)`,
+    ),
+    check(
+      'invoices_cancelled_ck',
+      sql`${t.status} <> 'cancelled' or (${t.cancelledAt} is not null and ${t.cancelReason} is not null and ${t.cancelJournalEntryId} is not null)`,
+    ),
+    check(
+      'invoices_totals_ck',
+      sql`${t.netTotal} >= 0 and ${t.vatTotal} >= 0 and ${t.grossTotal} >= 0 and ${t.grossTotal} = ${t.netTotal} + ${t.vatTotal}`,
+    ),
+    check('invoices_due_ck', sql`${t.dueDate} is null or ${t.dueDate} >= ${t.invoiceDate}`),
+  ],
+);
+
+export const invoiceLines = pgTable(
+  'invoice_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    invoiceId: uuid().notNull(),
+    lineNo: integer().notNull(),
+    /** Boşsa serbest satır (hizmet/gider). */
+    itemId: uuid(),
+    description: text().notNull(),
+    quantity: qty().notNull(),
+    unit: text(),
+    /** Fatura para biriminde; KDV dahil faturada KDV dahil birim fiyat. */
+    unitPrice: unitCost().notNull(),
+    discountPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    vatCode: text(),
+    /** Fatura tarihinde geçerli oranın anlık görüntüsü (yüzde). */
+    vatRate: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    /** Fatura para biriminde satır tutarları. */
+    net: money().notNull(),
+    vat: money().notNull(),
+    gross: money().notNull(),
+    /** Serbest satırda gelir/gider hesabı (boşsa eşlemedeki varsayılan). */
+    accountId: uuid(),
+    /** İade satırında, iade edilen orijinal fatura satırı. */
+    sourceLineId: uuid(),
+    /** Kaydetme anında yazılan defter para birimi tutarları ve stokta hareket eden maliyet. */
+    netBase: money(),
+    vatBase: money(),
+    costValue: money(),
+  },
+  (t) => [
+    unique('invoice_lines_uq').on(t.invoiceId, t.lineNo),
+    unique('invoice_lines_id_company_uq').on(t.id, t.companyId),
+    index('invoice_lines_item_idx').on(t.companyId, t.itemId),
+    foreignKey({
+      name: 'invoice_lines_invoice_fk',
+      columns: [t.invoiceId, t.companyId],
+      foreignColumns: [invoices.id, invoices.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'invoice_lines_item_fk',
+      columns: [t.itemId, t.companyId],
+      foreignColumns: [items.id, items.companyId],
+    }),
+    foreignKey({
+      name: 'invoice_lines_account_fk',
+      columns: [t.accountId, t.companyId],
+      foreignColumns: [accounts.id, accounts.companyId],
+    }),
+    foreignKey({
+      name: 'invoice_lines_source_fk',
+      columns: [t.sourceLineId, t.companyId],
+      foreignColumns: [t.id, t.companyId],
+    }),
+    check(
+      'invoice_lines_amounts_ck',
+      sql`${t.quantity} > 0 and ${t.unitPrice} >= 0 and ${t.discountPct} between 0 and 100 and ${t.vatRate} between 0 and 100 and ${t.net} >= 0 and ${t.vat} >= 0 and ${t.gross} = ${t.net} + ${t.vat}`,
+    ),
   ],
 );

@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   INBOUND_DOC_TYPES,
   dec,
@@ -14,12 +14,14 @@ import {
   type StockDocType,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { items, stockDocuments, stockMovements } from '../../db/schema';
+import { items, journalEntries, stockDocuments, stockMovements } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
+import { reverseJournalEntry } from '../ledger/journal';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
 import { loadItemStates, loadWarehouseQty, lockItems, neg, uuidList } from './balances';
+import { journalStockDocument, ledgerCtxOf } from './journal';
 import { StockPlanner, type DraftRow, type PlannerItem } from './planner';
 import { requireActiveWarehouse } from './warehouses';
 
@@ -27,6 +29,7 @@ export interface StockCtx {
   companyId: string;
   userId: string;
   baseCurrency: string;
+  reportingCurrency: string | null;
   allowNegativeStock: boolean;
 }
 
@@ -169,6 +172,8 @@ export async function postStockDocument(tx: Tx, ctx: StockCtx, input: CreateStoc
     },
     planner.rows,
   );
+  // Elle girilen belgenin muhasebe kaydı (fatura kaynaklı belgeler kendi yevmiyesini faturadan alır)
+  await journalStockDocument(tx, ctx, doc, planner.rows);
   return getStockDocument(tx, doc.id);
 }
 
@@ -176,9 +181,23 @@ export async function postStockDocument(tx: Tx, ctx: StockCtx, input: CreateStoc
  * Ters belge: tüm satırların işareti çevrilir (orijinal değerlerle). Yalnızca ilgili ürünlerde
  * bu belgeden sonra hareket yoksa yapılır; böylece durum tam olarak eski haline döner.
  */
-export async function reverseStockDocument(tx: Tx, ctx: StockCtx, id: string, opts: ReverseStockDocumentInput) {
+export async function reverseStockDocument(
+  tx: Tx,
+  ctx: StockCtx,
+  id: string,
+  opts: ReverseStockDocumentInput,
+  /** Faturanın iptali gibi kaynak belgenin kendi akışı: kaynak korumasını ve yevmiye tersini kaynak yürütür. */
+  fromSource = false,
+) {
   const [original] = await tx.select().from(stockDocuments).where(eq(stockDocuments.id, id));
   if (!original) throw notFound('Stok belgesi');
+  if (original.sourceType && !fromSource) {
+    throw unprocessable(
+      'Bu stok belgesi bir faturadan oluştu; ters kaydı ilgili belgeden (fatura iptali) yapın',
+      'STOCK_DOC_HAS_SOURCE',
+      { sourceType: original.sourceType },
+    );
+  }
   if (original.reversedById) {
     throw unprocessable('Bu stok belgesi zaten ters çevrilmiş', 'STOCK_DOC_ALREADY_REVERSED');
   }
@@ -197,10 +216,21 @@ export async function reverseStockDocument(tx: Tx, ctx: StockCtx, id: string, op
   const itemIds = [...new Set(originalRows.map((r) => r.itemId))];
   await lockItems(tx, itemIds);
 
+  // Sonradan hareket sayılmayanlar: bu belgeden sonra girilip yine bu belgeden sonra tümüyle ters
+  // çevrilmiş belge çiftleri. Çift, ürünün durumunu (miktar, değer) olduğu gibi bıraktığı için
+  // bu belgenin ters kaydı yine tam geri alma sağlar (örn. sondan başa doğru fatura iptali).
   const later = await tx.execute<{ code: string }>(sql`
-    select i.code from stock_movements m join items i on i.id = m.item_id
+    select i.code from stock_movements m
+    join items i on i.id = m.item_id
+    join stock_documents d on d.id = m.document_id
     where m.item_id in (${uuidList(itemIds)}) and m.document_id <> ${id}
       and m.seq > (select max(x.seq) from stock_movements x where x.document_id = ${id} and x.item_id = m.item_id)
+      and not exists (
+        select 1 from stock_documents p
+        where p.id in (d.reversal_of_id, d.reversed_by_id)
+          and (select min(y.seq) from stock_movements y where y.document_id = p.id and y.item_id = m.item_id)
+              > (select max(x.seq) from stock_movements x where x.document_id = ${id} and x.item_id = m.item_id)
+      )
     limit 1`);
   if (later.rows.length > 0) {
     throw unprocessable(
@@ -231,10 +261,33 @@ export async function reverseStockDocument(tx: Tx, ctx: StockCtx, id: string, op
       toWarehouseId: original.toWarehouseId,
       description: opts.description ?? `Ters kayıt: ${original.docNo}`,
       reversalOfId: original.id,
+      sourceType: original.sourceType,
+      sourceId: original.sourceId,
     },
     rows,
   );
   await tx.update(stockDocuments).set({ reversedById: reversal.id }).where(eq(stockDocuments.id, id));
+
+  if (!fromSource) {
+    // Belgenin yevmiyesi varsa aynı tarihte ters kaydı yazılır (M6 öncesi belgelerin yevmiyesi yoktur)
+    const [je] = await tx
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(
+        and(
+          eq(journalEntries.sourceType, 'stock_document'),
+          eq(journalEntries.sourceId, id),
+          isNull(journalEntries.reversalOfId),
+        ),
+      );
+    if (je) {
+      await reverseJournalEntry(tx, ledgerCtxOf(ctx), je.id, {
+        entryDate: docDate,
+        description: `Ters kayıt: ${original.docNo}`,
+        source: { type: 'stock_document', id: reversal.id },
+      });
+    }
+  }
   return getStockDocument(tx, reversal.id);
 }
 

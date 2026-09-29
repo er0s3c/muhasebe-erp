@@ -12,8 +12,11 @@ import {
   Hourglass,
   LayoutDashboard,
   ListTree,
+  Link2,
   Package,
   Percent,
+  Receipt,
+  ReceiptText,
   Scale,
   Tags,
   Users,
@@ -41,6 +44,9 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   'arrow-left-right': ArrowLeftRight,
   'clipboard-check': ClipboardCheck,
   warehouse: Warehouse,
+  receipt: Receipt,
+  'receipt-text': ReceiptText,
+  'link-2': Link2,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

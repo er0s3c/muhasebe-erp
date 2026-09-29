@@ -89,7 +89,8 @@
     "constructionProjects": "Şantiye ve projeler",
     "retailPos": "Hızlı satış (POS)",
     "parties": "Cari hesaplar",
-    "inventory": "Stok"
+    "inventory": "Stok",
+    "invoices": "Fatura"
   },
   "nav": {
     "groups": {
@@ -97,7 +98,8 @@
       "accounting": "Muhasebe",
       "settings": "Ayarlar",
       "parties": "Cari",
-      "stock": "Stok"
+      "stock": "Stok",
+      "invoices": "Fatura"
     },
     "dashboard": "Genel bakış",
     "journal": "Yevmiye kayıtları",
@@ -116,7 +118,11 @@
     "stockStatus": "Stok durumu",
     "stockMovements": "Stok hareketleri",
     "stockCounts": "Sayımlar",
-    "warehouses": "Depolar"
+    "warehouses": "Depolar",
+    "salesInvoices": "Satış faturaları",
+    "purchaseInvoices": "Alış ve gider faturaları",
+    "vatSummary": "KDV özeti",
+    "accountMapping": "Hesap eşlemesi"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -138,7 +144,9 @@
     "expand": "Menüyü genişlet",
     "openMenu": "Menüyü aç",
     "skipToContent": "İçeriğe geç",
-    "newParty": "Yeni cari"
+    "newParty": "Yeni cari",
+    "newSalesInvoice": "Yeni satış faturası",
+    "newPurchaseInvoice": "Yeni alış faturası"
   },
   "auth": {
     "loginTitle": "Hesabınıza giriş yapın",
@@ -215,7 +223,10 @@
     "payablesHint": "Vadeye göre açık kalemlerin toplamı",
     "stockValue": "Toplam stok değeri",
     "lowStock": "Kritik seviyedeki stok kartı",
-    "summary": "Özet göstergeler"
+    "summary": "Özet göstergeler",
+    "monthSales": "Bu ay satışlar (net)",
+    "monthPurchases": "Bu ay alışlar (net)",
+    "draftInvoices": "Taslak fatura"
   },
   "settings": {
     "company": {
@@ -405,7 +416,13 @@
       "pickParty": "Cari seçin",
       "dueDate": "Vade tarihi",
       "partyRequired": "Cari hesaplarda (120, 320…) cari seçilmeli",
-      "partyControlHint": "Bu bir cari hesabı: satırı bir cariye bağlayın."
+      "partyControlHint": "Bu bir cari hesabı: satırı bir cariye bağlayın.",
+      "source": {
+        "invoice": "Fatura",
+        "stock_document": "Stok belgesi"
+      },
+      "sourceOpen": "{{label}}",
+      "sourceLocked": "Bu kayıt bir belgeden otomatik oluştu; ters kaydı ilgili belgeden (fatura iptali, ters stok belgesi) yapılır."
     },
     "trialBalance": {
       "title": "Mizan",
@@ -463,7 +480,7 @@
     "PARTY_REQUIRED": "Cari hesaba kayıt atarken cari seçilmeli.",
     "PARTY_NOT_FOUND": "Cari bulunamadı.",
     "PARTY_INACTIVE": "Cari pasif; yeni kayıt atılamaz.",
-    "PARTY_KIND_MISMATCH": "Cari türü bu hesapla uyumlu değil (müşteri: 120, tedarikçi: 320).",
+    "PARTY_KIND_MISMATCH": "Cari türü bu işlemle uyumlu değil (satış: müşteri, alış: tedarikçi).",
     "PARTY_NOT_ALLOWED": "Cari yalnızca cari hesaplarda (120, 320…) kullanılabilir.",
     "DUE_DATE_WITHOUT_PARTY": "Vade tarihi yalnızca cari satırlarda kullanılabilir.",
     "PARTY_CODE_TAKEN": "Bu cari kodu zaten kullanılıyor.",
@@ -471,7 +488,12 @@
     "PARTY_KIND_IN_USE": "Cari diğer türde hareket gördüğü için türü daraltılamaz.",
     "RATE_SOURCE_UNAVAILABLE": "Merkez Bankası kur servisine ulaşılamadı. XML dosyasını indirip elle yükleyebilirsiniz.",
     "RATE_XML_INVALID": "Kur dosyası geçersiz veya beklenen biçimde değil.",
-    "RATE_XML_NO_SUPPORTED": "Dosyada desteklenen para birimi (GBP, EUR, USD) yok."
+    "RATE_XML_NO_SUPPORTED": "Dosyada desteklenen para birimi (GBP, EUR, USD) yok.",
+    "ENTRY_HAS_SOURCE": "Bu yevmiye bir belgeden otomatik oluştu; ters kaydı ilgili belgeden (fatura iptali, ters stok belgesi) yapın.",
+    "STOCK_DOC_HAS_SOURCE": "Bu stok belgesi bir faturadan oluştu; ters kaydı fatura iptalinden yapın.",
+    "INVOICE_RULE_VIOLATION": "Fatura kuralı ihlali",
+    "INVOICE_NOT_DRAFT": "Yalnızca taslak fatura düzenlenebilir veya silinebilir.",
+    "INVOICE_ALREADY_CANCELLED": "Fatura zaten iptal edilmiş."
   },
   "parties": {
     "title": "Cari hesaplar",
@@ -772,7 +794,9 @@
         "in": "Giriş",
         "out": "Çıkış",
         "transfer": "Transfer"
-      }
+      },
+      "fromInvoice": "Bu belge bir faturadan oluştu; ters kaydı fatura iptalinden yapılır.",
+      "openInvoice": "Faturayı aç"
     },
     "status": {
       "title": "Stok durumu",
@@ -870,6 +894,171 @@
       "codeHint": "Boş bırakılırsa D-001 gibi otomatik verilir.",
       "saved": "Depo kaydedildi",
       "deleted": "Depo silindi"
+    }
+  },
+  "invoices": {
+    "sales": {
+      "title": "Satış faturaları",
+      "subtitle": "Satış ve satış iadesi faturaları; kayıt, stok çıkışını, cari alacağı ve yevmiyeyi birlikte yazar.",
+      "empty": "Henüz satış faturası yok",
+      "emptyDesc": "İlk faturanızı kesin; stok, cari ve yevmiye kaydı otomatik oluşur."
+    },
+    "purchases": {
+      "title": "Alış ve gider faturaları",
+      "subtitle": "Alış, gider ve alış iadesi faturaları; kayıt, stok girişini, cari borcu ve yevmiyeyi birlikte yazar.",
+      "empty": "Henüz alış faturası yok",
+      "emptyDesc": "Tedarikçi faturasını girin; stok, cari ve yevmiye kaydı otomatik oluşur."
+    },
+    "types": {
+      "sales": "Satış faturası",
+      "purchase": "Alış faturası",
+      "expense": "Gider faturası",
+      "sales_return": "Satış iadesi",
+      "purchase_return": "Alış iadesi"
+    },
+    "newType": {
+      "sales": "Yeni satış faturası",
+      "purchase": "Yeni alış faturası",
+      "expense": "Yeni gider faturası",
+      "sales_return": "Yeni satış iadesi",
+      "purchase_return": "Yeni alış iadesi"
+    },
+    "status": {
+      "draft": "Taslak",
+      "posted": "Kaydedildi",
+      "cancelled": "İptal"
+    },
+    "allTypes": "Tümü",
+    "allStatuses": "Tüm durumlar",
+    "searchPlaceholder": "No, tedarikçi no veya cari ara",
+    "number": "Fatura no",
+    "party": "Cari",
+    "dueDate": "Vade",
+    "netTotal": "Ara toplam (KDV hariç)",
+    "vatTotal": "KDV",
+    "vatAt": "KDV %{{rate}}",
+    "grossTotal": "Genel toplam",
+    "baseEquivalent": "Defter para birimi karşılığı",
+    "form": {
+      "newTitle": "{{type}}",
+      "editTitle": "{{type}} (taslak)",
+      "customer": "Müşteri",
+      "supplier": "Tedarikçi",
+      "pickParty": "Cari seçin…",
+      "invoiceDate": "Fatura tarihi",
+      "dueDate": "Vade tarihi",
+      "dueAuto": "Boşsa carinin vade günü uygulanır",
+      "externalNo": "Tedarikçi fatura no",
+      "currency": "Para birimi",
+      "fxRate": "Kur",
+      "fxMissing": "Bu tarih için kur bulunamadı; kur girin ya da Ayarlar > Para birimi ve kurlar bölümünden ekleyin.",
+      "warehouse": "Depo",
+      "defaultWarehouse": "Varsayılan depo",
+      "vatIncluded": "Birim fiyatlar KDV dahil",
+      "lines": "Fatura satırları",
+      "item": "Kart / hizmet",
+      "quantity": "Miktar",
+      "unitPrice": "Birim fiyat",
+      "discount": "İsk. %",
+      "vat": "KDV",
+      "noVat": "KDV yok",
+      "lineNet": "Net tutar",
+      "lineGross": "Toplam",
+      "pickItem": "Kart seçin…",
+      "removeLine": "Satırı sil",
+      "addLine": "Satır ekle",
+      "account": "Hesap",
+      "defaultAccount": "Varsayılan ({{code}})",
+      "pickAccount": "Hesap seçin…",
+      "returnable": "İade edilebilir: {{qty}}",
+      "returnOf": "Orijinal fatura:",
+      "originalInvoice": "Orijinal fatura",
+      "vatUnverified": "Kullanılan KDV oranları henüz resmi kaynaktan doğrulanmadı.",
+      "partyRequired": "Cari seçilmeli.",
+      "linesRequired": "Her satırda açıklama, miktar ve birim fiyat girilmeli.",
+      "returnExceeded": "İade miktarı iade edilebilir miktarı aşıyor.",
+      "externalRequired": "Tedarikçi fatura numarası gerekli.",
+      "saveDraft": "Taslak kaydet",
+      "savePost": "Kaydet ve muhasebeleştir",
+      "savedMsg": "Taslak kaydedildi",
+      "postedMsg": "Fatura kaydedildi: {{no}}",
+      "deleteDraft": "Taslağı sil",
+      "deleteConfirm": "Bu taslak fatura silinecek. Stok, cari ve yevmiye etkilenmez.",
+      "deleted": "Taslak silindi"
+    },
+    "view": {
+      "print": "Yazdır",
+      "createReturn": "İade oluştur",
+      "cancel": "Faturayı iptal et",
+      "cancelledTitle": "Bu fatura {{date}} tarihinde iptal edildi",
+      "creditLimit": "Cari kredi limiti aşıldı: bakiye {{balance}} {{currency}}, limit {{limit}} {{currency}}.",
+      "returns": "İadeler",
+      "priceMode": "Fiyat türü",
+      "vatIncluded": "KDV dahil",
+      "vatExcluded": "KDV hariç",
+      "journal": "Yevmiye",
+      "stockDoc": "Stok belgesi",
+      "returned": "İade edilen: {{qty}}",
+      "internalNote": "Bu çıktı iç kullanım belgesidir; yasal fatura biçimi doğrulanmamıştır (bkz. docs/LEGAL-NOTES.md).",
+      "cancelTitle": "Faturayı iptal et",
+      "cancelDesc": "Stok hareketi ve yevmiye ters kayıtla geri alınır; fatura numarası serinin parçası olarak kalır. Faturadan sonra aynı ürünlerde stok hareketi ya da iade varsa iptal edilemez.",
+      "cancelDate": "İptal tarihi",
+      "cancelReason": "İptal nedeni",
+      "cancelledMsg": "Fatura iptal edildi"
+    },
+    "vat": {
+      "title": "KDV özeti",
+      "subtitle": "Kaydedilmiş faturalardan hesaplanan ve indirilecek KDV; iadeler düşülür, iptal edilenler dahil edilmez.",
+      "unverified": "Şu KDV kodlarının oranı henüz resmi kaynaktan doğrulanmadı: {{codes}}.",
+      "output": "Hesaplanan KDV",
+      "input": "İndirilecek KDV",
+      "payable": "Ödenecek KDV",
+      "carryover": "Devreden KDV",
+      "empty": "Bu aralıkta kaydedilmiş fatura yok",
+      "rate": "Oran",
+      "salesNet": "Satış matrahı",
+      "purchaseNet": "Alış matrahı",
+      "note": "Tutarlar faturada saklanan oranlar ve defter para birimi üzerinden hesaplanır; beyanname yerine geçmez."
+    }
+  },
+  "mappings": {
+    "title": "Hesap eşlemesi",
+    "subtitle": "Fatura ve stok belgeleri otomatik yevmiye yazarken hangi hesapları kullanacağını buradan belirlersiniz.",
+    "unverified": "Varsayılan eşlemeler genel Tekdüzen yapıya dayanır ve mali müşavirce doğrulanmamıştır. Kullanmadan önce mali müşavirinizle gözden geçirin.",
+    "missing": "Eşlemesi eksik: {{names}}. Bu hesaplar tanımlanmadan ilgili belgeler kaydedilemez.",
+    "cardTitle": "Otomatik yevmiye hesapları",
+    "cardDesc": "Cari hesap eşlemeleri yalnızca cari kontrol hesaplarından; diğerleri kayıt atılabilir, dövizli olmayan hesaplardan seçilir.",
+    "pick": "Hesap seçin…",
+    "saved": "Hesap eşlemesi kaydedildi",
+    "keys": {
+      "receivable": "Alıcılar (müşteri cari)",
+      "payable": "Satıcılar (tedarikçi cari)",
+      "sales_revenue": "Satış geliri",
+      "sales_return": "Satıştan iadeler",
+      "cogs": "Satılan malın maliyeti",
+      "stock": "Stok hesabı",
+      "vat_output": "Hesaplanan KDV",
+      "vat_input": "İndirilecek KDV",
+      "default_expense": "Varsayılan gider hesabı",
+      "stock_gain": "Stok fazlası geliri",
+      "stock_loss": "Stok fire ve noksanlık zararı",
+      "consumption": "Stok sarfı (malzeme gideri)",
+      "opening_offset": "Stok devri karşı hesabı"
+    },
+    "hints": {
+      "receivable": "Satış faturası ve satış iadesinde müşteri cari satırı",
+      "payable": "Alış, gider faturası ve alış iadesinde tedarikçi cari satırı",
+      "sales_revenue": "Satış faturasında gelir; satırda hesap seçilmemişse",
+      "sales_return": "Satış iadesinde gelirin düzeltilmesi",
+      "cogs": "Satış maliyeti, iade farkları ve eksi stok kapanış düzeltmesi",
+      "stock": "Alışta borç, satışta alacak; stok değeriyle mutabık olmalı",
+      "vat_output": "Satışlarda hesaplanan KDV",
+      "vat_input": "Alış ve giderlerde indirilecek KDV",
+      "default_expense": "Gider satırında hesap seçilmemişse",
+      "stock_gain": "Elle giriş ve sayım fazlasının karşı hesabı",
+      "stock_loss": "Fire ve sayım noksanlığının karşı hesabı",
+      "consumption": "Elle stok çıkışının (sarf) karşı hesabı",
+      "opening_offset": "Stok devrinin karşı hesabı (örn. sermaye)"
     }
   }
 }

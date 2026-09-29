@@ -10,9 +10,11 @@ import { hash } from '@node-rs/argon2';
 import { eq } from 'drizzle-orm';
 import {
   applyRate,
+  createInvoiceSchema,
   isoYear,
   todayIso,
   toDbRate,
+  type CreateInvoiceInput,
   type CreateItemInput,
   type CreateJournalInput,
   type CreatePartyInput,
@@ -30,13 +32,10 @@ import {
 } from '../modules/ledger/journal';
 import { createCategory } from '../modules/inventory/categories';
 import { createStockCount, postStockCount, updateStockCount } from '../modules/inventory/counts';
-import {
-  getStockDocument,
-  postStockDocument,
-  reverseStockDocument,
-  type StockCtx,
-} from '../modules/inventory/documents';
+import { postStockDocument, reverseStockDocument, type StockCtx } from '../modules/inventory/documents';
 import { createItem } from '../modules/inventory/items';
+import { cancelInvoice, postInvoice } from '../modules/invoices/posting';
+import { createInvoiceDraft, getInvoice, type InvoiceCtx } from '../modules/invoices/service';
 import { createWarehouse } from '../modules/inventory/warehouses';
 import { closePeriod, findPeriodForDate } from '../modules/settings/periods';
 import { createCompany } from '../modules/tenancy/service';
@@ -117,11 +116,13 @@ interface Spec {
 }
 
 /**
- * Stok demo verisi. Alışlar ve sarflar, henüz otomatik fiş üretilmediği için (M6) burada elle
- * yevmiye ile de kaydedilir; böylece "stok değeri ↔ 150–157 hesap bakiyesi" mutabakatı tutar.
+ * Stok ve fatura demo verisi. Alışlar ve satışlar faturayla girilir (stok, cari ve yevmiye otomatik);
+ * sarf, fire, transfer ve sayım elle girilen stok belgeleridir (yevmiyeleri de otomatik oluşur).
+ * Böylece "stok değeri ↔ 150–157 hesap bakiyesi" mutabakatı elle yevmiye girmeden tutar.
  */
-async function seedInventory(tx: Tx, ctx: LedgerCtx, acc: (code: string) => string, partyId: Map<string, string>): Promise<string> {
-  const stockCtx: StockCtx = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: 'TRY', allowNegativeStock: false };
+async function seedInventory(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string): Promise<string> {
+  const stockCtx: StockCtx = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: 'TRY', reportingCurrency: ctx.reportingCurrency, allowNegativeStock: false };
+  const invCtx: InvoiceCtx = { ...stockCtx };
   const [main] = await tx.select().from(warehouses).where(eq(warehouses.isDefault, true));
   if (!main) throw new Error('Varsayılan depo yok');
   const site = await createWarehouse(tx, ctx.companyId, { code: 'SNT', name: 'Şantiye deposu', isDefault: false });
@@ -146,75 +147,76 @@ async function seedInventory(tx: Tx, ctx: LedgerCtx, acc: (code: string) => stri
     kablo: await mk('NYY kablo 3x2,5 mm²', 'm', 'Elektrik', { minLevel: '500', purchasePrice: '14.5' }),
     seramik: await mk('İthal seramik 60x60', 'm2', 'Kaplama', { minLevel: '100', purchasePrice: '12', purchaseCurrency: 'EUR', salePrice: '20', saleCurrency: 'GBP' }),
   };
-  await createItem(tx, ctx.companyId, { kind: 'service', unit: 'saat', name: 'Şantiye nakliye hizmeti', purchaseCurrency: 'TRY', saleCurrency: 'TRY', vatCode: 'KDV-16' });
+  const nakliye = (await createItem(tx, ctx.companyId, { kind: 'service', unit: 'saat', name: 'Şantiye nakliye hizmeti', purchaseCurrency: 'TRY', saleCurrency: 'TRY', vatCode: 'KDV-16' })).id;
+  const names: Record<string, string> = {
+    [item.demir]: 'Nervürlü inşaat demiri 12 mm', [item.cimento]: 'Çimento 50 kg', [item.kum]: 'Yıkanmış kum', [item.beton]: 'Hazır beton C25',
+    [item.boya]: 'Dış cephe boyası 15 lt', [item.kablo]: 'NYY kablo 3x2,5 mm²', [item.seramik]: 'İthal seramik 60x60', [nakliye]: 'Şantiye nakliye hizmeti',
+  };
 
   const post = (input: CreateStockDocumentInput) => postStockDocument(tx, stockCtx, input);
-  const jl = (code: string, side: 'debit' | 'credit', amount: string, party?: string, dueDate?: string) => ({
-    accountId: acc(code),
-    currency: 'TRY',
-    debit: side === 'debit' ? amount : '0',
-    credit: side === 'credit' ? amount : '0',
-    ...(party ? { partyId: partyId.get(party)! } : {}),
-    ...(dueDate ? { dueDate } : {}),
+  const L = (itemId: string, quantity: string, unitPrice: string, extra: Record<string, unknown> = {}) => ({
+    itemId, description: names[itemId]!, quantity, unitPrice, vatCode: 'KDV-16', ...extra,
   });
-  const journal = (on: string, text: string, lines: ReturnType<typeof jl>[]) =>
-    createJournalEntry(tx, ctx, { entryDate: on, description: text, lines: lines as CreateJournalInput['lines'], post: true });
-
-  /** Alış: stok girişi + karşılığı yevmiye (150 + 191 KDV / 320 cari). `noJournal`: yevmiyesi zaten var. */
-  const purchase = async (on: string, key: keyof typeof item, qty: string, unitCost: string, party: string, opts: { currency?: 'EUR'; noJournal?: boolean; text: string }) => {
-    const doc = await post({
-      type: 'receipt', docDate: on, warehouseId: main.id, description: opts.text,
-      lines: [{ itemId: item[key], quantity: qty, unitCost, ...(opts.currency ? { currency: opts.currency } : {}) }],
-    });
-    if (!opts.noJournal) {
-      const net = doc.totalValue;
-      const vat = applyRate(net, '0.16').toFixed(2);
-      const gross = applyRate(net, '1.16').toFixed(2);
-      await journal(on, opts.text, [jl('150', 'debit', net), jl('191', 'debit', vat), jl('320', 'credit', gross, party, addDays(on, 30))]);
-    }
-    return doc;
+  type LineIn = ReturnType<typeof L>;
+  const invoice = async (
+    type: CreateInvoiceInput['type'],
+    on: string,
+    party: string,
+    lines: LineIn[],
+    extra: { externalNo?: string; currency?: 'EUR' | 'GBP'; description?: string; returnOfId?: string; post?: boolean } = {},
+  ) => {
+    const { post: doPost = true, ...rest } = extra;
+    const input = createInvoiceSchema.parse({ type, partyId: partyId.get(party)!, invoiceDate: on, lines, ...rest });
+    const id = await createInvoiceDraft(tx, invCtx, input);
+    return doPost ? postInvoice(tx, invCtx, id) : getInvoice(tx, id);
   };
-  /** Sarf/fire: stok çıkışı + karşılığı yevmiye (gider / 150). */
-  const consume = async (on: string, type: 'issue' | 'waste', wh: string, key: keyof typeof item, qty: string, text: string, expense: string) => {
-    const doc = await post({ type, docDate: on, warehouseId: wh, description: text, lines: [{ itemId: item[key], quantity: qty }] });
-    await journal(on, text, [jl(expense, 'debit', doc.totalValue), jl('150', 'credit', doc.totalValue)]);
-    return doc;
-  };
+  /** Alış faturası: stok girişi + KDV + tedarikçi carisi (yevmiyesi otomatik). */
+  const purchase = (on: string, key: keyof typeof item, qty: string, unitPrice: string, party: string, externalNo: string, currency?: 'EUR') =>
+    invoice('purchase', on, party, [L(item[key], qty, unitPrice)], { externalNo, ...(currency ? { currency } : {}) });
+  /** Sarf/fire: elle stok belgesi (yevmiyesi otomatik). */
+  const consume = (on: string, type: 'issue' | 'waste', wh: string, key: keyof typeof item, qty: string, text: string) =>
+    post({ type, docDate: on, warehouseId: wh, description: text, lines: [{ itemId: item[key], quantity: qty }] });
 
-  // Devir yok: tüm stok alışlarla oluşur (Ocak'taki demir alışı yukarıdaki yevmiyesiyle eşleşir)
-  await purchase(date(1, 20), 'demir', '60', '7000', 'demir', { noJournal: true, text: 'İnşaat demiri alımı — Demir Çelik A.Ş.' });
-  await purchase(date(2, 10), 'cimento', '1000', '180', 'beton', { text: 'Çimento alımı — Hazır Beton Ltd.' });
-  await consume(date(3, 5), 'issue', main.id, 'demir', '25', 'A Blok kolon demiri sarfı', '710');
+  await purchase(date(1, 20), 'demir', '60', '7000', 'demir', 'DC-2026-0142');
+  await purchase(date(2, 10), 'cimento', '1000', '180', 'beton', 'HB-2201');
+  await consume(date(3, 5), 'issue', main.id, 'demir', '25', 'A Blok kolon demiri sarfı');
   await post({ type: 'transfer', docDate: date(3, 22), warehouseId: main.id, toWarehouseId: site.id, description: 'Şantiyeye sevk', lines: [{ itemId: item.cimento, quantity: '600' }] });
-  await consume(date(3, 25), 'issue', site.id, 'cimento', '400', 'A Blok döşeme betonu çimento sarfı', '710');
-  await purchase(date(4, 15), 'boya', '100', '850', 'oto', { text: 'Boya alımı — Lefkoşa Otomotiv Ltd.' });
-  await consume(date(4, 30), 'waste', main.id, 'boya', '4', 'Depoda bozulan boya (fire)', '689');
-  await consume(date(5, 6), 'issue', site.id, 'cimento', '150', 'B Blok temel çimento sarfı', '710');
-  await consume(date(6, 12), 'issue', main.id, 'demir', '20', 'B Blok kolon demiri sarfı', '710');
-  await purchase(date(6, 20), 'seramik', '800', '12', 'oto', { currency: 'EUR', text: 'İthal seramik alımı (EUR)' });
-  await purchase(date(7, 8), 'kablo', '2000', '14.5', 'beton', { text: 'NYY kablo alımı' });
-  await purchase(date(7, 20), 'kum', '120', '650', 'beton', { text: 'Kum alımı' });
-  // Hazır beton aynı gün dökülür: alış yevmiyesi yukarıdaki Ağustos kaydıdır, sarfı burada yazılır
-  await purchase(date(8, 20), 'beton', '500', '520', 'beton', { noJournal: true, text: 'Hazır beton alımı — Hazır Beton Ltd.' });
-  await consume(date(8, 22), 'issue', main.id, 'beton', '500', 'B Blok döşeme betonu dökümü', '710');
+  await consume(date(3, 25), 'issue', site.id, 'cimento', '400', 'A Blok döşeme betonu çimento sarfı');
+  const boya = await purchase(date(4, 15), 'boya', '100', '850', 'oto', 'LO-311');
+  await consume(date(4, 30), 'waste', main.id, 'boya', '4', 'Depoda bozulan boya (fire)');
+  await consume(date(5, 6), 'issue', site.id, 'cimento', '150', 'B Blok temel çimento sarfı');
+  await consume(date(6, 12), 'issue', main.id, 'demir', '20', 'B Blok kolon demiri sarfı');
+  await purchase(date(6, 20), 'seramik', '800', '12', 'oto', 'LO-388', 'EUR');
+  await purchase(date(7, 8), 'kablo', '2000', '14.5', 'beton', 'HB-2310');
+  await purchase(date(7, 20), 'kum', '120', '650', 'beton', 'HB-2334');
+  await purchase(date(8, 20), 'beton', '500', '520', 'beton', 'HB-2377');
+  await consume(date(8, 22), 'issue', main.id, 'beton', '500', 'B Blok döşeme betonu dökümü');
 
-  // Eylül sayımı: kum 8 m³ eksik çıkar → sayım farkı gider yazılır
+  // Satışlar: TL (boya + nakliye hizmeti), GBP (seramik), kısmi iade, iptal, alış iadesi, gider, taslak
+  await invoice('sales', date(7, 25), 'ali', [L(item.boya, '20', '1100'), L(nakliye, '4', '250', { description: 'Boya nakliyesi' })], { description: 'A Blok daire boyası' });
+  const gbpSale = await invoice('sales', date(8, 10), 'sarah', [L(item.seramik, '100', '20')], { currency: 'GBP', description: 'B Blok 1. kat seramik (GBP)' });
+  await invoice('sales_return', date(8, 18), 'sarah', [L(item.seramik, '10', '20', { sourceLineId: gbpSale.lines[0]!.id })], { currency: 'GBP', returnOfId: gbpSale.invoice.id, description: 'Kırık seramik iadesi' });
+  const wrongSale = await invoice('sales', date(9, 5), 'ali', [L(item.boya, '2', '1100')], { description: 'Hatalı kesilen fatura' });
+  await cancelInvoice(tx, invCtx, wrongSale.invoice.id, { date: date(9, 6), reason: 'Müşteri vazgeçti' });
+  await invoice('purchase_return', date(9, 15), 'oto', [L(item.boya, '5', '850', { sourceLineId: boya.lines[0]!.id })], { externalNo: 'LO-311-İ', returnOfId: boya.invoice.id, description: 'Fazla gelen boya iadesi' });
+  await invoice('expense', date(9, 3), 'oto', [{ description: 'Şantiye geçici elektrik bağlantısı', quantity: '1', unitPrice: '6500', vatCode: 'KDV-16', accountId: acc('770') } as unknown as LineIn], { externalNo: 'LO-402' });
+
+  // Eylül sayımı: kum 8 m³ eksik çıkar → sayım noksanlığı otomatik yevmiyeyle yazılır
   const count = await createStockCount(tx, stockCtx, { warehouseId: main.id, countDate: date(9, 20), description: 'Eylül depo sayımı', prefill: 'in_stock' });
   await updateStockCount(tx, stockCtx, count.count.id, {
     description: undefined,
     lines: count.lines.map((l) => ({ itemId: l.itemId, countedQty: l.itemId === item.kum ? '112' : l.systemQty })),
   });
-  const counted = await postStockCount(tx, stockCtx, count.count.id);
-  if (counted.count.documentId) {
-    const d = await getStockDocument(tx, counted.count.documentId);
-    await journal(date(9, 20), 'Sayım farkı (kum eksiği)', [jl('689', 'debit', d.totalValue), jl('150', 'credit', d.totalValue)]);
-  }
+  await postStockCount(tx, stockCtx, count.count.id);
 
   // Yanlış girilmiş bir çıkış ve ters kaydı (ters belge demosu; net etkisi sıfır)
   const wrong = await post({ type: 'issue', docDate: date(9, 22), warehouseId: main.id, description: 'Yanlış girilen çıkış', lines: [{ itemId: item.boya, quantity: '10' }] });
   await reverseStockDocument(tx, stockCtx, wrong.document.id, { docDate: date(9, 23) });
 
-  return 'stok: 7 kart, 2 depo, 1 sayım';
+  // Bekleyen taslak fatura
+  await invoice('sales', date(9, 28), 'ali', [L(item.boya, '5', '1100')], { description: 'Ek boya siparişi (taslak)', post: false });
+
+  return 'stok: 7 kart, 2 depo, 9 fatura, 1 sayım';
 }
 
 async function main() {
@@ -304,10 +306,6 @@ async function main() {
     const specs: Spec[] = [
       { on: date(1, 5), text: 'Sermaye girişi', lines: [['102.001', 'debit', '2500000'], ['500', 'credit', '2500000']] },
       { on: date(1, 12), text: 'Arsa alımı (Girne, 2 dönüm)', lines: [['250', 'debit', '1800000'], ['102.001', 'credit', '1800000']] },
-      {
-        on: date(1, 20), text: 'İnşaat demiri alımı — Demir Çelik A.Ş.',
-        lines: [['150', 'debit', '420000'], ['191', 'debit', '67200'], ['320', 'credit', '487200', { party: 'demir', dueDays: 60 }]],
-      },
       { on: date(2, 3), text: 'Satıcıya ödeme — Demir Çelik A.Ş.', lines: [['320', 'debit', '300000', { party: 'demir' }], ['102.001', 'credit', '300000']] },
       {
         on: date(2, 14), text: 'Yurt dışı yatırımcıdan GBP avans',
@@ -336,10 +334,6 @@ async function main() {
         lines: [['120', 'debit', '2320000', { party: 'sarah', dueDays: 30 }], ['600', 'credit', '2000000'], ['391', 'credit', '320000']],
       },
       { on: date(8, 3), text: 'Daire satışı tahsilatı (B Blok)', lines: [['102.001', 'debit', '1000000'], ['120', 'credit', '1000000', { party: 'sarah' }]] },
-      {
-        on: date(8, 20), text: 'Hazır beton alımı — Hazır Beton Ltd.',
-        lines: [['150', 'debit', '260000'], ['191', 'debit', '41600'], ['320', 'credit', '301600', { party: 'beton', dueDays: 30 }]],
-      },
       {
         on: date(9, 12), text: 'Hatalı gider kaydı (ters çevrilecek)',
         lines: [['770', 'debit', '12500'], ['102.001', 'credit', '12500']], reverseOn: date(9, 14),
@@ -382,7 +376,7 @@ async function main() {
       }
     }
 
-    const stockSummary = await seedInventory(tx, ctx, acc, partyId);
+    const stockSummary = await seedInventory(tx, ctx, partyId, acc);
 
     // Geçmiş aylar kapansın (yılın ilk yarısı)
     for (let m = 1; m <= 6; m++) {

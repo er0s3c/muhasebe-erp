@@ -68,6 +68,9 @@ export interface JournalListItem {
   status: 'draft' | 'posted';
   reversalOfId: string | null;
   reversedById: string | null;
+  /** Otomatik yevmiyeyi üreten belge: 'invoice' | 'stock_document' */
+  sourceType: string | null;
+  sourceId: string | null;
   totalBase: string;
 }
 
@@ -290,6 +293,7 @@ export interface ItemListRow {
   kind: ItemKind;
   unit: string;
   barcode: string | null;
+  vatCode: string | null;
   isActive: boolean;
   minLevel: string | null;
   categoryId: string | null;
@@ -386,6 +390,8 @@ export interface StockDocDetail {
     reversedById: string | null;
     reversedByNo: string | null;
     countId: string | null;
+    sourceType: string | null;
+    sourceId: string | null;
   };
   lines: {
     lineNo: number;
@@ -470,6 +476,106 @@ export interface InventorySummary {
   lowCount: number;
 }
 
+// --- Fatura ---------------------------------------------------------------
+
+export type InvoiceType = 'sales' | 'purchase' | 'expense' | 'sales_return' | 'purchase_return';
+export type InvoiceStatus = 'draft' | 'posted' | 'cancelled';
+
+export interface InvoiceListRow {
+  id: string;
+  type: InvoiceType;
+  status: InvoiceStatus;
+  invoiceNo: string | null;
+  externalNo: string | null;
+  invoiceDate: string;
+  dueDate: string | null;
+  partyId: string;
+  partyCode: string;
+  partyName: string;
+  currencyCode: string;
+  netTotal: string;
+  vatTotal: string;
+  grossTotal: string;
+  grossTotalBase: string | null;
+  returnOfId: string | null;
+  description: string | null;
+}
+
+export interface InvoiceLineRow {
+  id: string;
+  lineNo: number;
+  itemId: string | null;
+  itemCode: string | null;
+  itemKind: ItemKind | null;
+  description: string;
+  quantity: string;
+  unit: string | null;
+  unitPrice: string;
+  discountPct: string;
+  vatCode: string | null;
+  vatRate: string;
+  net: string;
+  vat: string;
+  gross: string;
+  accountId: string | null;
+  accountCode: string | null;
+  sourceLineId: string | null;
+  netBase: string | null;
+  vatBase: string | null;
+  costValue: string | null;
+  returnedQty: string | null;
+  returnableQty: string | null;
+}
+
+export interface InvoiceDetail {
+  invoice: Omit<InvoiceListRow, 'returnOfId'> & {
+    fxRate: string | null;
+    vatIncluded: boolean;
+    warehouseId: string | null;
+    warehouseName: string | null;
+    returnOfId: string | null;
+    returnOfNo: string | null;
+    netTotalBase: string | null;
+    vatTotalBase: string | null;
+    journalEntryId: string | null;
+    journalEntryNo: string | null;
+    stockDocumentId: string | null;
+    stockDocumentNo: string | null;
+    postedAt: string | null;
+    cancelledAt: string | null;
+    cancelReason: string | null;
+    cancelJournalEntryId: string | null;
+    cancelJournalEntryNo: string | null;
+    cancelStockDocumentId: string | null;
+  };
+  lines: InvoiceLineRow[];
+  returns: { id: string; invoiceNo: string | null; status: InvoiceStatus; type: InvoiceType }[];
+  warnings?: { creditLimit: { limit: string; balance: string } | null };
+}
+
+export interface AccountMapping {
+  key: string;
+  label: string;
+  accountId: string | null;
+  accountCode: string | null;
+  accountName: string | null;
+}
+
+export interface VatSummary {
+  from: string;
+  to: string;
+  rows: { code: string | null; rate: string; salesNet: string; salesVat: string; purchaseNet: string; purchaseVat: string }[];
+  totals: { salesNet: string; salesVat: string; purchaseNet: string; purchaseVat: string; payable: string };
+  unverifiedCodes: string[];
+}
+
+export interface InvoiceSummary {
+  month: string;
+  salesNet: string;
+  purchasesNet: string;
+  draftCount: number;
+}
+
 /** Modül anahtarı -> çeviri anahtarı */
 export const MODULE_LABEL_KEYS = {
   'core.dashboard': 'modules.dashboard',
@@ -477,6 +583,7 @@ export const MODULE_LABEL_KEYS = {
   'core.settings': 'modules.settings',
   'core.parties': 'modules.parties',
   'core.inventory': 'modules.inventory',
+  'core.invoices': 'modules.invoices',
   'construction.projects': 'modules.constructionProjects',
   'retail.pos': 'modules.retailPos',
 } as const;

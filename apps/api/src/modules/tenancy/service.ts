@@ -3,13 +3,14 @@ import { isoYear, todayIso, type CreateCompanyInput } from '@erp/shared';
 import { setContext, type Tx } from '../../db/client';
 import { companies, memberships, warehouses } from '../../db/schema';
 import { seedChartOfAccounts } from '../ledger/accounts';
+import { seedMappings } from '../ledger/mappings';
 import { seedTaxRates } from '../settings/defaults';
 import { generatePeriods } from '../settings/periods';
 import type { AuthUser } from '../../http/context';
 
 /**
  * Şirketi ve varsayılanlarını (sahip üyeliği, cari yıl dönemleri, hesap planı,
- * KDV oranları, varsayılan depo) tek işlemde kurar. Herhangi bir adım başarısız olursa tümü geri alınır.
+ * KDV oranları, hesap eşlemesi, varsayılan depo) tek işlemde kurar. Herhangi bir adım başarısız olursa tümü geri alınır.
  */
 export async function createCompany(
   tx: Tx,
@@ -40,6 +41,7 @@ export async function createCompany(
 
   await generatePeriods(tx, companyId, isoYear(todayIso()));
   await seedChartOfAccounts(tx, companyId);
+  await seedMappings(tx, companyId, input.sector);
   await seedTaxRates(tx, companyId);
   await tx.insert(warehouses).values({ companyId, code: 'ANA', name: 'Ana depo', isDefault: true });
 

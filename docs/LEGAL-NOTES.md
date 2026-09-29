@@ -46,6 +46,9 @@ Kapsam belgesi yapay zekâ (Gemini) çıktısıdır. Aşağıdaki maddeleri bağ
 | Sosyal güvenlik teşviği | D1/D3 bordro tipleri, %100/%80 prim teşviki | Doğrulanmadı |
 | Kur kaynağı | KKTC Merkez Bankası gösterge kurları her iş günü 15:30 | **Kısmen doğrulandı:** kurumun "Döviz kurlarına erişim" sayfası (kullanıcının yapıştırdığı metin) XML adreslerini doğruluyor: güncel `https://www.mb.gov.ct.tr/kur/gunluk.xml`, tarihli `https://www.mb.gov.ct.tr/kur/tarih/YYYYMMDD` (XML: 09/04/2011'den itibaren). Örnek dosyada yalnızca tarih ve duyuru no var, **yayın saati yok** (15:30 iddiası doğrulanmadı). Yeniden dağıtım/kullanım şartı okunmadı |
 | Stok değerleme yöntemi | Hareketli ağırlıklı ortalama maliyet varsayılan yöntem olarak uygulanır | KKTC vergi mevzuatında kabul edilen stok değerleme yöntemleri ve dönem sonu envanter kuralları **doğrulanmadı**; mali müşavirle teyit edin |
+| Fatura biçimi ve numaralama | KKTC'de yasal faturanın zorunlu içeriği, basım/onay ve sıra numarası kuralları | **Doğrulanmadı.** Uygulama boşluksuz iç numara ve yazdırılabilir bir **iç belge** üretir; bu çıktı yasal fatura yerine geçmez. Mali müşavirle ve Maliye mevzuatıyla teyit edilmeden yasal fatura olarak kullanılmamalı |
+| Hesap eşlemesi varsayılanları | 120/320 cari, 600/610 gelir, 621 maliyet, 150/153 stok, 391/191 KDV, 632 gider, 649/659 stok fazlası/zararı, 710 sarf, 500 devir karşı hesabı | Genel Tekdüzen yapıya dayanır, **doğrulanmadı.** Ayarlar > Hesap eşlemesi'nden şirkete göre değiştirilir; ekran her açılışta uyarı gösterir |
+| KDV hesabı | Satır başına yuvarlama; KDV dahil fiyatta net = brüt ÷ (1 + oran) | Yuvarlama ve beyan kuralları KKTC mevzuatına göre **doğrulanmadı**; KDV özeti beyanname yerine geçmez |
 | Kurumlar | MŞ32 raporu, İnşaat Encümeni sınıf karneleri ve m² kapasiteleri | Doğrulanmadı |
 
 ### Tasarım ilkesi

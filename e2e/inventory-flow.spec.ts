@@ -62,7 +62,8 @@ test('stok: kart aç → giriş → çıkış → kritik seviye → stok durumu 
   await expect(row).toBeVisible();
   await expect(row.getByText('Kritik')).toBeVisible();
   await expect(page.getByRole('cell', { name: '60,00' }).first()).toBeVisible();
-  await expect(page.getByText('Stok değeri ile muhasebe bakiyesi arasında fark var')).toBeVisible();
+  // Elle girilen stok belgeleri otomatik yevmiye ürettiği için stok defteri muhasebeyle baştan uyumludur
+  await expect(page.getByText('Stok defteri muhasebe bakiyesiyle uyumlu')).toBeVisible();
 
   // 6) Sayım: 7 çuval sayıldı → 1 fazla, işlenince stok 7
   await nav.getByRole('link', { name: 'Sayımlar' }).click();

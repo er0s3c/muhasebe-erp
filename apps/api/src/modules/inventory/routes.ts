@@ -43,6 +43,7 @@ const stockCtx = ({ company, user }: TenantCtx): StockCtx => ({
   companyId: company.id,
   userId: user.id,
   baseCurrency: company.baseCurrency,
+  reportingCurrency: company.reportingCurrency,
   allowNegativeStock: company.allowNegativeStock,
 });
 

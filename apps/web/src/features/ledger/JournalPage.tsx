@@ -45,6 +45,15 @@ export function JournalPage() {
   const { data, isPending } = useCQuery<{ entries: JournalListItem[] }>(['journal', from, to, status], `/api/journal-entries?${query}`);
   const canPost = can('ledger.post');
 
+  // Fatura/stok belgesinden (?open=<id>) gelindiyse ilgili yevmiyeyi aç
+  useEffect(() => {
+    const open = params.get('open');
+    if (open) {
+      setDetailId(open);
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
+
   // Komut paletinden (?new=1) gelindiyse formu aç
   useEffect(() => {
     if (params.get('new') === '1' && canPost) {
@@ -140,7 +149,10 @@ export function JournalPage() {
                 >
                   <Td>{formatDateTR(e.entryDate)}</Td>
                   <Td className="font-mono text-[13px]">{e.entryNo ?? '—'}</Td>
-                  <Td className="max-w-md truncate">{e.description}</Td>
+                  <Td className="max-w-md truncate">
+                    {e.description}
+                    {e.sourceType && <SourceBadge type={e.sourceType} />}
+                  </Td>
                   <Td num>{isZero(e.totalBase) ? '—' : money(e.totalBase)}</Td>
                   <Td>
                     <StatusBadge e={e} />
@@ -169,6 +181,26 @@ export function JournalPage() {
         onSaved={(entry) => setDetailId(entry.id)}
       />
     </>
+  );
+}
+
+function sourceLabel(type: string, t: (k: never) => string): string {
+  return type === 'invoice' ? t('ledger.journal.source.invoice' as never) : t('ledger.journal.source.stock_document' as never);
+}
+
+function SourceBadge({ type }: { type: string }) {
+  const { t } = useTranslation();
+  return <Badge className="ml-2">{sourceLabel(type, t as never)}</Badge>;
+}
+
+/** Yevmiyeyi üreten belgeye (fatura ya da stok belgesi) giden bağlantı */
+function SourceLink({ type, id }: { type: string; id: string }) {
+  const { t } = useTranslation();
+  const to = type === 'invoice' ? `/invoices/${id}` : `/inventory/movements?open=${id}`;
+  return (
+    <Link to={to} className="link">
+      {t('ledger.journal.sourceOpen', { label: sourceLabel(type, t as never) })} →
+    </Link>
   );
 }
 
@@ -243,6 +275,8 @@ function JournalDetail({
                   {t('ledger.journal.postNow')}
                 </Button>
               </>
+            ) : entry.sourceType ? (
+              <p className="mr-auto text-[13px] text-muted">{t('ledger.journal.sourceLocked')}</p>
             ) : !entry.reversedById && !entry.reversalOfId ? (
               <Button onClick={() => setReversing(true)}>
                 <RotateCcw className="size-4" aria-hidden />
@@ -259,6 +293,7 @@ function JournalDetail({
             {actionError && <Callout tone="danger">{actionError}</Callout>}
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <StatusBadge e={entry} />
+              {entry.sourceType && entry.sourceId && <SourceLink type={entry.sourceType} id={entry.sourceId} />}
               <span className="text-muted">
                 {entry.periodYear}-{String(entry.periodMonth).padStart(2, '0')}
               </span>

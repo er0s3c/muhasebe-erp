@@ -33,7 +33,7 @@ test('kayıt → şirket kurulumu → kur girişi → dövizli yevmiye → mizan
 
   // 4) Kur girişi: 1 GBP = 40 TRY
   await nav.getByRole('link', { name: 'Para birimi ve kurlar' }).click();
-  await page.getByLabel('Alış').first().fill('40');
+  await page.getByLabel('Alış', { exact: true }).first().fill('40');
   await page.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByText('Kur kaydedildi')).toBeVisible();
   await shot(page, '04-rates');

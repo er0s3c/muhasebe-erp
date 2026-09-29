@@ -55,6 +55,16 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="core.invoices" />,
+                children: [
+                  { path: 'invoices/sales', ...page(() => import('../features/invoices/InvoicesPage'), 'SalesInvoicesPage') },
+                  { path: 'invoices/purchases', ...page(() => import('../features/invoices/InvoicesPage'), 'PurchaseInvoicesPage') },
+                  { path: 'invoices/vat-summary', ...page(() => import('../features/invoices/VatSummaryPage'), 'VatSummaryPage') },
+                  { path: 'invoices/new', ...page(() => import('../features/invoices/InvoiceEditorPage'), 'InvoiceEditorPage') },
+                  { path: 'invoices/:id', ...page(() => import('../features/invoices/InvoiceEditorPage'), 'InvoiceEditorPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="core.inventory" />,
                 children: [
                   { path: 'inventory/items', ...page(() => import('../features/inventory/ItemsPage'), 'ItemsPage') },
@@ -75,6 +85,7 @@ export const router = createBrowserRouter([
                   { path: 'settings/tax-rates', ...page(() => import('../features/settings/TaxRatesPage'), 'TaxRatesPage') },
                   { path: 'settings/periods', ...page(() => import('../features/settings/PeriodsPage'), 'PeriodsPage') },
                   { path: 'settings/custom-codes', ...page(() => import('../features/settings/CustomCodesPage'), 'CustomCodesPage') },
+                  { path: 'settings/account-mapping', ...page(() => import('../features/settings/AccountMappingPage'), 'AccountMappingPage') },
                 ],
               },
               { path: '*', element: <NotFoundPage /> },

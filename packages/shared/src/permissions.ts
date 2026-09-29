@@ -13,6 +13,9 @@ export const PERMISSIONS = [
   'inventory.read',
   'inventory.manage',
   'inventory.move',
+  'invoices.read',
+  'invoices.manage',
+  'invoices.post',
   'reports.read',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -39,13 +42,17 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'inventory.read',
     'inventory.manage',
     'inventory.move',
+    'invoices.read',
+    'invoices.manage',
+    'invoices.post',
     'reports.read',
   ],
   // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
-  sales: ['settings.read', 'parties.read', 'parties.manage', 'inventory.read', 'inventory.manage'],
+  // Faturayı taslak olarak hazırlar; muhasebeleştirmeyi (invoices.post) muhasebeci yapar.
+  sales: ['settings.read', 'parties.read', 'parties.manage', 'inventory.read', 'inventory.manage', 'invoices.read', 'invoices.manage'],
   // Şantiye sorumlusu: malzeme sarfı/transferi/sayım girer, stok kartı açmaz
   site_manager: ['settings.read', 'inventory.read', 'inventory.move'],
-  viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'reports.read'],
+  viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'reports.read'],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {

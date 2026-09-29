@@ -42,7 +42,8 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
   );
 
   const doc = data?.document;
-  const reversible = !!doc && canMove && !doc.reversedById && !doc.reversalOfId;
+  // Faturadan doğan belge tek başına ters çevrilmez: ters kayıt faturanın iptalinden yapılır
+  const reversible = !!doc && canMove && !doc.reversedById && !doc.reversalOfId && !doc.sourceType;
 
   return (
     <>
@@ -111,6 +112,15 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
                 </div>
               )}
             </dl>
+
+            {doc.sourceType === 'invoice' && doc.sourceId && (
+              <Callout>
+                {t('inventory.mdetail.fromInvoice')}{' '}
+                <Link to={`/invoices/${doc.sourceId}`} className="link" onClick={onClose}>
+                  {t('inventory.mdetail.openInvoice')}
+                </Link>
+              </Callout>
+            )}
 
             {doc.countId && (
               <Link to={`/inventory/counts/${doc.countId}`} className="text-sm link" onClick={onClose}>

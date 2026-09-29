@@ -177,7 +177,7 @@ export async function listItems(tx: Tx, q: ListItemsQuery) {
     ${where}`;
 
   const rows = await tx.execute<ListRow>(sql`
-    select i.id, i.code, i.name, i.kind, i.unit, i.barcode, i.is_active as "isActive",
+    select i.id, i.code, i.name, i.kind, i.unit, i.barcode, i.is_active as "isActive", i.vat_code as "vatCode",
            i.min_level as "minLevel", i.category_id as "categoryId", c.name as "categoryName",
            i.purchase_price as "purchasePrice", i.purchase_currency as "purchaseCurrency",
            i.sale_price as "salePrice", i.sale_currency as "saleCurrency",

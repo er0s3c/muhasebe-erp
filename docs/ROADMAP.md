@@ -10,12 +10,13 @@
 | M3 | Genel muhasebe | Hesap planı, yevmiye (taslak/kaydet/ters kayıt/dövizli), dönem kilidi, mizan, hesap ekstresi |
 | M4 | Cari | Müşteri/tedarikçi kartı, cari kontrol hesabı kuralı, ekstre, vadeye göre yaşlandırma, açık kalemler (FIFO); Merkez Bankası XML kur içe aktarma; Türkçe sıralama/arama |
 | M5 | Stok | Stok kartı (mal/hizmet, çok para birimli fiyat, kritik seviye), çoklu depo, giriş/çıkış/fire/transfer/devir, ters belge, sayım, hareketli ağırlıklı ortalama maliyet, negatif stok ayarı, stok durumu/değerleme ve muhasebe mutabakatı |
+| M6 | Fatura | Satış/alış/gider/satış iadesi/alış iadesi faturası → stok + cari + yevmiye tek işlemde; boşluksuz numara, iptal (ters kayıt), KDV hariç/dahil, iskonto, dövizli fatura, KDV özeti; **hesap eşlemesi** ve elle girilen stok belgelerinin/sayımın otomatik yevmiyesi; `cost_adjust` → 621; yazdırılabilir iç belge görünümü |
 
 ## MVP'ye kalan (Çekirdek ERP)
 
 | # | Kilometre taşı | İçerik |
 |---|---|---|
-| M6 | Fatura ve irsaliye | Satış/alış/gider/iade → stok + cari + yevmiyeye otomatik kayıt. **Hesap eşlemesi** (150/153, 621, 191/391, fire/sayım farkı/sarf hesapları) ve stok belgelerinden otomatik yevmiye; stok defterindeki `cost_adjust` (eksi bakiye kapanış) satırları satılan mal maliyetine (621) gider; faturadan stok hareketi (`source_type/source_id`); satış tarafında para birimi dönüşümü |
+| M6b | İrsaliye | Sevk irsaliyesi (stok hareketi), faturanın irsaliyeye bağlanması (tekrar stok düşmez, kısmi faturalama), **faturalanmamış irsaliye** raporu ve mutabakat farkı; sipariş/teklif sonraya |
 | M7 | Kasa ve banka | Tahsilat/ödeme, virman, döviz alım-satım, kur farkı kâr/zararı, eşleştirme |
 | M8 | Raporlar ve aktarım | Rapor seti, xlsx/csv/PDF, Excel içe aktarma (cari, stok, açılış bakiyesi), yönetim ekranı: modül istisnaları |
 | M9 | Sağlamlaştırma | Demo şirket, yedekleme ve geri yükleme notları, üretim derlemesi ve dağıtım hattı, yük ve güvenlik gözden geçirmesi |

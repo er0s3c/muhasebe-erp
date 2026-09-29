@@ -33,6 +33,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     if (modules.includes('core.ledger') && can('ledger.post')) {
       list.push({ id: 'new-journal', label: t('shell.newJournal'), group: t('shell.quickActions'), path: '/accounting/journal?new=1', icon: 'book-open', keywords: 'yeni fiş kayıt ekle' });
     }
+    if (modules.includes('core.invoices') && can('invoices.manage')) {
+      list.push({ id: 'new-sales-invoice', label: t('shell.newSalesInvoice'), group: t('shell.quickActions'), path: '/invoices/new?type=sales', icon: 'receipt', keywords: 'yeni satış fatura kes' });
+      list.push({ id: 'new-purchase-invoice', label: t('shell.newPurchaseInvoice'), group: t('shell.quickActions'), path: '/invoices/new?type=purchase', icon: 'receipt-text', keywords: 'yeni alış fatura gider' });
+    }
     if (modules.includes('core.settings') && can('rates.manage')) {
       list.push({ id: 'enter-rates', label: t('shell.enterRates'), group: t('shell.quickActions'), path: '/settings/currencies', icon: 'coins', keywords: 'döviz kur dolar euro sterlin' });
     }
