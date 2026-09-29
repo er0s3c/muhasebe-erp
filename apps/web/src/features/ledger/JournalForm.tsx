@@ -318,7 +318,8 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
               <Plus className="size-3.5" aria-hidden />
               {t('ledger.journal.addLine')}
             </Button>
-            <dl className="flex gap-6 text-sm">
+            <dl className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
+              <dt className="text-muted">{t('ledger.journal.totalsBase', { currency: base })}</dt>
               <div className="flex gap-2">
                 <dt className="text-muted">{t('common.debit')}</dt>
                 <dd className="num font-medium">{formatTR(computed.debit.toFixed(2))}</dd>
@@ -326,10 +327,6 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
               <div className="flex gap-2">
                 <dt className="text-muted">{t('common.credit')}</dt>
                 <dd className="num font-medium">{formatTR(computed.credit.toFixed(2))}</dd>
-              </div>
-              <div className="flex gap-2">
-                <dt className="text-muted">{base}</dt>
-                <dd className="text-muted">{t('ledger.journal.baseAmount')}</dd>
               </div>
             </dl>
           </div>

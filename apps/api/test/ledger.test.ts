@@ -241,6 +241,35 @@ describe('genel muhasebe', async () => {
     });
   });
 
+  it('raporlama tutarları fiş içinde dengelenir: yuvarlama farkı mizanı bozmaz (kayıt ve yeniden hesaplama)', async () => {
+    const { c, ids } = await setup('Yuvarla');
+    // 1 GBP = 41 TRY => TRY→GBP = 0,0243902…; 10 TL → 0,24 ama 20 TL → 0,49 (tek tek yuvarlanınca 0,24+0,24 ≠ 0,49)
+    await c.put('/api/exchange-rates', { rateDate: day(3, 1), currencyCode: 'GBP', quoteCode: 'TRY', buy: '41' });
+    const lines = [tl(ids['100']!, 'debit', '10'), tl(ids['102']!, 'debit', '10'), tl(ids['500']!, 'credit', '20')];
+
+    const sumSide = (entry: any, key: 'debitReporting' | 'creditReporting') =>
+      entry.lines.reduce((acc: number, l: any) => acc + Math.round(Number(l[key]) * 100), 0);
+
+    // 1) Kayıt anında dengelenir
+    const created = (await c.post('/api/journal-entries', { entryDate: day(3, 2), description: 'Yuvarlama', lines, post: true })).json().entry;
+    expect(sumSide(created, 'debitReporting')).toBe(sumSide(created, 'creditReporting'));
+    expect(sumSide(created, 'creditReporting')).toBe(49);
+
+    // 2) Kur sonradan girilirse yeniden hesaplama da fişi dengeler
+    const late = (await c.post('/api/journal-entries', { entryDate: day(6, 1), description: 'Kursuz', lines, post: true })).json().entry;
+    expect(late.lines[0].debitReporting).toBeNull();
+    await c.put('/api/exchange-rates', { rateDate: day(6, 1), currencyCode: 'GBP', quoteCode: 'TRY', buy: '41' });
+    expect((await c.post('/api/ledger/backfill-reporting')).json()).toEqual({ updated: 3, stillMissing: 0 });
+    const filled = (await c.get(`/api/journal-entries/${late.id}`)).json().entry;
+    expect(sumSide(filled, 'debitReporting')).toBe(sumSide(filled, 'creditReporting'));
+
+    // 3) Raporlama para biriminde mizan dengeli (fark 0)
+    const tb = (await c.get(`/api/reports/trial-balance?from=${day(1, 1)}&to=${day(12, 31)}&currency=reporting`)).json();
+    expect(tb.totals.difference).toBe('0.0000');
+    expect(tb.totals.debit).toBe(tb.totals.credit);
+    expect(tb.missingReportingLines).toBe(0);
+  });
+
   it('mizan: gruplara toplanır, borç=alacak, taslaklar dahil edilmez', async () => {
     const { c, ids } = await setup('Mizan');
     const post = (d: string, lines: any[], p = true) =>

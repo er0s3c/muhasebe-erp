@@ -56,7 +56,7 @@ export function CompanyPage() {
   return (
     <>
       <PageHeader title={t('settings.company.title')} description={t('settings.company.subtitle')} />
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <CardHeader title={t('settings.company.title')} />
           <form

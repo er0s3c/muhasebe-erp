@@ -91,7 +91,7 @@ export function DashboardPage() {
 
       <div className="flex flex-col gap-6">
         {canLedger && (
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Kpi icon={<FileCheck2 className="size-5" />} label={t('dashboard.postedEntries')} value={posted ? posted.entries.length : '—'} />
             <Kpi icon={<FileEdit className="size-5" />} label={t('dashboard.draftEntries')} value={drafts ? drafts.entries.length : '—'} tone={drafts && drafts.entries.length > 0 ? 'warning' : 'brand'} />
             {canReports && (
@@ -105,7 +105,7 @@ export function DashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           {steps.length > 0 && !allDone && (
             <Card>
               <CardHeader
@@ -171,7 +171,7 @@ export function DashboardPage() {
         {foreign.length > 0 && ratesLoaded && (
           <Card>
             <CardHeader title={t('dashboard.todayRates')} action={<Link to="/settings/currencies" className="text-sm font-medium text-brand hover:underline">{t('settings.currencies.quickEntry')}</Link>} />
-            <div className="grid gap-px bg-border sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-px bg-border sm:grid-cols-3">
               {foreign.map((cur, i) => {
                 const rate = rateQueries[i]?.data?.rate;
                 return (

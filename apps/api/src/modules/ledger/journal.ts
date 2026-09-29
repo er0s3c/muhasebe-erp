@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import {
   applyRate,
   dec,
   isoYear,
+  sum,
   todayIso,
   toDbAmount,
   toDbRate,
@@ -54,6 +55,39 @@ interface PreparedLine {
   creditBase: MoneyValue;
   debitReporting: MoneyValue | null;
   creditReporting: MoneyValue | null;
+}
+
+export interface ReportingLine {
+  debitBase: MoneyValue;
+  creditBase: MoneyValue;
+  debitReporting: MoneyValue | null;
+  creditReporting: MoneyValue | null;
+}
+
+/**
+ * Satırlar tek tek yuvarlandığı için raporlama para biriminde borç ve alacak toplamı birkaç
+ * kuruş ayrışabilir, oysa defter dengelidir. Fark, fişteki en büyük ters taraf satırına
+ * yansıtılarak fiş kendi içinde dengelenir (çok para birimli defterlerde olağan yöntem).
+ * Defter tutarları dengesizse (taslak) dokunulmaz.
+ */
+export function balanceReporting(lines: ReportingLine[]): void {
+  if (lines.length === 0) return;
+  if (lines.some((l) => l.debitReporting === null || l.creditReporting === null)) return;
+  if (!sum(lines.map((l) => l.debitBase)).equals(sum(lines.map((l) => l.creditBase)))) return;
+
+  const diff = sum(lines.map((l) => l.debitReporting!)).minus(sum(lines.map((l) => l.creditReporting!)));
+  if (diff.isZero()) return;
+
+  if (diff.gt(0)) {
+    // Borç fazla: en büyük alacak satırını artır
+    const credits = lines.filter((l) => l.creditBase.gt(0));
+    const target = credits.reduce((a, b) => (b.creditReporting!.gt(a.creditReporting!) ? b : a));
+    target.creditReporting = target.creditReporting!.plus(diff);
+  } else {
+    const debits = lines.filter((l) => l.debitBase.gt(0));
+    const target = debits.reduce((a, b) => (b.debitReporting!.gt(a.debitReporting!) ? b : a));
+    target.debitReporting = target.debitReporting!.plus(diff.abs());
+  }
 }
 
 /** Satırları doğrular; tutarları defter ve raporlama para birimine çevirir. */
@@ -136,6 +170,7 @@ async function prepareLines(
       creditReporting: reportingRate ? applyRate(creditBase, reportingRate) : null,
     });
   }
+  balanceReporting(prepared);
   return prepared;
 }
 
@@ -391,33 +426,52 @@ export async function listJournalEntries(tx: Tx, q: ListEntriesQuery) {
 
 /**
  * Kur sonradan girildiğinde, raporlama tutarı boş kalmış kaydedilmiş satırları doldurur.
- * Defter tutarlarına dokunmaz (veritabanı tetikleyicisi yalnızca boş raporlama sütunlarına izin verir).
+ * Her fiş kendi içinde dengelenir. Defter tutarlarına dokunmaz (veritabanı tetikleyicisi
+ * yalnızca boş raporlama sütunlarının doldurulmasına izin verir).
  */
 export async function backfillReporting(tx: Tx, ctx: LedgerCtx) {
   if (!ctx.reportingCurrency) {
     throw unprocessable('Şirkette raporlama para birimi tanımlı değil', 'REPORTING_CURRENCY_NOT_SET');
   }
-  const dates = await tx.execute<{ d: string }>(sql`
-    select distinct e.entry_date::text as d
-    from journal_lines l join journal_entries e on e.id = l.entry_id
+  const pending = await tx.execute<{ id: string; d: string }>(sql`
+    select distinct e.id, e.entry_date::text as d
+    from journal_entries e join journal_lines l on l.entry_id = e.id
     where e.status = 'posted' and l.debit_reporting is null
-    order by 1`);
+    order by 2, 1`);
 
+  const rates = new Map<string, MoneyValue | null>();
   let updated = 0;
-  for (const { d } of dates.rows) {
-    const rate =
-      ctx.reportingCurrency === ctx.baseCurrency
-        ? dec(1)
-        : await findRate(tx, ctx.baseCurrency, ctx.reportingCurrency, d, ctx.baseCurrency);
+  for (const { id, d } of pending.rows) {
+    if (!rates.has(d)) {
+      rates.set(
+        d,
+        ctx.reportingCurrency === ctx.baseCurrency
+          ? dec(1)
+          : await findRate(tx, ctx.baseCurrency, ctx.reportingCurrency, d, ctx.baseCurrency),
+      );
+    }
+    const rate = rates.get(d);
     if (!rate) continue;
-    const r = await tx.execute(sql`
-      update journal_lines l
-         set debit_reporting = round(l.debit_base * ${toDbRate(rate)}::numeric, 2),
-             credit_reporting = round(l.credit_base * ${toDbRate(rate)}::numeric, 2)
-        from journal_entries e
-       where e.id = l.entry_id and e.status = 'posted' and e.entry_date = ${d}::date
-         and l.debit_reporting is null`);
-    updated += r.rowCount ?? 0;
+
+    const rows = await tx
+      .select({ id: journalLines.id, debitBase: journalLines.debitBase, creditBase: journalLines.creditBase })
+      .from(journalLines)
+      .where(and(eq(journalLines.entryId, id), isNull(journalLines.debitReporting)));
+    const lines = rows.map((r) => ({
+      id: r.id,
+      debitBase: dec(r.debitBase),
+      creditBase: dec(r.creditBase),
+      debitReporting: applyRate(r.debitBase, rate) as MoneyValue | null,
+      creditReporting: applyRate(r.creditBase, rate) as MoneyValue | null,
+    }));
+    balanceReporting(lines);
+    for (const l of lines) {
+      await tx
+        .update(journalLines)
+        .set({ debitReporting: toDbAmount(l.debitReporting!), creditReporting: toDbAmount(l.creditReporting!) })
+        .where(eq(journalLines.id, l.id));
+      updated++;
+    }
   }
 
   const remaining = await tx.execute<{ n: number }>(sql`
