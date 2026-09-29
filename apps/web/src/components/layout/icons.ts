@@ -1,18 +1,23 @@
 import {
+  ArrowLeftRight,
   BookOpen,
+  Boxes,
   Building2,
   CalendarDays,
   Circle,
+  ClipboardCheck,
   Contact,
   Coins,
   FileText,
   Hourglass,
   LayoutDashboard,
   ListTree,
+  Package,
   Percent,
   Scale,
   Tags,
   Users,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -31,6 +36,11 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   'building-2': Building2,
   contact: Contact,
   hourglass: Hourglass,
+  package: Package,
+  boxes: Boxes,
+  'arrow-left-right': ArrowLeftRight,
+  'clipboard-check': ClipboardCheck,
+  warehouse: Warehouse,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

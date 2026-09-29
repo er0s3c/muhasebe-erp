@@ -39,7 +39,7 @@ export function useCMutation<TData, TVars>(
 }
 
 export interface NavigationData {
-  company: { id: string; name: string; sector: string; baseCurrency: string; reportingCurrency: string | null };
+  company: { id: string; name: string; sector: string; baseCurrency: string; reportingCurrency: string | null; allowNegativeStock: boolean };
   role: string;
   permissions: string[];
   modules: string[];

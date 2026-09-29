@@ -19,6 +19,7 @@ interface CompanyRow {
   reportingCurrency: string | null;
   taxNumber: string | null;
   taxOffice: string | null;
+  allowNegativeStock: boolean;
 }
 
 export function CompanyPage() {
@@ -31,6 +32,7 @@ export function CompanyPage() {
   const [name, setName] = useState('');
   const [taxNumber, setTaxNumber] = useState('');
   const [taxOffice, setTaxOffice] = useState('');
+  const [allowNegativeStock, setAllowNegativeStock] = useState(false);
   const editable = can('company.manage');
 
   useEffect(() => {
@@ -38,6 +40,7 @@ export function CompanyPage() {
       setName(data.company.name);
       setTaxNumber(data.company.taxNumber ?? '');
       setTaxOffice(data.company.taxOffice ?? '');
+      setAllowNegativeStock(data.company.allowNegativeStock);
     }
   }, [data]);
 
@@ -45,7 +48,7 @@ export function CompanyPage() {
     (_: void, call) =>
       call('/api/company', {
         method: 'PATCH',
-        body: { name, taxNumber: taxNumber || null, taxOffice: taxOffice || null },
+        body: { name, taxNumber: taxNumber || null, taxOffice: taxOffice || null, allowNegativeStock },
       }),
     [['company'], ['navigation']],
   );
@@ -84,6 +87,19 @@ export function CompanyPage() {
                 {(id) => <Input id={id} value={taxOffice} onChange={(e) => setTaxOffice(e.target.value)} disabled={!editable} />}
               </Field>
             </div>
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 accent-[var(--brand)]"
+                checked={allowNegativeStock}
+                disabled={!editable}
+                onChange={(e) => setAllowNegativeStock(e.target.checked)}
+              />
+              <span>
+                <span className="block font-medium">{t('settings.company.allowNegativeStock')}</span>
+                <span className="block text-[13px] text-muted">{t('settings.company.allowNegativeStockHint')}</span>
+              </span>
+            </label>
             {editable && (
               <div>
                 <Button type="submit" variant="primary" loading={save.isPending} disabled={name.trim().length < 2}>

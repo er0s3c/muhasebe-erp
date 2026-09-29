@@ -55,6 +55,18 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="core.inventory" />,
+                children: [
+                  { path: 'inventory/items', ...page(() => import('../features/inventory/ItemsPage'), 'ItemsPage') },
+                  { path: 'inventory/items/:id', ...page(() => import('../features/inventory/ItemDetailPage'), 'ItemDetailPage') },
+                  { path: 'inventory/status', ...page(() => import('../features/inventory/StockStatusPage'), 'StockStatusPage') },
+                  { path: 'inventory/movements', ...page(() => import('../features/inventory/MovementsPage'), 'MovementsPage') },
+                  { path: 'inventory/counts', ...page(() => import('../features/inventory/CountsPage'), 'CountsPage') },
+                  { path: 'inventory/counts/:id', ...page(() => import('../features/inventory/CountEditorPage'), 'CountEditorPage') },
+                  { path: 'inventory/warehouses', ...page(() => import('../features/inventory/WarehousesPage'), 'WarehousesPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="core.settings" />,
                 children: [
                   { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage') },

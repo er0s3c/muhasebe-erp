@@ -50,6 +50,7 @@ export interface CompanyInfo {
   sector: Sector;
   baseCurrency: string;
   reportingCurrency: string | null;
+  allowNegativeStock: boolean;
 }
 
 export interface TenantCtx extends AuthCtx {
@@ -129,6 +130,7 @@ export function tenantRoute<T>(
           sector: companies.sector,
           baseCurrency: companies.baseCurrency,
           reportingCurrency: companies.reportingCurrency,
+          allowNegativeStock: companies.allowNegativeStock,
         })
         .from(companies)
         .where(eq(companies.id, companyId));

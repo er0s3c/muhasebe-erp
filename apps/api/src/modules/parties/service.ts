@@ -10,12 +10,11 @@ import {
 import type { Tx } from '../../db/client';
 import { journalLines, parties } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
+import { TR, trContains } from '../../db/search';
 import { nextNumber } from '../settings/numbering';
 import { buildAgingReport, computeOpenItems, type PartyLine } from './aging';
 
 const PARTY_SEQUENCE = 'PARTY';
-/** ICU Türkçe sıralama/karşılaştırma (Ç, Ğ, İ, Ö, Ş, Ü doğru yerde); PostgreSQL ICU ile derlenmiş olmalı. */
-const TR = sql.raw('"tr-TR-x-icu"');
 
 async function generateCode(tx: Tx, companyId: string): Promise<string> {
   // Yıla bağlı olmayan sayaç: yıl = 0
@@ -127,13 +126,7 @@ export async function getParty(tx: Tx, id: string) {
 
 export async function listParties(tx: Tx, q: ListPartiesQuery) {
   const conds: SQL[] = [];
-  if (q.query) {
-    // Türkçe büyük/küçük harf kuralı (İ→i, I→ı) ve LIKE joker karakterlerinden kaçış
-    const like = `%${q.query.replace(/[\\%_]/g, '\\$&')}%`;
-    const needle = sql`lower(${like}::text collate ${TR})`;
-    const hit = (col: string) => sql`lower(${sql.raw(col)} collate ${TR}) like ${needle}`;
-    conds.push(sql`(${hit('p.name')} or ${hit('p.code')} or ${hit('coalesce(p.tax_number, \'\')')} or ${hit('coalesce(p.phone, \'\')')})`);
-  }
+  if (q.query) conds.push(trContains(['p.name', 'p.code', "coalesce(p.tax_number, '')", "coalesce(p.phone, '')"], q.query));
   if (q.kind === 'customer') conds.push(sql`p.kind in ('customer','both')`);
   if (q.kind === 'supplier') conds.push(sql`p.kind in ('supplier','both')`);
   if (q.kind === 'both') conds.push(sql`p.kind = 'both'`);

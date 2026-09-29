@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterAll } from 'vitest';
 import { buildApp } from '../src/app';
@@ -122,6 +123,26 @@ export async function asDb<T>(
   } finally {
     await c.query('ROLLBACK');
     c.release();
+  }
+}
+
+/**
+ * Ham SQL, tablo SAHİBİ rolle (RLS'i ve erp_app'e verilmeyen yetkileri aşar); işlem her zaman geri alınır.
+ * Tetikleyicilerin kendisini, yetki kısıtından bağımsız sınamak için kullanılır.
+ */
+export async function asOwner<T>(
+  fn: (q: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }>) => Promise<T>,
+): Promise<T> {
+  const client = new pg.Client({
+    connectionString: process.env.TEST_MIGRATION_DATABASE_URL ?? 'postgres://erp:erp@localhost:5432/erp_test',
+  });
+  await client.connect();
+  try {
+    await client.query('BEGIN');
+    return await fn((sql, params) => client.query(sql, params));
+  } finally {
+    await client.query('ROLLBACK');
+    await client.end();
   }
 }
 

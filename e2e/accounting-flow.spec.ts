@@ -40,7 +40,8 @@ test('kayıt → şirket kurulumu → kur girişi → dövizli yevmiye → mizan
 
   // 5) Dövizli yevmiye: 100 GBP banka borç / 4.000 TRY sermaye alacak
   await nav.getByRole('link', { name: 'Yevmiye kayıtları' }).click();
-  await page.getByRole('button', { name: 'Yeni yevmiye' }).click();
+  // Sayfa başlığındaki ve boş durumdaki iki "Yeni yevmiye" düğmesi vardır; hangisi olduğu fark etmez
+  await page.getByRole('button', { name: 'Yeni yevmiye' }).first().click();
   // Etiket "Açıklama *" (zorunlu işareti dahil); satır açıklamaları "Satır açıklaması N" ile başlar
   await page.getByRole('textbox', { name: /^Açıklama/ }).fill('Ortak sermaye girişi');
 

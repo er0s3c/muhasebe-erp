@@ -68,6 +68,13 @@ export function errorHandler(
       .send({ error: { code: 'LEDGER_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP02') {
+    // Stok defteri kuralları (yetersiz stok, değiştirilemez hareket, kapalı dönem vb.)
+    void reply
+      .status(422)
+      .send({ error: { code: 'STOCK_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

@@ -43,6 +43,7 @@ Kapsam belgesi yapay zekâ (Gemini) çıktısıdır. Aşağıdaki maddeleri bağ
 | Yabancı işçi teminatı | kişi başı 250 € | Doğrulanmadı |
 | Sosyal güvenlik teşviği | D1/D3 bordro tipleri, %100/%80 prim teşviki | Doğrulanmadı |
 | Kur kaynağı | KKTC Merkez Bankası gösterge kurları her iş günü 15:30 | **Kısmen doğrulandı:** kurumun "Döviz kurlarına erişim" sayfası (kullanıcının yapıştırdığı metin) XML adreslerini doğruluyor: güncel `https://www.mb.gov.ct.tr/kur/gunluk.xml`, tarihli `https://www.mb.gov.ct.tr/kur/tarih/YYYYMMDD` (XML: 09/04/2011'den itibaren). Örnek dosyada yalnızca tarih ve duyuru no var, **yayın saati yok** (15:30 iddiası doğrulanmadı). Yeniden dağıtım/kullanım şartı okunmadı |
+| Stok değerleme yöntemi | Hareketli ağırlıklı ortalama maliyet varsayılan yöntem olarak uygulanır | KKTC vergi mevzuatında kabul edilen stok değerleme yöntemleri ve dönem sonu envanter kuralları **doğrulanmadı**; mali müşavirle teyit edin |
 | Kurumlar | MŞ32 raporu, İnşaat Encümeni sınıf karneleri ve m² kapasiteleri | Doğrulanmadı |
 
 ### Tasarım ilkesi

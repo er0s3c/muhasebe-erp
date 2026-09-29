@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { isoYear, todayIso, type CreateCompanyInput } from '@erp/shared';
 import { setContext, type Tx } from '../../db/client';
-import { companies, memberships } from '../../db/schema';
+import { companies, memberships, warehouses } from '../../db/schema';
 import { seedChartOfAccounts } from '../ledger/accounts';
 import { seedTaxRates } from '../settings/defaults';
 import { generatePeriods } from '../settings/periods';
@@ -9,7 +9,7 @@ import type { AuthUser } from '../../http/context';
 
 /**
  * Şirketi ve varsayılanlarını (sahip üyeliği, cari yıl dönemleri, hesap planı,
- * KDV oranları) tek işlemde kurar. Herhangi bir adım başarısız olursa tümü geri alınır.
+ * KDV oranları, varsayılan depo) tek işlemde kurar. Herhangi bir adım başarısız olursa tümü geri alınır.
  */
 export async function createCompany(
   tx: Tx,
@@ -27,6 +27,8 @@ export async function createCompany(
       reportingCurrency: input.reportingCurrency,
       taxNumber: input.taxNumber ?? null,
       taxOffice: input.taxOffice ?? null,
+      // Perakendede alış faturası satıştan sonra girilebildiği için negatif stok açık başlar.
+      allowNegativeStock: input.sector === 'RETAIL_MARKET',
     })
     .returning({ id: companies.id });
   const companyId = company!.id;
@@ -39,6 +41,7 @@ export async function createCompany(
   await generatePeriods(tx, companyId, isoYear(todayIso()));
   await seedChartOfAccounts(tx, companyId);
   await seedTaxRates(tx, companyId);
+  await tx.insert(warehouses).values({ companyId, code: 'ANA', name: 'Ana depo', isDefault: true });
 
   const [created] = await tx.select().from(companies).where(eq(companies.id, companyId));
   return created!;

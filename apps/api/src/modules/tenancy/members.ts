@@ -7,6 +7,7 @@ import type { Tx } from '../../db/client';
 import { memberships, users } from '../../db/schema';
 import { tenantRoute } from '../../http/context';
 import { AppError, notFound, unprocessable } from '../../http/errors';
+import { TR } from '../../db/search';
 
 const userIdParam = z.object({ userId: uuid });
 
@@ -26,7 +27,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         })
         .from(memberships)
         .innerJoin(users, eq(users.id, memberships.userId))
-        .orderBy(sql`${users.fullName} collate "tr-TR-x-icu"`);
+        .orderBy(sql`${users.fullName} collate ${TR}`);
       return { members: rows };
     }),
   );

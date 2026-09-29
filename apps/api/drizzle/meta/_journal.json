@@ -29,6 +29,20 @@
       "when": 1790695610200,
       "tag": "0003_parties_rls_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790700259753,
+      "tag": "0004_inventory",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790700272383,
+      "tag": "0005_inventory_rls_rules",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { and, asc, eq, gte, lte, sql } from 'drizzle-orm';
+import { isoYear } from '@erp/shared';
 import { unprocessable, notFound } from '../../http/errors';
 import type { Tx } from '../../db/client';
 import { fiscalPeriods, journalEntries } from '../../db/schema';
@@ -30,6 +31,24 @@ export async function findPeriodForDate(tx: Tx, date: string) {
     .from(fiscalPeriods)
     .where(and(lte(fiscalPeriods.startDate, date), gte(fiscalPeriods.endDate, date)));
   return period ?? null;
+}
+
+/** Tarihin dönemini döndürür; dönem tanımsızsa veya kapalıysa 422 fırlatır (yevmiye ve stok ortak). */
+export async function requireOpenPeriod(tx: Tx, date: string) {
+  const period = await findPeriodForDate(tx, date);
+  if (!period) {
+    throw unprocessable(
+      `${date} tarihi için dönem tanımlı değil. Ayarlar > Dönemler'den ${isoYear(date)} yılını oluşturun.`,
+      'PERIOD_MISSING',
+    );
+  }
+  if (period.status !== 'open') {
+    throw unprocessable(
+      `${period.year}-${String(period.month).padStart(2, '0')} dönemi kapalı`,
+      'PERIOD_CLOSED',
+    );
+  }
+  return period;
 }
 
 export async function listPeriods(tx: Tx, year: number) {

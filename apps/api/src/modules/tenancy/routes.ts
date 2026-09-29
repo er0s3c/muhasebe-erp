@@ -92,6 +92,7 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.taxNumber !== undefined ? { taxNumber: input.taxNumber } : {}),
           ...(input.taxOffice !== undefined ? { taxOffice: input.taxOffice } : {}),
+          ...(input.allowNegativeStock !== undefined ? { allowNegativeStock: input.allowNegativeStock } : {}),
         })
         .where(and(eq(companies.id, company.id)))
         .returning();

@@ -18,6 +18,8 @@ export const updateCompanySchema = z.object({
   name: z.string().trim().min(2).max(160).optional(),
   taxNumber: z.string().trim().max(40).nullable().optional(),
   taxOffice: z.string().trim().max(120).nullable().optional(),
+  /** Stokta olmayan malın çıkışına izin (perakende). Kapalıyken çıkış bakiyeyi aşamaz. */
+  allowNegativeStock: z.boolean().optional(),
 });
 export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
 

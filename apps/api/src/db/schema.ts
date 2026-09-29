@@ -26,6 +26,8 @@ const id = () =>
 const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow();
 const money = () => numeric({ precision: 19, scale: 4 });
 const rate = () => numeric({ precision: 19, scale: 8 });
+const qty = () => numeric({ precision: 19, scale: 4 });
+const unitCost = () => numeric({ precision: 19, scale: 6 });
 
 // ---------------------------------------------------------------------------
 // Kiracılık ve güvenlik
@@ -84,6 +86,8 @@ export const companies = pgTable(
     reportingCurrency: text(),
     taxNumber: text(),
     taxOffice: text(),
+    /** Stokta olmayan malın çıkışına izin (perakende). Kapalıyken çıkış depo bakiyesini aşamaz. */
+    allowNegativeStock: boolean().notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [
@@ -440,5 +444,292 @@ export const journalLines = pgTable(
     ),
     check('journal_lines_base_ck', sql`${t.debitBase} >= 0 and ${t.creditBase} >= 0`),
     check('journal_lines_fx_ck', sql`${t.fxRate} > 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Stok
+// ---------------------------------------------------------------------------
+
+export const itemCategories = pgTable(
+  'item_categories',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    name: text().notNull(),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('item_categories_company_name_uq').on(t.companyId, t.name),
+    unique('item_categories_id_company_uq').on(t.id, t.companyId),
+  ],
+);
+
+export const warehouses = pgTable(
+  'warehouses',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    isDefault: boolean().notNull().default(false),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('warehouses_company_code_uq').on(t.companyId, t.code),
+    unique('warehouses_id_company_uq').on(t.id, t.companyId),
+    // Şirket başına en çok bir varsayılan depo
+    uniqueIndex('warehouses_default_uq')
+      .on(t.companyId)
+      .where(sql`${t.isDefault}`),
+  ],
+);
+
+export const items = pgTable(
+  'items',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    /** 'goods' stok tutar; 'service' (işçilik, nakliye…) hareket görmez. */
+    kind: text().notNull().default('goods'),
+    unit: text().notNull().default('adet'),
+    categoryId: uuid(),
+    barcode: text(),
+    /** Şirketin tax_rates.code değeri (uygulamada doğrulanır). */
+    vatCode: text(),
+    /** Alış ve satış fiyatı ayrı para birimlerinde tutulabilir (EUR ile al, GBP/TL ile sat). */
+    purchasePrice: unitCost(),
+    purchaseCurrency: text()
+      .notNull()
+      .default('TRY')
+      .references(() => currencies.code),
+    salePrice: unitCost(),
+    saleCurrency: text()
+      .notNull()
+      .default('TRY')
+      .references(() => currencies.code),
+    minLevel: qty(),
+    notes: text(),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('items_company_code_uq').on(t.companyId, t.code),
+    unique('items_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('items_company_barcode_uq')
+      .on(t.companyId, t.barcode)
+      .where(sql`${t.barcode} is not null`),
+    index('items_name_idx').on(t.companyId, t.name),
+    foreignKey({
+      name: 'items_category_fk',
+      columns: [t.categoryId, t.companyId],
+      foreignColumns: [itemCategories.id, itemCategories.companyId],
+    }),
+    check('items_kind_ck', sql`${t.kind} in ('goods','service')`),
+    check(
+      'items_amounts_ck',
+      sql`(${t.purchasePrice} is null or ${t.purchasePrice} >= 0) and (${t.salePrice} is null or ${t.salePrice} >= 0) and (${t.minLevel} is null or ${t.minLevel} >= 0)`,
+    ),
+  ],
+);
+
+/** Stok belgesi başlığı. Doğrudan "kaydedildi" oluşur; değiştirilemez, düzeltme ters belgeyle. */
+export const stockDocuments = pgTable(
+  'stock_documents',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    docNo: text().notNull(),
+    docDate: date({ mode: 'string' }).notNull(),
+    periodId: uuid().notNull(),
+    type: text().notNull(),
+    warehouseId: uuid().notNull(),
+    /** Yalnızca transferde: hedef depo. */
+    toWarehouseId: uuid(),
+    description: text(),
+    /** Belgeyi üreten kaynak (fatura, irsaliye…) — M6'da doldurulur. */
+    sourceType: text(),
+    sourceId: uuid(),
+    reversalOfId: uuid(),
+    reversedById: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('stock_documents_id_company_uq').on(t.id, t.companyId),
+    unique('stock_documents_no_uq').on(t.companyId, t.docNo),
+    foreignKey({
+      name: 'stock_documents_period_fk',
+      columns: [t.periodId, t.companyId],
+      foreignColumns: [fiscalPeriods.id, fiscalPeriods.companyId],
+    }),
+    foreignKey({
+      name: 'stock_documents_warehouse_fk',
+      columns: [t.warehouseId, t.companyId],
+      foreignColumns: [warehouses.id, warehouses.companyId],
+    }),
+    foreignKey({
+      name: 'stock_documents_to_warehouse_fk',
+      columns: [t.toWarehouseId, t.companyId],
+      foreignColumns: [warehouses.id, warehouses.companyId],
+    }),
+    foreignKey({
+      name: 'stock_documents_reversal_of_fk',
+      columns: [t.reversalOfId, t.companyId],
+      foreignColumns: [t.id, t.companyId],
+    }),
+    foreignKey({
+      name: 'stock_documents_reversed_by_fk',
+      columns: [t.reversedById, t.companyId],
+      foreignColumns: [t.id, t.companyId],
+    }),
+    index('stock_documents_date_idx').on(t.companyId, t.docDate),
+    check(
+      'stock_documents_type_ck',
+      sql`${t.type} in ('opening','receipt','issue','waste','transfer','count')`,
+    ),
+    check('stock_documents_transfer_ck', sql`(${t.type} = 'transfer') = (${t.toWarehouseId} is not null)`),
+  ],
+);
+
+/**
+ * Stok defteri: belge başına etki satırları (işaretli miktar ve şirket para birimi değeri).
+ * Eldeki miktar/değer her zaman bu tablonun toplamından türetilir; ayrı bakiye tablosu yoktur.
+ * 'cost_adjust' satırı (miktar 0): eksi bakiye sonradan gelen alışla kapanırken oluşan maliyet farkı.
+ */
+export const stockMovements = pgTable(
+  'stock_movements',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** İşleme sırası (geriye dönük tarihli hareketlerde de artar). */
+    seq: bigserial({ mode: 'number' }).notNull(),
+    documentId: uuid().notNull(),
+    lineNo: integer().notNull(),
+    kind: text().notNull().default('qty'),
+    itemId: uuid().notNull(),
+    warehouseId: uuid().notNull(),
+    movementDate: date({ mode: 'string' }).notNull(),
+    qty: qty().notNull(),
+    /** Şirket para biriminde işaretli değer (2 ondalık). */
+    value: money().notNull(),
+    /** Alış/devirde orijinal para birimi, o para biriminde birim maliyet ve uygulanan kur. */
+    currencyCode: text().references(() => currencies.code),
+    unitCost: unitCost(),
+    fxRate: rate(),
+  },
+  (t) => [
+    unique('stock_movements_seq_uq').on(t.seq),
+    foreignKey({
+      name: 'stock_movements_document_fk',
+      columns: [t.documentId, t.companyId],
+      foreignColumns: [stockDocuments.id, stockDocuments.companyId],
+    }),
+    foreignKey({
+      name: 'stock_movements_item_fk',
+      columns: [t.itemId, t.companyId],
+      foreignColumns: [items.id, items.companyId],
+    }),
+    foreignKey({
+      name: 'stock_movements_warehouse_fk',
+      columns: [t.warehouseId, t.companyId],
+      foreignColumns: [warehouses.id, warehouses.companyId],
+    }),
+    index('stock_movements_item_idx').on(t.companyId, t.itemId, t.seq),
+    index('stock_movements_wh_item_idx').on(t.companyId, t.warehouseId, t.itemId),
+    index('stock_movements_date_idx').on(t.companyId, t.movementDate),
+    index('stock_movements_doc_idx').on(t.documentId),
+    check('stock_movements_kind_ck', sql`${t.kind} in ('qty','cost_adjust')`),
+    check(
+      'stock_movements_shape_ck',
+      sql`(${t.kind} = 'qty' and ${t.qty} <> 0 and (${t.value} = 0 or sign(${t.qty}) = sign(${t.value}))) or (${t.kind} = 'cost_adjust' and ${t.qty} = 0 and ${t.value} <> 0)`,
+    ),
+  ],
+);
+
+export const stockCounts = pgTable(
+  'stock_counts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** Kaydedilene kadar null; boşluksuz seri işleme anında atanır. */
+    countNo: text(),
+    countDate: date({ mode: 'string' }).notNull(),
+    warehouseId: uuid().notNull(),
+    description: text(),
+    status: text().notNull().default('draft'),
+    /** Fark varsa işleme anında üretilen 'count' türü stok belgesi. */
+    documentId: uuid(),
+    postedAt: timestamp({ withTimezone: true }),
+    postedBy: uuid().references(() => users.id),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('stock_counts_id_company_uq').on(t.id, t.companyId),
+    unique('stock_counts_no_uq').on(t.companyId, t.countNo),
+    foreignKey({
+      name: 'stock_counts_warehouse_fk',
+      columns: [t.warehouseId, t.companyId],
+      foreignColumns: [warehouses.id, warehouses.companyId],
+    }),
+    foreignKey({
+      name: 'stock_counts_document_fk',
+      columns: [t.documentId, t.companyId],
+      foreignColumns: [stockDocuments.id, stockDocuments.companyId],
+    }),
+    check('stock_counts_status_ck', sql`${t.status} in ('draft','posted')`),
+    check(
+      'stock_counts_posted_ck',
+      sql`${t.status} = 'draft' or (${t.countNo} is not null and ${t.postedAt} is not null)`,
+    ),
+  ],
+);
+
+export const stockCountLines = pgTable(
+  'stock_count_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    countId: uuid().notNull(),
+    itemId: uuid().notNull(),
+    /** null = henüz sayılmadı; işleme sırasında dikkate alınmaz. */
+    countedQty: qty(),
+    /** İşleme anında doldurulur: depodaki sistem miktarı ve fark (sayılan − sistem). */
+    systemQty: qty(),
+    diffQty: qty(),
+  },
+  (t) => [
+    unique('stock_count_lines_uq').on(t.countId, t.itemId),
+    foreignKey({
+      name: 'stock_count_lines_count_fk',
+      columns: [t.countId, t.companyId],
+      foreignColumns: [stockCounts.id, stockCounts.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'stock_count_lines_item_fk',
+      columns: [t.itemId, t.companyId],
+      foreignColumns: [items.id, items.companyId],
+    }),
+    check('stock_count_lines_qty_ck', sql`${t.countedQty} is null or ${t.countedQty} >= 0`),
   ],
 );

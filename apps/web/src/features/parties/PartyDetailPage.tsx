@@ -316,7 +316,8 @@ function StatementTab({ partyId }: { partyId: string }) {
   );
 }
 
-function bucketBadge(item: OpenItem, t: ReturnType<typeof useTranslation>['t']) {
+function BucketBadge({ item }: { item: OpenItem }) {
+  const { t } = useTranslation();
   if (item.bucket === 'notDue') return <Badge>{t('parties.detail.notDue')}</Badge>;
   const tone = item.bucket === 'd1_30' ? 'warning' : 'danger';
   return <Badge tone={tone}>{t('parties.detail.days', { count: item.daysOverdue })}</Badge>;
@@ -387,7 +388,9 @@ function OpenItemsTab({ partyId }: { partyId: string }) {
                         <Td num className="font-medium">
                           {money(it.remainingBase)}
                         </Td>
-                        <Td>{bucketBadge(it, t)}</Td>
+                        <Td>
+                          <BucketBadge item={it} />
+                        </Td>
                       </Tr>
                     ))}
                   </tbody>

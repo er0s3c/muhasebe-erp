@@ -47,6 +47,18 @@ Tek veritabanı, tek API. Sektöre özgü davranış ayrı dağıtımlarla deği
 - **Açık kalem ve yaşlandırma** (`modules/parties/aging.ts`, saf fonksiyon): alacak tarafında borç satırları, borç tarafında alacak satırları "kalem"dir; karşı taraf toplamı en eski **vadeden** (yoksa fiş tarihinden) başlayarak uygulanır (FIFO). Uygulanamayan fazla ödeme "avans" olarak ayrı gösterilir. Kovalar: vadesi gelmemiş, 1–30, 31–60, 61–90, 90+ gün. Fatura–tahsilat elle eşleştirme (M7) bu hesabın üstüne gelecek.
 - **Türkçe sıralama/arama:** cari listesi `COLLATE "tr-TR-x-icu"` ile sıralanır ve arar (Ç, Ğ, İ, Ö, Ş, Ü doğru yerde; İ→i, I→ı). PostgreSQL'in ICU desteğiyle derlenmiş olması gerekir (resmî Docker imajı, Ubuntu/Debian paketleri ve EDB kurucusunda vardır).
 
+## Stok
+
+- **Stok defteri ayrı bir alt defterdir:** `stock_documents` (başlık) + `stock_movements` (belge başına etki satırları: işaretli miktar ve şirket para biriminde işaretli değer). Eldeki miktar/değer **ayrı bakiye tablosunda tutulmaz**, hareket toplamından türetilir; böylece sapma olmaz. Depo bazında yalnızca miktar izlenir, ürün maliyeti şirket geneli tek ortalamadır (depo değeri = miktar × ürün ortalaması).
+- **Maliyet: hareketli ağırlıklı ortalama** (`modules/inventory/costing.ts`, saf fonksiyonlar). Çıkış değeri: tamamı boşaltılıyorsa kalan değerin tamamı (kuruş artığı kalmaz), aksi halde `round2(değer × çıkış / eldeki)`. Bakiye ≤ 0 iken referans maliyet `değer/miktar`, yoksa son alış maliyeti, yoksa 0.
+- **Negatif stok** şirket ayarıdır (`companies.allow_negative_stock`; varsayılan kapalı, RETAIL_MARKET'ta açık). Kapalıyken çıkış uygulamada (`STOCK_INSUFFICIENT`) ve `stock_movements_insert_guard` tetikleyicisinde reddedilir. Açıkken eksi bakiye son maliyetle değerlenir; alış eksik bakiyeyi kapatırken maliyet farkı ayrı bir `cost_adjust` satırıyla (miktar 0) yazılır, böylece envanter değeri hep miktar × yeni ortalama kalır. Fark M6'da satılan mal maliyetine (621) gidecek.
+- **Çoklu para birimi:** giriş/devir satırında maliyet EUR/GBP/TL girilir, hareket tarihindeki kurla (`requireRate`) ya da elle kurla şirket para birimine çevrilir; orijinal para birimi, birim maliyet ve kur satırda kalır (tarihsel maliyet). Kartta alış ve satış fiyatı ayrı para birimlerinde tutulur.
+- **Değiştirilemez:** hareket satırlarında `erp_app`'in UPDATE/DELETE yetkisi yoktur ve tetikleyici de reddeder; belge başlığında yalnızca `reversed_by_id` (boş → dolu) değişebilir. Düzeltme **ters belge** ile olur ve yalnızca ilgili ürünlerde belgeden sonra hareket yoksa yapılır (`STOCK_DOC_HAS_LATER_MOVEMENTS`); böylece durum tam eski haline döner. Belge tarihi açık mali dönemde olmalıdır (uygulama ve tetikleyici).
+- **Eşzamanlılık:** belge işlenirken ilgili ürün satırları `SELECT … FOR UPDATE` ile (id sırasıyla) kilitlenir, ardından numara alınır; tetikleyici de ürün satırını kilitler (ikinci savunma). Paralel iki çıkış testi bunu sınar.
+- **Sayım:** taslak → işlendi. Fark, işleme anındaki depo bakiyesine göre hesaplanır; fazla ortalama maliyetle giriş, eksik çıkış olur; tek `count` belgesi üretilir. İşlenen sayım değişmez.
+- **Muhasebe bağı:** M5'te stok hareketleri yevmiye üretmez; hesap eşlemesi (karşı hesap belgeye göre değişir) fatura (M6) ile birlikte tasarlanır. Bu arada **Stok durumu** raporu, stok defteri değerini 150–157 hesaplarının defter bakiyesiyle karşılaştırır ve farkı gösterir; belgelerde `source_type/source_id` alanları M6'ya hazırdır.
+- Geriye dönük tarihli hareket geçmişi yeniden değerlemez (hareket, girildiği andaki ortalamayla maliyetlenir); raporlar hareket tarihine göre tarih anı değeri verir.
+
 ## Kur içe aktarma
 
 `POST /api/exchange-rates/import`: `{ source: 'kktcmb', date? }` resmî adresten indirir, `{ source: 'xml', xml }` yüklenen dosyayı kullanır. İndirme fonksiyonu (`app.rateFetcher`) test için değiştirilebilir. Ayrıntı ve güvenlik notları: [LEGAL-NOTES.md](LEGAL-NOTES.md) §6.
@@ -75,7 +87,7 @@ React 19 + Vite + Tailwind v4. Renk/yüzey belirteçleri CSS değişkenidir (aç
 
 - `packages/shared`: saf birim testleri (para, modül kaydı, izinler, şemalar).
 - `apps/api`: `app.inject` ile **gerçek PostgreSQL** üzerinde entegrasyon testleri; her çalıştırmada test şeması sıfırlanır. RLS, değiştirilemezlik, dönem kilidi, eş zamanlı numaralama, rol izinleri ve modül yalıtımı doğrudan ham SQL ile de sınanır.
-- `e2e/`: Playwright ile kayıt → kurulum → kur → dövizli yevmiye → mizan akışı.
+- `e2e/`: Playwright ile kayıt → kurulum → kur → dövizli yevmiye → mizan; cari akışı; stok akışı (kart → giriş → çıkış → kritik seviye → sayım).
 
 ## Bilinen sınırlar
 

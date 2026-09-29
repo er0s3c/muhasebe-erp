@@ -46,11 +46,13 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 
 | İşlev | Durum |
 |---|---|
-| Stok kartı (birim, kategori, barkod, KDV), hızlı giriş | 🔜 M5 |
-| Depolar, giriş/çıkış/transfer hareketleri | 🔜 M5 |
-| Sarf, fire, sayım ve sayım farkı | 🔜 M5 |
-| Ağırlıklı ortalama maliyet, stok değerleme | 🔜 M5 |
-| Stok durumu, hareket, kritik seviye, kâr/zarar raporları | 🔜 M5/M8 |
+| Stok kartı (birim, kategori, barkod, KDV, kritik seviye, alış/satış fiyatı ayrı para biriminde) | ✅ |
+| Depolar, giriş/çıkış/transfer/devir hareketleri; ters belge | ✅ |
+| Sarf, fire, sayım ve sayım farkı | ✅ |
+| Hareketli ağırlıklı ortalama maliyet, dövizli alış maliyeti, negatif stok ayarı, stok değerleme | ✅ |
+| Stok değeri ↔ muhasebe (150–157) mutabakatı; stok hareketinden otomatik yevmiye | ✅ mutabakat · 🔜 M6 yevmiye |
+| Stok durumu (tarih anı), kart ekstresi, kritik seviye | ✅ |
+| Stok kâr/zarar ve diğer rapor seti | 🔜 M8 |
 | Seri no takibi, emanet stok, barkod yazdırma | ⏳ |
 | Fiyat listeleri, kampanya | ⏳ |
 

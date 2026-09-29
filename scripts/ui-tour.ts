@@ -141,6 +141,38 @@ async function main() {
   await settle(page, 700);
   await shot(page, '26-yaslandirma-borc');
 
+  // Stok
+  await go('/inventory/items', '30-stok-kartlari', 'Stok kartları');
+  await page.getByRole('row', { name: /Nervürlü inşaat demiri/ }).click();
+  await page.getByRole('heading', { name: 'Nervürlü inşaat demiri 12 mm', level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '31-stok-karti-ekstre');
+  // Dövizli giriş: maliyet £ ile girilir, TL karşılığı hareket günü kuruyla önizlenir
+  await page.getByRole('button', { name: 'Stok girişi' }).click();
+  const stockForm = page.getByRole('dialog');
+  await stockForm.getByLabel('Miktar 1').fill('5');
+  await stockForm.getByLabel('Birim maliyet 1').fill('110');
+  await stockForm.getByLabel('Para birimi 1').selectOption('GBP');
+  await stockForm.getByLabel('Tutar (TRY) 1').filter({ hasText: /\d/ }).waitFor();
+  await settle(page, 600);
+  await shot(page, '32-stok-giris-formu');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await go('/inventory/status', '33-stok-durumu', 'Stok durumu');
+  await go('/inventory/movements', '34-stok-hareketleri', 'Stok hareketleri');
+  await page.getByText('Depoda bozulan boya (fire)').first().click();
+  await page.getByRole('dialog').getByText('SH-').first().waitFor();
+  await settle(page, 600);
+  await shot(page, '35-stok-belge-detay');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await go('/inventory/counts', '36-sayimlar', 'Stok sayımları');
+  await page.getByText('Eylül depo sayımı').first().click();
+  await page.getByRole('heading', { name: /^SY-/, level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '37-sayim-detay');
+  await go('/inventory/warehouses', '38-depolar', 'Depolar');
+
   // Ayarlar
   await go('/settings/currencies', '11-kurlar', 'Para birimi ve kurlar');
   // Merkez Bankası XML dosyasından içe aktarma (resmî örnek dosya)
@@ -190,7 +222,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/parties', '/parties/aging', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);

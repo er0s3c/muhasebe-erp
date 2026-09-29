@@ -1,5 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-import { ArrowRight, CheckCircle2, Circle, FileEdit, FileCheck2, Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Boxes, CheckCircle2, Circle, FileEdit, FileCheck2, Scale, TrendingDown, TrendingUp } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -10,7 +10,7 @@ import { cn } from '../../lib/cn';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCQuery, useCompanyApi } from '../../lib/queries';
 import { useSession } from '../../lib/session';
-import type { AgingReport, JournalListItem, Member, TaxRate, TrialBalanceData } from '../../lib/types';
+import type { AgingReport, InventorySummary, JournalListItem, Member, TaxRate, TrialBalanceData } from '../../lib/types';
 
 interface Step {
   key: string;
@@ -46,6 +46,8 @@ export function DashboardPage() {
   const canReports = can('reports.read');
   const canMembers = can('members.manage');
   const canParties = can('parties.read');
+  const canInventory = can('inventory.read');
+  const { data: stockSummary } = useCQuery<InventorySummary>(['dashboard', 'stock'], '/api/inventory/summary', { enabled: canInventory });
 
   const { data: posted } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'posted'], `/api/journal-entries?status=posted&limit=200&from=${year}-01-01`, { enabled: canLedger });
   const { data: drafts } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'drafts'], '/api/journal-entries?status=draft&limit=200', { enabled: canLedger });
@@ -115,6 +117,22 @@ export function DashboardPage() {
             </Link>
             <Link to="/parties/aging" className="block rounded-xl transition-shadow hover:shadow-pop" aria-label={t('dashboard.payables')}>
               <Kpi icon={<TrendingDown className="size-5" />} label={t('dashboard.payables')} value={pay ? `${money(pay.totals.total)} ${company.baseCurrency}` : '—'} tone="warning" />
+            </Link>
+          </div>
+        )}
+
+        {canInventory && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Link to="/inventory/status" className="block rounded-xl transition-shadow hover:shadow-pop" aria-label={t('dashboard.stockValue')}>
+              <Kpi icon={<Boxes className="size-5" />} label={t('dashboard.stockValue')} value={stockSummary ? `${money(stockSummary.stockValue)} ${company.baseCurrency}` : '—'} />
+            </Link>
+            <Link to="/inventory/status?low=1" className="block rounded-xl transition-shadow hover:shadow-pop" aria-label={t('dashboard.lowStock')}>
+              <Kpi
+                icon={<AlertTriangle className="size-5" />}
+                label={t('dashboard.lowStock')}
+                value={stockSummary ? stockSummary.lowCount : '—'}
+                tone={stockSummary && stockSummary.lowCount > 0 ? 'warning' : 'brand'}
+              />
             </Link>
           </div>
         )}

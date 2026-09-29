@@ -18,7 +18,7 @@ import type { Tx } from '../../db/client';
 import { accounts, fiscalPeriods, journalEntries, journalLines, parties } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
-import { findPeriodForDate } from '../settings/periods';
+import { requireOpenPeriod } from '../settings/periods';
 import { findRate, requireRate } from '../settings/rates';
 
 export interface LedgerCtx {
@@ -29,23 +29,6 @@ export interface LedgerCtx {
 }
 
 const JOURNAL_NUMBER_KEY = 'JE';
-
-async function requireOpenPeriod(tx: Tx, date: string) {
-  const period = await findPeriodForDate(tx, date);
-  if (!period) {
-    throw unprocessable(
-      `${date} tarihi için dönem tanımlı değil. Ayarlar > Dönemler'den ${isoYear(date)} yılını oluşturun.`,
-      'PERIOD_MISSING',
-    );
-  }
-  if (period.status !== 'open') {
-    throw unprocessable(
-      `${period.year}-${String(period.month).padStart(2, '0')} dönemi kapalı`,
-      'PERIOD_CLOSED',
-    );
-  }
-  return period;
-}
 
 interface PreparedLine {
   accountId: string;

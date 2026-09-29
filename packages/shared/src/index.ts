@@ -8,3 +8,4 @@ export * from './schemas/company';
 export * from './schemas/settings';
 export * from './schemas/ledger';
 export * from './schemas/parties';
+export * from './schemas/inventory';

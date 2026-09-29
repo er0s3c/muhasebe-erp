@@ -260,12 +260,223 @@ export interface AgingReport {
   totals: Omit<AgingRow, 'partyId' | 'partyCode' | 'partyName'>;
 }
 
+// --- Stok ---------------------------------------------------------------
+
+export type ItemKind = 'goods' | 'service';
+export type StockDocType = 'opening' | 'receipt' | 'issue' | 'waste' | 'transfer' | 'count';
+
+export interface Item {
+  id: string;
+  code: string;
+  name: string;
+  kind: ItemKind;
+  unit: string;
+  categoryId: string | null;
+  barcode: string | null;
+  vatCode: string | null;
+  purchasePrice: string | null;
+  purchaseCurrency: string;
+  salePrice: string | null;
+  saleCurrency: string;
+  minLevel: string | null;
+  notes: string | null;
+  isActive: boolean;
+}
+
+export interface ItemListRow {
+  id: string;
+  code: string;
+  name: string;
+  kind: ItemKind;
+  unit: string;
+  barcode: string | null;
+  isActive: boolean;
+  minLevel: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  purchasePrice: string | null;
+  purchaseCurrency: string;
+  salePrice: string | null;
+  saleCurrency: string;
+  /** Depo süzgeci varsa o depodaki, yoksa toplam miktar */
+  onHand: string;
+  value: string;
+  avgCost: string | null;
+  isLow: boolean;
+}
+
+export interface ItemDetail {
+  item: Item & { categoryName: string | null };
+  stock: {
+    qty: string;
+    value: string;
+    avgCost: string | null;
+    isLow: boolean;
+    byWarehouse: { warehouseId: string; code: string; name: string; isActive: boolean; qty: string }[];
+  };
+}
+
+export interface ItemStatementData {
+  item: { id: string; code: string; name: string; unit: string };
+  from: string;
+  to: string;
+  openingQty: string;
+  openingValue: string | null;
+  lines: {
+    date: string;
+    documentId: string;
+    docNo: string;
+    type: StockDocType;
+    kind: 'qty' | 'cost_adjust';
+    isReversal: boolean;
+    description: string | null;
+    warehouseName: string;
+    qty: string;
+    value: string;
+    balanceQty: string;
+    balanceValue: string | null;
+  }[];
+  closingQty: string;
+  closingValue: string | null;
+}
+
+export interface WarehouseRow {
+  id: string;
+  code: string;
+  name: string;
+  isDefault: boolean;
+  isActive: boolean;
+  itemCount: number;
+}
+
+export interface CategoryRow {
+  id: string;
+  name: string;
+  isActive: boolean;
+  itemCount: number;
+}
+
+export interface StockDocListRow {
+  id: string;
+  docNo: string;
+  docDate: string;
+  type: StockDocType;
+  description: string | null;
+  warehouseName: string;
+  toWarehouseName: string | null;
+  reversalOfId: string | null;
+  reversedById: string | null;
+  lineCount: number;
+  totalValue: string;
+}
+
+export interface StockDocDetail {
+  document: {
+    id: string;
+    docNo: string;
+    docDate: string;
+    type: StockDocType;
+    description: string | null;
+    warehouseId: string;
+    warehouseName: string;
+    toWarehouseId: string | null;
+    toWarehouseName: string | null;
+    reversalOfId: string | null;
+    reversalOfNo: string | null;
+    reversedById: string | null;
+    reversedByNo: string | null;
+    countId: string | null;
+  };
+  lines: {
+    lineNo: number;
+    itemId: string;
+    itemCode: string;
+    itemName: string;
+    unit: string;
+    direction: 'in' | 'out' | 'transfer';
+    warehouseName: string;
+    qty: string;
+    value: string;
+    unitCostBase: string | null;
+    currencyCode: string | null;
+    unitCost: string | null;
+    fxRate: string | null;
+    adjustment: string | null;
+  }[];
+  totalValue: string;
+}
+
+export interface StockCountListRow {
+  id: string;
+  countNo: string | null;
+  countDate: string;
+  status: 'draft' | 'posted';
+  description: string | null;
+  warehouseName: string;
+  documentId: string | null;
+  lineCount: number;
+  countedCount: number;
+}
+
+export interface StockCountDetail {
+  count: {
+    id: string;
+    countNo: string | null;
+    countDate: string;
+    status: 'draft' | 'posted';
+    description: string | null;
+    warehouseId: string;
+    warehouseName: string;
+    documentId: string | null;
+    documentNo: string | null;
+    documentReversedById: string | null;
+  };
+  lines: {
+    itemId: string;
+    itemCode: string;
+    itemName: string;
+    unit: string;
+    countedQty: string | null;
+    systemQty: string | null;
+    diffQty: string | null;
+  }[];
+  summary: { lines: number; counted: number; uncounted: number; surplus: number; shortage: number };
+  warnings?: { zeroCostItems: string[] };
+}
+
+export interface StockStatusReport {
+  asOf: string;
+  baseCurrency: string;
+  rows: {
+    id: string;
+    code: string;
+    name: string;
+    unit: string;
+    categoryName: string | null;
+    isActive: boolean;
+    minLevel: string | null;
+    onHand: string;
+    avgCost: string | null;
+    value: string;
+    isLow: boolean;
+  }[];
+  totals: { itemCount: number; lowCount: number; value: string; reportingValue: string | null; reportingCurrency: string | null };
+  ledger: { accountsBalance: string; stockValue: string; difference: string } | null;
+}
+
+export interface InventorySummary {
+  itemCount: number;
+  stockValue: string;
+  lowCount: number;
+}
+
 /** Modül anahtarı -> çeviri anahtarı */
 export const MODULE_LABEL_KEYS = {
   'core.dashboard': 'modules.dashboard',
   'core.ledger': 'modules.ledger',
   'core.settings': 'modules.settings',
   'core.parties': 'modules.parties',
+  'core.inventory': 'modules.inventory',
   'construction.projects': 'modules.constructionProjects',
   'retail.pos': 'modules.retailPos',
 } as const;
