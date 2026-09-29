@@ -75,7 +75,7 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
             {doc.reversedById && (
               <Callout tone="warning">
                 {t('inventory.mdetail.reversedBy', { no: doc.reversedByNo })}{' '}
-                <button className="font-medium text-brand hover:underline" onClick={() => onOpen(doc.reversedById!)}>
+                <button className="link" onClick={() => onOpen(doc.reversedById!)}>
                   {doc.reversedByNo}
                 </button>
               </Callout>
@@ -83,7 +83,7 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
             {doc.reversalOfId && (
               <Callout>
                 {t('inventory.mdetail.reversalOf', { no: doc.reversalOfNo })}{' '}
-                <button className="font-medium text-brand hover:underline" onClick={() => onOpen(doc.reversalOfId!)}>
+                <button className="link" onClick={() => onOpen(doc.reversalOfId!)}>
                   {doc.reversalOfNo}
                 </button>
               </Callout>
@@ -92,17 +92,17 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
             <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
               <div>
                 <dt className="text-muted">{doc.type === 'transfer' ? t('inventory.mform.fromWarehouse') : t('inventory.mdetail.warehouse')}</dt>
-                <dd className="mt-0.5 font-medium">{doc.warehouseName}</dd>
+                <dd className="mt-0.5">{doc.warehouseName}</dd>
               </div>
               {doc.toWarehouseName && (
                 <div>
                   <dt className="text-muted">{t('inventory.mdetail.toWarehouse')}</dt>
-                  <dd className="mt-0.5 font-medium">{doc.toWarehouseName}</dd>
+                  <dd className="mt-0.5">{doc.toWarehouseName}</dd>
                 </div>
               )}
               <div>
                 <dt className="text-muted">{t('inventory.mdetail.date')}</dt>
-                <dd className="mt-0.5 font-medium">{formatDateTR(doc.docDate)}</dd>
+                <dd className="mt-0.5">{formatDateTR(doc.docDate)}</dd>
               </div>
               {doc.description && (
                 <div className="sm:col-span-3">
@@ -113,7 +113,7 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
             </dl>
 
             {doc.countId && (
-              <Link to={`/inventory/counts/${doc.countId}`} className="text-sm font-medium text-brand hover:underline" onClick={onClose}>
+              <Link to={`/inventory/counts/${doc.countId}`} className="text-sm link" onClick={onClose}>
                 {t('inventory.mdetail.fromCount')}
               </Link>
             )}
@@ -134,7 +134,7 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
                   {data.lines.map((l) => (
                     <Tr key={l.lineNo}>
                       <Td>
-                        <span className="font-medium">{l.itemName}</span>
+                        <span>{l.itemName}</span>
                         <span className="ml-2 font-mono text-xs text-muted">{l.itemCode}</span>
                         {l.currencyCode && l.currencyCode !== company.baseCurrency && l.unitCost && l.fxRate && (
                           <span className="block text-xs text-muted">
@@ -152,12 +152,12 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
                         {qtyText(l.qty)} {unitLabel(l.unit)}
                       </Td>
                       <Td num className="text-muted">{l.unitCostBase ? money(l.unitCostBase, 4) : '—'}</Td>
-                      <Td num className="font-medium">{money(l.value)}</Td>
+                      <Td num>{money(l.value)}</Td>
                     </Tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-surface-2 font-semibold">
+                  <tr className="bg-surface-2">
                     <Td colSpan={3}>{t('inventory.mdetail.total')}</Td>
                     <Td num>{money(data.totalValue)}</Td>
                   </tr>

@@ -60,7 +60,7 @@ export function CategoriesSheet({ open, onOpenChange }: Props) {
           {data.categories.map((c) => (
             <li key={c.id} className="flex items-center gap-3 px-4 py-2.5">
               <div className="min-w-0 flex-1">
-                <p className={c.isActive ? 'font-medium' : 'font-medium text-muted line-through'}>{c.name}</p>
+                <p className={c.isActive ? '' : ' text-muted line-through'}>{c.name}</p>
                 <p className="text-xs text-muted">{t('inventory.items.categories.itemCount', { count: c.itemCount })}</p>
               </div>
               {!c.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}

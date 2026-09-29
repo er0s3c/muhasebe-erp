@@ -1,21 +1,22 @@
 import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { cn } from '../../lib/cn';
 
+/** Girdi: 10px yarıçap, hairline çerçeve; odakta Ink çerçeve (sarı yalnızca eylem yüzeylerinde). */
 const control =
-  'w-full rounded-lg border border-border-strong bg-surface px-3 text-sm text-text placeholder:text-muted/70 ' +
-  'transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25 disabled:bg-surface-2 disabled:opacity-70';
+  'w-full rounded-lg border border-border-strong bg-surface px-3.5 text-sm text-text placeholder:text-muted/70 ' +
+  'transition-colors focus:border-text focus:outline-none disabled:bg-surface-2 disabled:opacity-70';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...props }, ref) {
-  return <input ref={ref} className={cn(control, 'h-9', className)} {...props} />;
+  return <input ref={ref} className={cn(control, 'h-10', className)} {...props} />;
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...props }, ref) {
-  return <textarea ref={ref} className={cn(control, 'min-h-20 py-2', className)} {...props} />;
+  return <textarea ref={ref} className={cn(control, 'min-h-20 py-2.5', className)} {...props} />;
 });
 
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function Select({ className, children, ...props }, ref) {
   return (
-    <select ref={ref} className={cn(control, 'h-9 pr-8', className)} {...props}>
+    <select ref={ref} className={cn(control, 'h-10 pr-8', className)} {...props}>
       {children}
     </select>
   );
@@ -35,7 +36,7 @@ export function Field({ label, hint, error, required, className, children }: Fie
   const id = useId();
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
-      <label htmlFor={id} className="text-[13px] font-medium text-text">
+      <label htmlFor={id} className="text-[13px] text-text">
         {label}
         {required && <span className="ml-0.5 text-danger" aria-hidden>*</span>}
       </label>

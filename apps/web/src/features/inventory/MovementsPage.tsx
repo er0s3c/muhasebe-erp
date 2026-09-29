@@ -128,7 +128,7 @@ export function MovementsPage() {
                       <DocTypeBadge type={d.type} />
                     </Td>
                     <Td>
-                      <span className="font-medium">
+                      <span>
                         {d.warehouseName}
                         {d.toWarehouseName && ` → ${d.toWarehouseName}`}
                       </span>
@@ -137,7 +137,7 @@ export function MovementsPage() {
                       {d.description && <span className="block truncate text-xs text-muted">{d.description}</span>}
                     </Td>
                     <Td num className="text-muted">{d.lineCount}</Td>
-                    <Td num className="font-medium">{money(d.totalValue)}</Td>
+                    <Td num>{money(d.totalValue)}</Td>
                     <Td>
                       <ChevronRight className="size-4 text-muted" aria-hidden />
                     </Td>

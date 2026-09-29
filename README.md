@@ -63,6 +63,7 @@ e2e/            Playwright senaryoları
 ## Belgeler
 
 - [Mimari](docs/ARCHITECTURE.md)
+- [Tasarım sistemi](docs/DESIGN.md)
 - [Kapsam ve işlev kontrol listesi](docs/SCOPE.md)
 - [Hukuki notlar ve doğrulanması gerekenler](docs/LEGAL-NOTES.md) — ticari kullanımdan önce mutlaka okuyun
 - [Yol haritası](docs/ROADMAP.md)

@@ -8,6 +8,7 @@ import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { SegmentedTabs } from '../../components/ui/Tabs';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { isZero, money } from '../../lib/format';
@@ -62,19 +63,11 @@ export function PartyAgingPage() {
       />
 
       <div className="mb-5 flex flex-wrap items-end gap-4">
-        <div role="tablist" className="inline-flex rounded-lg border border-border bg-surface p-1">
-          {(['receivable', 'payable'] as const).map((k) => (
-            <button
-              key={k}
-              role="tab"
-              aria-selected={type === k}
-              onClick={() => setType(k)}
-              className={cn('rounded-md px-4 py-1.5 text-sm font-medium text-muted transition-colors', type === k && 'bg-brand-soft text-brand')}
-            >
-              {t(`partyAging.${k}`)}
-            </button>
-          ))}
-        </div>
+        <SegmentedTabs
+          value={type}
+          onChange={setType}
+          items={(['receivable', 'payable'] as const).map((k) => ({ key: k, label: t(`partyAging.${k}`) }))}
+        />
         <Field label={t('partyAging.asOf')}>{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-44" />}</Field>
       </div>
 
@@ -117,21 +110,21 @@ export function PartyAgingPage() {
                     }}
                   >
                     <Td>
-                      <span className="font-medium">{r.partyName}</span>
+                      <span>{r.partyName}</span>
                       <span className="ml-2 whitespace-nowrap font-mono text-xs text-muted">{r.partyCode}</span>
                     </Td>
                     <Td num>{cell(r.notDue)}</Td>
                     <Td num className={cn(!isZero(r.d1_30) && 'text-warning')}>{cell(r.d1_30)}</Td>
                     <Td num className={cn(!isZero(r.d31_60) && 'text-warning')}>{cell(r.d31_60)}</Td>
                     <Td num className={cn(!isZero(r.d61_90) && 'text-danger')}>{cell(r.d61_90)}</Td>
-                    <Td num className={cn(!isZero(r.d90plus) && 'font-medium text-danger')}>{cell(r.d90plus)}</Td>
+                    <Td num className={cn(!isZero(r.d90plus) && ' text-danger')}>{cell(r.d90plus)}</Td>
                     <Td num>{cell(r.unapplied)}</Td>
-                    <Td num className="font-semibold">{money(r.total)}</Td>
+                    <Td num>{money(r.total)}</Td>
                   </Tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="bg-surface-2 font-semibold">
+                <tr className="bg-surface-2">
                   <Td>{t('partyAging.grandTotal')}</Td>
                   {BUCKETS.map((b) => (
                     <Td key={b} num>

@@ -19,16 +19,16 @@ export function Sheet({ open, onOpenChange, title, description, wide, footer, ch
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[1px] [animation:fade-in_0.15s_ease-out]" />
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-inverted/50 backdrop-blur-[8px] [animation:fade-in_0.15s_ease-out]" />
         <Dialog.Content
           className={cn(
-            'fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-surface shadow-pop [animation:sheet-in_0.2s_ease-out]',
+            'fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-surface [animation:sheet-in_0.2s_ease-out]',
             wide ? 'max-w-4xl' : 'max-w-md',
           )}
         >
           <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
             <div>
-              <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
+              <Dialog.Title className="text-subheading">{title}</Dialog.Title>
               <Dialog.Description className={cn('mt-0.5 text-sm text-muted', !description && 'sr-only')}>
                 {description ?? title}
               </Dialog.Description>
@@ -50,10 +50,10 @@ export function Modal({ open, onOpenChange, title, description, footer, children
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/40 [animation:fade-in_0.15s_ease-out]" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface shadow-pop [animation:pop-in_0.15s_ease-out]">
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-inverted/50 backdrop-blur-[8px] [animation:fade-in_0.15s_ease-out]" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-surface [animation:pop-in_0.15s_ease-out]">
           <div className="px-6 pt-5">
-            <Dialog.Title className="text-base font-semibold">{title}</Dialog.Title>
+            <Dialog.Title className="text-base">{title}</Dialog.Title>
             <Dialog.Description className={cn('mt-1 text-sm text-muted', !description && 'sr-only')}>
               {description ?? title}
             </Dialog.Description>

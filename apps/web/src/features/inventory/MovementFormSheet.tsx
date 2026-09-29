@@ -10,6 +10,7 @@ import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Sheet } from '../../components/ui/Sheet';
+import { SegmentedTabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
@@ -179,11 +180,11 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
             {computed.missing ? (
               <span className="text-warning">{t('inventory.mform.fxMissing')}</span>
             ) : computed.overdrawn ? (
-              <span className="font-medium text-danger">{t('inventory.mform.insufficient')}</span>
+              <span className="text-danger">{t('inventory.mform.insufficient')}</span>
             ) : computed.total.gt(0) ? (
               <span className="text-muted">
                 {inbound ? t('inventory.mform.totalValue', { currency: base }) : t('inventory.mform.estimated', { value: `${formatTR(computed.total.toFixed(2))} ${base}` })}
-                {inbound && <span className="num ml-2 font-medium text-text">{formatTR(computed.total.toFixed(2))}</span>}
+                {inbound && <span className="num ml-2 text-text">{formatTR(computed.total.toFixed(2))}</span>}
               </span>
             ) : null}
           </div>
@@ -200,7 +201,7 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
             tone="danger"
             action={
               fxMissing ? (
-                <Link to="/settings/currencies" className="shrink-0 text-sm font-medium text-brand hover:underline" onClick={() => onOpenChange(false)}>
+                <Link to="/settings/currencies" className="shrink-0 text-sm link" onClick={() => onOpenChange(false)}>
                   {t('ledger.journal.enterFx')}
                 </Link>
               ) : undefined
@@ -211,23 +212,15 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
         )}
 
         <div>
-          <p className="mb-1.5 text-[13px] font-medium">{t('inventory.mform.type')}</p>
-          <div role="tablist" className="inline-flex flex-wrap rounded-lg border border-border bg-surface p-1">
-            {TYPES.map((k) => (
-              <button
-                key={k}
-                role="tab"
-                aria-selected={type === k}
-                onClick={() => {
-                  setType(k);
-                  setLines((cur) => cur.map((l) => ({ ...l, unitCost: '', fxRate: '' })));
-                }}
-                className={cn('rounded-md px-3.5 py-1.5 text-sm font-medium text-muted transition-colors', type === k && 'bg-brand-soft text-brand')}
-              >
-                {t(`inventory.docTypes.${k}`)}
-              </button>
-            ))}
-          </div>
+          <p className="mb-1.5 text-[13px]">{t('inventory.mform.type')}</p>
+          <SegmentedTabs
+            value={type}
+            onChange={(k) => {
+              setType(k);
+              setLines((cur) => cur.map((l) => ({ ...l, unitCost: '', fxRate: '' })));
+            }}
+            items={TYPES.map((k) => ({ key: k, label: t(`inventory.docTypes.${k}`) }))}
+          />
           <p className="mt-2 text-[13px] text-muted">{t(`inventory.mform.hints.${type}`)}</p>
         </div>
 
@@ -268,7 +261,7 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
         </Field>
 
         <section aria-label={t('inventory.mform.lines')}>
-          <div className={cn('mb-2 grid items-end gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted max-lg:hidden', inbound ? gridIn : gridOut)}>
+          <div className={cn('mb-2 grid items-end gap-2 px-1 micro max-lg:hidden', inbound ? gridIn : gridOut)}>
             <span>{t('inventory.mform.item')}</span>
             <span className="text-right">{t('inventory.mform.quantity')}</span>
             {inbound ? (
@@ -319,7 +312,7 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
                         aria-label={`${t('inventory.mform.fxRate')} ${i + 1}`}
                         onChange={(v) => patch(l.key, { fxRate: v })}
                       />
-                      <span className="num text-right text-sm font-medium" aria-label={`${t('inventory.mform.valueBase', { currency: base })} ${i + 1}`}>
+                      <span className="num text-right text-sm" aria-label={`${t('inventory.mform.valueBase', { currency: base })} ${i + 1}`}>
                         {value ? formatTR(value.toFixed(2)) : '—'}
                       </span>
                     </>
@@ -327,7 +320,7 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
                     <div className="col-span-2 text-[13px] lg:col-span-1">
                       {it ? (
                         <>
-                          <span className={cn(over ? 'font-medium text-danger' : 'text-muted')}>
+                          <span className={cn(over ? ' text-danger' : 'text-muted')}>
                             {t('inventory.mform.available', { qty: qtyText(it.onHand) || '0', unit: unitLabel(it.unit) })}
                           </span>
                           {l.qty && it.avgCost && (

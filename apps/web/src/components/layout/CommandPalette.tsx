@@ -62,8 +62,8 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/40 [animation:fade-in_0.15s_ease-out]" />
-        <Dialog.Content className="fixed left-1/2 top-[15vh] z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-surface shadow-pop [animation:pop-in_0.15s_ease-out]">
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-inverted/50 backdrop-blur-[8px] [animation:fade-in_0.15s_ease-out]" />
+        <Dialog.Content className="fixed left-1/2 top-[15vh] z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-2xl border border-border bg-surface [animation:pop-in_0.15s_ease-out]">
           <Dialog.Title className="sr-only">{t('shell.commandPalette')}</Dialog.Title>
           <Dialog.Description className="sr-only">{t('shell.typeToSearch')}</Dialog.Description>
           <div className="flex items-center gap-3 border-b border-border px-4">
@@ -97,13 +97,13 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               const showGroup = i === 0 || results[i - 1]!.group !== c.group;
               return (
                 <li key={c.id} role="presentation">
-                  {showGroup && <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{c.group}</p>}
+                  {showGroup && <p className="micro px-3 pb-1 pt-2">{c.group}</p>}
                   <button
                     role="option"
                     aria-selected={i === active}
                     onMouseEnter={() => setActive(i)}
                     onClick={() => run(c)}
-                    className={cn('flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm', i === active && 'bg-brand-soft')}
+                    className={cn('flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm', i === active && 'bg-surface-2')}
                   >
                     <Icon className="size-4 text-muted" aria-hidden />
                     <span className="flex-1">{c.label}</span>

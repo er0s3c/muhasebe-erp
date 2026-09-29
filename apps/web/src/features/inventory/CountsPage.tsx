@@ -124,7 +124,7 @@ export function CountsPage() {
                     <Td className="whitespace-nowrap">{formatDateTR(c.countDate)}</Td>
                     <Td className="whitespace-nowrap font-mono text-[13px]">{c.countNo ?? <span className="font-sans text-muted">{t('inventory.counts.draft')}</span>}</Td>
                     <Td>
-                      <span className="font-medium">{c.warehouseName}</span>
+                      <span>{c.warehouseName}</span>
                       {c.description && <span className="block truncate text-xs text-muted">{c.description}</span>}
                     </Td>
                     <Td num className="text-muted">
@@ -178,11 +178,11 @@ export function CountsPage() {
             {(id) => <Input id={id} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={200} />}
           </Field>
           <fieldset>
-            <legend className="mb-1.5 text-[13px] font-medium">{t('inventory.counts.prefill')}</legend>
+            <legend className="mb-1.5 text-[13px]">{t('inventory.counts.prefill')}</legend>
             <div className="flex flex-col gap-2 text-sm">
               {(['in_stock', 'empty'] as const).map((k) => (
                 <label key={k} className="flex cursor-pointer items-center gap-2">
-                  <input type="radio" name="prefill" className="size-4 accent-[var(--brand)]" checked={prefill === k} onChange={() => setPrefill(k)} />
+                  <input type="radio" name="prefill" className="size-4" checked={prefill === k} onChange={() => setPrefill(k)} />
                   {k === 'in_stock' ? t('inventory.counts.prefillStock') : t('inventory.counts.prefillEmpty')}
                 </label>
               ))}

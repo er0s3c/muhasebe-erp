@@ -110,7 +110,7 @@ export function TaxRatesPage() {
               <tbody>
                 {data.taxRates.map((r) => (
                   <Tr key={r.id}>
-                    <Td className="font-medium">{r.code}</Td>
+                    <Td>{r.code}</Td>
                     <Td>{r.name}</Td>
                     <Td num>%{formatTR(r.rate, 2)}</Td>
                     <Td>{formatDateTR(r.validFrom)}</Td>
@@ -237,7 +237,7 @@ export function TaxRatesPage() {
       >
         <div className="flex flex-col gap-4">
           <p className="text-sm">
-            <span className="font-medium">{verifying?.code}</span> — %{formatTR(verifying?.rate ?? '0', 2)}
+            <span>{verifying?.code}</span> — %{formatTR(verifying?.rate ?? '0', 2)}
           </p>
           <Field label={t('settings.taxRates.verifiedBy')} required>
             {(id) => <Input id={id} value={verifier} onChange={(e) => setVerifier(e.target.value)} autoFocus />}

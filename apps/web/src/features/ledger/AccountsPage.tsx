@@ -99,7 +99,7 @@ export function AccountsPage() {
             <Input className="pl-9" placeholder={t('ledger.accounts.searchPlaceholder')} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t('common.search')} />
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={onlyPostable} onChange={(e) => setOnlyPostable(e.target.checked)} />
+            <input type="checkbox" className="size-4" checked={onlyPostable} onChange={(e) => setOnlyPostable(e.target.checked)} />
             {t('ledger.accounts.onlyPostable')}
           </label>
         </div>
@@ -127,9 +127,9 @@ export function AccountsPage() {
                   return (
                     <Tr key={a.id} className={cn(!a.isPostable && 'bg-surface-2/50', !a.isActive && 'opacity-55')}>
                       <Td className="font-mono text-[13px]" style={{ paddingLeft: `${1 + level * 1.1}rem` }}>
-                        <span className={cn(!a.isPostable && 'font-semibold')}>{a.code}</span>
+                        <span className={cn(!a.isPostable && 'uppercase tracking-[0.03em]')}>{a.code}</span>
                       </Td>
-                      <Td className={cn(!a.isPostable && 'font-semibold')}>{a.name}</Td>
+                      <Td className={cn(!a.isPostable && 'text-[13px] uppercase tracking-[0.03em]')}>{a.name}</Td>
                       <Td>
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge tone={a.isPostable ? 'brand' : 'neutral'}>{a.isPostable ? t('ledger.accounts.postable') : t('ledger.accounts.group')}</Badge>

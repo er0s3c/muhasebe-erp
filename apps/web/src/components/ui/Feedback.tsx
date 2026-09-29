@@ -17,9 +17,9 @@ export function PageLoading() {
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: string; description?: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
-      {icon && <div className="flex size-11 items-center justify-center rounded-full bg-brand-soft text-brand">{icon}</div>}
+      {icon && <div className="flex size-11 items-center justify-center rounded-xl bg-surface-2 text-text">{icon}</div>}
       <div>
-        <p className="font-medium">{title}</p>
+        <p>{title}</p>
         {description && <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{description}</p>}
       </div>
       {action}
@@ -29,7 +29,7 @@ export function EmptyState({ icon, title, description, action }: { icon?: ReactN
 
 type Tone = 'info' | 'warning' | 'danger';
 const tones: Record<Tone, string> = {
-  info: 'border-brand/30 bg-brand-soft text-text',
+  info: 'border-border bg-surface-2 text-text',
   warning: 'border-warning/30 bg-warning-soft text-text',
   danger: 'border-danger/30 bg-danger-soft text-text',
 };
@@ -37,10 +37,10 @@ const tones: Record<Tone, string> = {
 export function Callout({ tone = 'info', title, children, action }: { tone?: Tone; title?: string; children?: ReactNode; action?: ReactNode }) {
   const Icon = tone === 'info' ? Info : AlertTriangle;
   return (
-    <div role={tone === 'danger' ? 'alert' : 'status'} className={cn('flex items-start gap-3 rounded-lg border px-4 py-3 text-sm', tones[tone])}>
-      <Icon className={cn('mt-0.5 size-4 shrink-0', tone === 'info' ? 'text-brand' : tone === 'warning' ? 'text-warning' : 'text-danger')} aria-hidden />
+    <div role={tone === 'danger' ? 'alert' : 'status'} className={cn('flex items-start gap-3 rounded-xl border px-4 py-3 text-sm', tones[tone])}>
+      <Icon className={cn('mt-0.5 size-4 shrink-0', tone === 'info' ? 'text-text' : tone === 'warning' ? 'text-warning' : 'text-danger')} aria-hidden />
       <div className="min-w-0 flex-1">
-        {title && <p className="font-medium">{title}</p>}
+        {title && <p>{title}</p>}
         {children && <div className={cn(title && 'mt-0.5 text-muted')}>{children}</div>}
       </div>
       {action}

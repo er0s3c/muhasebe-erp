@@ -7,8 +7,8 @@ import { Card, PageHeader } from '../../components/ui/Card';
 import { EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Input } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { SegmentedTabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
-import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { CustomCode } from '../../lib/types';
@@ -44,19 +44,12 @@ export function CustomCodesPage() {
     <>
       <PageHeader title={t('settings.customCodes.title')} description={t('settings.customCodes.subtitle')} />
 
-      <div role="tablist" className="mb-5 inline-flex rounded-lg border border-border bg-surface p-1">
-        {CUSTOM_CODE_SCOPES.map((s) => (
-          <button
-            key={s}
-            role="tab"
-            aria-selected={scope === s}
-            onClick={() => setScope(s)}
-            className={cn('rounded-md px-4 py-1.5 text-sm font-medium text-muted transition-colors', scope === s && 'bg-brand-soft text-brand')}
-          >
-            {t(`settings.customCodes.scopes.${s}`)}
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+        className="mb-5"
+        value={scope}
+        onChange={setScope}
+        items={CUSTOM_CODE_SCOPES.map((s) => ({ key: s, label: t(`settings.customCodes.scopes.${s}`) }))}
+      />
 
       {canManage && (
         <Card className="mb-5 p-4">
@@ -68,13 +61,13 @@ export function CustomCodesPage() {
             }}
           >
             <div className="w-32">
-              <label className="mb-1.5 block text-[13px] font-medium" htmlFor="cc-code">
+              <label className="mb-1.5 block text-[13px]" htmlFor="cc-code">
                 {t('common.code')}
               </label>
               <Input id="cc-code" value={code} onChange={(e) => setCode(e.target.value)} maxLength={30} />
             </div>
             <div className="min-w-56 flex-1">
-              <label className="mb-1.5 block text-[13px] font-medium" htmlFor="cc-name">
+              <label className="mb-1.5 block text-[13px]" htmlFor="cc-name">
                 {t('common.name')}
               </label>
               <Input id="cc-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
@@ -105,7 +98,7 @@ export function CustomCodesPage() {
             <tbody>
               {data.customCodes.map((c) => (
                 <Tr key={c.id}>
-                  <Td className="font-medium">{c.code}</Td>
+                  <Td>{c.code}</Td>
                   <Td>{c.name}</Td>
                   {canManage && (
                     <Td>

@@ -71,11 +71,11 @@ export function PartiesPage() {
           <option value="supplier">{t('parties.kinds.supplier')}</option>
         </Select>
         <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={onlyBalance} onChange={(e) => setOnlyBalance(e.target.checked)} />
+          <input type="checkbox" className="size-4" checked={onlyBalance} onChange={(e) => setOnlyBalance(e.target.checked)} />
           {t('parties.onlyWithBalance')}
         </label>
         <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+          <input type="checkbox" className="size-4" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
           {t('parties.showInactive')}
         </label>
       </div>
@@ -127,7 +127,7 @@ export function PartiesPage() {
                   >
                     <Td className="font-mono text-[13px]">{p.code}</Td>
                     <Td>
-                      <span className="font-medium">{p.name}</span>
+                      <span>{p.name}</span>
                       {!p.isActive && <Badge tone="danger" className="ml-2">{t('common.inactive')}</Badge>}
                       {(p.phone || p.taxNumber) && (
                         <span className="block text-xs text-muted">{[p.phone, p.taxNumber && `VN ${p.taxNumber}`].filter(Boolean).join(' · ')}</span>
@@ -136,7 +136,7 @@ export function PartiesPage() {
                     <Td>
                       <Badge tone={p.kind === 'customer' ? 'brand' : p.kind === 'supplier' ? 'warning' : 'neutral'}>{t(`parties.kinds.${p.kind}`)}</Badge>
                     </Td>
-                    <Td num className="font-medium">
+                    <Td num>
                       <BalanceText value={p.balance} />
                     </Td>
                     <Td>

@@ -95,7 +95,7 @@ export function MembersPage() {
               {data.members.map((m) => (
                 <Tr key={m.userId}>
                   <Td>
-                    <span className="font-medium">{m.fullName}</span>
+                    <span>{m.fullName}</span>
                     {m.userId === user?.id && <Badge tone="brand" className="ml-2">{t('settings.members.you')}</Badge>}
                   </Td>
                   <Td className="text-muted">{m.email}</Td>
@@ -205,7 +205,7 @@ export function MembersPage() {
           </>
         }
       >
-        <p className="text-sm font-medium">{removing?.fullName}</p>
+        <p className="text-sm">{removing?.fullName}</p>
       </Modal>
     </>
   );

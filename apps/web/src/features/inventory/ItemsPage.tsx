@@ -1,10 +1,11 @@
-import { AlertTriangle, ChevronRight, Package, Plus, Search, Tags, Wallet } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { ChevronRight, Package, Plus, Search, Tags } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
+import { Stat } from '../../components/ui/Stat';
 import { EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -18,19 +19,6 @@ import { qtyText, useCategories, useUnitLabel } from './common';
 import { ItemFormSheet } from './ItemFormSheet';
 
 const PAGE = 100;
-
-function Kpi({ icon, label, value, tone = 'brand' }: { icon: ReactNode; label: string; value: ReactNode; tone?: 'brand' | 'warning' }) {
-  const tones = { brand: 'bg-brand-soft text-brand', warning: 'bg-warning-soft text-warning' };
-  return (
-    <Card className="flex items-center gap-4 p-5">
-      <span className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', tones[tone])}>{icon}</span>
-      <div className="min-w-0">
-        <p className="text-sm text-muted">{label}</p>
-        <p className="mt-0.5 truncate text-xl font-semibold tracking-tight">{value}</p>
-      </div>
-    </Card>
-  );
-}
 
 export function ItemsPage() {
   const { t } = useTranslation();
@@ -97,10 +85,12 @@ export function ItemsPage() {
       />
 
       <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Kpi icon={<Package className="size-5" />} label={t('inventory.items.kpiItems')} value={summary ? summary.itemCount : '—'} />
-        <Kpi icon={<Wallet className="size-5" />} label={t('inventory.items.kpiValue')} value={summary ? `${money(summary.stockValue)} ${company.baseCurrency}` : '—'} />
-        <button type="button" className="rounded-xl text-left transition-shadow hover:shadow-pop" onClick={() => setLow(!onlyLow)} aria-pressed={onlyLow}>
-          <Kpi icon={<AlertTriangle className="size-5" />} label={t('inventory.items.kpiLow')} value={summary ? summary.lowCount : '—'} tone={summary && summary.lowCount > 0 ? 'warning' : 'brand'} />
+        <Stat label={t('inventory.items.kpiItems')}>{summary ? summary.itemCount : '—'}</Stat>
+        <Stat label={t('inventory.items.kpiValue')}>{summary ? `${money(summary.stockValue)} ${company.baseCurrency}` : '—'}</Stat>
+        <button type="button" className="group rounded-2xl text-left" onClick={() => setLow(!onlyLow)} aria-pressed={onlyLow}>
+          <Stat label={t('inventory.items.kpiLow')} className={cn('transition-colors group-hover:border-text', onlyLow && 'border-text')}>
+            <span className={cn(summary && summary.lowCount > 0 && 'text-warning')}>{summary ? summary.lowCount : '—'}</span>
+          </Stat>
         </button>
       </div>
 
@@ -123,11 +113,11 @@ export function ItemsPage() {
           <option value="service">{t('inventory.kinds.service')}</option>
         </Select>
         <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={onlyLow} onChange={(e) => setLow(e.target.checked)} />
+          <input type="checkbox" className="size-4" checked={onlyLow} onChange={(e) => setLow(e.target.checked)} />
           {t('inventory.items.onlyLow')}
         </label>
         <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+          <input type="checkbox" className="size-4" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
           {t('inventory.items.showInactive')}
         </label>
       </div>
@@ -180,7 +170,7 @@ export function ItemsPage() {
                   >
                     <Td className="whitespace-nowrap font-mono text-[13px]">{i.code}</Td>
                     <Td>
-                      <span className="font-medium">{i.name}</span>
+                      <span>{i.name}</span>
                       {!i.isActive && <Badge tone="danger" className="ml-2">{t('common.inactive')}</Badge>}
                       {i.kind === 'service' && <Badge className="ml-2">{t('inventory.kinds.service')}</Badge>}
                       <span className="block text-xs text-muted">{[i.categoryName ?? t('inventory.items.noCategory'), i.barcode].filter(Boolean).join(' · ')}</span>
@@ -190,7 +180,7 @@ export function ItemsPage() {
                         <span className="text-muted">—</span>
                       ) : (
                         <>
-                          <span className={cn('font-medium', i.isLow && 'text-warning')}>
+                          <span className={cn('', i.isLow && 'text-warning')}>
                             {qtyText(i.onHand) || '0'} {unitLabel(i.unit)}
                           </span>
                           {i.isLow && <Badge tone="warning" className="ml-2">{t('inventory.items.low')}</Badge>}
@@ -198,7 +188,7 @@ export function ItemsPage() {
                       )}
                     </Td>
                     <Td num className="text-muted">{i.avgCost ? money(i.avgCost) : '—'}</Td>
-                    <Td num className="font-medium">{i.kind === 'service' ? '—' : money(i.value)}</Td>
+                    <Td num>{i.kind === 'service' ? '—' : money(i.value)}</Td>
                     <Td>
                       <ChevronRight className="size-4 text-muted" aria-hidden />
                     </Td>

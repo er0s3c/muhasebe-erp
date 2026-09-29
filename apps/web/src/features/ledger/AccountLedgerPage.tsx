@@ -79,7 +79,7 @@ export function AccountLedgerPage() {
               </tr>
             </thead>
             <tbody>
-              <tr className="bg-surface-2/60 font-medium">
+              <tr className="bg-surface-2/60">
                 <Td colSpan={6}>
                   {t('ledger.accountLedger.opening')} — {data.account.code} {data.account.name}
                 </Td>
@@ -114,7 +114,7 @@ export function AccountLedgerPage() {
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-surface-2 font-semibold">
+              <tr className="bg-surface-2">
                 <Td colSpan={4}>{t('ledger.accountLedger.totals')}</Td>
                 <Td num>{money(data.totals.debitBase)}</Td>
                 <Td num>{money(data.totals.creditBase)}</Td>

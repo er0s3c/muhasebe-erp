@@ -150,7 +150,7 @@ export function CountEditorPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{count.countNo ?? t('inventory.count.draftTitle')}</h1>
+            <h1 className="text-heading">{count.countNo ?? t('inventory.count.draftTitle')}</h1>
             <Badge tone={draft ? 'warning' : 'success'}>{t(draft ? 'inventory.counts.draft' : 'inventory.counts.posted')}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted">
@@ -186,7 +186,7 @@ export function CountEditorPage() {
           {count.documentId ? (
             <Callout>
               {t('inventory.count.document')}:{' '}
-              <button className="font-medium text-brand hover:underline" onClick={() => setOpenDoc(count.documentId)}>
+              <button className="link" onClick={() => setOpenDoc(count.documentId)}>
                 {count.documentNo}
               </button>
             </Callout>
@@ -228,7 +228,7 @@ export function CountEditorPage() {
                 return (
                   <Tr key={r.itemId}>
                     <Td>
-                      <span className="font-medium">{r.itemName}</span>
+                      <span>{r.itemName}</span>
                       <span className="ml-2 whitespace-nowrap font-mono text-xs text-muted">{r.itemCode}</span>
                     </Td>
                     <Td num className="text-muted">
@@ -238,10 +238,10 @@ export function CountEditorPage() {
                       {editable ? (
                         <MoneyInput value={r.counted} decimals={0} maxDecimals={4} aria-label={`${t('inventory.count.counted')}: ${r.itemName}`} onChange={(v) => patchRow(r.itemId, v)} className="text-right" />
                       ) : (
-                        <span className="font-medium">{r.counted === '' ? '—' : qtyText(r.counted)}</span>
+                        <span>{r.counted === '' ? '—' : qtyText(r.counted)}</span>
                       )}
                     </Td>
-                    <Td num className={cn('font-medium', diff.tone === 'success' && 'text-success', diff.tone === 'danger' && 'text-danger', diff.tone === 'muted' && 'text-muted')}>
+                    <Td num className={cn('', diff.tone === 'success' && 'text-success', diff.tone === 'danger' && 'text-danger', diff.tone === 'muted' && 'text-muted')}>
                       {diff.text}
                     </Td>
                   </Tr>

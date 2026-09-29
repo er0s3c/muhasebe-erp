@@ -64,7 +64,7 @@ export function Combobox({ options, value, onChange, placeholder, disabled, clas
         aria-controls={listId}
         aria-autocomplete="list"
         disabled={disabled}
-        className="h-9 w-full rounded-lg border border-border-strong bg-surface px-3 pr-8 text-sm placeholder:text-muted/70 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25 disabled:opacity-60"
+        className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3.5 pr-8 text-sm placeholder:text-muted/70 transition-colors focus:border-text focus:outline-none disabled:opacity-60"
         placeholder={selected ? selected.label : placeholder}
         value={open ? query : (selected?.label ?? '')}
         onFocus={() => setOpen(true)}
@@ -92,9 +92,9 @@ export function Combobox({ options, value, onChange, placeholder, disabled, clas
         }}
         {...rest}
       />
-      <ChevronsUpDown className="pointer-events-none absolute right-2.5 top-2.5 size-4 text-muted" aria-hidden />
+      <ChevronsUpDown className="pointer-events-none absolute right-2.5 top-3 size-4 text-muted" aria-hidden />
       {open && (
-        <ul id={listId} role="listbox" className="absolute z-30 mt-1 max-h-64 w-full min-w-64 overflow-auto rounded-lg border border-border bg-surface py-1 shadow-pop">
+        <ul id={listId} role="listbox" className="absolute z-30 mt-1 max-h-64 w-full min-w-64 overflow-auto rounded-xl border border-border bg-surface py-1">
           {filtered.length === 0 && <li className="px-3 py-2 text-sm text-muted">Sonuç yok</li>}
           {filtered.map((o, i) => (
             <li
@@ -106,7 +106,7 @@ export function Combobox({ options, value, onChange, placeholder, disabled, clas
                 choose(o);
               }}
               onMouseEnter={() => setActive(i)}
-              className={cn('flex cursor-pointer items-baseline justify-between gap-3 px-3 py-1.5 text-sm', i === active && 'bg-brand-soft', o.value === value && 'font-medium')}
+              className={cn('flex cursor-pointer items-baseline justify-between gap-3 px-3 py-1.5 text-sm', i === active && 'bg-surface-2', o.value === value && 'text-text underline decoration-border-strong underline-offset-4')}
             >
               <span className="truncate">{o.label}</span>
               {o.hint && <span className="shrink-0 text-xs text-muted">{o.hint}</span>}

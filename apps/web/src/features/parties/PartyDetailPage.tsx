@@ -6,9 +6,11 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
+import { Stat } from '../../components/ui/Stat';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
+import { SegmentedTabs } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { cn } from '../../lib/cn';
@@ -22,16 +24,6 @@ import { BalanceText } from './BalanceText';
 import { PartyFormSheet } from './PartyFormSheet';
 
 type Tab = 'statement' | 'openItems' | 'card';
-
-function Kpi({ label, children, sub }: { label: string; children: React.ReactNode; sub?: React.ReactNode }) {
-  return (
-    <Card className="p-5">
-      <p className="text-sm text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">{children}</p>
-      {sub && <p className="mt-1 text-xs text-muted">{sub}</p>}
-    </Card>
-  );
-}
 
 export function PartyDetailPage() {
   const { t } = useTranslation();
@@ -77,7 +69,7 @@ export function PartyDetailPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{party.name}</h1>
+            <h1 className="text-heading">{party.name}</h1>
             <Badge tone={party.kind === 'customer' ? 'brand' : party.kind === 'supplier' ? 'warning' : 'neutral'}>{t(`parties.kinds.${party.kind}`)}</Badge>
             {!party.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
             {overLimit && <Badge tone="danger">{t('parties.detail.limitExceeded')}</Badge>}
@@ -95,7 +87,7 @@ export function PartyDetailPage() {
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Kpi
+        <Stat
           label={t('parties.detail.balance')}
           sub={
             <>
@@ -117,26 +109,19 @@ export function PartyDetailPage() {
           <span className={cn(balance > 0 && 'text-text', balance < 0 && 'text-warning')}>
             <BalanceText value={summary.balance} />
           </span>
-        </Kpi>
-        <Kpi label={t('parties.detail.totalDebit')} sub={t('parties.detail.movements', { count: summary.movements })}>
+        </Stat>
+        <Stat label={t('parties.detail.totalDebit')} sub={t('parties.detail.movements', { count: summary.movements })}>
           {money(summary.debit)}
-        </Kpi>
-        <Kpi label={t('parties.detail.totalCredit')}>{money(summary.credit)}</Kpi>
+        </Stat>
+        <Stat label={t('parties.detail.totalCredit')}>{money(summary.credit)}</Stat>
       </div>
 
-      <div role="tablist" className="mb-5 inline-flex rounded-lg border border-border bg-surface p-1">
-        {(['statement', 'openItems', 'card'] as const).map((k) => (
-          <button
-            key={k}
-            role="tab"
-            aria-selected={tab === k}
-            onClick={() => setTab(k)}
-            className={cn('rounded-md px-4 py-1.5 text-sm font-medium text-muted transition-colors', tab === k && 'bg-brand-soft text-brand')}
-          >
-            {t(`parties.detail.tabs.${k}`)}
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+        className="mb-5"
+        value={tab}
+        onChange={setTab}
+        items={(['statement', 'openItems', 'card'] as const).map((k) => ({ key: k, label: t(`parties.detail.tabs.${k}`) }))}
+      />
 
       {tab === 'statement' && <StatementTab partyId={party.id} />}
       {tab === 'openItems' && <OpenItemsTab partyId={party.id} />}
@@ -184,7 +169,7 @@ export function PartyDetailPage() {
             ).map(([key, value]) => (
               <div key={key}>
                 <dt className="text-muted">{t(`parties.${key}` as never)}</dt>
-                <dd className="mt-0.5 font-medium">{value || <span className="font-normal text-muted">{t('parties.detail.notProvided')}</span>}</dd>
+                <dd className="mt-0.5">{value || <span className="font-normal text-muted">{t('parties.detail.notProvided')}</span>}</dd>
               </div>
             ))}
           </dl>
@@ -268,7 +253,7 @@ function StatementTab({ partyId }: { partyId: string }) {
               </tr>
             </thead>
             <tbody>
-              <tr className="bg-surface-2/60 font-medium">
+              <tr className="bg-surface-2/60">
                 <Td colSpan={7}>{t('ledger.accountLedger.opening')}</Td>
                 <Td num>
                   <BalanceText value={data.opening} />
@@ -299,7 +284,7 @@ function StatementTab({ partyId }: { partyId: string }) {
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-surface-2 font-semibold">
+              <tr className="bg-surface-2">
                 <Td colSpan={5}>{t('ledger.accountLedger.totals')}</Td>
                 <Td num>{money(data.totals.debitBase)}</Td>
                 <Td num>{money(data.totals.creditBase)}</Td>
@@ -355,7 +340,7 @@ function OpenItemsTab({ partyId }: { partyId: string }) {
       ) : (
         sections.map(({ type, result }) => (
           <section key={type}>
-            <h2 className="mb-3 text-[15px] font-semibold">{type === 'receivable' ? t('parties.detail.receivables') : t('parties.detail.payables')}</h2>
+            <h2 className="mb-3 text-[15px]">{type === 'receivable' ? t('parties.detail.receivables') : t('parties.detail.payables')}</h2>
             {result && !isZero(result.unapplied) && (
               <div className="mb-3">
                 <Callout>{t('parties.detail.unapplied', { amount: money(result.unapplied) })}</Callout>
@@ -385,7 +370,7 @@ function OpenItemsTab({ partyId }: { partyId: string }) {
                         <Td num className="text-muted">
                           {money(it.amount)} {it.currencyCode}
                         </Td>
-                        <Td num className="font-medium">
+                        <Td num>
                           {money(it.remainingBase)}
                         </Td>
                         <Td>

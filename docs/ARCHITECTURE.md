@@ -81,7 +81,7 @@ Tek veritabanı, tek API. Sektöre özgü davranış ayrı dağıtımlarla deği
 
 ## Arayüz
 
-React 19 + Vite + Tailwind v4. Renk/yüzey belirteçleri CSS değişkenidir (açık/koyu). Sunucu durumu TanStack Query'dedir; sorgu anahtarları şirket kimliği içerir (şirket değişince önbellek karışmaz). Formlar react-hook-form + paylaşılan zod şemaları. Tüm metinler i18next üzerinden; anahtarlar derleme zamanında tip denetimlidir.
+React 19 + Vite + Tailwind v4. Renk/yüzey belirteçleri CSS değişkenidir (açık/koyu); tasarım kuralları ve belirteç tablosu [DESIGN.md](DESIGN.md)'dedir (tek vurgu rengi, tek yazı ağırlığı, gölgesiz hairline yüzeyler). Sunucu durumu TanStack Query'dedir; sorgu anahtarları şirket kimliği içerir (şirket değişince önbellek karışmaz). Formlar react-hook-form + paylaşılan zod şemaları. Tüm metinler i18next üzerinden; anahtarlar derleme zamanında tip denetimlidir.
 
 ## Test stratejisi
 

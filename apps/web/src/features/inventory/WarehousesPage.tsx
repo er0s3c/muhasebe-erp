@@ -80,7 +80,7 @@ export function WarehousesPage() {
                 <Tr key={w.id} className={w.isActive ? undefined : 'opacity-60'}>
                   <Td className="font-mono text-[13px]">{w.code}</Td>
                   <Td>
-                    <span className="font-medium">{w.name}</span>
+                    <span>{w.name}</span>
                     {w.isDefault && <Badge tone="brand" className="ml-2">{t('inventory.warehouses.default')}</Badge>}
                     {!w.isActive && <Badge tone="danger" className="ml-2">{t('common.inactive')}</Badge>}
                   </Td>

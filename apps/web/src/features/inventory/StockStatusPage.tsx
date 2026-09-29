@@ -115,11 +115,11 @@ export function StockStatusPage() {
         </Field>
         <Input className="w-56" placeholder={t('inventory.items.searchPlaceholder')} value={text} onChange={(e) => setText(e.target.value)} aria-label={t('common.search')} />
         <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={lowOnly} onChange={(e) => setLow(e.target.checked)} />
+          <input type="checkbox" className="size-4" checked={lowOnly} onChange={(e) => setLow(e.target.checked)} />
           {t('inventory.status.onlyLow')}
         </label>
         <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={includeZero} onChange={(e) => setIncludeZero(e.target.checked)} />
+          <input type="checkbox" className="size-4" checked={includeZero} onChange={(e) => setIncludeZero(e.target.checked)} />
           {t('inventory.status.includeZero')}
         </label>
       </div>
@@ -152,26 +152,26 @@ export function StockStatusPage() {
                 {data.rows.map((r) => (
                   <Tr key={r.id} className={r.isActive ? undefined : 'opacity-60'}>
                     <Td>
-                      <Link to={`/inventory/items/${r.id}`} className="font-medium hover:text-brand hover:underline">
+                      <Link to={`/inventory/items/${r.id}`} className="underline-offset-4 hover:underline">
                         {r.name}
                       </Link>
                       <span className="ml-2 whitespace-nowrap font-mono text-xs text-muted">{r.code}</span>
                       {r.categoryName && <span className="block text-xs text-muted">{r.categoryName}</span>}
                     </Td>
                     <Td num>
-                      <span className={cn('font-medium', r.isLow && 'text-warning')}>
+                      <span className={cn('', r.isLow && 'text-warning')}>
                         {qtyText(r.onHand) || '0'} {unitLabel(r.unit)}
                       </span>
                       {r.isLow && <Badge tone="warning" className="ml-2">{t('inventory.status.lowBadge')}</Badge>}
                     </Td>
                     <Td num className="text-muted">{r.minLevel ? qtyText(r.minLevel) : '—'}</Td>
                     <Td num className="text-muted">{r.avgCost ? money(r.avgCost) : '—'}</Td>
-                    <Td num className="font-medium">{money(r.value)}</Td>
+                    <Td num>{money(r.value)}</Td>
                   </Tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="bg-surface-2 font-semibold">
+                <tr className="bg-surface-2">
                   <Td colSpan={4}>{t('inventory.status.total')}</Td>
                   <Td num>{money(data.totals.value)}</Td>
                 </tr>
@@ -182,25 +182,25 @@ export function StockStatusPage() {
 
         {data && data.totals.reportingValue && (
           <p className="text-sm text-muted">
-            {t('inventory.status.reporting', { currency: data.totals.reportingCurrency })}: <span className="num font-medium text-text">{money(data.totals.reportingValue)}</span>
+            {t('inventory.status.reporting', { currency: data.totals.reportingCurrency })}: <span className="num text-text">{money(data.totals.reportingValue)}</span>
           </p>
         )}
 
         {ledger && (
           <Card className="p-5">
-            <h2 className="mb-3 text-[15px] font-semibold">{t('inventory.status.reconcileTitle')}</h2>
+            <h2 className="mb-3 text-[15px]">{t('inventory.status.reconcileTitle')}</h2>
             <dl className="mb-3 grid gap-4 text-sm sm:grid-cols-3">
               <div>
                 <dt className="text-muted">{t('inventory.status.reconcileStock')}</dt>
-                <dd className="mt-0.5 font-medium tabular-nums">{money(ledger.stockValue)}</dd>
+                <dd className="mt-0.5 tabular-nums">{money(ledger.stockValue)}</dd>
               </div>
               <div>
                 <dt className="text-muted">{t('inventory.status.reconcileLedger')}</dt>
-                <dd className="mt-0.5 font-medium tabular-nums">{money(ledger.accountsBalance)}</dd>
+                <dd className="mt-0.5 tabular-nums">{money(ledger.accountsBalance)}</dd>
               </div>
               <div>
                 <dt className="text-muted">{t('inventory.status.reconcileDiff')}</dt>
-                <dd className={cn('mt-0.5 font-medium tabular-nums', !reconciled && 'text-warning')}>{money(ledger.difference)}</dd>
+                <dd className={cn('mt-0.5 tabular-nums', !reconciled && 'text-warning')}>{money(ledger.difference)}</dd>
               </div>
             </dl>
             <Callout tone={reconciled ? 'info' : 'warning'}>{reconciled ? t('inventory.status.reconcileOk') : t('inventory.status.reconcileOff')}</Callout>

@@ -207,9 +207,9 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
             {computed.missing.length > 0 ? (
               <span className="text-warning">{t('ledger.journal.fxMissing')}</span>
             ) : balanced ? (
-              <span className="font-medium text-success">{t('ledger.journal.diffBalanced')}</span>
+              <span className="text-success">{t('ledger.journal.diffBalanced')}</span>
             ) : computed.debit.gt(0) || computed.credit.gt(0) ? (
-              <span className="font-medium text-danger">{t('ledger.journal.diffUnbalanced', { amount: formatTR(computed.diff.abs().toFixed(2)) })}</span>
+              <span className="text-danger">{t('ledger.journal.diffUnbalanced', { amount: formatTR(computed.diff.abs().toFixed(2)) })}</span>
             ) : null}
           </div>
           <Button onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
@@ -228,7 +228,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
             tone="danger"
             action={
               fxMissing ? (
-                <Link to="/settings/currencies" className="shrink-0 text-sm font-medium text-brand hover:underline" onClick={() => onOpenChange(false)}>
+                <Link to="/settings/currencies" className="shrink-0 text-sm link" onClick={() => onOpenChange(false)}>
                   {t('ledger.journal.enterFx')}
                 </Link>
               ) : undefined
@@ -248,7 +248,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
         </div>
 
         <section aria-label={t('ledger.journal.lines')}>
-          <div className="mb-2 grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_96px_minmax(0,1fr)_minmax(0,1fr)_88px_32px] items-end gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted max-lg:hidden">
+          <div className="mb-2 grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_96px_minmax(0,1fr)_minmax(0,1fr)_88px_32px] items-end gap-2 px-1 micro max-lg:hidden">
             <span>{t('ledger.journal.account')}</span>
             <span>{t('ledger.journal.lineDescription')}</span>
             <span>{t('common.currency')}</span>
@@ -307,12 +307,14 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                   <MoneyInput
                     value={l.debit}
                     aria-label={`${t('common.debit')} ${i + 1}`}
+                    className="px-2.5"
                     placeholder={t('common.debit')}
                     onChange={(v) => patch(l.key, { debit: v, ...(v ? { credit: '' } : {}) })}
                   />
                   <MoneyInput
                     value={l.credit}
                     aria-label={`${t('common.credit')} ${i + 1}`}
+                    className="px-2.5"
                     placeholder={t('common.credit')}
                     onChange={(v) => patch(l.key, { credit: v, ...(v ? { debit: '' } : {}) })}
                   />
@@ -334,8 +336,8 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                     <X className="size-4" />
                   </button>
                   {acc?.partyControl && (
-                    <div className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-brand-soft/60 px-3 py-2 lg:mt-1">
-                      <span className="text-xs font-medium text-muted" title={t('ledger.journal.partyControlHint')}>
+                    <div className="col-span-full flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-surface-2 px-3 py-2 lg:mt-1">
+                      <span className="text-xs text-muted" title={t('ledger.journal.partyControlHint')}>
                         {t('ledger.journal.party')}
                       </span>
                       <Combobox
@@ -347,7 +349,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                         disabled={!canParties}
                         onChange={(v) => patch(l.key, { partyId: v })}
                       />
-                      <span className="text-xs font-medium text-muted">{t('ledger.journal.dueDate')}</span>
+                      <span className="text-xs text-muted">{t('ledger.journal.dueDate')}</span>
                       <Input
                         type="date"
                         className="w-40"
@@ -370,11 +372,11 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
               <dt className="text-muted">{t('ledger.journal.totalsBase', { currency: base })}</dt>
               <div className="flex gap-2">
                 <dt className="text-muted">{t('common.debit')}</dt>
-                <dd className="num font-medium">{formatTR(computed.debit.toFixed(2))}</dd>
+                <dd className="num">{formatTR(computed.debit.toFixed(2))}</dd>
               </div>
               <div className="flex gap-2">
                 <dt className="text-muted">{t('common.credit')}</dt>
-                <dd className="num font-medium">{formatTR(computed.credit.toFixed(2))}</dd>
+                <dd className="num">{formatTR(computed.credit.toFixed(2))}</dd>
               </div>
             </dl>
           </div>

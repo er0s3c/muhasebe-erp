@@ -1,15 +1,17 @@
 import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Pencil, Power, Trash2 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
+import { Stat } from '../../components/ui/Stat';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { SegmentedTabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
@@ -24,16 +26,6 @@ import { MovementDetailSheet } from './MovementDetailSheet';
 import { MovementFormSheet, type MovementType } from './MovementFormSheet';
 
 type Tab = 'statement' | 'warehouses' | 'card';
-
-function Kpi({ label, children, sub }: { label: string; children: ReactNode; sub?: ReactNode }) {
-  return (
-    <Card className="p-5">
-      <p className="text-sm text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">{children}</p>
-      {sub && <p className="mt-1 text-xs text-muted">{sub}</p>}
-    </Card>
-  );
-}
 
 export function ItemDetailPage() {
   const { t } = useTranslation();
@@ -83,7 +75,7 @@ export function ItemDetailPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{item.name}</h1>
+            <h1 className="text-heading">{item.name}</h1>
             {!goods && <Badge>{t('inventory.kinds.service')}</Badge>}
             {!item.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
             {stock.isLow && <Badge tone="warning">{t('inventory.detail.lowBadge')}</Badge>}
@@ -117,34 +109,27 @@ export function ItemDetailPage() {
 
       {goods && (
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Kpi
+          <Stat
             label={t('inventory.detail.onHand')}
             sub={item.minLevel ? t('inventory.detail.minLevel', { level: qtyText(item.minLevel), unit }) : undefined}
           >
             <span className={cn(stock.isLow && 'text-warning')}>
               {qtyText(stock.qty) || '0'} {unit}
             </span>
-          </Kpi>
-          <Kpi label={t('inventory.detail.avgCost')}>{stock.avgCost ? `${money(stock.avgCost)} ${company.baseCurrency}` : '—'}</Kpi>
-          <Kpi label={t('inventory.detail.value')}>
+          </Stat>
+          <Stat label={t('inventory.detail.avgCost')}>{stock.avgCost ? `${money(stock.avgCost)} ${company.baseCurrency}` : '—'}</Stat>
+          <Stat label={t('inventory.detail.value')}>
             {money(stock.value)} {company.baseCurrency}
-          </Kpi>
+          </Stat>
         </div>
       )}
 
-      <div role="tablist" className="mb-5 inline-flex rounded-lg border border-border bg-surface p-1">
-        {(goods ? (['statement', 'warehouses', 'card'] as const) : (['card'] as const)).map((k) => (
-          <button
-            key={k}
-            role="tab"
-            aria-selected={(goods ? tab : 'card') === k}
-            onClick={() => setTab(k)}
-            className={cn('rounded-md px-4 py-1.5 text-sm font-medium text-muted transition-colors', (goods ? tab : 'card') === k && 'bg-brand-soft text-brand')}
-          >
-            {t(`inventory.detail.tabs.${k}`)}
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs
+        className="mb-5"
+        value={goods ? tab : 'card'}
+        onChange={setTab}
+        items={(goods ? (['statement', 'warehouses', 'card'] as const) : (['card'] as const)).map((k) => ({ key: k, label: t(`inventory.detail.tabs.${k}`) }))}
+      />
 
       {goods && tab === 'statement' && <StatementTab itemId={item.id} unit={unit} onOpenDoc={setOpenDoc} />}
       {goods && tab === 'warehouses' && (
@@ -160,10 +145,10 @@ export function ItemDetailPage() {
               {stock.byWarehouse.map((w) => (
                 <Tr key={w.warehouseId}>
                   <Td>
-                    <span className="font-medium">{w.name}</span>
+                    <span>{w.name}</span>
                     <span className="ml-2 font-mono text-xs text-muted">{w.code}</span>
                   </Td>
-                  <Td num className="font-medium">
+                  <Td num>
                     {qtyText(w.qty) || '0'} {unit}
                   </Td>
                 </Tr>
@@ -212,7 +197,7 @@ export function ItemDetailPage() {
             ).map(([label, value]) => (
               <div key={label}>
                 <dt className="text-muted">{label}</dt>
-                <dd className="mt-0.5 font-medium">{value || <span className="font-normal text-muted">{t('inventory.detail.notProvided')}</span>}</dd>
+                <dd className="mt-0.5">{value || <span className="font-normal text-muted">{t('inventory.detail.notProvided')}</span>}</dd>
               </div>
             ))}
           </dl>
@@ -310,7 +295,7 @@ function StatementTab({ itemId, unit, onOpenDoc }: { itemId: string; unit: strin
               </tr>
             </thead>
             <tbody>
-              <tr className="bg-surface-2/60 font-medium">
+              <tr className="bg-surface-2/60">
                 <Td colSpan={5}>{t('inventory.detail.opening')}</Td>
                 <Td num>
                   {qtyText(data.openingQty) || '0'} {unit}
@@ -337,7 +322,7 @@ function StatementTab({ itemId, unit, onOpenDoc }: { itemId: string; unit: strin
                     <Td className="text-muted">{l.warehouseName}</Td>
                     <Td num>{qty > 0 ? qtyText(l.qty) : ''}</Td>
                     <Td num>{qty < 0 ? qtyText(String(Math.abs(qty))) : ''}</Td>
-                    <Td num className="font-medium">
+                    <Td num>
                       {qtyText(l.balanceQty) || '0'}
                     </Td>
                     <Td num>{l.balanceValue === null ? '' : money(l.balanceValue)}</Td>
@@ -346,7 +331,7 @@ function StatementTab({ itemId, unit, onOpenDoc }: { itemId: string; unit: strin
               })}
             </tbody>
             <tfoot>
-              <tr className="bg-surface-2 font-semibold">
+              <tr className="bg-surface-2">
                 <Td colSpan={5}>{t('inventory.detail.closing')}</Td>
                 <Td num>
                   {qtyText(data.closingQty) || '0'} {unit}

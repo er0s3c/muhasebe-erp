@@ -83,7 +83,7 @@ export function PeriodsPage() {
               <Card key={p.id} className="flex flex-col gap-3 p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="font-semibold">{months[p.month - 1]}</p>
+                    <p>{months[p.month - 1]}</p>
                     <p className="text-xs text-muted">
                       {formatDateTR(p.startDate)} – {formatDateTR(p.endDate)}
                     </p>

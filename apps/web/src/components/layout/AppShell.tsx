@@ -27,9 +27,9 @@ const readCollapsed = () => {
 };
 
 const menuContent =
-  'z-50 min-w-56 rounded-xl border border-border bg-surface p-1.5 shadow-pop [animation:pop-in_0.12s_ease-out]';
+  'z-50 min-w-56 rounded-xl border border-border bg-surface p-1.5 [animation:pop-in_0.12s_ease-out]';
 const menuItem =
-  'flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none data-[highlighted]:bg-surface-2';
+  'flex cursor-pointer select-none items-center gap-2.5 rounded-md px-3 py-2 text-sm outline-none data-[highlighted]:bg-surface-2';
 
 export function AppShell() {
   const { t } = useTranslation();
@@ -70,7 +70,7 @@ export function AppShell() {
       </a>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setMobileOpen(false)} aria-hidden />
+        <div className="fixed inset-0 z-30 bg-inverted/50 backdrop-blur-[8px] lg:hidden" onClick={() => setMobileOpen(false)} aria-hidden />
       )}
       <aside
         className={cn(
@@ -83,13 +83,13 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur sm:px-6">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur [box-shadow:var(--shadow-subtle)] sm:px-6">
           <button className="rounded-md p-2 text-muted hover:bg-surface-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label={t('shell.openMenu')}>
             <Menu className="size-5" />
           </button>
           <button
             onClick={() => setPaletteOpen(true)}
-            className="flex h-9 w-full max-w-md items-center gap-2.5 rounded-lg border border-border bg-bg px-3 text-sm text-muted transition-colors hover:border-border-strong"
+            className="flex h-10 w-full max-w-md items-center gap-2.5 rounded-lg border border-border bg-bg px-3.5 text-sm text-muted transition-colors hover:border-border-strong"
             aria-label={t('shell.commandPalette')}
           >
             <Search className="size-4" aria-hidden />
@@ -104,7 +104,7 @@ export function AppShell() {
         </header>
 
         <main id="main" className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
+          <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-8 sm:py-8">
             <Outlet />
           </div>
         </main>
@@ -124,7 +124,7 @@ function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggl
     <>
       <div className={cn('flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4', collapsed && 'lg:justify-center lg:px-0')}>
         <BrandMark />
-        <span className={cn('text-[15px] font-semibold tracking-tight', collapsed && 'lg:hidden')}>{t('app.name')}</span>
+        <span className={cn('text-base', collapsed && 'lg:hidden')}>{t('app.name')}</span>
         <button className="ml-auto rounded-md p-1.5 text-muted hover:bg-surface-2 lg:hidden" onClick={onClose} aria-label={t('common.close')}>
           <X className="size-5" />
         </button>
@@ -137,7 +137,7 @@ function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggl
       <nav className="flex-1 overflow-y-auto px-3 py-3" aria-label="Ana menü">
         {nav?.groups.map((group) => (
           <div key={group.key} className="mb-4">
-            <p className={cn('px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted', collapsed && 'lg:hidden')}>
+            <p className={cn('micro px-3 pb-1.5', collapsed && 'lg:hidden')}>
               {t(group.labelKey as never)}
             </p>
             <ul className="flex flex-col gap-0.5">
@@ -152,8 +152,8 @@ function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggl
                       title={collapsed ? label : undefined}
                       className={({ isActive }) =>
                         cn(
-                          'group flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-text',
-                          isActive && 'bg-brand-soft text-brand hover:bg-brand-soft hover:text-brand',
+                          'group flex h-9 items-center gap-3 rounded-md px-3 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-text',
+                          isActive && 'bg-brand text-brand-contrast hover:bg-brand hover:text-brand-contrast',
                           collapsed && 'lg:justify-center lg:px-0',
                         )
                       }
@@ -172,7 +172,7 @@ function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggl
       <div className="hidden border-t border-border p-3 lg:block">
         <button
           onClick={onToggle}
-          className={cn('flex h-9 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted hover:bg-surface-2 hover:text-text', collapsed && 'justify-center px-0')}
+          className={cn('flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm text-muted hover:bg-surface-2 hover:text-text', collapsed && 'justify-center px-0')}
           aria-label={collapsed ? t('shell.expand') : t('shell.collapse')}
         >
           {collapsed ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
@@ -203,16 +203,16 @@ function CompanySwitcher({ collapsed }: { collapsed: boolean }) {
         )}
         aria-label={t('shell.switchCompany')}
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-xs font-semibold text-brand">{initials}</span>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-inverted text-xs text-on-inverted">{initials}</span>
         <span className={cn('min-w-0 flex-1', collapsed && 'lg:hidden')}>
-          <span className="block truncate text-sm font-medium">{activeCompany.name}</span>
+          <span className="block truncate text-sm">{activeCompany.name}</span>
           <span className="block truncate text-xs text-muted">{t(`sectors.${activeCompany.sector}`)}</span>
         </span>
         <ChevronsUpDown className={cn('size-4 shrink-0 text-muted', collapsed && 'lg:hidden')} aria-hidden />
       </Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content align="start" sideOffset={6} className={menuContent}>
-          <Dropdown.Label className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted">{t('shell.switchCompany')}</Dropdown.Label>
+          <Dropdown.Label className="micro px-3 py-1.5">{t('shell.switchCompany')}</Dropdown.Label>
           {companies.map((c) => (
             <Dropdown.Item
               key={c.id}
@@ -223,7 +223,7 @@ function CompanySwitcher({ collapsed }: { collapsed: boolean }) {
               }}
             >
               <span className="flex-1 truncate">{c.name}</span>
-              {c.id === activeCompany.id && <Check className="size-4 text-brand" aria-hidden />}
+              {c.id === activeCompany.id && <Check className="size-4" aria-hidden />}
             </Dropdown.Item>
           ))}
           <Dropdown.Separator className="my-1 h-px bg-border" />
@@ -241,7 +241,7 @@ function ThemeButton() {
   const { t } = useTranslation();
   const { theme, toggle } = useTheme();
   return (
-    <button onClick={toggle} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-text" aria-label={t('shell.theme')} title={theme === 'dark' ? t('shell.themeLight') : t('shell.themeDark')}>
+    <button onClick={toggle} className="rounded-md p-2 text-muted hover:bg-surface-2 hover:text-text" aria-label={t('shell.theme')} title={theme === 'dark' ? t('shell.themeLight') : t('shell.themeDark')}>
       {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
     </button>
   );
@@ -258,13 +258,13 @@ function UserMenu({ onChangePassword, onLogout }: { onChangePassword: () => void
     .join('');
   return (
     <Dropdown.Root>
-      <Dropdown.Trigger className="flex size-9 items-center justify-center rounded-full bg-brand text-xs font-semibold text-brand-contrast" aria-label={user.fullName}>
+      <Dropdown.Trigger className="flex size-9 items-center justify-center rounded-md bg-inverted text-xs text-on-inverted" aria-label={user.fullName}>
         {initials}
       </Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content align="end" sideOffset={8} className={menuContent}>
           <div className="px-3 py-2">
-            <p className="text-sm font-medium">{user.fullName}</p>
+            <p className="text-sm">{user.fullName}</p>
             <p className="text-xs text-muted">{user.email}</p>
           </div>
           <Dropdown.Separator className="my-1 h-px bg-border" />

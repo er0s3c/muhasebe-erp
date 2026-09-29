@@ -263,12 +263,12 @@ function JournalDetail({
                 {entry.periodYear}-{String(entry.periodMonth).padStart(2, '0')}
               </span>
               {entry.reversedById && (
-                <button className="text-brand hover:underline" onClick={() => onOpenOther(entry.reversedById!)}>
+                <button className="link" onClick={() => onOpenOther(entry.reversedById!)}>
                   {t('ledger.journal.reversedBy')} →
                 </button>
               )}
               {entry.reversalOfId && (
-                <button className="text-brand hover:underline" onClick={() => onOpenOther(entry.reversalOfId!)}>
+                <button className="link" onClick={() => onOpenOther(entry.reversalOfId!)}>
                   ← {t('ledger.journal.reversalOf')}
                 </button>
               )}
@@ -293,7 +293,7 @@ function JournalDetail({
                         <span className="ml-2 text-muted">{l.accountName}</span>
                         {l.partyId && (
                           <span className="mt-0.5 block text-xs">
-                            <Link to={`/parties/${l.partyId}`} className="font-medium text-brand hover:underline">
+                            <Link to={`/parties/${l.partyId}`} className="link">
                               {l.partyName}
                             </Link>
                             {l.dueDate && <span className="ml-2 text-muted">{t('parties.detail.dueDate')}: {formatDateTR(l.dueDate)}</span>}

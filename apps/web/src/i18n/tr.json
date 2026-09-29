@@ -214,7 +214,8 @@
     "receivablesHint": "Vadeye göre açık kalemlerin toplamı",
     "payablesHint": "Vadeye göre açık kalemlerin toplamı",
     "stockValue": "Toplam stok değeri",
-    "lowStock": "Kritik seviyedeki stok kartı"
+    "lowStock": "Kritik seviyedeki stok kartı",
+    "summary": "Özet göstergeler"
   },
   "settings": {
     "company": {

@@ -13,6 +13,8 @@ Aşağıdakiler **kopyalanmaz**:
 - Ekran yerleşimleri ve ağaç menü düzeni; rapor başlıklarının birebir listesi
 - Dosya/veritabanı biçimleri: tersine mühendislik yapılmaz. Veri aktarımı yalnızca müşterinin kendi dışa aktardığı Excel/CSV dosyalarıyla yapılır.
 
+Görsel dil (renk paleti, tipografi ölçeği, yüzey ve bileşen kuralları) kullanıcının verdiği genel bir stil referansından uyarlanmıştır; yalnızca tasarım ilkeleri (renk, aralık, yarıçap, tek vurgu, tek ağırlık) uygulanır. Referansın adı, logosu, özel yazı tipi (lisanslıdır; yerine açık lisanslı Inter kullanılır), görselleri ve metinleri **kullanılmaz**. Marka işareti ve ürün adı kendi tasarımımızdır (bkz. [DESIGN.md](DESIGN.md)).
+
 Bu projenin bilgi mimarisi ve arayüzü özgündür: görev odaklı menü, genel bakış ekranı, komut paleti, yan panelli formlar, özgün marka işareti.
 
 **Yapılacaklar:** ürün adını seçmeden önce marka/alan adı taraması yapın ve mevcut yazılım adlarına benzerlikten kaçının.

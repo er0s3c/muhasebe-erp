@@ -156,7 +156,7 @@ export function TrialBalancePage() {
                     {rows.map((r) => {
                       const closing = splitBalance(r.closing);
                       return (
-                        <Tr key={r.accountId} className={cn(!r.isPostable && 'bg-surface-2/50 font-semibold')}>
+                        <Tr key={r.accountId} className={cn(!r.isPostable && 'bg-surface-2/50')}>
                           <Td className="font-mono text-[13px]" style={{ paddingLeft: `${1 + (withGroups ? levelOf(r.code) : 0) * 1.1}rem` }}>
                             {r.code}
                           </Td>
@@ -173,7 +173,7 @@ export function TrialBalancePage() {
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-surface-2 font-semibold">
+                    <tr className="bg-surface-2">
                       <Td colSpan={3}>
                         {t('ledger.trialBalance.grandTotal')} ({data.currency})
                       </Td>
@@ -184,7 +184,7 @@ export function TrialBalancePage() {
                   </tfoot>
                 </Table>
               </TableWrap>
-              <div className={cn('flex items-center gap-2 text-sm font-medium', balanced ? 'text-success' : 'text-danger')} role="status">
+              <div className={cn('flex items-center gap-2 text-sm', balanced ? 'text-success' : 'text-danger')} role="status">
                 {balanced ? <CheckCircle2 className="size-4" aria-hidden /> : <TriangleAlert className="size-4" aria-hidden />}
                 {balanced ? t('ledger.trialBalance.balanced') : t('ledger.trialBalance.unbalanced', { amount: money(String(Math.abs(Number(data.totals.difference)))) })}
               </div>

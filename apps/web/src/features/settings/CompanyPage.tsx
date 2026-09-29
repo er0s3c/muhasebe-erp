@@ -90,13 +90,13 @@ export function CompanyPage() {
             <label className="flex items-start gap-3 text-sm">
               <input
                 type="checkbox"
-                className="mt-0.5 size-4 accent-[var(--brand)]"
+                className="mt-0.5 size-4"
                 checked={allowNegativeStock}
                 disabled={!editable}
                 onChange={(e) => setAllowNegativeStock(e.target.checked)}
               />
               <span>
-                <span className="block font-medium">{t('settings.company.allowNegativeStock')}</span>
+                <span className="block">{t('settings.company.allowNegativeStock')}</span>
                 <span className="block text-[13px] text-muted">{t('settings.company.allowNegativeStockHint')}</span>
               </span>
             </label>
@@ -115,16 +115,16 @@ export function CompanyPage() {
           <dl className="flex flex-col gap-4 p-5 text-sm">
             <div>
               <dt className="text-muted">{t('settings.company.sector')}</dt>
-              <dd className="mt-0.5 font-medium">{t(`sectors.${c.sector}`)}</dd>
+              <dd className="mt-0.5">{t(`sectors.${c.sector}`)}</dd>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <dt className="text-muted">{t('settings.company.baseCurrency')}</dt>
-                <dd className="mt-0.5 font-medium">{c.baseCurrency}</dd>
+                <dd className="mt-0.5">{c.baseCurrency}</dd>
               </div>
               <div>
                 <dt className="text-muted">{t('settings.company.reportingCurrency')}</dt>
-                <dd className="mt-0.5 font-medium">{c.reportingCurrency ?? '—'}</dd>
+                <dd className="mt-0.5">{c.reportingCurrency ?? '—'}</dd>
               </div>
             </div>
             <div>

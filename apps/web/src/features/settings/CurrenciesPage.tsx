@@ -145,7 +145,7 @@ export function CurrenciesPage() {
                   const last = latest[code];
                   return (
                     <div key={code} className="rounded-lg border border-border p-4">
-                      <p className="mb-3 text-sm font-semibold">
+                      <p className="mb-3 text-sm">
                         {t('settings.currencies.unit', { from: code })} <span className="text-muted">{company.baseCurrency}</span>
                       </p>
                       <div className="grid grid-cols-2 gap-3">
@@ -203,7 +203,7 @@ export function CurrenciesPage() {
         )}
 
         <section>
-          <h2 className="mb-3 text-[15px] font-semibold">{t('settings.currencies.history')}</h2>
+          <h2 className="mb-3 text-[15px]">{t('settings.currencies.history')}</h2>
           {isPending ? (
             <PageLoading />
           ) : !data?.rates.length ? (
@@ -227,7 +227,7 @@ export function CurrenciesPage() {
                   {data.rates.map((r) => (
                     <Tr key={r.id}>
                       <Td>{formatDateTR(r.rateDate)}</Td>
-                      <Td className="font-medium">
+                      <Td>
                         {r.currencyCode}/{r.quoteCode}
                       </Td>
                       <Td num>{money(r.buy, 4)}</Td>

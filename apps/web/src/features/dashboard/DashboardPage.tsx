@@ -1,11 +1,11 @@
 import { useQueries } from '@tanstack/react-query';
-import { AlertTriangle, ArrowRight, Boxes, CheckCircle2, Circle, FileEdit, FileCheck2, Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Circle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { CURRENCY_CODES, todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
-import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
+import { Card, CardHeader } from '../../components/ui/Card';
 import { cn } from '../../lib/cn';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCQuery, useCompanyApi } from '../../lib/queries';
@@ -20,16 +20,45 @@ interface Step {
   to: string;
 }
 
-function Kpi({ icon, label, value, tone = 'brand' }: { icon: ReactNode; label: string; value: ReactNode; tone?: 'brand' | 'success' | 'danger' | 'warning' }) {
-  const tones = { brand: 'bg-brand-soft text-brand', success: 'bg-success-soft text-success', danger: 'bg-danger-soft text-danger', warning: 'bg-warning-soft text-warning' };
+interface Metric {
+  key: string;
+  label: string;
+  value: ReactNode;
+  to?: string;
+  /** Dikkat gerektiren değer (koyu zeminde okunur uyarı/hata rengi) */
+  tone?: 'warning' | 'danger';
+}
+
+/**
+ * Sayaç şeridi: tek koyu (Obsidian) şerit; 10px büyük harf etiket, 28px tek ağırlıklı değer.
+ * Bağlantılı göstergeler tıklanabilir ve odak halkası sarıdır (koyu zeminde Ink görünmez).
+ */
+function CounterBand({ metrics, label }: { metrics: Metric[]; label: string }) {
   return (
-    <Card className="flex items-center gap-4 p-5">
-      <span className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', tones[tone])}>{icon}</span>
-      <div className="min-w-0">
-        <p className="text-sm text-muted">{label}</p>
-        <p className="mt-0.5 truncate text-xl font-semibold tracking-tight">{value}</p>
-      </div>
-    </Card>
+    <section aria-label={label} className="overflow-hidden rounded-2xl bg-inverted text-on-inverted">
+      <ul className="flex flex-wrap">
+        {metrics.map((m) => {
+          const body = (
+            <>
+              <p className="text-caption uppercase tracking-[0.05em] text-inverted-muted">{m.label}</p>
+              <p className={cn('mt-2 truncate text-heading', m.tone === 'warning' && 'text-warning-on-inverted', m.tone === 'danger' && 'text-danger-on-inverted')}>{m.value}</p>
+            </>
+          );
+          const cell = 'block h-full p-5';
+          return (
+            <li key={m.key} className="-ml-px -mt-px grow basis-[200px] border-l border-t border-white/10">
+              {m.to ? (
+                <Link to={m.to} aria-label={m.label} className={cn(cell, 'transition-colors hover:bg-white/5 focus-visible:outline-brand')}>
+                  {body}
+                </Link>
+              ) : (
+                <div className={cell}>{body}</div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -92,50 +121,38 @@ export function DashboardPage() {
 
   return (
     <>
-      <PageHeader title={t('dashboard.greeting', { name: user?.fullName.split(' ')[0] ?? '' })} description={t('dashboard.subtitle', { company: company.name })} />
+      <div className="mb-8">
+        <h1 className="text-heading-lg">{t('dashboard.greeting', { name: user?.fullName.split(' ')[0] ?? '' })}</h1>
+        <p className="mt-2 text-sm text-muted">{t('dashboard.subtitle', { company: company.name })}</p>
+      </div>
 
       <div className="flex flex-col gap-6">
-        {canLedger && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Kpi icon={<FileCheck2 className="size-5" />} label={t('dashboard.postedEntries')} value={posted ? posted.entries.length : '—'} />
-            <Kpi icon={<FileEdit className="size-5" />} label={t('dashboard.draftEntries')} value={drafts ? drafts.entries.length : '—'} tone={drafts && drafts.entries.length > 0 ? 'warning' : 'brand'} />
-            {canReports && (
-              <Kpi
-                icon={<Scale className="size-5" />}
-                label={t('dashboard.ledgerBalance')}
-                value={balanced === null ? '—' : balanced ? t('dashboard.balanced') : t('dashboard.unbalanced')}
-                tone={balanced === null ? 'brand' : balanced ? 'success' : 'danger'}
-              />
-            )}
-          </div>
-        )}
-
-        {canParties && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Link to="/parties/aging" className="block rounded-xl transition-shadow hover:shadow-pop" aria-label={t('dashboard.receivables')}>
-              <Kpi icon={<TrendingUp className="size-5" />} label={t('dashboard.receivables')} value={recv ? `${money(recv.totals.total)} ${company.baseCurrency}` : '—'} tone="success" />
-            </Link>
-            <Link to="/parties/aging" className="block rounded-xl transition-shadow hover:shadow-pop" aria-label={t('dashboard.payables')}>
-              <Kpi icon={<TrendingDown className="size-5" />} label={t('dashboard.payables')} value={pay ? `${money(pay.totals.total)} ${company.baseCurrency}` : '—'} tone="warning" />
-            </Link>
-          </div>
-        )}
-
-        {canInventory && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Link to="/inventory/status" className="block rounded-xl transition-shadow hover:shadow-pop" aria-label={t('dashboard.stockValue')}>
-              <Kpi icon={<Boxes className="size-5" />} label={t('dashboard.stockValue')} value={stockSummary ? `${money(stockSummary.stockValue)} ${company.baseCurrency}` : '—'} />
-            </Link>
-            <Link to="/inventory/status?low=1" className="block rounded-xl transition-shadow hover:shadow-pop" aria-label={t('dashboard.lowStock')}>
-              <Kpi
-                icon={<AlertTriangle className="size-5" />}
-                label={t('dashboard.lowStock')}
-                value={stockSummary ? stockSummary.lowCount : '—'}
-                tone={stockSummary && stockSummary.lowCount > 0 ? 'warning' : 'brand'}
-              />
-            </Link>
-          </div>
-        )}
+        <CounterBand
+          label={t('dashboard.summary')}
+          metrics={[
+            ...(canLedger
+              ? [
+                  { key: 'posted', label: t('dashboard.postedEntries'), value: posted ? posted.entries.length : '—' },
+                  { key: 'drafts', label: t('dashboard.draftEntries'), value: drafts ? drafts.entries.length : '—', tone: drafts && drafts.entries.length > 0 ? ('warning' as const) : undefined },
+                ]
+              : []),
+            ...(canLedger && canReports
+              ? [{ key: 'balance', label: t('dashboard.ledgerBalance'), value: balanced === null ? '—' : balanced ? t('dashboard.balanced') : t('dashboard.unbalanced'), tone: balanced === false ? ('danger' as const) : undefined }]
+              : []),
+            ...(canParties
+              ? [
+                  { key: 'recv', label: t('dashboard.receivables'), value: recv ? `${money(recv.totals.total)} ${company.baseCurrency}` : '—', to: '/parties/aging' },
+                  { key: 'pay', label: t('dashboard.payables'), value: pay ? `${money(pay.totals.total)} ${company.baseCurrency}` : '—', to: '/parties/aging' },
+                ]
+              : []),
+            ...(canInventory
+              ? [
+                  { key: 'stock', label: t('dashboard.stockValue'), value: stockSummary ? `${money(stockSummary.stockValue)} ${company.baseCurrency}` : '—', to: '/inventory/status' },
+                  { key: 'low', label: t('dashboard.lowStock'), value: stockSummary ? stockSummary.lowCount : '—', to: '/inventory/status?low=1', tone: stockSummary && stockSummary.lowCount > 0 ? ('warning' as const) : undefined },
+                ]
+              : []),
+          ]}
+        />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           {steps.length > 0 && !allDone && (
@@ -157,7 +174,7 @@ export function DashboardPage() {
                     <Link to={s.to} className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-surface-2/60">
                       {s.done ? <CheckCircle2 className="size-5 shrink-0 text-success" aria-label={t('dashboard.setupDone')} /> : <Circle className="size-5 shrink-0 text-border-strong" aria-hidden />}
                       <span className="min-w-0 flex-1">
-                        <span className={cn('block text-sm font-medium', s.done && 'text-muted line-through')}>{s.title}</span>
+                        <span className={cn('block text-sm', s.done && 'text-muted line-through')}>{s.title}</span>
                         <span className="block text-[13px] text-muted">{s.description}</span>
                       </span>
                       <ArrowRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
@@ -173,7 +190,7 @@ export function DashboardPage() {
               <CardHeader
                 title={t('dashboard.recentEntries')}
                 action={
-                  <Link to="/accounting/journal" className="text-sm font-medium text-brand hover:underline">
+                  <Link to="/accounting/journal" className="text-sm link">
                     {t('dashboard.viewAll')}
                   </Link>
                 }
@@ -185,13 +202,13 @@ export function DashboardPage() {
                   {posted.entries.slice(0, 6).map((e) => (
                     <li key={e.id} className="flex items-center gap-3 border-b border-border px-5 py-3 last:border-b-0">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{e.description}</p>
+                        <p className="truncate text-sm">{e.description}</p>
                         <p className="text-xs text-muted">
                           {formatDateTR(e.entryDate)} · <span className="font-mono">{e.entryNo}</span>
                         </p>
                       </div>
                       {e.reversalOfId ? <Badge>{t('ledger.journal.reversal')}</Badge> : e.reversedById ? <Badge tone="danger">{t('ledger.journal.reversed')}</Badge> : null}
-                      <span className="num text-sm font-medium">{money(e.totalBase)}</span>
+                      <span className="num text-sm">{money(e.totalBase)}</span>
                     </li>
                   ))}
                 </ul>
@@ -202,7 +219,7 @@ export function DashboardPage() {
 
         {foreign.length > 0 && ratesLoaded && (
           <Card>
-            <CardHeader title={t('dashboard.todayRates')} action={<Link to="/settings/currencies" className="text-sm font-medium text-brand hover:underline">{t('settings.currencies.quickEntry')}</Link>} />
+            <CardHeader title={t('dashboard.todayRates')} action={<Link to="/settings/currencies" className="text-sm link">{t('settings.currencies.quickEntry')}</Link>} />
             <div className="grid grid-cols-1 gap-px bg-border sm:grid-cols-3">
               {foreign.map((cur, i) => {
                 const rate = rateQueries[i]?.data?.rate;
@@ -211,7 +228,7 @@ export function DashboardPage() {
                     <p className="text-sm text-muted">
                       {cur}/{company.baseCurrency}
                     </p>
-                    <p className="mt-1 text-xl font-semibold tracking-tight">{rate ? money(rate, 4) : <span className="text-base font-normal text-warning">{t('dashboard.rateMissing')}</span>}</p>
+                    <p className="mt-1 text-heading">{rate ? money(rate, 4) : <span className="text-base text-warning">{t('dashboard.rateMissing')}</span>}</p>
                   </div>
                 );
               })}
