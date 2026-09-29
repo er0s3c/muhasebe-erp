@@ -17,6 +17,19 @@ export interface PartyLine {
   creditBase: string;
 }
 
+/**
+ * Tahsilat/ödemenin kapattığı belirli bir kalem (party_allocations). Kapatan satır FIFO havuzundan çıkar,
+ * kalem yalnızca kalanı kadar açık görünür; kalan havuz eskisi gibi FIFO uygulanır.
+ */
+export interface PartyAllocation {
+  chargeLineId: string;
+  settleLineId: string;
+  /** Kalemin para biriminde kapatılan tutar */
+  amount: string;
+  /** Kalemin taşıdığı defter tutarından kapatılan pay */
+  amountBase: string;
+}
+
 export interface OpenItem {
   lineId: string;
   partyId: string;
@@ -63,10 +76,15 @@ export interface OpenItemsResult {
 /**
  * FIFO ile açık kalem hesabı. Alacak tarafında (müşteri) borç satırları, borç tarafında
  * (tedarikçi) alacak satırları "kalem"dir; karşı taraftaki satırlar (tahsilat/ödeme) toplamı
- * en eski vadeden başlayarak kalemlere uygulanır. Fatura–tahsilat elle eşleştirme (M7) bu
- * hesabın üstüne, belirli bir kalemi seçerek eklenecektir.
+ * en eski vadeden başlayarak kalemlere uygulanır. Tahsilat/ödeme belirli kalemleri seçerek
+ * kapatmışsa (`allocations`) önce bu eşleştirmeler düşülür; eşleştirilmiş kapatan satırlar havuza girmez.
  */
-export function computeOpenItems(lines: PartyLine[], type: PartyControlType, asOf: string): OpenItemsResult {
+export function computeOpenItems(
+  lines: PartyLine[],
+  type: PartyControlType,
+  asOf: string,
+  allocations: readonly PartyAllocation[] = [],
+): OpenItemsResult {
   const chargeSide = type === 'receivable' ? 'debit' : 'credit';
   const settleSide = type === 'receivable' ? 'credit' : 'debit';
   const base = (l: PartyLine, side: 'debit' | 'credit') => dec(side === 'debit' ? l.debitBase : l.creditBase);
@@ -82,20 +100,35 @@ export function computeOpenItems(lines: PartyLine[], type: PartyControlType, asO
         a.line.lineNo - b.line.lineNo,
     );
 
-  let pool: MoneyValue = sum(lines.filter((l) => base(l, settleSide).gt(0)).map((l) => base(l, settleSide)));
+  const explicitSettle = new Set(allocations.map((a) => a.settleLineId));
+  const explicit = new Map<string, { amount: MoneyValue; base: MoneyValue }>();
+  for (const a of allocations) {
+    const cur = explicit.get(a.chargeLineId) ?? { amount: dec(0), base: dec(0) };
+    explicit.set(a.chargeLineId, { amount: cur.amount.plus(a.amount), base: cur.base.plus(a.amountBase) });
+  }
+
+  let pool: MoneyValue = sum(
+    lines.filter((l) => base(l, settleSide).gt(0) && !explicitSettle.has(l.lineId)).map((l) => base(l, settleSide)),
+  );
 
   const items: OpenItem[] = [];
   for (const { line, dueOn } of charges) {
     const amountBase = base(line, chargeSide);
-    const used = pool.gte(amountBase) ? amountBase : pool;
+    const original = dec(chargeSide === 'debit' ? line.debit : line.credit);
+    const closed = explicit.get(line.lineId);
+    // Eşleştirmelerden sonra kalem (defter ve kalem para biriminde)
+    const availBase = closed ? amountBase.minus(closed.base) : amountBase;
+    const availDoc = closed ? original.minus(closed.amount) : original;
+    if (availBase.lte(0)) continue;
+
+    const used = pool.gte(availBase) ? availBase : pool;
     pool = pool.minus(used);
-    const remainingBase = amountBase.minus(used);
+    const remainingBase = availBase.minus(used);
     if (remainingBase.lte(0)) continue;
 
-    const original = dec(chargeSide === 'debit' ? line.debit : line.credit);
-    const remaining = remainingBase.equals(amountBase)
-      ? original
-      : roundMoney(original.times(remainingBase).div(amountBase));
+    const remaining = remainingBase.equals(availBase)
+      ? availDoc
+      : roundMoney(availDoc.times(remainingBase).div(availBase));
     const daysOverdue = daysBetween(dueOn, asOf);
     items.push({
       lineId: line.lineId,
@@ -140,7 +173,7 @@ export interface AgingReport {
 }
 
 export function buildAgingReport(
-  linesByParty: Map<string, { code: string; name: string; lines: PartyLine[] }>,
+  linesByParty: Map<string, { code: string; name: string; lines: PartyLine[]; allocations?: PartyAllocation[] }>,
   type: PartyControlType,
   asOf: string,
 ): AgingReport {
@@ -149,7 +182,7 @@ export function buildAgingReport(
   const grand = zero();
 
   for (const [partyId, p] of linesByParty) {
-    const { items, unapplied } = computeOpenItems(p.lines, type, asOf);
+    const { items, unapplied } = computeOpenItems(p.lines, type, asOf, p.allocations ?? []);
     const b = zero();
     for (const it of items) b[it.bucket] = b[it.bucket].plus(it.remainingBase);
     b.unapplied = dec(unapplied);

@@ -12,6 +12,8 @@ import {
   applyRate,
   createDeliveryNoteSchema,
   createInvoiceSchema,
+  createTreasuryAccountSchema,
+  createTreasuryTransactionSchema,
   isoYear,
   todayIso,
   toDbRate,
@@ -38,6 +40,9 @@ import { postStockDocument, reverseStockDocument, type StockCtx } from '../modul
 import { createItem } from '../modules/inventory/items';
 import { postDeliveryNote } from '../modules/deliveries/posting';
 import { createDeliveryDraft } from '../modules/deliveries/service';
+import { openItemsFor } from '../modules/parties/service';
+import { createTreasuryAccount } from '../modules/treasury/accounts';
+import { cancelTreasuryTransaction, postTreasuryTransaction } from '../modules/treasury/posting';
 import { cancelInvoice, postInvoice } from '../modules/invoices/posting';
 import { createInvoiceDraft, getInvoice, type InvoiceCtx } from '../modules/invoices/service';
 import { createWarehouse } from '../modules/inventory/warehouses';
@@ -244,6 +249,73 @@ async function seedInventory(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string
   return 'stok: 7 kart, 2 depo, fatura ve irsaliyeler, 1 sayım';
 }
 
+/**
+ * Kasa ve banka demo verisi: mevcut 102.001/102.002 hesapları kasa/banka hesabına bağlanır, kasa ve bir EUR
+ * hesabı açılır. Hareketler gerçek akışlarla girilir: seçilen kalemi kapatan tahsilat, GBP faturasının
+ * yüksek kurlu tahsilatı (kur kârı), tedarikçi ödemesi, EUR faturasının ödemesi (kur zararı), virman,
+ * döviz alım-satım, banka masrafı, faiz geliri ve iptal edilmiş bir hareket. Hepsi otomatik yevmiye üretir.
+ */
+async function seedTreasury(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string): Promise<string> {
+  const account = (input: Record<string, unknown>) => createTreasuryAccount(tx, ctx, createTreasuryAccountSchema.parse(input));
+  const bankTl = await account({ kind: 'bank', name: 'KTB TL Vadesiz', currency: 'TRY', bankName: 'Örnek Banka', branch: 'Lefkoşa', linkAccountId: acc('102.001') });
+  const bankGbp = await account({ kind: 'bank', name: 'KTB GBP Hesabı', currency: 'GBP', bankName: 'Örnek Banka', branch: 'Lefkoşa', linkAccountId: acc('102.002') });
+  const cash = await account({ kind: 'cash', name: 'Ana kasa', currency: 'TRY' });
+  const bankEur = await account({ kind: 'bank', name: 'KTB EUR Hesabı', currency: 'EUR', bankName: 'Örnek Banka', branch: 'Lefkoşa' });
+
+  const txn = (input: Record<string, unknown>) => postTreasuryTransaction(tx, ctx, createTreasuryTransactionSchema.parse(input));
+  const open = async (party: string, control: 'receivable' | 'payable', asOf: string) => (await openItemsFor(tx, partyId.get(party)!, control, asOf)).items;
+
+  // Kasa: bankadan nakit çekimi, sonra kasadan küçük gider (kasa eksiye düşmez)
+  await txn({ type: 'transfer', date: date(8, 30), accountId: bankTl.id, toAccountId: cash.id, amount: '60000', description: 'Kasaya nakit çekildi' });
+  await txn({ type: 'other_payment', date: date(9, 24), accountId: cash.id, amount: '3500', glAccountId: acc('770'), description: 'Şantiye küçük giderleri (nakit)' });
+
+  // Ali Yılmaz: en eski kalem açık dururken yalnızca Temmuz faturası tahsil edilir (seçilen kalem)
+  const aliItems = await open('ali', 'receivable', date(8, 26));
+  const julyInvoice = aliItems.find((i) => i.description.includes('A Blok daire boyası')) ?? aliItems[aliItems.length - 1]!;
+  await txn({
+    type: 'receipt', date: date(8, 26), accountId: bankTl.id, amount: julyInvoice.remaining, partyId: partyId.get('ali')!,
+    items: [{ lineId: julyInvoice.lineId, amount: julyInvoice.remaining, settleAmount: julyInvoice.remaining }], description: 'Boya faturası havale ile tahsil edildi',
+  });
+  // Yanlış girilen avans tahsilatı: aynı gün iptal edilir (numara serinin parçası kalır)
+  const wrong = await txn({ type: 'receipt', date: date(9, 2), accountId: cash.id, amount: '5000', partyId: partyId.get('ali')!, description: 'Peşinat (yanlış hesaba girildi)' });
+  await cancelTreasuryTransaction(tx, ctx, wrong.transaction.id as string, { date: date(9, 3), reason: 'Yanlış hesaba girildi' });
+
+  // Sarah Thompson: GBP faturası GBP hesabına tahsil edilir; fatura günündeki kurdan yüksek kur → kambiyo kârı
+  const sarahGbp = (await open('sarah', 'receivable', date(9, 15))).find((i) => i.currencyCode === 'GBP');
+  if (sarahGbp) {
+    await txn({
+      type: 'receipt', date: date(9, 15), accountId: bankGbp.id, amount: sarahGbp.remaining, partyId: partyId.get('sarah')!,
+      items: [{ lineId: sarahGbp.lineId, amount: sarahGbp.remaining, settleAmount: sarahGbp.remaining }], description: 'Seramik faturası (GBP) tahsilatı',
+    });
+  }
+
+  // Tedarikçi ödemesi: Hazır Beton'un en eski faturası bankadan ödenir
+  const betonFirst = (await open('beton', 'payable', date(9, 10)))[0];
+  if (betonFirst) {
+    await txn({
+      type: 'payment', date: date(9, 10), accountId: bankTl.id, amount: betonFirst.remaining, partyId: partyId.get('beton')!,
+      items: [{ lineId: betonFirst.lineId, amount: betonFirst.remaining, settleAmount: betonFirst.remaining }], description: 'Çimento faturası ödemesi',
+    });
+  }
+
+  // EUR: TL ile döviz alınır, ardından EUR faturası kısmen ödenir (kur zararı)
+  await txn({ type: 'exchange', date: date(9, 5), accountId: bankTl.id, toAccountId: bankEur.id, amount: '300000', counterAmount: '5400', description: 'Seramik ödemesi için EUR alımı' });
+  const eurItem = (await open('oto', 'payable', date(9, 18))).find((i) => i.currencyCode === 'EUR');
+  if (eurItem) {
+    await txn({
+      type: 'payment', date: date(9, 18), accountId: bankEur.id, amount: '5000', partyId: partyId.get('oto')!,
+      items: [{ lineId: eurItem.lineId, amount: '5000', settleAmount: '5000' }], description: 'Seramik faturası (EUR) kısmi ödemesi',
+    });
+  }
+
+  // GBP satışı: ortalama maliyetin üzerinde satış → kambiyo kârı; banka masrafı ve faiz geliri
+  await txn({ type: 'exchange', date: date(9, 22), accountId: bankGbp.id, toAccountId: bankTl.id, amount: '20000', counterAmount: '1290000', description: 'GBP satışı' });
+  await txn({ type: 'other_payment', date: date(9, 1), accountId: bankTl.id, amount: '125', glAccountId: acc('770'), description: 'Havale masrafı' });
+  await txn({ type: 'other_receipt', date: date(9, 26), accountId: bankTl.id, amount: '2150', glAccountId: acc('642'), description: 'Vadesiz hesap faiz geliri' });
+
+  return 'kasa/banka: 4 hesap, 11 hareket';
+}
+
 async function main() {
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, DEMO_EMAIL));
   if (existing) {
@@ -402,6 +474,7 @@ async function main() {
     }
 
     const stockSummary = await seedInventory(tx, ctx, partyId, acc);
+    const treasurySummary = await seedTreasury(tx, ctx, partyId, acc);
 
     // Geçmiş aylar kapansın (yılın ilk yarısı)
     for (let m = 1; m <= 6; m++) {
@@ -410,7 +483,7 @@ async function main() {
       if (p && date(m, last) < today) await closePeriod(tx, p.id, userId);
     }
 
-    console.log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary})`);
+    console.log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary}, ${treasurySummary})`);
     console.log(`  Giriş:  ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
     console.log('  Ekip:   muhasebe@ornek.local (muhasebeci), izleyici@ornek.local (izleyici) — aynı şifre');
   });

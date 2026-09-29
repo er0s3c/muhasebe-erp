@@ -10,6 +10,7 @@ import {
   Coins,
   FileText,
   Hourglass,
+  Landmark,
   LayoutDashboard,
   ListTree,
   Link2,
@@ -22,6 +23,7 @@ import {
   Tags,
   Truck,
   Users,
+  Wallet,
   Warehouse,
   type LucideIcon,
 } from 'lucide-react';
@@ -51,6 +53,8 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   'link-2': Link2,
   truck: Truck,
   'package-check': PackageCheck,
+  wallet: Wallet,
+  landmark: Landmark,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

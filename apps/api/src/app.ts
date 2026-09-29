@@ -11,6 +11,7 @@ import { authRoutes } from './modules/auth/routes';
 import { inventoryRoutes } from './modules/inventory/routes';
 import { deliveryRoutes } from './modules/deliveries/routes';
 import { invoiceRoutes } from './modules/invoices/routes';
+import { treasuryRoutes } from './modules/treasury/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
@@ -66,6 +67,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(inventoryRoutes);
   await app.register(invoiceRoutes);
   await app.register(deliveryRoutes);
+  await app.register(treasuryRoutes);
 
   return app;
 }

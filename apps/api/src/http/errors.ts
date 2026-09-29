@@ -89,6 +89,13 @@ export function errorHandler(
       .send({ error: { code: 'DELIVERY_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP05') {
+    // Kasa/banka kuralları (değiştirilemez hareket, yevmiye/tutar tutarsızlığı, eşleştirme aşımı vb.)
+    void reply
+      .status(422)
+      .send({ error: { code: 'TREASURY_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

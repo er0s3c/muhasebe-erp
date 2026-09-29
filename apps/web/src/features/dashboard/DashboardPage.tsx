@@ -8,9 +8,9 @@ import { Badge } from '../../components/ui/Badge';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { cn } from '../../lib/cn';
 import { formatDateTR, money } from '../../lib/format';
-import { useCan, useCQuery, useCompanyApi } from '../../lib/queries';
+import { useCan, useCQuery, useCompanyApi, useNavigation } from '../../lib/queries';
 import { useSession } from '../../lib/session';
-import type { AgingReport, DeliverySummary, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData } from '../../lib/types';
+import type { AgingReport, DeliverySummary, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData, TreasurySummary } from '../../lib/types';
 
 interface Step {
   key: string;
@@ -82,6 +82,9 @@ export function DashboardPage() {
   const canDeliveries = can('deliveries.read');
   const { data: delSummary } = useCQuery<DeliverySummary>(['dashboard', 'deliveries'], '/api/delivery-notes/summary', { enabled: canDeliveries });
   const unbilled = delSummary ? delSummary.sales.openCount + delSummary.purchases.openCount : null;
+  const { data: nav } = useNavigation();
+  const canTreasury = can('treasury.read') && (nav?.modules.includes('core.treasury') ?? false);
+  const { data: treasury } = useCQuery<TreasurySummary>(['dashboard', 'treasury'], '/api/treasury/summary', { enabled: canTreasury });
 
   const { data: posted } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'posted'], `/api/journal-entries?status=posted&limit=200&from=${year}-01-01`, { enabled: canLedger });
   const { data: drafts } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'drafts'], '/api/journal-entries?status=draft&limit=200', { enabled: canLedger });
@@ -149,6 +152,9 @@ export function DashboardPage() {
                   { key: 'recv', label: t('dashboard.receivables'), value: recv ? `${money(recv.totals.total)} ${company.baseCurrency}` : '—', to: '/parties/aging' },
                   { key: 'pay', label: t('dashboard.payables'), value: pay ? `${money(pay.totals.total)} ${company.baseCurrency}` : '—', to: '/parties/aging' },
                 ]
+              : []),
+            ...(canTreasury
+              ? [{ key: 'treasury', label: t('dashboard.treasuryBalance'), value: treasury ? `${money(treasury.equivalent)} ${company.baseCurrency}` : '—', to: '/treasury/accounts' }]
               : []),
             ...(canInvoices
               ? [

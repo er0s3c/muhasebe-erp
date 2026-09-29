@@ -686,6 +686,136 @@ export interface DeliverySummary {
   purchases: { openCount: number; openValue: string };
 }
 
+// --- Kasa ve banka --------------------------------------------------------
+
+export type TreasuryAccountKind = 'cash' | 'bank';
+export type TreasuryTxnType = 'receipt' | 'payment' | 'transfer' | 'exchange' | 'other_receipt' | 'other_payment';
+export type TreasuryTxnStatus = 'posted' | 'cancelled';
+
+export interface TreasuryAccount {
+  id: string;
+  kind: TreasuryAccountKind;
+  name: string;
+  currencyCode: string;
+  accountId: string;
+  accountCode: string;
+  bankName: string | null;
+  branch: string | null;
+  iban: string | null;
+  accountNo: string | null;
+  isActive: boolean;
+  /** Hesabın kendi para biriminde bakiye */
+  balance: string;
+  /** Defter para biriminde tarihsel maliyet */
+  balanceBase: string;
+  /** Güncel kurla defter para birimi karşılığı; kur yoksa null */
+  equivalent: string | null;
+  lastActivity: string | null;
+}
+
+export interface TreasurySummary {
+  accountCount: number;
+  equivalent: string;
+  /** Bazı hesaplarda güncel kur yok: toplam tarihsel maliyetle tamamlandı */
+  approximate: boolean;
+  byCurrency: { currency: string; balance: string }[];
+}
+
+export interface TreasuryStatementLine {
+  entryId: string;
+  entryNo: string;
+  entryDate: string;
+  description: string;
+  debit: string;
+  credit: string;
+  debitBase: string;
+  creditBase: string;
+  fxRate: string;
+  balanceDoc: string;
+  balanceBase: string;
+  txnId: string | null;
+  txnNo: string | null;
+  txnType: TreasuryTxnType | null;
+  txnStatus: TreasuryTxnStatus | null;
+}
+
+export interface TreasuryStatementData {
+  account: { id: string; name: string; kind: TreasuryAccountKind; currencyCode: string; accountCode: string };
+  from: string;
+  to: string;
+  openingDoc: string;
+  openingBase: string;
+  lines: TreasuryStatementLine[];
+  totals: { debit: string; credit: string };
+  closingDoc: string;
+  closingBase: string;
+}
+
+export interface TreasuryTxnListRow {
+  id: string;
+  type: TreasuryTxnType;
+  status: TreasuryTxnStatus;
+  txnNo: string;
+  txnDate: string;
+  accountName: string;
+  currencyCode: string;
+  amount: string;
+  toAccountName: string | null;
+  toCurrencyCode: string | null;
+  counterAmount: string | null;
+  partyName: string | null;
+  glAccountCode: string | null;
+  glAccountName: string | null;
+  description: string | null;
+}
+
+export interface TreasuryTxnDetail {
+  transaction: {
+    id: string;
+    type: TreasuryTxnType;
+    status: TreasuryTxnStatus;
+    txnNo: string;
+    txnDate: string;
+    accountId: string;
+    accountName: string;
+    accountKind: TreasuryAccountKind;
+    currencyCode: string;
+    amount: string;
+    toAccountId: string | null;
+    toAccountName: string | null;
+    toCurrencyCode: string | null;
+    counterAmount: string | null;
+    fxRate: string | null;
+    partyId: string | null;
+    partyCode: string | null;
+    partyName: string | null;
+    glAccountId: string | null;
+    glAccountCode: string | null;
+    glAccountName: string | null;
+    description: string | null;
+    journalEntryId: string;
+    journalEntryNo: string | null;
+    postedAt: string;
+    cancelledAt: string | null;
+    cancelReason: string | null;
+    cancelJournalEntryId: string | null;
+    cancelJournalEntryNo: string | null;
+  };
+  allocations: {
+    lineId: string;
+    entryId: string;
+    entryNo: string;
+    entryDate: string;
+    description: string;
+    currencyCode: string;
+    amount: string;
+    amountBase: string;
+    settleAmount: string;
+  }[];
+  /** Hareketin yevmiyesindeki net kambiyo farkı (+ kâr, − zarar; defter para birimi) */
+  fxNet: string;
+}
+
 /** Modül anahtarı -> çeviri anahtarı */
 export const MODULE_LABEL_KEYS = {
   'core.dashboard': 'modules.dashboard',
@@ -694,6 +824,7 @@ export const MODULE_LABEL_KEYS = {
   'core.parties': 'modules.parties',
   'core.inventory': 'modules.inventory',
   'core.invoices': 'modules.invoices',
+  'core.treasury': 'modules.treasury',
   'construction.projects': 'modules.constructionProjects',
   'retail.pos': 'modules.retailPos',
 } as const;

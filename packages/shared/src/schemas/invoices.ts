@@ -61,6 +61,8 @@ export const ACCOUNT_MAPPING_KEYS = [
   'stock_loss',
   'consumption',
   'opening_offset',
+  'fx_gain',
+  'fx_loss',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -80,6 +82,9 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     stock_loss: '659',
     consumption: '710',
     opening_offset: '500',
+    // Kambiyo kârı/zararı (gerçekleşen kur farkı). Varsayılanlar doğrulanmamıştır.
+    fx_gain: '646',
+    fx_loss: '656',
   };
 }
 

@@ -440,6 +440,8 @@ export const journalLines = pgTable(
       foreignColumns: [parties.id, parties.companyId],
     }),
     unique('journal_lines_entry_line_uq').on(t.entryId, t.lineNo),
+    // Cari eşleştirmesi (party_allocations) satıra bileşik anahtarla bağlanır
+    unique('journal_lines_id_company_uq').on(t.id, t.companyId),
     index('journal_lines_account_idx').on(t.companyId, t.accountId),
     index('journal_lines_party_idx').on(t.companyId, t.partyId),
     check(
@@ -763,7 +765,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss')`,
     ),
   ],
 );
@@ -1078,6 +1080,202 @@ export const invoiceLines = pgTable(
     check(
       'invoice_lines_amounts_ck',
       sql`${t.quantity} > 0 and ${t.unitPrice} >= 0 and ${t.discountPct} between 0 and 100 and ${t.vatRate} between 0 and 100 and ${t.net} >= 0 and ${t.vat} >= 0 and ${t.gross} = ${t.net} + ${t.vat}`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Kasa ve banka
+// ---------------------------------------------------------------------------
+
+/**
+ * Kasa/banka hesabı: bir muhasebe yaprak hesabına (100.x / 102.x) bağlı, tek para birimli hesap.
+ * Bakiye ayrı tutulmaz, bağlı muhasebe hesabının hareketlerinden türetilir.
+ */
+export const treasuryAccounts = pgTable(
+  'treasury_accounts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** cash | bank */
+    kind: text().notNull(),
+    name: text().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    accountId: uuid().notNull(),
+    bankName: text(),
+    branch: text(),
+    iban: text(),
+    accountNo: text(),
+    isActive: boolean().notNull().default(true),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('treasury_accounts_id_company_uq').on(t.id, t.companyId),
+    unique('treasury_accounts_gl_uq').on(t.companyId, t.accountId),
+    unique('treasury_accounts_name_uq').on(t.companyId, t.name),
+    foreignKey({
+      name: 'treasury_accounts_gl_fk',
+      columns: [t.accountId, t.companyId],
+      foreignColumns: [accounts.id, accounts.companyId],
+    }),
+    check('treasury_accounts_kind_ck', sql`${t.kind} in ('cash','bank')`),
+  ],
+);
+
+/**
+ * Kasa/banka hareketi: doğrudan kaydedilir (taslak yok), yevmiyesi aynı işlemde yazılır.
+ * Değiştirilemez; düzeltme iptal (yevmiyenin ters kaydı) ile yapılır.
+ */
+export const treasuryTransactions = pgTable(
+  'treasury_transactions',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** receipt | payment | transfer | exchange | other_receipt | other_payment */
+    type: text().notNull(),
+    status: text().notNull().default('posted'),
+    txnNo: text().notNull(),
+    txnDate: date({ mode: 'string' }).notNull(),
+    /** Kasa/banka hesabı: tahsilatta giren, diğerlerinde çıkan taraf. */
+    accountId: uuid().notNull(),
+    /** Virman/döviz: hedef hesap. */
+    toAccountId: uuid(),
+    partyId: uuid(),
+    /** Diğer tahsilat/ödeme: karşı muhasebe hesabı. */
+    glAccountId: uuid(),
+    /** Kasa/banka hesabının para birimi ve bu para biriminde tutar. */
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    amount: money().notNull(),
+    /** Döviz: hedef hesap para biriminde tutar. */
+    counterAmount: money(),
+    /** Kasa/banka para biriminin defter para birimine kuru (yalnızca bilgi; defter tutarları yevmiyededir). */
+    fxRate: rate(),
+    description: text(),
+    journalEntryId: uuid().notNull(),
+    postedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    postedBy: uuid().references(() => users.id),
+    cancelledAt: timestamp({ withTimezone: true }),
+    cancelledBy: uuid().references(() => users.id),
+    cancelReason: text(),
+    cancelJournalEntryId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('treasury_transactions_id_company_uq').on(t.id, t.companyId),
+    unique('treasury_transactions_no_uq').on(t.companyId, t.txnNo),
+    index('treasury_transactions_date_idx').on(t.companyId, t.txnDate),
+    index('treasury_transactions_account_idx').on(t.companyId, t.accountId),
+    index('treasury_transactions_party_idx').on(t.companyId, t.partyId),
+    foreignKey({
+      name: 'treasury_transactions_account_fk',
+      columns: [t.accountId, t.companyId],
+      foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId],
+    }),
+    foreignKey({
+      name: 'treasury_transactions_to_account_fk',
+      columns: [t.toAccountId, t.companyId],
+      foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId],
+    }),
+    foreignKey({
+      name: 'treasury_transactions_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    foreignKey({
+      name: 'treasury_transactions_gl_fk',
+      columns: [t.glAccountId, t.companyId],
+      foreignColumns: [accounts.id, accounts.companyId],
+    }),
+    foreignKey({
+      name: 'treasury_transactions_journal_fk',
+      columns: [t.journalEntryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    foreignKey({
+      name: 'treasury_transactions_cancel_journal_fk',
+      columns: [t.cancelJournalEntryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    check(
+      'treasury_transactions_type_ck',
+      sql`${t.type} in ('receipt','payment','transfer','exchange','other_receipt','other_payment')`,
+    ),
+    check('treasury_transactions_status_ck', sql`${t.status} in ('posted','cancelled')`),
+    check(
+      'treasury_transactions_amount_ck',
+      sql`${t.amount} > 0 and (${t.counterAmount} is null or ${t.counterAmount} > 0)`,
+    ),
+    check(
+      'treasury_transactions_cancelled_ck',
+      sql`${t.status} <> 'cancelled' or (${t.cancelledAt} is not null and ${t.cancelReason} is not null and ${t.cancelJournalEntryId} is not null)`,
+    ),
+  ],
+);
+
+/**
+ * Tahsilat/ödemenin kapattığı açık kalem (cari kontrol hesabı satırı). Değişmez; işlem iptal edilince
+ * kayıt silinmez, `status = 'cancelled'` olan işlemin eşleştirmeleri hesaba katılmaz.
+ */
+export const partyAllocations = pgTable(
+  'party_allocations',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    partyId: uuid().notNull(),
+    /** receivable | payable */
+    control: text().notNull(),
+    transactionId: uuid().notNull(),
+    /** Kapatılan kalem (fatura vb. cari satırı) ve kapatan satır (tahsilat/ödemenin cari satırı). */
+    chargeLineId: uuid().notNull(),
+    settleLineId: uuid().notNull(),
+    /** Kalemin para biriminde kapatılan tutar ve kalemin taşıdığı defter tutarı payı. */
+    amount: money().notNull(),
+    amountBase: money().notNull(),
+    /** Kasa/banka para biriminde karşılığı. */
+    settleAmount: money().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('party_allocations_settle_uq').on(t.settleLineId),
+    index('party_allocations_charge_idx').on(t.chargeLineId),
+    index('party_allocations_party_idx').on(t.companyId, t.partyId),
+    foreignKey({
+      name: 'party_allocations_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    foreignKey({
+      name: 'party_allocations_transaction_fk',
+      columns: [t.transactionId, t.companyId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId],
+    }),
+    foreignKey({
+      name: 'party_allocations_charge_fk',
+      columns: [t.chargeLineId, t.companyId],
+      foreignColumns: [journalLines.id, journalLines.companyId],
+    }),
+    foreignKey({
+      name: 'party_allocations_settle_fk',
+      columns: [t.settleLineId, t.companyId],
+      foreignColumns: [journalLines.id, journalLines.companyId],
+    }),
+    check('party_allocations_control_ck', sql`${t.control} in ('receivable','payable')`),
+    check(
+      'party_allocations_amount_ck',
+      sql`${t.amount} > 0 and ${t.amountBase} > 0 and ${t.settleAmount} > 0`,
     ),
   ],
 );

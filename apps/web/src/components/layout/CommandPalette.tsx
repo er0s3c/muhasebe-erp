@@ -41,6 +41,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       list.push({ id: 'new-sales-delivery', label: t('shell.newSalesDelivery'), group: t('shell.quickActions'), path: '/delivery-notes/new?type=sales', icon: 'truck', keywords: 'yeni satış irsaliye sevk' });
       list.push({ id: 'new-purchase-delivery', label: t('shell.newPurchaseDelivery'), group: t('shell.quickActions'), path: '/delivery-notes/new?type=purchase', icon: 'package-check', keywords: 'yeni alış irsaliye mal kabul' });
     }
+    if (modules.includes('core.treasury') && can('treasury.post')) {
+      list.push({ id: 'new-receipt', label: t('shell.newReceipt'), group: t('shell.quickActions'), path: '/treasury/transactions?new=receipt', icon: 'wallet', keywords: 'yeni tahsilat para al kasa banka' });
+      list.push({ id: 'new-payment', label: t('shell.newPayment'), group: t('shell.quickActions'), path: '/treasury/transactions?new=payment', icon: 'landmark', keywords: 'yeni ödeme para ver kasa banka' });
+    }
     if (modules.includes('core.settings') && can('rates.manage')) {
       list.push({ id: 'enter-rates', label: t('shell.enterRates'), group: t('shell.quickActions'), path: '/settings/currencies', icon: 'coins', keywords: 'döviz kur dolar euro sterlin' });
     }

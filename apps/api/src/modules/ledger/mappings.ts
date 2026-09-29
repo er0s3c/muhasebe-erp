@@ -25,6 +25,8 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   stock_loss: 'Stok fire ve noksanlık zararı',
   consumption: 'Stok sarfı (malzeme gideri)',
   opening_offset: 'Stok devri karşı hesabı',
+  fx_gain: 'Kambiyo kârı (gerçekleşen kur farkı)',
+  fx_loss: 'Kambiyo zararı (gerçekleşen kur farkı)',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

@@ -71,6 +71,20 @@
       "when": 1790712622671,
       "tag": "0009_deliveries_rls_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790717123594,
+      "tag": "0010_treasury",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790717124390,
+      "tag": "0011_treasury_rls_rules",
+      "breakpoints": true
     }
   ]
 }

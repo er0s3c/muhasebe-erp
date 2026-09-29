@@ -69,6 +69,14 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="core.treasury" />,
+                children: [
+                  { path: 'treasury/accounts', ...page(() => import('../features/treasury/AccountsPage'), 'AccountsPage') },
+                  { path: 'treasury/accounts/:id', ...page(() => import('../features/treasury/AccountDetailPage'), 'AccountDetailPage') },
+                  { path: 'treasury/transactions', ...page(() => import('../features/treasury/TransactionsPage'), 'TransactionsPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="core.inventory" />,
                 children: [
                   { path: 'inventory/items', ...page(() => import('../features/inventory/ItemsPage'), 'ItemsPage') },

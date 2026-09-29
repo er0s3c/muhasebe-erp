@@ -424,11 +424,12 @@ describe('fatura', async () => {
   it('hesap eşlemesi: varsayılanlar, doğrulama, değişiklik faturaya yansır, eksik eşleme açık hata verir', async () => {
     const { company, c, ids, main } = await setup('Esleme');
     const list = (await c.get('/api/account-mappings')).json().mappings as any[];
-    expect(list).toHaveLength(13);
+    expect(list).toHaveLength(15);
     expect(list.every((m) => m.accountId)).toBe(true);
     expect(Object.fromEntries(list.map((m) => [m.key, m.accountCode]))).toMatchObject({
       receivable: '120', payable: '320', sales_revenue: '600', sales_return: '610', cogs: '621', stock: '150',
       vat_output: '391', vat_input: '191', default_expense: '632', stock_gain: '649', stock_loss: '659', consumption: '710', opening_offset: '500',
+      fx_gain: '646', fx_loss: '656',
     });
 
     const put = (mappings: Record<string, string>) => c.put('/api/account-mappings', { mappings });

@@ -24,6 +24,7 @@ export const MODULES: readonly ModuleDef[] = [
   { key: 'core.parties', labelKey: 'modules.parties', sectors: 'all', status: 'available' },
   { key: 'core.inventory', labelKey: 'modules.inventory', sectors: 'all', status: 'available' },
   { key: 'core.invoices', labelKey: 'modules.invoices', sectors: 'all', status: 'available' },
+  { key: 'core.treasury', labelKey: 'modules.treasury', sectors: 'all', status: 'available' },
   { key: 'core.settings', labelKey: 'modules.settings', sectors: 'all', status: 'available' },
   {
     key: 'construction.projects',
@@ -39,7 +40,7 @@ export const MODULES: readonly ModuleDef[] = [
   },
 ];
 
-export type NavGroupKey = 'overview' | 'parties' | 'invoices' | 'stock' | 'accounting' | 'settings';
+export type NavGroupKey = 'overview' | 'parties' | 'invoices' | 'treasury' | 'stock' | 'accounting' | 'settings';
 
 export interface NavItemDef {
   key: string;
@@ -56,6 +57,7 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
   { key: 'overview', labelKey: 'nav.groups.overview' },
   { key: 'parties', labelKey: 'nav.groups.parties' },
   { key: 'invoices', labelKey: 'nav.groups.invoices' },
+  { key: 'treasury', labelKey: 'nav.groups.treasury' },
   { key: 'stock', labelKey: 'nav.groups.stock' },
   { key: 'accounting', labelKey: 'nav.groups.accounting' },
   { key: 'settings', labelKey: 'nav.groups.settings' },
@@ -132,6 +134,24 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'invoices',
     module: 'core.invoices',
     permission: 'reports.read',
+  },
+  {
+    key: 'treasury-accounts',
+    labelKey: 'nav.treasuryAccounts',
+    path: '/treasury/accounts',
+    icon: 'wallet',
+    group: 'treasury',
+    module: 'core.treasury',
+    permission: 'treasury.read',
+  },
+  {
+    key: 'treasury-transactions',
+    labelKey: 'nav.treasuryTransactions',
+    path: '/treasury/transactions',
+    icon: 'landmark',
+    group: 'treasury',
+    module: 'core.treasury',
+    permission: 'treasury.read',
   },
   {
     key: 'items',

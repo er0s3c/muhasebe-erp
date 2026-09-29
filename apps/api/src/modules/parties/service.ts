@@ -12,7 +12,7 @@ import { journalLines, parties } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { TR, trContains } from '../../db/search';
 import { nextNumber } from '../settings/numbering';
-import { buildAgingReport, computeOpenItems, type PartyLine } from './aging';
+import { buildAgingReport, computeOpenItems, type PartyAllocation, type PartyLine } from './aging';
 
 const PARTY_SEQUENCE = 'PARTY';
 
@@ -246,7 +246,11 @@ interface LineRow extends Record<string, unknown> {
   credit_base: string;
 }
 
-/** Cari kontrol hesabı satırları (kaydedilmiş, `asOf` tarihine kadar). */
+/**
+ * Cari kontrol hesabı satırları (kaydedilmiş, `asOf` tarihine kadar) ve tahsilat/ödeme eşleştirmeleri.
+ * Ters çevrilmiş fiş çiftleri (orijinal + ters kayıt, ters kayıt `asOf`'a kadar yapılmışsa) açık kalem
+ * hesabında nötr sayılır: iptal edilen fatura/tahsilat hayalet kalem bırakmaz. Ekstre etkilenmez.
+ */
 async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, partyId?: string) {
   const rows = await tx.execute<LineRow>(sql`
     select l.id as line_id, l.party_id, p.code as party_code, p.name as party_name,
@@ -255,16 +259,18 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
            l.currency_code, l.debit, l.credit, l.debit_base, l.credit_base
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+    left join journal_entries rv on rv.id = e.reversed_by_id and rv.status = 'posted' and rv.entry_date <= ${asOf}::date
     join accounts a on a.id = l.account_id
     join parties p on p.id = l.party_id
     where a.party_control = ${type} and e.entry_date <= ${asOf}::date
+      and e.reversal_of_id is null and rv.id is null
       ${partyId ? sql`and l.party_id = ${partyId}` : sql``}`);
 
-  const byParty = new Map<string, { code: string; name: string; lines: PartyLine[] }>();
+  const byParty = new Map<string, { code: string; name: string; lines: PartyLine[]; allocations: PartyAllocation[] }>();
   for (const r of rows.rows) {
     let entry = byParty.get(r.party_id);
     if (!entry) {
-      entry = { code: r.party_code, name: r.party_name, lines: [] };
+      entry = { code: r.party_code, name: r.party_name, lines: [], allocations: [] };
       byParty.set(r.party_id, entry);
     }
     entry.lines.push({
@@ -283,7 +289,32 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
       creditBase: r.credit_base,
     });
   }
+
+  // Kasa/banka hareketlerinin kalem eşleştirmeleri: hareket `asOf`'ta geçerliyse (iptali sonradan) sayılır
+  const allocs = await tx.execute<{ party_id: string; charge_line_id: string; settle_line_id: string; amount: string; amount_base: string }>(sql`
+    select a.party_id, a.charge_line_id, a.settle_line_id, a.amount, a.amount_base
+    from party_allocations a
+    join treasury_transactions t on t.id = a.transaction_id
+    left join journal_entries cj on cj.id = t.cancel_journal_entry_id
+    where a.control = ${type} and t.txn_date <= ${asOf}::date
+      and (t.status = 'posted' or cj.entry_date > ${asOf}::date)
+      ${partyId ? sql`and a.party_id = ${partyId}` : sql``}`);
+  for (const a of allocs.rows) {
+    byParty.get(a.party_id)?.allocations.push({
+      chargeLineId: a.charge_line_id,
+      settleLineId: a.settle_line_id,
+      amount: a.amount,
+      amountBase: a.amount_base,
+    });
+  }
   return byParty;
+}
+
+/** Bir carinin açık kalemleri (kasa/banka tahsilat ve ödemesinde eşleştirme için de kullanılır). */
+export async function openItemsFor(tx: Tx, partyId: string, type: PartyControlType, asOf: string) {
+  const byParty = await loadPartyLines(tx, type, asOf, partyId);
+  const p = byParty.get(partyId);
+  return computeOpenItems(p?.lines ?? [], type, asOf, p?.allocations ?? []);
 }
 
 export async function partyAging(tx: Tx, q: { type: PartyControlType; asOf: string }) {
@@ -296,7 +327,8 @@ export async function partyOpenItems(tx: Tx, id: string, q: { asOf: string; type
   const result: Partial<Record<PartyControlType, ReturnType<typeof computeOpenItems>>> = {};
   for (const type of types) {
     const byParty = await loadPartyLines(tx, type, q.asOf, id);
-    result[type] = computeOpenItems(byParty.get(id)?.lines ?? [], type, q.asOf);
+    const p = byParty.get(id);
+    result[type] = computeOpenItems(p?.lines ?? [], type, q.asOf, p?.allocations ?? []);
   }
   return { asOf: q.asOf, ...result };
 }

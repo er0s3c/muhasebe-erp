@@ -90,7 +90,8 @@
     "retailPos": "Hızlı satış (POS)",
     "parties": "Cari hesaplar",
     "inventory": "Stok",
-    "invoices": "Fatura"
+    "invoices": "Fatura",
+    "treasury": "Kasa ve banka"
   },
   "nav": {
     "groups": {
@@ -99,7 +100,8 @@
       "settings": "Ayarlar",
       "parties": "Cari",
       "stock": "Stok",
-      "invoices": "Fatura ve irsaliye"
+      "invoices": "Fatura ve irsaliye",
+      "treasury": "Kasa ve banka"
     },
     "dashboard": "Genel bakış",
     "journal": "Yevmiye kayıtları",
@@ -124,7 +126,9 @@
     "salesDeliveryNotes": "Satış irsaliyeleri",
     "purchaseDeliveryNotes": "Alış irsaliyeleri",
     "vatSummary": "KDV özeti",
-    "accountMapping": "Hesap eşlemesi"
+    "accountMapping": "Hesap eşlemesi",
+    "treasuryAccounts": "Hesaplar",
+    "treasuryTransactions": "Hareketler"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -150,7 +154,9 @@
     "newSalesInvoice": "Yeni satış faturası",
     "newPurchaseInvoice": "Yeni alış faturası",
     "newSalesDelivery": "Yeni satış irsaliyesi",
-    "newPurchaseDelivery": "Yeni alış irsaliyesi"
+    "newPurchaseDelivery": "Yeni alış irsaliyesi",
+    "newReceipt": "Tahsilat al",
+    "newPayment": "Ödeme yap"
   },
   "auth": {
     "loginTitle": "Hesabınıza giriş yapın",
@@ -231,7 +237,8 @@
     "monthSales": "Bu ay satışlar (net)",
     "monthPurchases": "Bu ay alışlar (net)",
     "draftInvoices": "Taslak fatura",
-    "unbilledDeliveries": "Faturalanmamış irsaliye"
+    "unbilledDeliveries": "Faturalanmamış irsaliye",
+    "treasuryBalance": "Kasa ve banka (karşılık)"
   },
   "settings": {
     "company": {
@@ -501,7 +508,8 @@
     "DELIVERY_NOT_DRAFT": "Yalnızca taslak irsaliye düzenlenebilir veya silinebilir.",
     "DELIVERY_ALREADY_CANCELLED": "İrsaliye zaten iptal edilmiş.",
     "INVOICE_NOT_DRAFT": "Yalnızca taslak fatura düzenlenebilir veya silinebilir.",
-    "INVOICE_ALREADY_CANCELLED": "Fatura zaten iptal edilmiş."
+    "INVOICE_ALREADY_CANCELLED": "Fatura zaten iptal edilmiş.",
+    "TREASURY_RULE_VIOLATION": "Kasa/banka kuralı ihlali"
   },
   "parties": {
     "title": "Cari hesaplar",
@@ -580,7 +588,9 @@
       "delete": "Cariyi sil",
       "deleteConfirm": "Bu cari kartı silinsin mi? Hareketi olan cariler silinemez; pasifleştirebilirsiniz.",
       "editCard": "Kartı düzenle",
-      "notProvided": "Girilmemiş"
+      "notProvided": "Girilmemiş",
+      "collect": "Tahsilat al",
+      "pay": "Ödeme yap"
     }
   },
   "partyAging": {
@@ -1157,6 +1167,190 @@
       "exceeded": "Faturalanan miktar irsaliyede kalan miktarı aşıyor."
     }
   },
+  "treasury": {
+    "kinds": {
+      "cash": "Kasa",
+      "bank": "Banka"
+    },
+    "types": {
+      "receipt": "Tahsilat",
+      "payment": "Ödeme",
+      "transfer": "Virman",
+      "exchange": "Döviz alım-satım",
+      "other_receipt": "Diğer tahsilat",
+      "other_payment": "Diğer ödeme"
+    },
+    "status": {
+      "posted": "Kaydedildi",
+      "cancelled": "İptal"
+    },
+    "accounts": {
+      "title": "Kasa ve banka hesapları",
+      "subtitle": "Nakit ve banka hesaplarınızın bakiyesi. Her hesap bir muhasebe hesabına bağlıdır; hareketler otomatik yevmiye üretir.",
+      "add": "Yeni hesap",
+      "empty": "Henüz kasa veya banka hesabı yok",
+      "emptyDesc": "İlk hesabınızı açın; tahsilat, ödeme ve virmanlar bu hesaplardan geçer. Dövizli hesaplarda bakiye kendi para biriminde tutulur.",
+      "totalEquivalent": "Toplam karşılık",
+      "equivalentNote": "Güncel kurla defter para birimi",
+      "approx": "Bazı hesaplarda güncel kur yok",
+      "approxDetail": "Bazı dövizli hesaplar için güncel kur girilmemiş; toplam onlar için tarihsel maliyetle hesaplandı. Ayarlar'dan bugünün kurunu girin.",
+      "accountCount": "Aktif hesap",
+      "byCurrency": "Para birimine göre",
+      "name": "Hesap",
+      "glCode": "Muhasebe hesabı",
+      "balance": "Bakiye",
+      "equivalent": "Karşılık ({{currency}})",
+      "noRate": "Kur yok",
+      "lastActivity": "Son hareket"
+    },
+    "form": {
+      "newTitle": "Yeni kasa/banka hesabı",
+      "newDesc": "Yeni alt hesap otomatik açılır ya da var olan bir hesaba bağlanır.",
+      "editTitle": "Hesabı düzenle",
+      "kind": "Tür",
+      "name": "Hesap adı",
+      "nameHintCash": "Örn. Ana kasa",
+      "nameHintBank": "Örn. KTB Ticari TL",
+      "currency": "Para birimi",
+      "currencyLocked": "Para birimi hesap açıldıktan sonra değişmez.",
+      "bankName": "Banka",
+      "branch": "Şube",
+      "accountNo": "Hesap no",
+      "iban": "IBAN",
+      "link": "Yeni alt hesap açmak yerine mevcut {{code}} hesabına bağla",
+      "linkHint": "Bu hesap grubuna daha önce yevmiye kaydı girdiyseniz alt hesap açılamaz; mevcut hesabı seçin.",
+      "linkPick": "Muhasebe hesabı seçin…",
+      "linkAria": "Bağlanacak muhasebe hesabı",
+      "linkNone": "{{code}} grubunda {{currency}} cinsinden bağlanabilecek boş hesap yok.",
+      "saved": "Hesap kaydedildi"
+    },
+    "detail": {
+      "notFound": "Hesap bulunamadı",
+      "back": "Kasa ve banka",
+      "deactivate": "Pasifleştir",
+      "activate": "Etkinleştir",
+      "balance": "Bakiye",
+      "cost": "Defter değeri (maliyet)",
+      "costHint": "Dövizin alındığı kurlarla oluşan ortalama maliyet",
+      "equivalent": "Güncel karşılık",
+      "equivalentHint": "Bugünün kuruyla",
+      "lastActivity": "Son hareket",
+      "otherPayment": "Diğer ödeme (masraf)",
+      "statement": "Hesap ekstresi",
+      "in": "Giriş",
+      "out": "Çıkış",
+      "statementEmpty": "Bu aralıkta hareket yok"
+    },
+    "txn": {
+      "title": "Kasa ve banka hareketleri",
+      "subtitle": "Tahsilat, ödeme, virman ve döviz işlemleri. Hareketler değiştirilemez; hata durumunda iptal edilir (ters kayıt).",
+      "new": "Yeni işlem",
+      "type": "Tür",
+      "allTypes": "Tüm türler",
+      "allAccounts": "Tüm hesaplar",
+      "allStatuses": "Tüm durumlar",
+      "account": "Hesap",
+      "number": "Hareket no",
+      "detail": "Ayrıntı",
+      "searchPlaceholder": "Numara, cari veya açıklama ara",
+      "empty": "Henüz hareket yok",
+      "emptyDesc": "Tahsilat, ödeme, virman veya döviz işlemi ekleyin."
+    },
+    "sheet": {
+      "title": "Yeni kasa/banka işlemi",
+      "save": "Kaydet",
+      "saved": "{{no}} kaydedildi",
+      "noAccounts": "Önce bir kasa veya banka hesabı açın",
+      "noAccountsLink": "Hesap aç",
+      "type": "İşlem türü",
+      "hints": {
+        "receipt": "Müşteriden alınan parayı kasaya ya da bankaya girer ve seçtiğiniz faturaları kapatır. Faturadan farklı kurla tahsil edilirse kur farkı otomatik yazılır.",
+        "payment": "Tedarikçiye ödenen parayı kasadan ya da bankadan çıkarır ve seçtiğiniz faturaları kapatır. Kur farkı otomatik yazılır.",
+        "transfer": "Aynı para birimindeki iki hesap arasında (örn. kasadan bankaya) para aktarır; maliyet olduğu gibi taşınır.",
+        "exchange": "Farklı para birimindeki iki hesap arasında döviz alır ya da satar. Satışta, hesabın ortalama maliyetine göre kur farkı yazılır.",
+        "other_receipt": "Faiz geliri gibi cari dışı girişler; karşı hesabı siz seçersiniz.",
+        "other_payment": "Banka masrafı, komisyon gibi cari dışı çıkışlar; karşı hesabı siz seçersiniz."
+      },
+      "date": "Tarih",
+      "fromAccount": "Kaynak hesap (çıkış)",
+      "toAccount": "Hedef hesap (giriş)",
+      "outAccount": "Ödeme hesabı (çıkış)",
+      "inAccount": "Tahsilat hesabı (giriş)",
+      "available": "Hesap bakiyesi: {{amount}} {{currency}}",
+      "amount": {
+        "receipt": "Tahsil edilen tutar ({{currency}})",
+        "payment": "Ödenen tutar ({{currency}})",
+        "transfer": "Tutar ({{currency}})",
+        "exchange": "Çıkan tutar ({{currency}})",
+        "other_receipt": "Tutar ({{currency}})",
+        "other_payment": "Tutar ({{currency}})"
+      },
+      "counterAmount": "Giren tutar ({{currency}})",
+      "rate": "Kur (1 {{currency}} = ? {{base}})",
+      "rateTo": "Hedef para birimi kuru (1 {{currency}} = ? {{base}})",
+      "rateMissingHint": "Bu tarih için kayıtlı kur yok; kuru girin.",
+      "rateMissing": "{{currency}} için bu tarihte kayıtlı kur yok. Kuru yukarıya girin ya da Ayarlar'dan kur ekleyin.",
+      "impliedRate": "Fiili kur: 1 {{currency}} = {{rate}} {{base}}",
+      "cashLow": "Kasada şu an {{balance}} {{currency}} var ve bu çıkış bakiyeyi aşıyor. Kasa eksiye düşemez; kaydederken işlem tarihindeki bakiye denetlenir.",
+      "items": "Kapatılacak kalemler",
+      "customer": "Müşteri",
+      "supplier": "Tedarikçi",
+      "pickParty": "Cari seçin…",
+      "openItems": "Açık kalemler",
+      "selectAll": "Tümünü seç",
+      "autoAllocate": "Tutarı en eskiden dağıt",
+      "clearSelection": "Seçimi temizle",
+      "noOpenItems": {
+        "receivable": "Bu müşterinin açık alacağı yok. Tutarın tamamı avans olarak kaydedilir.",
+        "payable": "Bu tedarikçiye açık borç yok. Tutarın tamamı avans olarak kaydedilir."
+      },
+      "closeAmount": "Kapatılan",
+      "settleAmount": "Karşılık ({{currency}})",
+      "selectItem": "{{name}} kalemini seç",
+      "closeAmountOf": "Kapatılan tutar: {{name}}",
+      "settleAmountOf": "Karşılık tutar: {{name}}",
+      "existingAdvance": "Carinin kapatılmamış avansı: {{amount}} {{currency}}",
+      "allocated": "Kalemlere ayrılan",
+      "advance": "Avans (kalan)",
+      "exceeds": "Tutarı aşıyor",
+      "fxDiff": "Kur farkı",
+      "noFxDiff": "Kur farkı yok",
+      "advanceNote": "Kalemlere ayrılmayan tutar cari hesapta avans olarak kalır; sonraki faturalara en eski kalemden başlayarak sayılır.",
+      "fxGain": "Kambiyo kârı",
+      "fxLoss": "Kambiyo zararı",
+      "exchangeNote": "Çıkan tutarın maliyeti hesabın ortalama defter değeriyle, alınan tutarın değeri girdiğiniz tutarla hesaplanır. Önizleme güncel bakiyeye dayanır; kayıtta işlem tarihi kullanılır.",
+      "glAccount": "Karşı hesap",
+      "glAccountHint": "Cari, dövizli ve kasa/banka hesapları listelenmez.",
+      "pickGl": "Hesap seçin…",
+      "description": "Açıklama"
+    },
+    "view": {
+      "title": "Hareket",
+      "cancel": "İptal et",
+      "cancelledTitle": "{{date}} tarihinde iptal edildi",
+      "fromAccount": "Kaynak hesap",
+      "account": "Hesap",
+      "toAccount": "Hedef hesap",
+      "amount": "Tutar",
+      "counterAmount": "Hedef tutar",
+      "party": "Cari",
+      "glAccount": "Karşı hesap",
+      "rate": "Kur",
+      "fxGain": "Kambiyo kârı",
+      "fxLoss": "Kambiyo zararı",
+      "journal": "Yevmiye",
+      "allocations": "Kapatılan kalemler",
+      "closed": "Kapatılan",
+      "settled": "Karşılık ({{currency}})",
+      "carried": "Defter değeri ({{currency}})",
+      "advanceOnly": "Bu hareket kalem kapatmadı; tutarın tamamı avans olarak cari hesaba yazıldı.",
+      "cancelTitle": "Hareketi iptal et",
+      "cancelDesc": "İptal, yevmiyenin ters kaydını yazar; kapatılan kalemler yeniden açılır. Hareket numarası silinmez.",
+      "cancelledMsg": "Hareket iptal edildi",
+      "cancelDate": "İptal tarihi",
+      "cancelReason": "İptal nedeni"
+    }
+  },
   "mappings": {
     "title": "Hesap eşlemesi",
     "subtitle": "Fatura ve stok belgeleri otomatik yevmiye yazarken hangi hesapları kullanacağını buradan belirlersiniz.",
@@ -1179,7 +1373,9 @@
       "stock_gain": "Stok fazlası geliri",
       "stock_loss": "Stok fire ve noksanlık zararı",
       "consumption": "Stok sarfı (malzeme gideri)",
-      "opening_offset": "Stok devri karşı hesabı"
+      "opening_offset": "Stok devri karşı hesabı",
+      "fx_gain": "Kambiyo (kur farkı) kârı",
+      "fx_loss": "Kambiyo (kur farkı) zararı"
     },
     "hints": {
       "receivable": "Satış faturası ve satış iadesinde müşteri cari satırı",
@@ -1194,7 +1390,9 @@
       "stock_gain": "Elle giriş ve sayım fazlasının karşı hesabı",
       "stock_loss": "Fire ve sayım noksanlığının karşı hesabı",
       "consumption": "Elle stok çıkışının (sarf) karşı hesabı",
-      "opening_offset": "Stok devrinin karşı hesabı (örn. sermaye)"
+      "opening_offset": "Stok devrinin karşı hesabı (örn. sermaye)",
+      "fx_gain": "Tahsilat, ödeme ve döviz satışında oluşan gerçekleşmiş kur kârı",
+      "fx_loss": "Tahsilat, ödeme ve döviz satışında oluşan gerçekleşmiş kur zararı"
     }
   }
 }

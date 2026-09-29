@@ -227,6 +227,68 @@ async function main() {
   await settle(page, 400);
   await shot(page, '58-stok-mutabakat-bekleyen');
 
+  // Kasa ve banka: hesaplar, ekstre, hareketler, tahsilat/ödeme/döviz formları
+  await go('/treasury/accounts', '60-kasa-banka-hesaplari', 'Kasa ve banka hesapları');
+  await page.getByRole('row', { name: /KTB GBP Hesabı/ }).click();
+  await page.getByRole('heading', { name: 'KTB GBP Hesabı', level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '61-hesap-ekstresi-gbp');
+  await go('/treasury/transactions', '62-kasa-banka-hareketleri', 'Kasa ve banka hareketleri');
+  await page.getByRole('row', { name: /Seramik faturası \(GBP\) tahsilatı/ }).click();
+  await page.getByRole('dialog').getByText('TAH-').first().waitFor();
+  await settle(page, 600);
+  await shot(page, '63-hareket-detay-kur-farki');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await page.getByRole('row', { name: /Peşinat/ }).click();
+  await page.getByRole('dialog').getByText('iptal edildi').waitFor();
+  await settle(page, 600);
+  await shot(page, '64-hareket-iptal-edilmis');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
+  // Tahsilat: carinin açık kalemleri seçilir, tutar en eskiden dağıtılır
+  await go('/parties', '65a-cariler', 'Cari hesaplar');
+  await page.getByRole('cell', { name: /Ali Yılmaz/ }).click();
+  await page.getByRole('heading', { name: 'Ali Yılmaz', level: 1 }).waitFor();
+  await page.getByRole('button', { name: 'Tahsilat al' }).click();
+  const receipt = page.getByRole('dialog');
+  await receipt.getByText('Açık kalemler').waitFor();
+  await receipt.getByLabel('Tahsil edilen tutar (TRY)').fill('700.000,00');
+  await receipt.getByRole('button', { name: 'Tutarı en eskiden dağıt' }).click();
+  await settle(page, 600);
+  await shot(page, '65-tahsilat-formu');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
+  // Ödeme: EUR faturası TL hesaptan ödenir; kalem kurundan farklı kurda kambiyo farkı önizlenir
+  await go('/parties', '66a-cariler', 'Cari hesaplar');
+  await page.getByRole('cell', { name: /Lefkoşa Otomotiv/ }).click();
+  await page.getByRole('heading', { name: /Lefkoşa Otomotiv/, level: 1 }).waitFor();
+  await page.getByRole('button', { name: 'Ödeme yap' }).click();
+  const payment = page.getByRole('dialog');
+  await payment.getByText('Açık kalemler').waitFor();
+  await payment.getByLabel('Ödeme hesabı (çıkış)').selectOption({ label: 'KTB TL Vadesiz · TRY' });
+  await payment.getByRole('button', { name: 'Tümünü seç' }).click();
+  await settle(page, 700);
+  await shot(page, '66-odeme-formu-kur-farki');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
+  // Döviz alım-satım
+  await go('/treasury/transactions', '67a-hareketler', 'Kasa ve banka hareketleri');
+  await page.getByRole('button', { name: 'Yeni işlem' }).click();
+  const exchange = page.getByRole('dialog');
+  await exchange.getByRole('tab', { name: 'Döviz alım-satım' }).click();
+  await exchange.getByLabel('Kaynak hesap (çıkış)').selectOption({ label: 'KTB GBP Hesabı · GBP' });
+  await exchange.getByLabel('Hedef hesap (giriş)').selectOption({ label: 'KTB TL Vadesiz · TRY' });
+  await exchange.getByLabel('Çıkan tutar (GBP)').fill('10.000,00');
+  await exchange.getByLabel('Giren tutar (TRY)').fill('648.000,00');
+  await settle(page, 700);
+  await shot(page, '67-doviz-satis-formu');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
   // Ayarlar
   await go('/settings/currencies', '11-kurlar', 'Para birimi ve kurlar');
   // Merkez Bankası XML dosyasından içe aktarma (resmî örnek dosya)
@@ -276,7 +338,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);
@@ -287,6 +349,29 @@ async function main() {
     if (over > 1) overflowing.push(`${path} (+${over}px)`);
   }
   console.log(overflowing.length ? `  ✗ Yatay taşma: ${overflowing.join(', ')}` : '  ✓ mobilde yatay taşma yok');
+
+  // Mobilde tahsilat formu (açık kalem ızgarası) da yatay taşmamalı
+  await m.goto(`${BASE}/parties`);
+  await m.getByRole('heading', { level: 1 }).first().waitFor();
+  await m.getByText('Ali Yılmaz').first().click();
+  await m.getByRole('heading', { name: 'Ali Yılmaz', level: 1 }).waitFor();
+  await m.getByRole('button', { name: 'Tahsilat al' }).click();
+  const sheet = m.getByRole('dialog');
+  await sheet.getByText('Açık kalemler').waitFor();
+  await sheet.getByRole('button', { name: 'Tümünü seç' }).click();
+  await settle(m, 600);
+  await m.screenshot({ path: `${OUT}/68-mobil-tahsilat-formu.png` });
+  console.log('  ✓ 68-mobil-tahsilat-formu');
+  const sheetOver = await sheet.evaluate((el) => {
+    const body = el.querySelector('div.overflow-y-auto');
+    return body ? body.scrollWidth - body.clientWidth : 0;
+  });
+  if (sheetOver > 1) {
+    overflowing.push(`tahsilat formu (+${sheetOver}px)`);
+    console.log(`  ✗ Tahsilat formu mobilde taşıyor (+${sheetOver}px)`);
+  } else {
+    console.log('  ✓ mobilde tahsilat formu taşmıyor');
+  }
 
   await browser.close();
   if (overflowing.length) process.exitCode = 1;

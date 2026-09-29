@@ -53,7 +53,9 @@ test('cari: kart aç → cariye bağlı yevmiye (zorunlu) → ekstre ve yaşland
   await party.click();
   await party.fill('Ömer');
   await page.getByRole('listbox').getByRole('option').first().click();
-  const due = new Date();
+  // Uygulama gününü Europe/Nicosia saatiyle sayar; UTC günü gece 21:00'den sonra bir gün geride kalır
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Nicosia' });
+  const due = new Date(`${today}T00:00:00Z`);
   due.setUTCDate(due.getUTCDate() - 40); // 40 gün önce vadesi dolmuş
   await page.getByLabel('Vade tarihi 1').fill(due.toISOString().slice(0, 10));
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();

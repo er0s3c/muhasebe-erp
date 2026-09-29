@@ -1,4 +1,4 @@
-import { ArrowLeft, Pencil, Power, Trash2 } from 'lucide-react';
+import { ArrowLeft, Banknote, Pencil, Power, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -17,7 +17,7 @@ import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, isZero, money } from '../../lib/format';
-import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { useCan, useCMutation, useCQuery, useNavigation } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { OpenItem, OpenItemsData, PartyDetail, PartyStatementData } from '../../lib/types';
 import { BalanceText } from './BalanceText';
@@ -30,7 +30,10 @@ export function PartyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const canManage = useCan()('parties.manage');
+  const can = useCan();
+  const canManage = can('parties.manage');
+  const { data: nav } = useNavigation();
+  const canCollect = can('treasury.post') && (nav?.modules.includes('core.treasury') ?? false);
   const company = useCompany();
   const { data, isPending, error } = useCQuery<PartyDetail>(['party', id], id ? `/api/parties/${id}` : null);
   const [tab, setTab] = useState<Tab>('statement');
@@ -76,12 +79,26 @@ export function PartyDetailPage() {
           </div>
           <p className="mt-1 font-mono text-sm text-muted">{party.code}</p>
         </div>
-        {canManage && (
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setEditing(true)}>
-              <Pencil className="size-4" aria-hidden />
-              {t('common.edit')}
-            </Button>
+        {(canManage || canCollect) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {canCollect && party.isActive && party.kind !== 'supplier' && (
+              <Button variant="primary" onClick={() => navigate(`/treasury/transactions?new=receipt&party=${party.id}`)}>
+                <Banknote className="size-4" aria-hidden />
+                {t('parties.detail.collect')}
+              </Button>
+            )}
+            {canCollect && party.isActive && party.kind !== 'customer' && (
+              <Button variant={party.kind === 'supplier' ? 'primary' : 'secondary'} onClick={() => navigate(`/treasury/transactions?new=payment&party=${party.id}`)}>
+                <Banknote className="size-4" aria-hidden />
+                {t('parties.detail.pay')}
+              </Button>
+            )}
+            {canManage && (
+              <Button onClick={() => setEditing(true)}>
+                <Pencil className="size-4" aria-hidden />
+                {t('common.edit')}
+              </Button>
+            )}
           </div>
         )}
       </div>

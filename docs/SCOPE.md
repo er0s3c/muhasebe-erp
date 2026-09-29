@@ -27,7 +27,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Mali dönemler, dönem kapatma/açma | ✅ |
 | Kebir, yevmiye defteri baskısı | 🔜 M8 |
 | Yıl sonu kapanış ve devir | 🔜 M8/M9 |
-| Kur farkı kâr/zarar kayıtları | 🔜 M7 |
+| Gerçekleşen kur farkı kâr/zarar kayıtları (tahsilat, ödeme, döviz satışı) | ✅ |
+| Dönem sonu kur değerlemesi (gerçekleşmemiş kur farkı) | 🔜 M7b ⚠️ |
 
 ## Cari (müşteri ve tedarikçi)
 
@@ -36,7 +37,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Cari kart (kimlik, vergi, iletişim, para birimi, kredi limiti, vade) — müşteri/tedarikçi/her ikisi | ✅ |
 | Cari ekstre (yürüyen bakiye, para birimi bazında bakiye), vadeye göre yaşlandırma, açık kalemler (FIFO) | ✅ |
 | Cari kontrol hesabı kuralı: 120/320 satırlarında cari zorunlu, diğer hesaplarda yasak (uygulama + veritabanı) | ✅ |
-| Tahsilat/ödeme kaydı yevmiye ile girilebilir; fatura ile **elle eşleştirme**, kur farkı | 🔜 M7 |
+| Tahsilat/ödeme fatura kalemiyle **elle eşleştirilerek** girilir (kısmi, çoklu kalem, farklı para birimi, avans); kur farkı otomatik | ✅ |
+| Sonradan avans mahsubu (avansı sonraki faturaya elle bağlama) | 🔜 M7b |
 | Fazla ödeme/avans yaşlandırmada ayrı gösterilir | ✅ |
 | Borç/alacak dekontu (mahsup) yevmiye ile; devir işlemleri | 🔜 M8/M9 |
 | Cari özel fiyat/iskonto | ⏳ |
@@ -79,9 +81,10 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 
 | İşlev | Durum |
 |---|---|
-| Kasa ve banka hesapları, çoklu para birimi | 🔜 M7 |
-| Tahsilat/ödeme, virman, döviz alım-satım | 🔜 M7 |
-| Banka ekstresi içe aktarma ve eşleştirme | 🔜 M7/M8 |
+| Kasa ve banka hesapları, çoklu para birimi, hesap ekstresi (hesap + defter para birimi bakiyesi) | ✅ |
+| Tahsilat/ödeme (fatura eşleştirmeli), virman, döviz alım-satım (ortalama maliyet), diğer tahsilat/ödeme (masraf, faiz), iptal (ters kayıt) | ✅ |
+| Kasa eksi bakiyeye düşmez (banka düşebilir) | ✅ ⚠️ kural doğrulanmadı |
+| Banka ekstresi içe aktarma ve eşleştirme | 🔜 M8 |
 | Çek/senet portföyü ve takas | ⏳ |
 | Banka teminat mektupları | ⏳ Faz B |
 
