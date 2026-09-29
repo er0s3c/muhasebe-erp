@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
@@ -156,6 +157,7 @@ export function AccountDetailPage() {
         <h2 className="mr-auto text-[15px]">{t('treasury.detail.statement')}</h2>
         <Field label={t('common.from')}>{(fid) => <Input id={fid} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />}</Field>
         <Field label={t('common.to')}>{(fid) => <Input id={fid} type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />}</Field>
+        <ExportMenu exportKey="treasury-statement" params={{ accountId: a.id, from, to }} print={false} disabled={!st} />
       </div>
 
       {statement.error ? (

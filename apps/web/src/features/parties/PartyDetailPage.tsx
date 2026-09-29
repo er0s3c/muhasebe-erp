@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Stat } from '../../components/ui/Stat';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
@@ -247,6 +248,9 @@ function StatementTab({ partyId }: { partyId: string }) {
       <div className="flex flex-wrap items-end gap-4">
         <Field label={t('common.from')}>{(id) => <Input id={id} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />}</Field>
         <Field label={t('common.to')}>{(id) => <Input id={id} type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />}</Field>
+        <div className="ml-auto">
+          <ExportMenu exportKey="party-statement" params={{ partyId, from, to }} print={false} disabled={!data} />
+        </div>
       </div>
       {error ? (
         <Callout tone="danger">{errorMessage(error)}</Callout>
@@ -344,6 +348,9 @@ function OpenItemsTab({ partyId }: { partyId: string }) {
       <div className="flex flex-wrap items-end gap-4">
         <Field label={t('parties.detail.asOf')}>{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-44" />}</Field>
         <p className="pb-2 text-sm text-muted">{t('parties.detail.fifoNote')}</p>
+        <div className="ml-auto">
+          <ExportMenu exportKey="party-open-items" params={{ partyId, asOf }} print={false} disabled={!data} />
+        </div>
       </div>
 
       {error ? (

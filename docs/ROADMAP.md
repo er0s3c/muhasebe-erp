@@ -19,8 +19,10 @@
 | # | Kilometre taşı | İçerik |
 |---|---|---|
 | M7b | Kur değerlemesi ve avans mahsubu | Dönem sonu dövizli hesap/cari değerlemesi (gerçekleşmemiş kur farkı) ve sonradan avans mahsubu: yalnızca-defter-tutarı düzeltme satırı gerektirir; yasal kural doğrulanmadan yazılmaz |
-| M8 | Raporlar ve aktarım | Rapor seti, xlsx/csv/PDF, Excel içe aktarma (cari, stok, açılış bakiyesi), banka ekstresi içe aktarma ve eşleştirme, yönetim ekranı: modül istisnaları |
-| M9 | Sağlamlaştırma | Demo şirket, yedekleme ve geri yükleme notları, üretim derlemesi ve dağıtım hattı, yük ve güvenlik gözden geçirmesi |
+| M8a ✅ | Raporlar ve dışa aktarma | Tüm raporlarda Excel/CSV/baskı (PDF olarak kaydet); yevmiye defteri, kebir, satış/alış raporu, stok kârlılığı, kambiyo raporu, tam veri dışa aktarma (`data.export`); kendi xlsx yazıcı/okuyucumuz (`fflate`) |
+| M8b | İçe aktarma | Excel/CSV sihirbazı (sütun eşleme, önizleme, atomik yazma): cari kartları, stok kartları, cari açılış bakiyeleri, stok açılışı, genel mizan açılışı |
+| M8c | Banka ekstresi | Ekstre içe aktarma (genel sütun eşleme), defter satırlarıyla eşleştirme (kesin/olası öneri), eşleşmeyen satırdan hareket oluşturma, mutabakat farkı; modül istisnaları ekranı M9'a taşındı |
+| M9 | Sağlamlaştırma | Modül istisnaları yönetim ekranı, demo şirket, yedekleme ve geri yükleme notları, üretim derlemesi ve dağıtım hattı, yük ve güvenlik gözden geçirmesi |
 
 ## MVP sonrası
 

@@ -4,7 +4,9 @@ import {
   accountLedgerQuerySchema,
   createAccountSchema,
   createJournalSchema,
+  generalLedgerQuerySchema,
   isoDate,
+  journalBookQuerySchema,
   reverseJournalSchema,
   trialBalanceQuerySchema,
   updateAccountMappingsSchema,
@@ -14,6 +16,7 @@ import {
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { unprocessable } from '../../http/errors';
 import { createAccount, listAccounts, updateAccount } from './accounts';
+import { generalLedger, journalBook } from './books';
 import {
   backfillReporting,
   createJournalEntry,
@@ -182,5 +185,15 @@ export const ledgerRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, ledger('reports.read'), async ({ tx, req }) => {
       return accountLedger(tx, accountLedgerQuerySchema.parse(req.query));
     }),
+  );
+
+  app.get(
+    '/api/reports/journal-book',
+    tenantRoute(app, ledger('reports.read'), async ({ tx, req }) => journalBook(tx, journalBookQuerySchema.parse(req.query))),
+  );
+
+  app.get(
+    '/api/reports/general-ledger',
+    tenantRoute(app, ledger('reports.read'), async ({ tx, req }) => generalLedger(tx, generalLedgerQuerySchema.parse(req.query))),
   );
 };

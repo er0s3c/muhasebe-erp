@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { dec, todayIso } from '@erp/shared';
 import { Card, PageHeader } from '../../components/ui/Card';
+import { ExportMenu } from '../../components/ui/ExportMenu';
+import { PrintHeader } from '../../components/ui/PrintHeader';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
@@ -25,9 +27,10 @@ export function VatSummaryPage() {
 
   return (
     <>
-      <PageHeader title={t('invoices.vat.title')} description={t('invoices.vat.subtitle')} />
+      <PageHeader title={t('invoices.vat.title')} description={t('invoices.vat.subtitle')} actions={<ExportMenu exportKey="vat-summary" params={{ from, to }} disabled={!data || data.rows.length === 0} />} />
+      <PrintHeader subtitle={`${from.split('-').reverse().join('.')} – ${to.split('-').reverse().join('.')}`} />
 
-      <div className="mb-5 flex flex-wrap items-end gap-4">
+      <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <Field label={t('common.from')}>{(id) => <Input id={id} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />}</Field>
         <Field label={t('common.to')}>{(id) => <Input id={id} type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />}</Field>
       </div>

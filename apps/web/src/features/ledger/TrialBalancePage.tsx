@@ -1,8 +1,10 @@
-import { CheckCircle2, Download, RefreshCw, Scale, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, RefreshCw, Scale, TriangleAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
+import { ExportMenu } from '../../components/ui/ExportMenu';
+import { PrintHeader } from '../../components/ui/PrintHeader';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
@@ -10,7 +12,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { formatTR, isZero, money, splitBalance } from '../../lib/format';
+import { isZero, money, splitBalance } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { TrialBalanceData } from '../../lib/types';
@@ -51,36 +53,16 @@ export function TrialBalancePage() {
   const rows = useMemo(() => (data?.rows ?? []).filter((r) => withGroups || r.isPostable), [data, withGroups]);
   const balanced = data ? isZero(data.totals.difference) : false;
 
-  const exportCsv = () => {
-    if (!data) return;
-    const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
-    const lines = [
-      ['Kod', 'Hesap', 'Açılış (B-A)', 'Dönem Borç', 'Dönem Alacak', 'Bakiye (B-A)'].map(esc).join(';'),
-      ...rows.map((r) => [r.code, r.name, formatTR(r.opening), formatTR(r.debit), formatTR(r.credit), formatTR(r.closing)].map(esc).join(';')),
-    ];
-    // Excel'in Türkçe karakterleri doğru okuması için BOM
-    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `mizan-${from}-${to}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
   return (
-    <>
+    <div className="print-wide">
       <PageHeader
         title={t('ledger.trialBalance.title')}
         description={t('ledger.trialBalance.subtitle')}
-        actions={
-          <Button onClick={exportCsv} disabled={!data || rows.length === 0}>
-            <Download className="size-4" aria-hidden />
-            {t('common.export')}
-          </Button>
-        }
+        actions={<ExportMenu exportKey="trial-balance" params={{ from, to, currency, view: withGroups ? 'groups' : 'accounts' }} disabled={!data || rows.length === 0} />}
       />
+      <PrintHeader subtitle={`${from.split('-').reverse().join('.')} – ${to.split('-').reverse().join('.')}`} />
 
-      <div className="mb-5 flex flex-wrap items-end gap-4">
+      <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <Field label={t('common.from')}>{(id) => <Input id={id} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />}</Field>
         <Field label={t('common.to')}>{(id) => <Input id={id} type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />}</Field>
         <Field label={t('ledger.trialBalance.basis')}>
@@ -192,6 +174,6 @@ export function TrialBalancePage() {
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }

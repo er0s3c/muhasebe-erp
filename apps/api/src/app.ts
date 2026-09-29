@@ -12,6 +12,7 @@ import { inventoryRoutes } from './modules/inventory/routes';
 import { deliveryRoutes } from './modules/deliveries/routes';
 import { invoiceRoutes } from './modules/invoices/routes';
 import { treasuryRoutes } from './modules/treasury/routes';
+import { exportRoutes } from './modules/exports/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
@@ -43,6 +44,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     origin: opts.config.CORS_ORIGIN.split(','),
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Id'],
+    // Dosya indirmede tarayıcı betiğinin dosya adını okuyabilmesi için
+    exposedHeaders: ['Content-Disposition'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
   await app.register(cookie);
@@ -68,6 +71,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(invoiceRoutes);
   await app.register(deliveryRoutes);
   await app.register(treasuryRoutes);
+  await app.register(exportRoutes);
 
   return app;
 }

@@ -101,7 +101,8 @@
       "parties": "Cari",
       "stock": "Stok",
       "invoices": "Fatura ve irsaliye",
-      "treasury": "Kasa ve banka"
+      "treasury": "Kasa ve banka",
+      "reports": "Raporlar"
     },
     "dashboard": "Genel bakış",
     "journal": "Yevmiye kayıtları",
@@ -128,7 +129,14 @@
     "vatSummary": "KDV özeti",
     "accountMapping": "Hesap eşlemesi",
     "treasuryAccounts": "Hesaplar",
-    "treasuryTransactions": "Hareketler"
+    "treasuryTransactions": "Hareketler",
+    "reportJournalBook": "Yevmiye defteri",
+    "reportGeneralLedger": "Kebir",
+    "reportSales": "Satış raporu",
+    "reportPurchases": "Alış raporu",
+    "reportItemProfit": "Stok kârlılığı",
+    "reportFx": "Kambiyo raporu",
+    "dataExport": "Veri dışa aktarma"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -1349,6 +1357,117 @@
       "cancelledMsg": "Hareket iptal edildi",
       "cancelDate": "İptal tarihi",
       "cancelReason": "İptal nedeni"
+    }
+  },
+  "reports": {
+    "export": {
+      "button": "Dışa aktar",
+      "xlsx": "Excel (.xlsx)",
+      "csv": "CSV (Excel'de açılır)",
+      "print": "Yazdır / PDF olarak kaydet"
+    },
+    "print": {
+      "printedAt": "Yazdırma tarihi: {{date}}",
+      "internalNote": "İç belge: yasal onaylı defter yerine geçmez"
+    },
+    "prev": "Önceki",
+    "next": "Sonraki",
+    "journalBook": {
+      "title": "Yevmiye defteri",
+      "subtitle": "Kaydedilmiş tüm fişlerin satırları, tarih ve fiş sırasıyla. Ters kayıtlar da defterde ayrı satırlar olarak yer alır.",
+      "account": "Hesap",
+      "empty": "Bu aralıkta kaydedilmiş fiş yok",
+      "total": "Toplam",
+      "range": "{{from}}–{{to}} / {{total}} satır",
+      "printHint": "Yazdırma yalnızca görünen sayfayı ({{page}} satır) kapsar; tüm defter için Excel veya CSV olarak alın."
+    },
+    "generalLedger": {
+      "title": "Kebir (büyük defter)",
+      "subtitle": "Dönemde hareketi olan her hesap için devir, satırlar ve kapanış bakiyesi (defter para birimi).",
+      "prefix": "Hesap kodu öneki",
+      "prefixHint": "Örn. 120 ya da 6",
+      "prefixNote": "hesap kodu {{prefix}}…",
+      "empty": "Bu aralıkta hareketi olan hesap yok",
+      "opening": "Devir (dönem başı)",
+      "closing": "Kapanış",
+      "accountTotal": "Hesap toplamı",
+      "range": "{{from}}–{{to}} / {{total}} hesap"
+    },
+    "sales": {
+      "title": "Satış raporu",
+      "subtitle": "Kaydedilmiş satış faturaları ve iadeleri; cari, stok kartı, ay ya da fatura bazında.",
+      "groups": {
+        "party": "Cari",
+        "item": "Stok kartı",
+        "month": "Ay",
+        "invoice": "Fatura"
+      },
+      "customer": "Müşteri",
+      "supplier": "Tedarikçi",
+      "item": "Stok kartı",
+      "month": "Ay",
+      "invoiceNo": "Fatura no",
+      "type": "Tür",
+      "docCount": "Belge adedi",
+      "qty": "Miktar",
+      "net": "Net",
+      "vat": "KDV",
+      "gross": "Brüt",
+      "total": "Toplam",
+      "empty": "Bu dönemde kaydedilmiş fatura yok",
+      "note": "İade faturaları düşülmüştür; iptal edilen ve taslak faturalar dahil değildir. Tutarlar defter para birimindedir."
+    },
+    "purchases": {
+      "title": "Alış raporu",
+      "subtitle": "Kaydedilmiş alış ve gider faturaları ile alış iadeleri; cari, stok kartı, ay ya da fatura bazında."
+    },
+    "itemProfit": {
+      "title": "Stok kârlılığı",
+      "subtitle": "Stok kartı bazında satış, maliyet ve kâr; satış faturaları eksi iadeler.",
+      "item": "Stok kartı",
+      "qty": "Miktar",
+      "sales": "Satış (net)",
+      "cost": "Maliyet",
+      "profit": "Kâr",
+      "margin": "Marj",
+      "noItem": "Kartsız / serbest satırlar",
+      "empty": "Bu dönemde satış faturası yok",
+      "note": "Maliyet, fatura kaydında yazılan satılan mal maliyetidir (ortalama maliyet ya da irsaliye maliyeti). Kartsız ve hizmet satırlarının maliyeti yoktur."
+    },
+    "fx": {
+      "title": "Kambiyo (kur farkı) raporu",
+      "subtitle": "Tahsilat, ödeme ve döviz satışında oluşan gerçekleşmiş kur kârı ve zararı.",
+      "gain": "Kambiyo kârı",
+      "loss": "Kambiyo zararı",
+      "net": "Net",
+      "account": "Kasa/banka",
+      "party": "Cari",
+      "empty": "Bu dönemde kur farkı yok",
+      "emptyDesc": "Farklı kurla yapılan tahsilat, ödeme ve döviz satışları burada görünür.",
+      "note": "İptal edilen hareketler dahil değildir. Dönem sonu kur değerlemesi (gerçekleşmemiş fark) henüz yapılmaz."
+    },
+    "dataExport": {
+      "title": "Veri dışa aktarma",
+      "subtitle": "Şirketinizin tüm verisini tek Excel dosyası olarak indirin; her tablo ayrı bir sayfadır.",
+      "warnTitle": "Dosya şirketin tüm verisini içerir",
+      "warn": "İndirdiğiniz dosyada cariler, tutarlar ve banka bilgileri bulunur. Güvenli saklayın ve yetkisiz kişilerle paylaşmayın.",
+      "contentTitle": "Dosyanın içeriği",
+      "contentDesc": "Cari, stok kartı ve hesap planı süzgeçten etkilenmez; diğer sayfalar seçilen tarih aralığına göre daralır.",
+      "sheets": {
+        "parties": "Cariler ve güncel bakiyeleri",
+        "items": "Stok kartları, eldeki miktar ve değer",
+        "accounts": "Hesap planı",
+        "journal": "Yevmiye satırları",
+        "invoices": "Faturalar",
+        "invoiceLines": "Fatura satırları",
+        "deliveries": "İrsaliyeler (satır bazında)",
+        "treasuryAccounts": "Kasa ve banka hesapları",
+        "treasuryTransactions": "Kasa ve banka hareketleri",
+        "stockMovements": "Stok hareketleri"
+      },
+      "filterTitle": "Tarih aralığı (isteğe bağlı)",
+      "filterDesc": "Boş bırakırsanız tüm tarihler alınır. Çok büyük şirketlerde yıl bazında indirmeniz gerekebilir.",
+      "badRange": "Başlangıç bitişten sonra olamaz"
     }
   },
   "mappings": {

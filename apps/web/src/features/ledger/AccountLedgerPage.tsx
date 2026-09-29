@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { todayIso } from '@erp/shared';
 import { Card, PageHeader } from '../../components/ui/Card';
+import { ExportMenu } from '../../components/ui/ExportMenu';
+import { PrintHeader } from '../../components/ui/PrintHeader';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
@@ -44,9 +46,14 @@ export function AccountLedgerPage() {
 
   return (
     <>
-      <PageHeader title={t('ledger.accountLedger.title')} description={t('ledger.accountLedger.subtitle')} />
+      <PageHeader
+        title={t('ledger.accountLedger.title')}
+        description={t('ledger.accountLedger.subtitle')}
+        actions={accountId ? <ExportMenu exportKey="account-ledger" params={{ accountId, from, to }} disabled={!data} /> : undefined}
+      />
+      <PrintHeader subtitle={`${from.split('-').reverse().join('.')} – ${to.split('-').reverse().join('.')}`} />
 
-      <div className="mb-5 flex flex-wrap items-end gap-4">
+      <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <Field label={t('ledger.accountLedger.pick')} className="w-full max-w-md">
           {(id) => <Combobox options={options} value={accountId} onChange={setAccountId} placeholder={t('ledger.accountLedger.pickPrompt')} aria-label={t('ledger.accountLedger.pick')} id={id} />}
         </Field>

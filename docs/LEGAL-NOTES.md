@@ -23,6 +23,8 @@ Bu projenin bilgi mimarisi ve arayüzü özgündür: görev odaklı menü, genel
 
 Yalnızca izinli lisanslar kullanılır (MIT, ISC, BSD, Apache-2.0, 0BSD, BlueOak, CC0, OFL-1.1 yazı tipi). `npm run licenses` CI'da çalışır ve **kurulu tüm ağacı** (geliştirme araçları dahil, yaklaşık 470 paket) tarar; izin listesi dışında bir lisans (GPL/AGPL, lisanssız vb.) görürse hata verir. Inter yazı tipi (`@fontsource-variable/inter`) SIL OFL 1.1 ile lisanslıdır; kendi sunucumuzdan sunulur (harici CDN çağrısı yok).
 
+**xlsx yazma/okuma:** `exceljs` kurulumda `npm audit --omit=dev` (uuid) ve lisans denetimini (`buffers@0.1.1`, lisansı belirsiz) geçemediği için kullanılmadı. Bunun yerine MIT lisanslı `fflate` (zip) ve `fast-xml-parser` üstüne kendi küçük yazıcı/okuyucumuz yazıldı (`apps/api/src/files/`); izin listesi genişletilmedi.
+
 İzin listesine bilinçli olarak eklenen iki istisna (ikisi de yalnızca derleme/geliştirme aracıdır, ürün paketine girmez):
 
 - **MPL-2.0:** `lightningcss` (Tailwind/Vite'ın CSS derleyicisi). Dosya düzeyinde zayıf copyleft; değiştirilmemiş ikili olarak derleme sırasında kullanıldığı için kendi kodumuza yükümlülük getirmez. Bu paket değiştirilirse veya dağıtılan ürüne dahil edilirse yeniden değerlendirin.
@@ -77,3 +79,10 @@ Sistem kişi adı, e-posta, ileride kimlik/pasaport ve bordro verisi işleyecekt
 - XML'de `DOCTYPE`/`ENTITY` bulunması, 500 KB üstü boyut, geçersiz tarih/sayı/birim reddedilir (XXE ve varlık şişirme savunması).
 - **Yapılacak:** ticari kullanımdan önce kurumun veri kullanım/yeniden yayın koşullarını yazılı olarak kontrol edin; otomatik zamanlanmış çekim yalnızca bu doğrulamadan ve yayın saati netleştikten sonra eklenmeli.
 
+## 7. Rapor ve defter çıktıları
+
+- **Yevmiye defteri ve kebir baskısı yasal onaylı defter yerine geçmez.** Ekrandan/Excel'den/PDF'e kaydedilen çıktılar iç belgedir; KKTC'de defterlerin tutulma, sayfa numaralama, onay (tasdik) ve saklama biçimi **doğrulanmamıştır**. Ticari kullanımdan önce mali müşavirle teyit edin; gerekirse resmî biçim ayrı bir çıktı olarak eklenir.
+- Bilanço ve gelir tablosunun KKTC'deki yasal biçimi doğrulanmadığı için bu sürümde üretilmez (mizan ve hesap bazlı raporlar vardır).
+- **Kambiyo raporu** yalnızca gerçekleşmiş kur farklarını (646/656 varsayılan hesapları) gösterir; hesap eşlemesi mali müşavirce doğrulanmamıştır, dönem sonu değerleme yoktur (M7b).
+- **Tam veri dışa aktarma** cari, tutar ve banka bilgisi içerir; yalnızca `data.export` izniyle (sahip, yönetici, muhasebeci) alınır ve indirilen dosyanın saklanması kullanıcı sorumluluğundadır. Kişisel veri politikası için §5'e bakın.
+- **CSV/Excel formül enjeksiyonu:** metin hücreleri `= + - @` ile başlıyorsa CSV'de `'` ile etkisizleştirilir; XLSX'te formül olarak yazılmaz. İçe aktarma (M8b) tarafında da aynı ilke geçerlidir.

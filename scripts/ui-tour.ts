@@ -289,6 +289,36 @@ async function main() {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
 
+  // Raporlar: defterler, satış/alış, kârlılık, kambiyo, veri dışa aktarma ve baskı görünümü
+  await go('/reports/journal-book', '70-yevmiye-defteri', 'Yevmiye defteri');
+  await go('/reports/general-ledger', '71-kebir', 'Kebir (büyük defter)');
+  await go('/reports/sales', '72-satis-raporu', 'Satış raporu');
+  await page.getByRole('tab', { name: 'Stok kartı' }).click();
+  await settle(page, 600);
+  await shot(page, '73-satis-raporu-stok-karti');
+  await go('/reports/purchases', '74-alis-raporu', 'Alış raporu');
+  await go('/reports/item-profit', '75-stok-karliligi', 'Stok kârlılığı');
+  await go('/reports/fx-differences', '76-kambiyo-raporu', 'Kambiyo (kur farkı) raporu');
+  await go('/reports/data-export', '77-veri-disa-aktarma', 'Veri dışa aktarma');
+  await go('/accounting/trial-balance', '78a-mizan', 'Mizan');
+  await page.getByRole('button', { name: 'Dışa aktar' }).click();
+  await page.getByRole('menuitem', { name: /\.xlsx/ }).waitFor();
+  await page.waitForTimeout(300);
+  await shot(page, '78-disa-aktar-menusu');
+  await page.keyboard.press('Escape');
+  // Baskı önizlemesi: yatay A4 yazdırılabilir genişlikte (10 mm kenar boşluğu, 1047 px) tam sayfa + gerçek PDF çıktısının sayfa sayısı
+  const screenViewport = page.viewportSize();
+  await page.setViewportSize({ width: 1047, height: 740 });
+  await page.emulateMedia({ media: 'print' });
+  await settle(page, 400);
+  await page.screenshot({ path: `${OUT}/79-mizan-baski-onizleme.png`, fullPage: true });
+  console.log('  ✓ 79-mizan-baski-onizleme');
+  const pdf = await page.pdf({ format: 'A4', margin: { top: '12mm', bottom: '12mm', left: '12mm', right: '12mm' }, preferCSSPageSize: true, path: `${OUT}/79-mizan.pdf` });
+  const pdfPages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+  console.log(`  ✓ PDF: ${pdf.length} bayt, ${pdfPages} sayfa`);
+  await page.emulateMedia({ media: 'screen' });
+  if (screenViewport) await page.setViewportSize(screenViewport);
+
   // Ayarlar
   await go('/settings/currencies', '11-kurlar', 'Para birimi ve kurlar');
   // Merkez Bankası XML dosyasından içe aktarma (resmî örnek dosya)
@@ -338,7 +368,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/reports/journal-book', '/reports/general-ledger', '/reports/sales', '/reports/purchases', '/reports/item-profit', '/reports/fx-differences', '/reports/data-export', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);

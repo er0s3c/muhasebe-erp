@@ -92,7 +92,8 @@ async function parseError(res: Response): Promise<ApiError> {
   );
 }
 
-export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+/** İsteği gönderir; 401 alırsa oturumu bir kez yeniler ve yeniden dener. */
+async function send(path: string, opts: RequestOptions): Promise<Response> {
   let res = await raw(path, opts);
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
     if (await refreshSession()) {
@@ -103,5 +104,17 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
     }
   }
   if (!res.ok) throw await parseError(res);
-  return (await res.json()) as T;
+  return res;
+}
+
+export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  return (await (await send(path, opts)).json()) as T;
+}
+
+/** Dosya indirme: kimlikli istek (jeton bellekte olduğundan düz bağlantı çalışmaz); dosya adı yanıt başlığından. */
+export async function apiBlob(path: string, opts: RequestOptions = {}): Promise<{ blob: Blob; filename: string | null }> {
+  const res = await send(path, opts);
+  const cd = res.headers.get('content-disposition') ?? '';
+  const name = /filename="([^"]+)"/.exec(cd)?.[1] ?? null;
+  return { blob: await res.blob(), filename: name };
 }

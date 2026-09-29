@@ -40,7 +40,7 @@ export const MODULES: readonly ModuleDef[] = [
   },
 ];
 
-export type NavGroupKey = 'overview' | 'parties' | 'invoices' | 'treasury' | 'stock' | 'accounting' | 'settings';
+export type NavGroupKey = 'overview' | 'parties' | 'invoices' | 'treasury' | 'stock' | 'accounting' | 'reports' | 'settings';
 
 export interface NavItemDef {
   key: string;
@@ -60,6 +60,7 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
   { key: 'treasury', labelKey: 'nav.groups.treasury' },
   { key: 'stock', labelKey: 'nav.groups.stock' },
   { key: 'accounting', labelKey: 'nav.groups.accounting' },
+  { key: 'reports', labelKey: 'nav.groups.reports' },
   { key: 'settings', labelKey: 'nav.groups.settings' },
 ];
 
@@ -233,6 +234,69 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'accounting',
     module: 'core.ledger',
     permission: 'reports.read',
+  },
+  {
+    key: 'report-journal-book',
+    labelKey: 'nav.reportJournalBook',
+    path: '/reports/journal-book',
+    icon: 'book-marked',
+    group: 'reports',
+    module: 'core.ledger',
+    permission: 'reports.read',
+  },
+  {
+    key: 'report-general-ledger',
+    labelKey: 'nav.reportGeneralLedger',
+    path: '/reports/general-ledger',
+    icon: 'library',
+    group: 'reports',
+    module: 'core.ledger',
+    permission: 'reports.read',
+  },
+  {
+    key: 'report-sales',
+    labelKey: 'nav.reportSales',
+    path: '/reports/sales',
+    icon: 'trending-up',
+    group: 'reports',
+    module: 'core.invoices',
+    permission: 'reports.read',
+  },
+  {
+    key: 'report-purchases',
+    labelKey: 'nav.reportPurchases',
+    path: '/reports/purchases',
+    icon: 'shopping-bag',
+    group: 'reports',
+    module: 'core.invoices',
+    permission: 'reports.read',
+  },
+  {
+    key: 'report-item-profit',
+    labelKey: 'nav.reportItemProfit',
+    path: '/reports/item-profit',
+    icon: 'bar-chart',
+    group: 'reports',
+    module: 'core.invoices',
+    permission: 'reports.read',
+  },
+  {
+    key: 'report-fx',
+    labelKey: 'nav.reportFx',
+    path: '/reports/fx-differences',
+    icon: 'repeat',
+    group: 'reports',
+    module: 'core.treasury',
+    permission: 'reports.read',
+  },
+  {
+    key: 'data-export',
+    labelKey: 'nav.dataExport',
+    path: '/reports/data-export',
+    icon: 'download',
+    group: 'reports',
+    module: 'core.settings',
+    permission: 'data.export',
   },
   {
     key: 'company',

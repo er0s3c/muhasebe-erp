@@ -1,9 +1,10 @@
-import { Download, Hourglass } from 'lucide-react';
+import { Hourglass } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { formatTR, todayIso } from '@erp/shared';
-import { Button } from '../../components/ui/Button';
+import { todayIso } from '@erp/shared';
+import { ExportMenu } from '../../components/ui/ExportMenu';
+import { PrintHeader } from '../../components/ui/PrintHeader';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
@@ -14,7 +15,7 @@ import { errorMessage } from '../../lib/errors';
 import { isZero, money } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
-import type { AgingReport, AgingRow } from '../../lib/types';
+import type { AgingReport } from '../../lib/types';
 
 type Type = 'receivable' | 'payable';
 const BUCKETS = ['notDue', 'd1_30', 'd31_60', 'd61_90', 'd90plus'] as const;
@@ -34,35 +35,16 @@ export function PartyAgingPage() {
     { enabled: Boolean(asOf) },
   );
 
-  const exportCsv = () => {
-    if (!data) return;
-    const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
-    const head = [t('partyAging.party'), ...BUCKETS.map((b) => t(`partyAging.${b}`)), t('partyAging.unapplied'), t('partyAging.total')];
-    const line = (r: Pick<AgingRow, 'notDue' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90plus' | 'unapplied' | 'total'>, name: string) =>
-      [name, ...BUCKETS.map((b) => formatTR(r[b])), formatTR(r.unapplied), formatTR(r.total)].map(esc).join(';');
-    const lines = [head.map(esc).join(';'), ...data.rows.map((r) => line(r, `${r.partyCode} ${r.partyName}`)), line(data.totals, t('partyAging.grandTotal'))];
-    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `yaslandirma-${type}-${asOf}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
   return (
-    <>
+    <div className="print-wide">
       <PageHeader
         title={t('partyAging.title')}
         description={t('partyAging.subtitle')}
-        actions={
-          <Button onClick={exportCsv} disabled={!data || data.rows.length === 0}>
-            <Download className="size-4" aria-hidden />
-            {t('common.export')}
-          </Button>
-        }
+        actions={<ExportMenu exportKey="party-aging" params={{ type, asOf }} disabled={!data || data.rows.length === 0} />}
       />
+      <PrintHeader subtitle={`${t('partyAging.asOf')}: ${asOf.split('-').reverse().join('.')}`} />
 
-      <div className="mb-5 flex flex-wrap items-end gap-4">
+      <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <SegmentedTabs
           value={type}
           onChange={setType}
@@ -139,6 +121,6 @@ export function PartyAgingPage() {
           </TableWrap>
         )}
       </div>
-    </>
+    </div>
   );
 }

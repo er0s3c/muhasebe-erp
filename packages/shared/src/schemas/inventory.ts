@@ -25,6 +25,25 @@ export const ITEM_UNITS = [
 ] as const;
 export type ItemUnit = (typeof ITEM_UNITS)[number];
 
+/** Birim kodu → Türkçe etiket (dışa aktarma ve içe aktarma eşlemesi; arayüz çevirisiyle aynı metinler). */
+export const ITEM_UNIT_LABELS: Record<ItemUnit, string> = {
+  adet: 'adet',
+  kg: 'kg',
+  g: 'g',
+  ton: 'ton',
+  m: 'm',
+  m2: 'm²',
+  m3: 'm³',
+  lt: 'lt',
+  paket: 'paket',
+  koli: 'koli',
+  cuval: 'çuval',
+  takim: 'takım',
+  rulo: 'rulo',
+  saat: 'saat',
+  gun: 'gün',
+};
+
 /** Kullanıcının girebileceği stok belge türleri; `count` yalnızca sayım işlenince oluşur. */
 export const USER_STOCK_DOC_TYPES = ['opening', 'receipt', 'issue', 'waste', 'transfer'] as const;
 export const STOCK_DOC_TYPES = [...USER_STOCK_DOC_TYPES, 'count'] as const;

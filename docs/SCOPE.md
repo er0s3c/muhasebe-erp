@@ -22,10 +22,10 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 |---|---|
 | Hesap planı (şablon, alt hesap açma, pasifleştirme) | ✅ ⚠️ şablon doğrulanmadı |
 | Yevmiye kaydı: taslak, kaydet, ters kayıt, dövizli satır | ✅ |
-| Mizan (dönem aralığı, gruplu/hesap düzeyi, defter ve raporlama para birimi, CSV) | ✅ |
+| Mizan (dönem aralığı, gruplu/hesap düzeyi, defter ve raporlama para birimi; Excel/CSV/baskı) | ✅ |
 | Hesap ekstresi (yürüyen bakiye, alt hesaplar dahil) | ✅ |
 | Mali dönemler, dönem kapatma/açma | ✅ |
-| Kebir, yevmiye defteri baskısı | 🔜 M8 |
+| Kebir ve yevmiye defteri (ekran, Excel/CSV, baskı) | ✅ ⚠️ iç belge, yasal onaylı defter yerine geçmez |
 | Yıl sonu kapanış ve devir | 🔜 M8/M9 |
 | Gerçekleşen kur farkı kâr/zarar kayıtları (tahsilat, ödeme, döviz satışı) | ✅ |
 | Dönem sonu kur değerlemesi (gerçekleşmemiş kur farkı) | 🔜 M7b ⚠️ |
@@ -54,7 +54,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Hareketli ağırlıklı ortalama maliyet, dövizli alış maliyeti, negatif stok ayarı, stok değerleme | ✅ |
 | Stok değeri ↔ muhasebe (150–157) mutabakatı; stok hareketinden otomatik yevmiye | ✅ |
 | Stok durumu (tarih anı), kart ekstresi, kritik seviye | ✅ |
-| Stok kâr/zarar ve diğer rapor seti | 🔜 M8 |
+| Stok kâr/zarar, satış ve alış raporu (cari/stok kartı/ay/fatura kırılımı), kambiyo raporu; hepsinde Excel/CSV/baskı | ✅ |
 | Seri no takibi, emanet stok, barkod yazdırma | ⏳ |
 | Fiyat listeleri, kampanya | ⏳ |
 
@@ -72,7 +72,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Faturanın irsaliyeye bağlanması: kısmi ve çoklu faturalama, tekrar stok hareketi yok, alışta fiyat farkı düzeltmesi | ✅ |
 | Faturalanmamış irsaliye listesi, özeti ve stok mutabakatında açıklanan fark | ✅ |
 | İade irsaliyesi, sipariş/teklif, toplu faturalama sihirbazı | ⏳ |
-| Excel ile fatura/irsaliye içe aktarma | 🔜 M8 |
+| Excel ile fatura/irsaliye içe aktarma | ⏳ |
 | Gider kartları ve gider raporları | ⏳ |
 | İthalat maliyet dağıtımı (navlun, gümrük, liman) | ⏳ Faz B |
 | e-Fatura entegrasyonu | ⏳ Faz C ⚠️ |
@@ -128,5 +128,5 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | İşlev | Durum |
 |---|---|
 | Her işlemin kullanıcı/zaman/IP ile kaydı | ✅ |
-| Excel/CSV ile cari, stok, açılış bakiyesi aktarımı | 🔜 M8 |
-| Müşterinin verisini eksiksiz dışa aktarabilmesi | 🔜 M8 |
+| Excel/CSV ile cari, stok, açılış bakiyesi aktarımı | 🔜 M8b |
+| Müşterinin verisini eksiksiz dışa aktarabilmesi (tüm tablolar tek Excel dosyasında) | ✅ |

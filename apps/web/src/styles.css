@@ -219,3 +219,53 @@
     opacity: 1;
   }
 }
+
+/* Baskı: raporlar tarayıcıdan "Yazdır / PDF olarak kaydet" ile alınır (A4, başlık her sayfada tekrarlanır) */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+@page wide {
+  size: A4 landscape;
+  margin: 10mm;
+}
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+    background: #fff;
+    color: #000;
+  }
+  .print-wide {
+    page: wide;
+  }
+  .overflow-auto,
+  .overflow-y-auto,
+  .overflow-x-auto {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  table {
+    font-size: 9pt;
+  }
+  th,
+  td {
+    padding: 3px 6px;
+    position: static;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
+  }
+  tr {
+    break-inside: avoid;
+  }
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+}

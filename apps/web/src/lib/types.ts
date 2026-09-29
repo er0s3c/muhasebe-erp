@@ -816,6 +816,124 @@ export interface TreasuryTxnDetail {
   fxNet: string;
 }
 
+// --- Raporlar ---------------------------------------------------------------
+
+export interface JournalBookLine {
+  entryId: string;
+  entryNo: string;
+  entryDate: string;
+  entryDescription: string;
+  lineNo: number;
+  accountCode: string;
+  accountName: string;
+  partyName: string | null;
+  description: string | null;
+  currencyCode: string;
+  fxRate: string;
+  debit: string;
+  credit: string;
+  debitBase: string;
+  creditBase: string;
+}
+
+export interface JournalBookData {
+  from: string;
+  to: string;
+  total: number;
+  lines: JournalBookLine[];
+  totals: { debitBase: string; creditBase: string };
+}
+
+export interface GeneralLedgerAccount {
+  accountId: string;
+  code: string;
+  name: string;
+  opening: string;
+  lines: {
+    entryId: string;
+    entryNo: string;
+    entryDate: string;
+    description: string;
+    currencyCode: string;
+    debit: string;
+    credit: string;
+    debitBase: string;
+    creditBase: string;
+    balance: string;
+  }[];
+  debit: string;
+  credit: string;
+  closing: string;
+}
+
+export interface GeneralLedgerData {
+  from: string;
+  to: string;
+  total: number;
+  accounts: GeneralLedgerAccount[];
+}
+
+export type SalesReportGroup = 'party' | 'item' | 'month' | 'invoice';
+
+export interface SalesReportRow {
+  key: string;
+  label: string;
+  code: string | null;
+  docCount: number;
+  qty: string | null;
+  net: string;
+  vat: string;
+  gross: string;
+  date: string | null;
+  invoiceId: string | null;
+  type: string | null;
+  externalNo: string | null;
+}
+
+export interface SalesReportData {
+  from: string;
+  to: string;
+  side: 'sales' | 'purchases';
+  groupBy: SalesReportGroup;
+  rows: SalesReportRow[];
+  totals: { docCount: number | null; net: string; vat: string; gross: string };
+}
+
+export interface ItemProfitData {
+  from: string;
+  to: string;
+  rows: {
+    itemId: string | null;
+    code: string | null;
+    name: string;
+    unit: string | null;
+    qty: string | null;
+    sales: string;
+    cost: string;
+    profit: string;
+    marginPct: string | null;
+  }[];
+  totals: { sales: string; cost: string; profit: string; marginPct: string | null };
+}
+
+export interface FxDifferenceData {
+  from: string;
+  to: string;
+  rows: {
+    transactionId: string;
+    txnNo: string;
+    type: TreasuryTxnType;
+    txnDate: string;
+    accountName: string;
+    partyName: string | null;
+    currencyCode: string;
+    gain: string;
+    loss: string;
+    net: string;
+  }[];
+  totals: { gain: string; loss: string; net: string };
+}
+
 /** Modül anahtarı -> çeviri anahtarı */
 export const MODULE_LABEL_KEYS = {
   'core.dashboard': 'modules.dashboard',

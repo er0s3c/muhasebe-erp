@@ -3,6 +3,7 @@ import {
   cancelTreasuryTransactionSchema,
   createTreasuryAccountSchema,
   createTreasuryTransactionSchema,
+  fxDifferencesQuerySchema,
   idParam,
   listTreasuryTransactionsQuerySchema,
   todayIso,
@@ -18,6 +19,7 @@ import {
   treasurySummary,
   updateTreasuryAccount,
 } from './accounts';
+import { fxDifferences } from './fx-report';
 import { cancelTreasuryTransaction, postTreasuryTransaction } from './posting';
 import { treasuryStatement } from './reports';
 import { getTreasuryTransaction, listTreasuryTransactions } from './transactions';
@@ -98,6 +100,13 @@ export const treasuryRoutes: FastifyPluginAsync = async (app) => {
     '/api/treasury/transactions/:id/cancel',
     tenantRoute(app, post, async (c) =>
       cancelTreasuryTransaction(c.tx, ledgerCtx(c), idParam.parse(c.req.params).id, cancelTreasuryTransactionSchema.parse(c.req.body)),
+    ),
+  );
+
+  app.get(
+    '/api/reports/fx-differences',
+    tenantRoute(app, { module: 'core.treasury', permission: 'reports.read' }, async ({ tx, req }) =>
+      fxDifferences(tx, fxDifferencesQuerySchema.parse(req.query)),
     ),
   );
 };

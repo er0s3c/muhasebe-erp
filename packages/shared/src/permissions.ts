@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   'treasury.manage',
   'treasury.post',
   'reports.read',
+  'data.export',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -58,6 +59,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'treasury.manage',
     'treasury.post',
     'reports.read',
+    'data.export',
   ],
   // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
   // Faturayı taslak olarak hazırlar; muhasebeleştirmeyi (invoices.post) muhasebeci yapar.

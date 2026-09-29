@@ -4,12 +4,15 @@ import {
   createInvoiceSchema,
   hasPermission,
   idParam,
+  itemProfitQuerySchema,
   listInvoicesQuerySchema,
+  salesReportQuerySchema,
   updateInvoiceSchema,
   vatSummaryQuerySchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { forbidden } from '../../http/errors';
+import { itemProfitability, salesReport } from './analytics';
 import { cancelInvoice, postInvoice } from './posting';
 import { invoiceSummary, vatSummary } from './reports';
 import {
@@ -97,5 +100,19 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, { module: 'core.invoices', permission: 'reports.read' }, async ({ tx, req }) =>
       vatSummary(tx, vatSummaryQuerySchema.parse(req.query)),
     ),
+  );
+
+  const reports = { module: 'core.invoices', permission: 'reports.read' } as const;
+  app.get(
+    '/api/reports/sales-report',
+    tenantRoute(app, reports, async ({ tx, req }) => salesReport(tx, 'sales', salesReportQuerySchema.parse(req.query))),
+  );
+  app.get(
+    '/api/reports/purchase-report',
+    tenantRoute(app, reports, async ({ tx, req }) => salesReport(tx, 'purchases', salesReportQuerySchema.parse(req.query))),
+  );
+  app.get(
+    '/api/reports/item-profitability',
+    tenantRoute(app, reports, async ({ tx, req }) => itemProfitability(tx, itemProfitQuerySchema.parse(req.query))),
   );
 };

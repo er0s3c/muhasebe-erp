@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Stat } from '../../components/ui/Stat';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
@@ -272,6 +273,9 @@ function StatementTab({ itemId, unit, onOpenDoc }: { itemId: string; unit: strin
             </Select>
           )}
         </Field>
+        <div className="ml-auto">
+          <ExportMenu exportKey="item-card" params={{ itemId, from, to, warehouseId }} print={false} disabled={!data} />
+        </div>
       </div>
       {warehouseId && <Callout>{t('inventory.detail.valueNote')}</Callout>}
       {error ? (

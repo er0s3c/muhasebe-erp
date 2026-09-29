@@ -1,10 +1,11 @@
-import { Boxes, Download } from 'lucide-react';
+import { Boxes } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
-import { formatTR, todayIso } from '@erp/shared';
+import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
-import { Button } from '../../components/ui/Button';
+import { ExportMenu } from '../../components/ui/ExportMenu';
+import { PrintHeader } from '../../components/ui/PrintHeader';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
@@ -13,13 +14,11 @@ import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { isZero, money } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
-import { useCompany } from '../../lib/session';
 import type { StockStatusReport } from '../../lib/types';
 import { qtyText, useCategories, useUnitLabel, useWarehouses } from './common';
 
 export function StockStatusPage() {
   const { t } = useTranslation();
-  const company = useCompany();
   const unitLabel = useUnitLabel();
   const [params, setParams] = useSearchParams();
   const [asOf, setAsOf] = useState(todayIso());
@@ -52,44 +51,27 @@ export function StockStatusPage() {
     setParams(next, { replace: true });
   };
 
-  const exportCsv = () => {
-    if (!data) return;
-    const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
-    const head = [t('inventory.items.code'), t('inventory.status.item'), t('inventory.status.category'), t('inventory.form.unit'), t('inventory.status.onHand'), t('inventory.status.minLevel'), t('inventory.status.avgCost'), `${t('inventory.status.value')} (${company.baseCurrency})`];
-    const lines = [
-      head.map(esc).join(';'),
-      ...data.rows.map((r) =>
-        [r.code, r.name, r.categoryName ?? '', unitLabel(r.unit), qtyText(r.onHand) || '0', qtyText(r.minLevel), r.avgCost ? formatTR(r.avgCost) : '', formatTR(r.value)].map(esc).join(';'),
-      ),
-      [t('inventory.status.total'), '', '', '', '', '', '', formatTR(data.totals.value)].map(esc).join(';'),
-    ];
-    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `stok-durumu-${asOf}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
   const ledger = data?.ledger;
   const reconciled = ledger ? isZero(ledger.difference) : null;
   // Fark varsa ama tamamı faturalanmamış irsaliyelerden geliyorsa sorun değil, bekleyen kayıttır
   const pendingOnly = ledger ? !reconciled && isZero(ledger.unexplained) : false;
 
   return (
-    <>
+    <div className="print-wide">
       <PageHeader
         title={t('inventory.status.title')}
         description={t('inventory.status.subtitle')}
         actions={
-          <Button onClick={exportCsv} disabled={!data || data.rows.length === 0}>
-            <Download className="size-4" aria-hidden />
-            {t('common.export')}
-          </Button>
+          <ExportMenu
+            exportKey="stock-status"
+            params={{ asOf, warehouseId, categoryId, query, lowOnly: lowOnly ? 'true' : undefined, includeZero: includeZero ? 'true' : undefined }}
+            disabled={!data || data.rows.length === 0}
+          />
         }
       />
+      <PrintHeader subtitle={`${asOf.split('-').reverse().join('.')}`} />
 
-      <div className="mb-5 flex flex-wrap items-end gap-4">
+      <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <Field label={t('inventory.status.asOf')}>{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-44" />}</Field>
         <Field label={t('inventory.status.warehouse')}>
           {(id) => (
@@ -234,6 +216,6 @@ export function StockStatusPage() {
           </Card>
         )}
       </div>
-    </>
+    </div>
   );
 }

@@ -14,3 +14,4 @@ export * from './schemas/inventory';
 export * from './schemas/invoices';
 export * from './schemas/deliveries';
 export * from './schemas/treasury';
+export * from './schemas/reports';
