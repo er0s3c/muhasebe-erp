@@ -1,4 +1,4 @@
-import { ChevronRight, Package, Plus, Search, Tags } from 'lucide-react';
+import { ChevronRight, Package, Plus, Search, Tags, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -14,6 +14,7 @@ import { money } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { InventorySummary, ItemKind, ItemListRow } from '../../lib/types';
+import { ImportWizard } from '../imports/ImportWizard';
 import { CategoriesSheet } from './CategoriesSheet';
 import { qtyText, useCategories, useUnitLabel } from './common';
 import { ItemFormSheet } from './ItemFormSheet';
@@ -36,6 +37,7 @@ export function ItemsPage() {
   const [limit, setLimit] = useState(PAGE);
   const [adding, setAdding] = useState(false);
   const [categories, setCategories] = useState(false);
+  const [importing, setImporting] = useState(false);
   const onlyLow = params.get('low') === '1';
 
   useEffect(() => {
@@ -74,6 +76,10 @@ export function ItemsPage() {
               <Button onClick={() => setCategories(true)}>
                 <Tags className="size-4" aria-hidden />
                 {t('inventory.items.categories.button')}
+              </Button>
+              <Button onClick={() => setImporting(true)}>
+                <Upload className="size-4" aria-hidden />
+                {t('imports.button')}
               </Button>
               <Button variant="primary" onClick={() => setAdding(true)}>
                 <Plus className="size-4" aria-hidden />
@@ -208,6 +214,7 @@ export function ItemsPage() {
 
       <ItemFormSheet open={adding} onOpenChange={setAdding} onSaved={(item) => navigate(`/inventory/items/${item.id}`)} />
       <CategoriesSheet open={categories} onOpenChange={setCategories} />
+      <ImportWizard kind="items" open={importing} onOpenChange={setImporting} />
     </>
   );
 }

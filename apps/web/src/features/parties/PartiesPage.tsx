@@ -1,4 +1,4 @@
-import { ChevronRight, Contact, Plus, Search } from 'lucide-react';
+import { ChevronRight, Contact, Plus, Search, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useCan, useCQuery } from '../../lib/queries';
 import type { PartyKind, PartyListRow } from '../../lib/types';
+import { ImportWizard } from '../imports/ImportWizard';
 import { BalanceText } from './BalanceText';
 import { PartyFormSheet } from './PartyFormSheet';
 
@@ -26,6 +27,7 @@ export function PartiesPage() {
   const [showInactive, setShowInactive] = useState(false);
   const [limit, setLimit] = useState(PAGE);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // Yazarken her tuşta istek atmamak için kısa gecikme
   useEffect(() => {
@@ -52,10 +54,16 @@ export function PartiesPage() {
         description={t('parties.subtitle')}
         actions={
           canManage && (
-            <Button variant="primary" onClick={() => setAdding(true)}>
-              <Plus className="size-4" aria-hidden />
-              {t('parties.add')}
-            </Button>
+            <>
+              <Button onClick={() => setImporting(true)}>
+                <Upload className="size-4" aria-hidden />
+                {t('imports.button')}
+              </Button>
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                <Plus className="size-4" aria-hidden />
+                {t('parties.add')}
+              </Button>
+            </>
           )
         }
       />
@@ -160,6 +168,7 @@ export function PartiesPage() {
       )}
 
       <PartyFormSheet open={adding} onOpenChange={setAdding} onSaved={(p) => navigate(`/parties/${p.id}`)} />
+      <ImportWizard kind="parties" open={importing} onOpenChange={setImporting} />
     </>
   );
 }

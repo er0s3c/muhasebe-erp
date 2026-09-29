@@ -128,5 +128,6 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | İşlev | Durum |
 |---|---|
 | Her işlemin kullanıcı/zaman/IP ile kaydı | ✅ |
-| Excel/CSV ile cari, stok, açılış bakiyesi aktarımı | 🔜 M8b |
+| Excel/CSV ile cari ve stok kartı aktarımı (sütun eşleme, ön izleme, atomik) | ✅ |
+| Excel/CSV ile cari açılış bakiyesi, stok açılışı ve mizan açılışı aktarımı | ✅ ⚠️ açılış karşı hesabı doğrulanmadı |
 | Müşterinin verisini eksiksiz dışa aktarabilmesi (tüm tablolar tek Excel dosyasında) | ✅ |

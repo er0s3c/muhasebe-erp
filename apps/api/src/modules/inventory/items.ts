@@ -14,9 +14,13 @@ import { conflict, notFound, unprocessable } from '../../http/errors';
 import { nextNumber } from '../settings/numbering';
 import { requireCategory } from './categories';
 
-async function generateCode(tx: Tx, companyId: string): Promise<string> {
-  const n = await nextNumber(tx, companyId, 'ITEM', 0);
-  return `ST-${String(n).padStart(6, '0')}`;
+async function generateCode(tx: Tx, companyId: string, taken?: ReadonlySet<string>): Promise<string> {
+  // `taken`: toplu içe aktarmada dosyadaki açık kodlar (çakışan numara atlanır)
+  for (;;) {
+    const n = await nextNumber(tx, companyId, 'ITEM', 0);
+    const code = `ST-${String(n).padStart(6, '0')}`;
+    if (!taken?.has(code)) return code;
+  }
 }
 
 async function assertVatCode(tx: Tx, vatCode: string | null | undefined) {
@@ -31,8 +35,8 @@ async function assertBarcodeFree(tx: Tx, barcode: string | null | undefined, exc
   if (dup && dup.id !== exceptId) throw conflict(`${barcode} barkodu başka bir kartta kayıtlı`, 'BARCODE_TAKEN');
 }
 
-export async function createItem(tx: Tx, companyId: string, input: CreateItemInput) {
-  const code = input.code ?? (await generateCode(tx, companyId));
+export async function createItem(tx: Tx, companyId: string, input: CreateItemInput, taken?: ReadonlySet<string>) {
+  const code = input.code ?? (await generateCode(tx, companyId, taken));
   const [dup] = await tx.select({ id: items.id }).from(items).where(eq(items.code, code));
   if (dup) throw conflict(`${code} kodlu stok kartı zaten var`, 'ITEM_CODE_TAKEN');
   await assertBarcodeFree(tx, input.barcode);

@@ -85,4 +85,12 @@ Sistem kişi adı, e-posta, ileride kimlik/pasaport ve bordro verisi işleyecekt
 - Bilanço ve gelir tablosunun KKTC'deki yasal biçimi doğrulanmadığı için bu sürümde üretilmez (mizan ve hesap bazlı raporlar vardır).
 - **Kambiyo raporu** yalnızca gerçekleşmiş kur farklarını (646/656 varsayılan hesapları) gösterir; hesap eşlemesi mali müşavirce doğrulanmamıştır, dönem sonu değerleme yoktur (M7b).
 - **Tam veri dışa aktarma** cari, tutar ve banka bilgisi içerir; yalnızca `data.export` izniyle (sahip, yönetici, muhasebeci) alınır ve indirilen dosyanın saklanması kullanıcı sorumluluğundadır. Kişisel veri politikası için §5'e bakın.
-- **CSV/Excel formül enjeksiyonu:** metin hücreleri `= + - @` ile başlıyorsa CSV'de `'` ile etkisizleştirilir; XLSX'te formül olarak yazılmaz. İçe aktarma (M8b) tarafında da aynı ilke geçerlidir.
+- **CSV/Excel formül enjeksiyonu:** metin hücreleri `= + - @` ile başlıyorsa CSV'de `'` ile etkisizleştirilir; XLSX'te formül olarak yazılmaz. İçe aktarılan metinler (M8b) olduğu gibi saklanır ve ekranda düz metin görünür; onları dışa aktaran her çıktı aynı korumadan geçer.
+
+## 8. Açılış bakiyesi içe aktarma
+
+- **Açılış yevmiyesinin karşı hesabı** varsayılan olarak `opening_offset` eşlemesidir (varsayılan 500 Sermaye); KKTC uygulamasında açılış farkının hangi hesaba yazılacağı ve açılışın yıl sonu kapanış/devir kaydıyla nasıl ilişkilendirileceği **doğrulanmamıştır**. Mali müşavirle teyit edilmeden gerçek şirket açılışı yapmayın; karşı hesap içe aktarma sırasında değiştirilebilir.
+- **Cari açılışı** müşteri bakiyesini 120, tedarikçi bakiyesini 320 hesabına yazar (“her ikisi” türünde borç → 120, alacak → 320); bu eşleme ve avans yönü mali müşavirce doğrulanmamıştır.
+- **Mizan açılışı** cari kontrol (120/320…) ve stok (150–157) hesaplarını bilerek reddeder; bu hesapların bakiyesi cari ve stok açılışından girilmelidir (alt defter ↔ hesap ayrışmasın). Yıl sonu kapanış/devir akışı henüz yoktur (M9).
+- Açılış yevmiyeleri kaynaksızdır ve normal ters kayıtla geri alınabilir; aynı dosyanın iki kez yüklenmesi engellenmez.
+- **Dosya biçimi:** eski Windows CSV'leri (windows-1254) okunur; bankaya/muhasebe programına özgü biçimler doğrulanmamıştır, sütunlar kullanıcı tarafından eşlenir.

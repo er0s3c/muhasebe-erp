@@ -23,6 +23,8 @@ export interface ReportTable {
   sheet?: string;
   /** Dönem/süzgeç bilgisi (tek satır). */
   subtitle?: string;
+  /** XLSX'te başlık/dönem satırları olmadan, sütun başlıkları 1. satırda (içe aktarma şablonları için). */
+  plain?: boolean;
   columns: TableColumn[];
   rows: Record<string, CellValue>[];
   /** Toplam satırı: yalnızca dolu anahtarlar yazılır; ilk metin sütununa "Toplam" etiketi konur. */

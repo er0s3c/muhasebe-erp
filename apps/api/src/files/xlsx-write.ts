@@ -152,15 +152,19 @@ export function sheetNames(titles: readonly string[]): string[] {
   });
 }
 
-const HEADER_ROW = 4;
+/** Başlık satırı: başlıklı raporlarda 4 (1: rapor adı, 2: dönem, 3: boş), düz tablolarda 1. */
+const headerRowOf = (table: ReportTable) => (table.plain ? 1 : 4);
 
 function sheetXml(table: ReportTable): string {
+  const HEADER_ROW = headerRowOf(table);
   const cols = table.columns;
   const lastCol = columnName(Math.max(cols.length - 1, 0));
   const rows: string[] = [];
 
-  rows.push(`<row r="1">${textCell('A1', STYLE.title, table.title)}</row>`);
-  if (table.subtitle) rows.push(`<row r="2">${textCell('A2', STYLE.subtitle, table.subtitle)}</row>`);
+  if (!table.plain) {
+    rows.push(`<row r="1">${textCell('A1', STYLE.title, table.title)}</row>`);
+    if (table.subtitle) rows.push(`<row r="2">${textCell('A2', STYLE.subtitle, table.subtitle)}</row>`);
+  }
 
   rows.push(
     `<row r="${HEADER_ROW}" ht="30" customHeight="1">` +
@@ -245,7 +249,7 @@ export function writeXlsx(tables: readonly ReportTable[]): Uint8Array {
   const filters = tables
     .map((t, i) =>
       t.rows.length > 0
-        ? `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">${xmlEscape(quoted(names[i]!))}!$A$${HEADER_ROW}:$${columnName(Math.max(t.columns.length - 1, 0))}$${HEADER_ROW + t.rows.length}</definedName>`
+        ? `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">${xmlEscape(quoted(names[i]!))}!$A$${headerRowOf(t)}:$${columnName(Math.max(t.columns.length - 1, 0))}$${headerRowOf(t) + t.rows.length}</definedName>`
         : '',
     )
     .join('');

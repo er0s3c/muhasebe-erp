@@ -136,7 +136,8 @@
     "reportPurchases": "Alış raporu",
     "reportItemProfit": "Stok kârlılığı",
     "reportFx": "Kambiyo raporu",
-    "dataExport": "Veri dışa aktarma"
+    "dataExport": "Veri dışa aktarma",
+    "openings": "Açılış bakiyeleri"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -1513,5 +1514,128 @@
       "fx_gain": "Tahsilat, ödeme ve döviz satışında oluşan gerçekleşmiş kur kârı",
       "fx_loss": "Tahsilat, ödeme ve döviz satışında oluşan gerçekleşmiş kur zararı"
     }
+  },
+  "imports": {
+    "button": "İçe aktar",
+    "steps": {
+      "file": "Dosya",
+      "map": "Sütun eşleme",
+      "preview": "Ön izleme",
+      "done": "Sonuç"
+    },
+    "descriptions": {
+      "parties": "Cari kartlarını Excel ya da CSV dosyasından toplu oluşturur. Var olan kod ve vergi numaraları atlanır; kod boşsa otomatik verilir.",
+      "items": "Stok kartlarını toplu oluşturur. Kategori yoksa açılır; birim, KDV kodu ve para birimi doğrulanır. Var olan kod ve barkodlar atlanır.",
+      "party_openings": "Cari açılış bakiyelerini tek bir açılış yevmiyesi olarak yazar: müşteri bakiyesi 120, tedarikçi bakiyesi 320 hesabına gider; fark açılış karşı hesabına (varsayılan 500) yazılır.",
+      "stock_openings": "Depo başına bir stok açılış belgesi oluşturur. Stok defteri ve muhasebe (stok hesabı / açılış karşı hesabı) birlikte güncellenir; stok durumu ile muhasebe mutabakatı bozulmaz.",
+      "ledger_openings": "Mizan bakiyelerini tek bir açılış yevmiyesi olarak yazar. Cari (120/320) ve stok (150–157) hesapları burada girilmez; onlar için cari ve stok açılışını kullanın."
+    },
+    "file": {
+      "title": "Dosyanızı seçin",
+      "hint": "Excel (.xlsx) ya da CSV. Sütun başlıkları ilk dolu satırda olmalı; en çok {{rows}} veri satırı ve {{mb}} MB.",
+      "choose": "Dosya seç",
+      "drop": "Dosyayı buraya bırakın ya da seçin",
+      "reading": "Dosya okunuyor…",
+      "tooLarge": "Dosya {{mb}} MB’tan büyük olamaz",
+      "templateTitle": "Şablon",
+      "templateHint": "Doğru sütun başlıklarını içeren örnek dosya. Kendi dosyanızın başlıkları farklıysa bir sonraki adımda eşleyebilirsiniz.",
+      "templateXlsx": "Excel şablonu",
+      "templateCsv": "CSV şablonu"
+    },
+    "map": {
+      "title": "Sütunları eşleyin",
+      "hint": "Dosyanızdaki sütunları alanlara bağlayın. Zorunlu alanlar (*) eşlenmeden devam edilemez. Ön izlemede hiçbir kayıt yazılmaz.",
+      "sheet": "Sayfa",
+      "field": "Alan",
+      "column": "Dosyadaki sütun",
+      "notMapped": "— Eşleme yok —",
+      "sample": "Örnek: {{value}}",
+      "rows": "{{count}} satır okundu",
+      "options": "Seçenekler",
+      "numberFormat": "Sayı biçimi",
+      "numberFormatHint": "Belirsiz sayılar (örn. “1.234”) otomatik modda reddedilir; biçimi seçerseniz kesinleşir.",
+      "numberFormats": {
+        "auto": "Otomatik algıla",
+        "tr": "Türkçe (1.234,56)",
+        "en": "İngilizce (1,234.56)"
+      },
+      "skipDuplicates": "Var olan kayıtları atla",
+      "skipDuplicatesHint": "Kapalıysa yinelenen kod, vergi numarası ya da barkod hata sayılır.",
+      "openingDate": "Açılış tarihi",
+      "openingDateHint": "Tarihin mali dönemi tanımlı ve açık olmalı.",
+      "offsetAccount": "Karşı hesap",
+      "offsetDefault": "Varsayılan (Hesap eşlemesindeki açılış karşı hesabı)",
+      "plugDifference": "Borç-alacak farkını karşı hesaba at",
+      "plugDifferenceHint": "Kapalıysa fark hata sayılır.",
+      "requiredMissing": "Zorunlu alan eşlenmedi: {{fields}}",
+      "openingAmountMissing": "Borç, Alacak ya da Tutar sütunlarından en az biri eşlenmeli",
+      "next": "Ön izleme",
+      "back": "Geri"
+    },
+    "preview": {
+      "title": "Ön izleme",
+      "hint": "Henüz hiçbir kayıt yazılmadı. Tek bir hata bile varsa hiçbir satır içe aktarılmaz.",
+      "total": "Toplam satır",
+      "willImport": "Yazılacak",
+      "willSkip": "Atlanacak",
+      "errors": "Hatalı",
+      "filterAll": "Tümü",
+      "filterErrors": "Hatalı",
+      "filterSkipped": "Atlanan",
+      "row": "Satır",
+      "status": "Durum",
+      "record": "Kayıt",
+      "messages": "İletiler",
+      "statusOk": "Yazılacak",
+      "statusSkip": "Atlanacak",
+      "statusError": "Hata",
+      "noRows": "Bu süzgeçte satır yok",
+      "showing": "İlk {{shown}} satır gösteriliyor (toplam {{total}})",
+      "blocked": "Hataları düzeltip dosyayı yeniden yükleyin; ön izlemede hata varken içe aktarma yapılamaz.",
+      "nothing": "İçe aktarılacak geçerli satır yok.",
+      "commit": "İçe aktar",
+      "changed": "Veriler ön izlemeden sonra değişmiş; ön izleme yenilendi. Lütfen yeniden kontrol edin."
+    },
+    "done": {
+      "title": "İçe aktarma tamamlandı",
+      "created": "{{count}} kayıt oluşturuldu, {{skipped}} satır atlandı.",
+      "journal": "Yevmiye",
+      "stock": "Stok belgesi",
+      "undoHint": "Açılış yevmiyesi yanlışsa Yevmiye kayıtları sayfasından ters kayıt oluşturabilirsiniz.",
+      "another": "Başka dosya yükle",
+      "close": "Tamam"
+    }
+  },
+  "openings": {
+    "title": "Açılış bakiyeleri",
+    "subtitle": "Eski programınızdan ya da Excel’den açılış bakiyelerini aktarın. Her aktarma tek bir açılış yevmiyesi ya da stok belgesi olarak yazılır ve geri alınabilir.",
+    "tabs": {
+      "party_openings": "Cari bakiyeleri",
+      "stock_openings": "Stok",
+      "ledger_openings": "Mizan"
+    },
+    "order": "Önerilen sıra: cari kartları ve stok kartları → cari bakiyeleri → stok açılışı → diğer hesaplar (mizan).",
+    "rulesTitle": "Nasıl çalışır",
+    "rules": {
+      "party_openings": {
+        "r1": "Her satır bir carinin borç ya da alacak bakiyesidir; cari kodu ya da tam ünvanı ile bulunur.",
+        "r2": "Müşteri bakiyesi 120, tedarikçi bakiyesi 320 hesabına gider; “her ikisi” türünde borç 120’ye, alacak 320’ye yazılır.",
+        "r3": "Vade tarihi yaşlandırma raporunu besler; dövizli satırda kur yazılmazsa açılış tarihindeki kayıtlı kur kullanılır.",
+        "r4": "Borç-alacak farkı açılış karşı hesabına (varsayılan 500) tek satır olarak yazılır."
+      },
+      "stock_openings": {
+        "r1": "Her satır bir stok kartının bir depodaki devir miktarı ve birim maliyetidir; kart kodu, barkod ya da tam ad ile bulunur.",
+        "r2": "Depo başına bir stok belgesi oluşur (200 satırdan fazlası birden çok belgeye bölünür).",
+        "r3": "Belge, stok hesabına borç / açılış karşı hesabına alacak olarak muhasebeleşir."
+      },
+      "ledger_openings": {
+        "r1": "Her satır bir hesabın açılış bakiyesidir (borç ya da alacak); yalnızca kayıt atılabilen hesaplar kabul edilir.",
+        "r2": "Cari hesaplar (120, 320…) ve stok hesapları (150–157) reddedilir: bunları cari ve stok açılışından girin.",
+        "r3": "Dövizli hesapta tutar hesabın para birimindedir; kur yazılmazsa açılış tarihindeki kayıtlı kur kullanılır.",
+        "r4": "Borç-alacak farkı seçilen karşı hesaba atılabilir ya da hata sayılır."
+      }
+    },
+    "reverseHint": "Yanlış yüklenen açılış yevmiyesi, Yevmiye kayıtları sayfasından normal ters kayıtla geri alınır.",
+    "noAccess": "Bu sayfadaki hiçbir içe aktarma için yetkiniz ya da etkin modülünüz yok."
   }
 }

@@ -29,6 +29,7 @@ import {
   Tags,
   TrendingUp,
   Truck,
+  Upload,
   Users,
   Wallet,
   Warehouse,
@@ -69,6 +70,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   'bar-chart': BarChart3,
   repeat: Repeat,
   download: Download,
+  upload: Upload,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

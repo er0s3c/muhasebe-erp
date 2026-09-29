@@ -41,6 +41,7 @@ export const router = createBrowserRouter([
                 element: <RequireModule module="core.ledger" />,
                 children: [
                   { path: 'accounting/journal', ...page(() => import('../features/ledger/JournalPage'), 'JournalPage') },
+                  { path: 'accounting/openings', ...page(() => import('../features/imports/OpeningBalancesPage'), 'OpeningBalancesPage') },
                   { path: 'accounting/accounts', ...page(() => import('../features/ledger/AccountsPage'), 'AccountsPage') },
                   { path: 'accounting/trial-balance', ...page(() => import('../features/ledger/TrialBalancePage'), 'TrialBalancePage') },
                   { path: 'accounting/account-ledger', ...page(() => import('../features/ledger/AccountLedgerPage'), 'AccountLedgerPage') },

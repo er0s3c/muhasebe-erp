@@ -16,14 +16,17 @@ import { buildAgingReport, computeOpenItems, type PartyAllocation, type PartyLin
 
 const PARTY_SEQUENCE = 'PARTY';
 
-async function generateCode(tx: Tx, companyId: string): Promise<string> {
-  // Yıla bağlı olmayan sayaç: yıl = 0
-  const n = await nextNumber(tx, companyId, PARTY_SEQUENCE, 0);
-  return `CR-${String(n).padStart(6, '0')}`;
+async function generateCode(tx: Tx, companyId: string, taken?: ReadonlySet<string>): Promise<string> {
+  // Yıla bağlı olmayan sayaç: yıl = 0. `taken`: toplu içe aktarmada dosyadaki açık kodlar (çakışan numara atlanır)
+  for (;;) {
+    const n = await nextNumber(tx, companyId, PARTY_SEQUENCE, 0);
+    const code = `CR-${String(n).padStart(6, '0')}`;
+    if (!taken?.has(code)) return code;
+  }
 }
 
-export async function createParty(tx: Tx, companyId: string, input: CreatePartyInput) {
-  const code = input.code ?? (await generateCode(tx, companyId));
+export async function createParty(tx: Tx, companyId: string, input: CreatePartyInput, taken?: ReadonlySet<string>) {
+  const code = input.code ?? (await generateCode(tx, companyId, taken));
   const [dup] = await tx.select({ id: parties.id }).from(parties).where(eq(parties.code, code));
   if (dup) throw conflict(`${code} kodlu cari zaten var`, 'PARTY_CODE_TAKEN');
 

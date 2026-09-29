@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ExportFormat } from '@erp/shared';
 import { apiBlob } from '../../lib/api';
+import { saveBlob } from '../../lib/download';
 import { errorMessage } from '../../lib/errors';
 import { useCompany } from '../../lib/session';
 import { Button } from './Button';
@@ -39,13 +40,7 @@ export function ExportMenu({ exportKey, params = {}, formats = ['xlsx', 'csv'], 
     setBusy(true);
     try {
       const { blob, filename } = await apiBlob(`/api/exports/${exportKey}?${qs}`, { companyId: company.id });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename ?? `${exportKey}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
+      saveBlob(blob, filename ?? `${exportKey}.${format}`);
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {

@@ -319,6 +319,51 @@ async function main() {
   await page.emulateMedia({ media: 'screen' });
   if (screenViewport) await page.setViewportSize(screenViewport);
 
+  // İçe aktarma sihirbazı ve açılış bakiyeleri
+  const csvFile = (text: string) => ({ name: 'dosya.csv', mimeType: 'text/csv', buffer: Buffer.from(text, 'utf8') });
+  const wizard = page.getByRole('dialog');
+  await go('/parties', '80-cariler-ice-aktar-dugmesi', 'Cari hesaplar');
+  await page.getByRole('button', { name: 'İçe aktar' }).click();
+  await wizard.getByText('Dosyanızı seçin').waitFor();
+  await page.waitForTimeout(400);
+  await shot(page, '81-ice-aktar-dosya');
+  const stamp = Date.now();
+  await wizard.locator('input[type=file]').setInputFiles(
+    csvFile(`Cari Kodu;Ünvan / Ad Soyad;Tür;Vergi No;E-posta;Vade\n;Tur Deneme ${stamp} Ltd.;Müşteri;;info@ornek.com;30\nCR-000001;Yinelenen Kod;Müşteri;;;\n;Hatalı E-posta;Tedarikçi;;ali@;\n`),
+  );
+  await wizard.getByText('Sütunları eşleyin').waitFor();
+  await page.waitForTimeout(300);
+  await shot(page, '82-ice-aktar-esleme');
+  await wizard.getByRole('button', { name: 'Ön izleme' }).click();
+  await wizard.getByText('Henüz hiçbir kayıt yazılmadı').waitFor();
+  await settle(page, 300);
+  await shot(page, '83-ice-aktar-onizleme-hata');
+  await wizard.getByRole('button', { name: 'Geri' }).click();
+  await wizard.getByRole('button', { name: 'Geri' }).click();
+  await wizard.locator('input[type=file]').setInputFiles(csvFile(`Cari Kodu;Ünvan / Ad Soyad;Tür;Vergi No;E-posta;Vade\n;Tur Deneme ${stamp} Ltd.;Müşteri;;info@ornek.com;30\n`));
+  await wizard.getByRole('button', { name: 'Ön izleme' }).click();
+  await wizard.getByText('Henüz hiçbir kayıt yazılmadı').waitFor();
+  await settle(page, 300);
+  await shot(page, '84-ice-aktar-onizleme-hazir');
+  await wizard.getByRole('button', { name: 'İçe aktar', exact: true }).click();
+  await wizard.getByRole('heading', { name: 'İçe aktarma tamamlandı' }).waitFor();
+  await shot(page, '85-ice-aktar-sonuc');
+  await wizard.getByRole('button', { name: 'Tamam' }).click();
+
+  await go('/accounting/openings', '86-acilis-bakiyeleri', 'Açılış bakiyeleri');
+  await page.getByRole('tab', { name: 'Mizan' }).click();
+  await settle(page, 300);
+  await shot(page, '87-acilis-mizan-sekmesi');
+  await page.getByRole('button', { name: 'İçe aktar' }).click();
+  await wizard.getByText('Dosyanızı seçin').waitFor();
+  await wizard.locator('input[type=file]').setInputFiles(csvFile('Hesap Kodu;Hesap Adı;Borç;Alacak\n100;Kasa;50.000,00;\n120;Alıcılar;10.000,00;\n254;Taşıtlar;100.000,00;\n500;Sermaye;;120.000,00\n'));
+  await wizard.getByText('Sütunları eşleyin').waitFor();
+  await wizard.getByRole('button', { name: 'Ön izleme' }).click();
+  await wizard.getByText('Henüz hiçbir kayıt yazılmadı').waitFor();
+  await settle(page, 300);
+  await shot(page, '88-mizan-acilisi-onizleme');
+  await page.keyboard.press('Escape');
+
   // Ayarlar
   await go('/settings/currencies', '11-kurlar', 'Para birimi ve kurlar');
   // Merkez Bankası XML dosyasından içe aktarma (resmî örnek dosya)
@@ -368,7 +413,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/reports/journal-book', '/reports/general-ledger', '/reports/sales', '/reports/purchases', '/reports/item-profit', '/reports/fx-differences', '/reports/data-export', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/reports/journal-book', '/reports/general-ledger', '/reports/sales', '/reports/purchases', '/reports/item-profit', '/reports/fx-differences', '/reports/data-export', '/accounting/openings', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);

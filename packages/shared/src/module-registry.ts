@@ -209,6 +209,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'ledger.read',
   },
   {
+    key: 'openings',
+    labelKey: 'nav.openings',
+    path: '/accounting/openings',
+    icon: 'upload',
+    group: 'accounting',
+    module: 'core.ledger',
+    permission: 'ledger.post',
+  },
+  {
     key: 'accounts',
     labelKey: 'nav.accounts',
     path: '/accounting/accounts',
