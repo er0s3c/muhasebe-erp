@@ -24,6 +24,7 @@ import { requireMappings } from '../ledger/mappings';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
+import { DeliveryAllocator } from './delivery-link';
 import { buildInvoiceJournal, requiredMappingKeys } from './journal';
 import {
   assertExternalNoFree,
@@ -106,6 +107,7 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       vatCode: l.vatCode,
       accountId: l.accountId,
       sourceLineId: l.sourceLineId,
+      deliveryLineId: l.deliveryLineId,
     })),
     inv.vatIncluded,
   );
@@ -159,52 +161,92 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
     usedInThis.set(l.sourceLineId, { qty: mine.qty.plus(qty), cost: mine.cost.plus(value ?? 0) });
     return value;
   };
-  if (original) lines.forEach((l) => l.sourceLineId && !l.isStock && returnValue(l)); // stoksuz satırlarda yalnızca miktar sınırı
+  // Miktar sınırı tüm bağlı satırlarda (stoklu/stoksuz, satış/alış iadesi) kilit altında denetlenir;
+  // her satır için bir kez hesaplanır (aynı orijinal satıra bağlı satırlar birikir).
+  const returnValueByLine = new Map<number, MoneyValue | null>();
+  if (original) for (const l of lines) if (l.sourceLineId) returnValueByLine.set(l.lineNo, returnValue(l));
+
+  // İrsaliye bağı: irsaliye satırlarını kilitle, bağları yeniden doğrula, paylaşılan değerleri dağıt
+  const allocator = await DeliveryAllocator.lock(tx, type, party.id, lines, inv.id);
 
   // --- Stok (saf planlama; yazma aşağıda) ---
+  // İrsaliyeye bağlı satır stok hareketi yapmaz (mal irsaliyede çıktı/girdi). Alışta fatura fiyatı irsaliye
+  // değerinden farklıysa fark, elde kalan miktar payı kadar stok maliyetine (`cost_adjust`), kalanı satılan
+  // mal maliyetine (621) gider; irsaliyenin eksi bakiye kapanış düzeltmesi de burada 621'e aktarılır.
   const stockLines = lines.filter((l) => l.isStock);
+  const directStock = stockLines.filter((l) => !l.deliveryLineId);
+  const linkedPurchase = stockLines.filter((l) => l.deliveryLineId && type === 'purchase');
+  const planItemIds = [...new Set([...directStock, ...linkedPurchase].map((l) => l.itemId!))];
   let planRows: DraftRow[] = [];
   const costByLine = new Map<number, MoneyValue>();
+  const deliveryShare = new Map<number, { value: MoneyValue; adjust: MoneyValue }>();
   let stockAdjust = dec(0);
   let warehouseId: string | null = null;
   if (stockLines.length > 0) {
-    const wh = await resolveWarehouse(tx, inv.warehouseId, original);
-    warehouseId = wh.id;
-    const itemIds = [...new Set(stockLines.map((l) => l.itemId!))];
-    const plannerItems = await loadStockableItems(tx, itemIds);
-    await lockItems(tx, itemIds);
-    const states = await loadItemStates(tx, itemIds);
-    const whQty = await loadWarehouseQty(tx, itemIds, [wh.id]);
-    const planner = new StockPlanner(states, whQty, {
-      allowNegative: ctx.allowNegativeStock,
-      items: plannerItems,
-      warehouseNames: new Map([[wh.id, wh.name]]),
-    });
+    const wh = directStock.length > 0 ? await resolveWarehouse(tx, inv.warehouseId, original) : null;
+    let planner: StockPlanner | null = null;
+    if (planItemIds.length > 0) {
+      const plannerItems = await loadStockableItems(tx, planItemIds);
+      await lockItems(tx, planItemIds);
+      const states = await loadItemStates(tx, planItemIds);
+      const whQty = await loadWarehouseQty(tx, planItemIds, wh ? [wh.id] : []);
+      planner = new StockPlanner(states, whQty, {
+        allowNegative: ctx.allowNegativeStock,
+        items: plannerItems,
+        warehouseNames: new Map(wh ? [[wh.id, wh.name]] : []),
+      });
+    }
+    const poolUsed = new Map<string, MoneyValue>();
+    let reclass = dec(0);
     for (const l of stockLines) {
       const qty = dec(l.quantity);
-      const before = planner.rows.length;
       const idx = l.lineNo - 1;
+      if (l.deliveryLineId) {
+        const share = allocator.take(l.lineNo, l.deliveryLineId, qty);
+        deliveryShare.set(l.lineNo, { value: share.value, adjust: share.adjust });
+        if (type === 'sales') {
+          costByLine.set(l.lineNo, share.value);
+          continue;
+        }
+        const p = planner!;
+        const invValue = netBase[idx]!;
+        const variance = invValue.minus(share.value);
+        const onHand = p.state(l.itemId!).qty;
+        const pool = onHand.minus(poolUsed.get(l.itemId!) ?? 0);
+        const usable = pool.lte(0) ? dec(0) : qty.lt(pool) ? qty : pool;
+        poolUsed.set(l.itemId!, (poolUsed.get(l.itemId!) ?? dec(0)).plus(usable));
+        const toStock = variance.isZero() ? dec(0) : usable.eq(qty) ? variance : roundMoney(variance.times(usable).div(qty));
+        p.adjust(l.lineNo, l.itemId!, share.line.warehouseId, toStock, 'delivery_variance');
+        reclass = reclass.plus(share.adjust).minus(variance.minus(toStock));
+        costByLine.set(l.lineNo, invValue);
+        continue;
+      }
+      const p = planner!;
+      const before = p.rows.length;
       if (type === 'sales' || type === 'purchase_return') {
-        planner.issue(l.lineNo, l.itemId!, wh.id, qty);
+        p.issue(l.lineNo, l.itemId!, wh!.id, qty);
       } else if (type === 'purchase') {
-        planner.receipt(l.lineNo, l.itemId!, wh.id, qty, netBase[idx]!, {
+        p.receipt(l.lineNo, l.itemId!, wh!.id, qty, netBase[idx]!, {
           currencyCode: inv.currencyCode,
           unitCost: l.net.div(qty).toFixed(6),
           fxRate: toDbRate(fx),
         });
       } else {
         // Satış iadesi: bağlıysa orijinal satışın maliyetiyle, değilse güncel referans maliyetle girer
-        const value = returnValue(l);
-        if (value) planner.receipt(l.lineNo, l.itemId!, wh.id, qty, value);
-        else planner.surplus(l.lineNo, l.itemId!, wh.id, qty);
+        const value = returnValueByLine.get(l.lineNo) ?? null;
+        if (value) p.receipt(l.lineNo, l.itemId!, wh!.id, qty, value);
+        else p.surplus(l.lineNo, l.itemId!, wh!.id, qty);
       }
       costByLine.set(
         l.lineNo,
-        planner.rows.slice(before).filter((r) => r.kind === 'qty').reduce((s, r) => s.plus(r.value.abs()), dec(0)),
+        p.rows.slice(before).filter((r) => r.kind === 'qty').reduce((s, r) => s.plus(r.value.abs()), dec(0)),
       );
     }
-    planRows = planner.rows;
-    stockAdjust = planRows.filter((r) => r.kind === 'cost_adjust').reduce((s, r) => s.plus(r.value), dec(0));
+    planRows = planner?.rows ?? [];
+    warehouseId = wh?.id ?? (planRows.length > 0 ? allocator.info.get(linkedPurchase[0]!.deliveryLineId!)!.warehouseId : null);
+    // Yevmiyede envanterden satılan mal maliyetine aktarılacak tutar (eksi: envanter azalır):
+    // bu faturanın kendi alışlarındaki eksi bakiye kapanışı + irsaliyeli alışların aktarımları.
+    stockAdjust = planRows.filter((r) => r.kind === 'cost_adjust' && !r.tag).reduce((s, r) => s.plus(r.value), dec(0)).plus(reclass);
   }
 
   // --- Yevmiye satırları ---
@@ -280,6 +322,8 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
         netBase: toDbAmount(netBase[i]!),
         vatBase: toDbAmount(vatBase[i]!),
         costValue: l.isStock ? toDbAmount(costByLine.get(l.lineNo) ?? 0) : null,
+        deliveryValue: deliveryShare.has(l.lineNo) ? toDbAmount(deliveryShare.get(l.lineNo)!.value) : null,
+        deliveryAdjust: deliveryShare.has(l.lineNo) ? toDbAmount(deliveryShare.get(l.lineNo)!.adjust) : null,
       })
       .where(eq(invoiceLines.id, stockLine.id));
   }

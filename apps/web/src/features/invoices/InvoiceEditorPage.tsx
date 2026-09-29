@@ -14,7 +14,7 @@ import { errorMessage } from '../../lib/errors';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
-import type { InvoiceDetail, InvoiceType } from '../../lib/types';
+import type { DeliveryNoteDetail, InvoiceDetail, InvoiceType } from '../../lib/types';
 import { qtyText, useUnitLabel } from '../inventory/common';
 import { INVOICE_INVALIDATE, InvoiceStatusBadge, InvoiceTypeBadge } from './common';
 import { InvoiceForm } from './InvoiceForm';
@@ -32,14 +32,19 @@ export function InvoiceEditorPage() {
   const typeParam = params.get('type');
   const newType: InvoiceType = (INVOICE_TYPES as readonly string[]).includes(typeParam ?? '') ? (typeParam as InvoiceType) : 'sales';
   const returnOf = params.get('returnOf');
+  const deliveryNoteId = params.get('deliveryNote');
 
   const detail = useCQuery<InvoiceDetail>(['invoice', id], id ? `/api/invoices/${id}` : null);
   const original = useCQuery<InvoiceDetail>(['invoice', returnOf], !id && returnOf ? `/api/invoices/${returnOf}` : null);
+  const fromDelivery = useCQuery<DeliveryNoteDetail>(['delivery-note', deliveryNoteId], !id && deliveryNoteId ? `/api/delivery-notes/${deliveryNoteId}` : null);
 
   if (!id) {
     if (!canManage) return <Callout tone="danger">{t('errors.FORBIDDEN')}</Callout>;
     if (returnOf && !original.data) return original.error ? <Callout tone="danger">{errorMessage(original.error)}</Callout> : <PageLoading />;
-    return <InvoiceForm key={`new-${newType}-${returnOf ?? ''}`} type={newType} original={original.data} />;
+    if (deliveryNoteId && !fromDelivery.data) return fromDelivery.error ? <Callout tone="danger">{errorMessage(fromDelivery.error)}</Callout> : <PageLoading />;
+    // İrsaliyeden fatura: tür irsaliyenin yönünden gelir
+    const type: InvoiceType = fromDelivery.data ? (fromDelivery.data.note.type === 'sales' ? 'sales' : 'purchase') : newType;
+    return <InvoiceForm key={`new-${type}-${returnOf ?? ''}-${deliveryNoteId ?? ''}`} type={type} original={original.data} fromDelivery={fromDelivery.data} />;
   }
   if (detail.error) return <Callout tone="danger">{errorMessage(detail.error)}</Callout>;
   if (!detail.data) return <PageLoading />;
@@ -211,6 +216,13 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                     <span>{l.description}</span>
                     {l.itemCode && <span className="ml-2 font-mono text-xs text-muted">{l.itemCode}</span>}
                     {l.accountCode && <span className="block text-xs text-muted">{t('invoices.form.account')}: {l.accountCode}</span>}
+                    {l.deliveryNoteId && (
+                      <span className="block text-xs text-muted">
+                        <Link to={`/delivery-notes/${l.deliveryNoteId}`} className="link">
+                          {t('deliveries.line.from', { no: l.deliveryNoteNo ?? '', line: l.deliveryLineNo ?? '' })}
+                        </Link>
+                      </span>
+                    )}
                     {showQtyReturned && l.returnedQty && dec(l.returnedQty).gt(0) && (
                       <span className="block text-xs text-muted">{t('invoices.view.returned', { qty: qtyText(l.returnedQty) })}</span>
                     )}

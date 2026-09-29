@@ -99,7 +99,7 @@
       "settings": "Ayarlar",
       "parties": "Cari",
       "stock": "Stok",
-      "invoices": "Fatura"
+      "invoices": "Fatura ve irsaliye"
     },
     "dashboard": "Genel bakış",
     "journal": "Yevmiye kayıtları",
@@ -121,6 +121,8 @@
     "warehouses": "Depolar",
     "salesInvoices": "Satış faturaları",
     "purchaseInvoices": "Alış ve gider faturaları",
+    "salesDeliveryNotes": "Satış irsaliyeleri",
+    "purchaseDeliveryNotes": "Alış irsaliyeleri",
     "vatSummary": "KDV özeti",
     "accountMapping": "Hesap eşlemesi"
   },
@@ -146,7 +148,9 @@
     "skipToContent": "İçeriğe geç",
     "newParty": "Yeni cari",
     "newSalesInvoice": "Yeni satış faturası",
-    "newPurchaseInvoice": "Yeni alış faturası"
+    "newPurchaseInvoice": "Yeni alış faturası",
+    "newSalesDelivery": "Yeni satış irsaliyesi",
+    "newPurchaseDelivery": "Yeni alış irsaliyesi"
   },
   "auth": {
     "loginTitle": "Hesabınıza giriş yapın",
@@ -226,7 +230,8 @@
     "summary": "Özet göstergeler",
     "monthSales": "Bu ay satışlar (net)",
     "monthPurchases": "Bu ay alışlar (net)",
-    "draftInvoices": "Taslak fatura"
+    "draftInvoices": "Taslak fatura",
+    "unbilledDeliveries": "Faturalanmamış irsaliye"
   },
   "settings": {
     "company": {
@@ -490,8 +495,11 @@
     "RATE_XML_INVALID": "Kur dosyası geçersiz veya beklenen biçimde değil.",
     "RATE_XML_NO_SUPPORTED": "Dosyada desteklenen para birimi (GBP, EUR, USD) yok.",
     "ENTRY_HAS_SOURCE": "Bu yevmiye bir belgeden otomatik oluştu; ters kaydı ilgili belgeden (fatura iptali, ters stok belgesi) yapın.",
-    "STOCK_DOC_HAS_SOURCE": "Bu stok belgesi bir faturadan oluştu; ters kaydı fatura iptalinden yapın.",
+    "STOCK_DOC_HAS_SOURCE": "Bu stok belgesi bir faturadan veya irsaliyeden oluştu; ters kaydı fatura ya da irsaliye iptalinden yapın.",
     "INVOICE_RULE_VIOLATION": "Fatura kuralı ihlali",
+    "DELIVERY_RULE_VIOLATION": "İrsaliye kuralı ihlali",
+    "DELIVERY_NOT_DRAFT": "Yalnızca taslak irsaliye düzenlenebilir veya silinebilir.",
+    "DELIVERY_ALREADY_CANCELLED": "İrsaliye zaten iptal edilmiş.",
     "INVOICE_NOT_DRAFT": "Yalnızca taslak fatura düzenlenebilir veya silinebilir.",
     "INVOICE_ALREADY_CANCELLED": "Fatura zaten iptal edilmiş."
   },
@@ -793,10 +801,13 @@
       "direction": {
         "in": "Giriş",
         "out": "Çıkış",
-        "transfer": "Transfer"
+        "transfer": "Transfer",
+        "adjust": "Düzeltme"
       },
       "fromInvoice": "Bu belge bir faturadan oluştu; ters kaydı fatura iptalinden yapılır.",
-      "openInvoice": "Faturayı aç"
+      "openInvoice": "Faturayı aç",
+      "fromDelivery": "Bu belge bir irsaliyeden oluştu; ters kaydı irsaliye iptalinden yapılır.",
+      "openDelivery": "İrsaliyeyi aç"
     },
     "status": {
       "title": "Stok durumu",
@@ -823,7 +834,12 @@
       "reconcileLedger": "150–157 hesap bakiyesi",
       "reconcileDiff": "Fark",
       "reconcileOk": "Stok defteri muhasebe bakiyesiyle uyumlu.",
-      "reconcileOff": "Stok değeri ile muhasebe bakiyesi arasında fark var. Stok hareketleri henüz otomatik fiş üretmiyor (fatura modülüyle gelecek); açılış ve düzeltme fişlerini yevmiye kaydıyla girin."
+      "reconcileOff": "Stok değeri ile muhasebe bakiyesi arasında açıklanamayan fark var. Stok belgelerinin ve faturaların yevmiyesini ve elle girilen 150–157 fişlerini kontrol edin.",
+      "reconcilePending": "Faturalanmamış irsaliyeler",
+      "reconcilePendingSales": "Satış irsaliyeleri (maliyet)",
+      "reconcilePendingPurchases": "Alış irsaliyeleri (değer)",
+      "reconcileUnexplained": "Açıklanamayan fark",
+      "reconcilePendingOnly": "Fark, faturası henüz kesilmemiş irsaliyelerden kaynaklanıyor: irsaliye stoğu hemen hareket ettirir, yevmiye fatura kesilince oluşur. Faturalar kesildikçe kapanır."
     },
     "counts": {
       "title": "Stok sayımları",
@@ -1019,6 +1035,126 @@
       "salesNet": "Satış matrahı",
       "purchaseNet": "Alış matrahı",
       "note": "Tutarlar faturada saklanan oranlar ve defter para birimi üzerinden hesaplanır; beyanname yerine geçmez."
+    }
+  },
+  "deliveries": {
+    "sales": {
+      "title": "Satış irsaliyeleri",
+      "subtitle": "Sevk irsaliyeleri: kayıt stoğu ortalama maliyetle çıkarır; yevmiye faturada oluşur.",
+      "empty": "Henüz satış irsaliyesi yok",
+      "emptyDesc": "Mal sevk ederken irsaliye kesin; stok hemen düşer, fatura sonra kesilebilir."
+    },
+    "purchases": {
+      "title": "Alış irsaliyeleri",
+      "subtitle": "Mal kabul irsaliyeleri: kayıt stoğa girer; yevmiye tedarikçi faturası girilince oluşur.",
+      "empty": "Henüz alış irsaliyesi yok",
+      "emptyDesc": "Tedarikçiden mal gelince irsaliyeyi girin; fatura gelince irsaliyeye bağlarsınız."
+    },
+    "types": {
+      "sales": "Satış irsaliyesi",
+      "purchase": "Alış irsaliyesi"
+    },
+    "newType": {
+      "sales": "Yeni satış irsaliyesi",
+      "purchase": "Yeni alış irsaliyesi"
+    },
+    "status": {
+      "draft": "Taslak",
+      "posted": "Kaydedildi",
+      "cancelled": "İptal"
+    },
+    "invoicing": {
+      "open": "Faturalanmadı",
+      "partial": "Kısmen faturalandı",
+      "invoiced": "Faturalandı"
+    },
+    "allStatuses": "Tüm durumlar",
+    "allInvoicing": "Tüm faturalama durumları",
+    "searchPlaceholder": "No, dış numara veya cari ara",
+    "number": "İrsaliye no",
+    "party": "Cari",
+    "warehouse": "Depo",
+    "lineCol": "Kalem",
+    "invoicingCol": "Faturalama",
+    "pending": {
+      "title": "Faturalanmamış irsaliyeler",
+      "summary": "{{count}} irsaliye, kalan değer {{value}} {{currency}}",
+      "none": "Faturalanmamış irsaliye yok",
+      "show": "Listele"
+    },
+    "form": {
+      "newTitle": "{{type}}",
+      "editTitle": "{{type}} (taslak)",
+      "customer": "Müşteri",
+      "supplier": "Tedarikçi",
+      "pickParty": "Cari seçin…",
+      "noteDate": "İrsaliye tarihi",
+      "warehouse": "Depo",
+      "externalNo": "Tedarikçi irsaliye no",
+      "vehiclePlate": "Araç plakası",
+      "driverName": "Şoför",
+      "lines": "İrsaliye satırları",
+      "item": "Stok kartı",
+      "pickItem": "Kart seçin…",
+      "quantity": "Miktar",
+      "unitCost": "Birim maliyet",
+      "unitCostHint": "Fiyat bilinmiyorsa boş bırakın; tedarikçi faturası irsaliyeye bağlanınca fark otomatik düzeltilir.",
+      "currency": "Para birimi",
+      "fxRate": "Kur",
+      "onHand": "Eldeki: {{qty}} {{unit}}",
+      "notEnough": "Depoda yeterli stok yok: eldeki {{qty}} {{unit}}",
+      "addLine": "Satır ekle",
+      "removeLine": "Satırı sil",
+      "partyRequired": "Cari seçilmeli.",
+      "linesRequired": "Her satırda stok kartı ve miktar girilmeli.",
+      "externalRequired": "Tedarikçi irsaliye numarası gerekli.",
+      "saveDraft": "Taslak kaydet",
+      "savePost": "Kaydet ve stoğa işle",
+      "postNote": "Kayıt stok defterini hemen hareket ettirir; yevmiye fatura kesilince oluşur.",
+      "savedMsg": "Taslak kaydedildi",
+      "postedMsg": "İrsaliye kaydedildi: {{no}}",
+      "deleteDraft": "Taslağı sil",
+      "deleteConfirm": "Bu taslak irsaliye silinecek. Stok etkilenmez.",
+      "deleted": "Taslak silindi"
+    },
+    "view": {
+      "print": "Yazdır",
+      "createInvoice": "Fatura oluştur",
+      "cancel": "İrsaliyeyi iptal et",
+      "cancelledTitle": "Bu irsaliye {{date}} tarihinde iptal edildi",
+      "cancelTitle": "İrsaliyeyi iptal et",
+      "cancelDesc": "Stok hareketi ters belgeyle geri alınır; irsaliye numarası serinin parçası olarak kalır. Faturaya bağlı irsaliye ya da sonradan aynı ürünlerde stok hareketi görmüş irsaliye iptal edilemez.",
+      "cancelDate": "İptal tarihi",
+      "cancelReason": "İptal nedeni",
+      "cancelledMsg": "İrsaliye iptal edildi",
+      "stockDoc": "Stok belgesi",
+      "vehicle": "Araç plakası",
+      "driver": "Şoför",
+      "invoices": "Faturalar",
+      "invoiced": "Faturalanan",
+      "remaining": "Kalan",
+      "unitCost": "Birim maliyet",
+      "value": "Stok değeri",
+      "noPrice": "Fiyatsız",
+      "allInvoiced": "Tüm satırlar faturalandı.",
+      "noStockNote": "Yevmiye yok: bu irsaliye yalnızca stok defterini etkiler.",
+      "internalNote": "Bu çıktı iç kullanım belgesidir; yasal irsaliye biçimi doğrulanmamıştır (bkz. docs/LEGAL-NOTES.md)."
+    },
+    "picker": {
+      "button": "İrsaliyeden ekle",
+      "title": "İrsaliyeden satır ekle",
+      "desc": "Cariye ait, faturalanmamış irsaliye satırlarını seçin; miktar kalan miktarla gelir. Bağlı satır stok hareketi yapmaz.",
+      "empty": "Bu cariye ait faturalanacak irsaliye satırı yok.",
+      "pickPartyFirst": "Önce cari seçin.",
+      "note": "İrsaliye",
+      "item": "Kart",
+      "remaining": "Kalan",
+      "add": "Seçilenleri ekle"
+    },
+    "line": {
+      "from": "İrsaliye: {{no}} · satır {{line}}",
+      "remaining": "Kalan: {{qty}}",
+      "exceeded": "Faturalanan miktar irsaliyede kalan miktarı aşıyor."
     }
   },
   "mappings": {

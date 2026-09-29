@@ -66,7 +66,10 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | KDV hariç/dahil fiyat, iskonto, dövizli fatura, KDV özeti | ✅ ⚠️ oranlar doğrulanmadı |
 | Elle girilen stok belgelerinin ve sayımın otomatik yevmiyesi | ✅ |
 | Faturanın yazdırılabilir görünümü (iç belge) | ✅ ⚠️ yasal fatura biçimi doğrulanmadı |
-| İrsaliye ve faturaya dönüştürme; toplu fatura | 🔜 M6b |
+| Satış (sevk) ve alış (mal kabul) irsaliyesi; stok hemen hareket eder, yevmiye faturada oluşur | ✅ ⚠️ yasal irsaliye biçimi doğrulanmadı |
+| Faturanın irsaliyeye bağlanması: kısmi ve çoklu faturalama, tekrar stok hareketi yok, alışta fiyat farkı düzeltmesi | ✅ |
+| Faturalanmamış irsaliye listesi, özeti ve stok mutabakatında açıklanan fark | ✅ |
+| İade irsaliyesi, sipariş/teklif, toplu faturalama sihirbazı | ⏳ |
 | Excel ile fatura/irsaliye içe aktarma | 🔜 M8 |
 | Gider kartları ve gider raporları | ⏳ |
 | İthalat maliyet dağıtımı (navlun, gümrük, liman) | ⏳ Faz B |

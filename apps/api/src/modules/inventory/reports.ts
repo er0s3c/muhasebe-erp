@@ -2,6 +2,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import { applyRate, dec, sum, toDbAmount, type StockStatusQuery } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { TR, trContains } from '../../db/search';
+import { pendingDeliveries, type PendingDeliveries } from '../deliveries/reports';
 import { findRate } from '../settings/rates';
 
 interface StatusRow extends Record<string, unknown> {
@@ -82,7 +83,15 @@ export async function stockStatus(
     if (rate) reportingValue = toDbAmount(applyRate(totalValue, rate));
   }
 
-  let ledger: { accountsBalance: string; stockValue: string; difference: string } | null = null;
+  let ledger: {
+    accountsBalance: string;
+    stockValue: string;
+    difference: string;
+    /** İrsaliyeler stok defterine girmiş, faturaya bağlanınca yevmiyeye girecek: beklenen fark. */
+    pendingDeliveries: PendingDeliveries;
+    /** Fark − bekleyen irsaliyeler: sıfırdan farklıysa gerçek bir mutabakat sorunu. */
+    unexplained: string;
+  } | null = null;
   if (!q.warehouseId && !q.categoryId && !q.query && q.lowOnly !== 'true') {
     const bal = await tx.execute<{ balance: string }>(sql`
       select coalesce(sum(l.debit_base - l.credit_base), 0) as balance
@@ -92,10 +101,14 @@ export async function stockStatus(
       where e.entry_date <= ${q.asOf}::date and a.code ~ '^15[0-7]'`);
     const accountsBalance = dec(bal.rows[0]!.balance);
     const stockValue = sum(all.map((r) => r.value));
+    const difference = stockValue.minus(accountsBalance);
+    const pending = await pendingDeliveries(tx, q.asOf);
     ledger = {
       accountsBalance: toDbAmount(accountsBalance),
       stockValue: toDbAmount(stockValue),
-      difference: toDbAmount(stockValue.minus(accountsBalance)),
+      difference: toDbAmount(difference),
+      pendingDeliveries: pending.raw,
+      unexplained: toDbAmount(difference.minus(pending.total)),
     };
   }
 

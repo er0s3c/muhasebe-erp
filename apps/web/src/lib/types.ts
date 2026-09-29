@@ -399,7 +399,7 @@ export interface StockDocDetail {
     itemCode: string;
     itemName: string;
     unit: string;
-    direction: 'in' | 'out' | 'transfer';
+    direction: 'in' | 'out' | 'transfer' | 'adjust';
     warehouseName: string;
     qty: string;
     value: string;
@@ -467,7 +467,15 @@ export interface StockStatusReport {
     isLow: boolean;
   }[];
   totals: { itemCount: number; lowCount: number; value: string; reportingValue: string | null; reportingCurrency: string | null };
-  ledger: { accountsBalance: string; stockValue: string; difference: string } | null;
+  ledger: {
+    accountsBalance: string;
+    stockValue: string;
+    difference: string;
+    /** Faturası kesilmemiş irsaliyelerin stok defterine girmiş, yevmiyeye girmemiş değeri (satış eksi, alış artı). */
+    pendingDeliveries: { sales: string; purchases: string; total: string };
+    /** Fark − bekleyen irsaliyeler: sıfırdan farklıysa gerçek mutabakat sorunu. */
+    unexplained: string;
+  } | null;
 }
 
 export interface InventorySummary {
@@ -525,6 +533,10 @@ export interface InvoiceLineRow {
   costValue: string | null;
   returnedQty: string | null;
   returnableQty: string | null;
+  deliveryLineId: string | null;
+  deliveryNoteId: string | null;
+  deliveryNoteNo: string | null;
+  deliveryLineNo: number | null;
 }
 
 export interface InvoiceDetail {
@@ -574,6 +586,104 @@ export interface InvoiceSummary {
   salesNet: string;
   purchasesNet: string;
   draftCount: number;
+}
+
+// --- İrsaliye -------------------------------------------------------------
+
+export type DeliveryNoteType = 'sales' | 'purchase';
+export type DeliveryNoteStatus = 'draft' | 'posted' | 'cancelled';
+export type DeliveryInvoicing = 'open' | 'partial' | 'invoiced';
+
+export interface DeliveryNoteListRow {
+  id: string;
+  type: DeliveryNoteType;
+  status: DeliveryNoteStatus;
+  noteNo: string | null;
+  externalNo: string | null;
+  noteDate: string;
+  partyId: string;
+  partyCode: string;
+  partyName: string;
+  warehouseName: string;
+  vehiclePlate: string | null;
+  description: string | null;
+  lineCount: number;
+  totalQty: string;
+  invoicedQty: string;
+  invoicing: DeliveryInvoicing | null;
+  /** Kayıtlı irsaliyede henüz faturalanmamış stok değeri (defter para birimi). */
+  pendingValue: string | null;
+}
+
+export interface DeliveryNoteLineRow {
+  id: string;
+  lineNo: number;
+  itemId: string;
+  itemCode: string;
+  description: string;
+  quantity: string;
+  unit: string | null;
+  unitCost: string | null;
+  currencyCode: string | null;
+  fxRate: string | null;
+  stockValue: string | null;
+  adjustValue: string | null;
+  invoicedQty: string;
+  remainingQty: string;
+}
+
+export interface DeliveryNoteDetail {
+  note: {
+    id: string;
+    type: DeliveryNoteType;
+    status: DeliveryNoteStatus;
+    noteNo: string | null;
+    externalNo: string | null;
+    noteDate: string;
+    partyId: string;
+    partyCode: string;
+    partyName: string;
+    warehouseId: string;
+    warehouseName: string;
+    vehiclePlate: string | null;
+    driverName: string | null;
+    description: string | null;
+    stockDocumentId: string | null;
+    stockDocumentNo: string | null;
+    postedAt: string | null;
+    cancelledAt: string | null;
+    cancelReason: string | null;
+    cancelStockDocumentId: string | null;
+    cancelStockDocumentNo: string | null;
+    invoicing: DeliveryInvoicing | null;
+  };
+  lines: DeliveryNoteLineRow[];
+  invoices: { id: string; invoiceNo: string | null; status: InvoiceStatus; type: InvoiceType }[];
+}
+
+/** Faturaya eklenebilecek, kalan miktarı olan irsaliye satırı. */
+export interface OpenDeliveryLine {
+  lineId: string;
+  lineNo: number;
+  noteId: string;
+  noteNo: string;
+  noteDate: string;
+  externalNo: string | null;
+  warehouseId: string;
+  itemId: string;
+  itemCode: string;
+  description: string;
+  unit: string | null;
+  quantity: string;
+  unitCost: string | null;
+  currencyCode: string | null;
+  invoicedQty: string;
+  remainingQty: string;
+}
+
+export interface DeliverySummary {
+  sales: { openCount: number; openValue: string };
+  purchases: { openCount: number; openValue: string };
 }
 
 /** Modül anahtarı -> çeviri anahtarı */

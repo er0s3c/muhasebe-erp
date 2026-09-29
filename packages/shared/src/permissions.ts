@@ -16,6 +16,9 @@ export const PERMISSIONS = [
   'invoices.read',
   'invoices.manage',
   'invoices.post',
+  'deliveries.read',
+  'deliveries.manage',
+  'deliveries.post',
   'reports.read',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
@@ -45,14 +48,29 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'invoices.read',
     'invoices.manage',
     'invoices.post',
+    'deliveries.read',
+    'deliveries.manage',
+    'deliveries.post',
     'reports.read',
   ],
   // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
   // Faturayı taslak olarak hazırlar; muhasebeleştirmeyi (invoices.post) muhasebeci yapar.
-  sales: ['settings.read', 'parties.read', 'parties.manage', 'inventory.read', 'inventory.manage', 'invoices.read', 'invoices.manage'],
-  // Şantiye sorumlusu: malzeme sarfı/transferi/sayım girer, stok kartı açmaz
-  site_manager: ['settings.read', 'inventory.read', 'inventory.move'],
-  viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'reports.read'],
+  // İrsaliyeyi de taslak olarak hazırlar; stok hareketini işleyen (deliveries.post) depo/şantiye/muhasebedir.
+  sales: [
+    'settings.read',
+    'parties.read',
+    'parties.manage',
+    'inventory.read',
+    'inventory.manage',
+    'invoices.read',
+    'invoices.manage',
+    'deliveries.read',
+    'deliveries.manage',
+  ],
+  // Şantiye sorumlusu: malzeme sarfı/transferi/sayım girer, stok kartı açmaz; mal kabul (alış irsaliyesi)
+  // ve sevk irsaliyesi işler, faturaya dokunmaz.
+  site_manager: ['settings.read', 'inventory.read', 'inventory.move', 'deliveries.read', 'deliveries.manage', 'deliveries.post'],
+  viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'deliveries.read', 'reports.read'],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {

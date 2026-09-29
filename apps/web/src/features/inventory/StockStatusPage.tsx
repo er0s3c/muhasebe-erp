@@ -73,6 +73,8 @@ export function StockStatusPage() {
 
   const ledger = data?.ledger;
   const reconciled = ledger ? isZero(ledger.difference) : null;
+  // Fark varsa ama tamamı faturalanmamış irsaliyelerden geliyorsa sorun değil, bekleyen kayıttır
+  const pendingOnly = ledger ? !reconciled && isZero(ledger.unexplained) : false;
 
   return (
     <>
@@ -189,7 +191,7 @@ export function StockStatusPage() {
         {ledger && (
           <Card className="p-5">
             <h2 className="mb-3 text-[15px]">{t('inventory.status.reconcileTitle')}</h2>
-            <dl className="mb-3 grid gap-4 text-sm sm:grid-cols-3">
+            <dl className="mb-3 grid gap-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
               <div>
                 <dt className="text-muted">{t('inventory.status.reconcileStock')}</dt>
                 <dd className="mt-0.5 tabular-nums">{money(ledger.stockValue)}</dd>
@@ -200,10 +202,35 @@ export function StockStatusPage() {
               </div>
               <div>
                 <dt className="text-muted">{t('inventory.status.reconcileDiff')}</dt>
-                <dd className={cn('mt-0.5 tabular-nums', !reconciled && 'text-warning')}>{money(ledger.difference)}</dd>
+                <dd className={cn('mt-0.5 tabular-nums', !reconciled && !pendingOnly && 'text-warning')}>{money(ledger.difference)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted">{t('inventory.status.reconcilePending')}</dt>
+                <dd className="mt-0.5 tabular-nums">{money(ledger.pendingDeliveries.total)}</dd>
+                {!isZero(ledger.pendingDeliveries.total) && (
+                  <dd className="mt-0.5 text-xs text-muted">
+                    {!isZero(ledger.pendingDeliveries.sales) && (
+                      <Link to="/delivery-notes/sales?invoicing=open" className="link">
+                        {t('inventory.status.reconcilePendingSales')}: {money(ledger.pendingDeliveries.sales)}
+                      </Link>
+                    )}
+                    {!isZero(ledger.pendingDeliveries.sales) && !isZero(ledger.pendingDeliveries.purchases) && <br />}
+                    {!isZero(ledger.pendingDeliveries.purchases) && (
+                      <Link to="/delivery-notes/purchases?invoicing=open" className="link">
+                        {t('inventory.status.reconcilePendingPurchases')}: {money(ledger.pendingDeliveries.purchases)}
+                      </Link>
+                    )}
+                  </dd>
+                )}
+              </div>
+              <div>
+                <dt className="text-muted">{t('inventory.status.reconcileUnexplained')}</dt>
+                <dd className={cn('mt-0.5 tabular-nums', !isZero(ledger.unexplained) && 'text-warning')}>{money(ledger.unexplained)}</dd>
               </div>
             </dl>
-            <Callout tone={reconciled ? 'info' : 'warning'}>{reconciled ? t('inventory.status.reconcileOk') : t('inventory.status.reconcileOff')}</Callout>
+            <Callout tone={reconciled || pendingOnly ? 'info' : 'warning'}>
+              {reconciled ? t('inventory.status.reconcileOk') : pendingOnly ? t('inventory.status.reconcilePendingOnly') : t('inventory.status.reconcileOff')}
+            </Callout>
           </Card>
         )}
       </div>

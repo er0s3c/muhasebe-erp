@@ -14,11 +14,13 @@ import {
   ListTree,
   Link2,
   Package,
+  PackageCheck,
   Percent,
   Receipt,
   ReceiptText,
   Scale,
   Tags,
+  Truck,
   Users,
   Warehouse,
   type LucideIcon,
@@ -47,6 +49,8 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   receipt: Receipt,
   'receipt-text': ReceiptText,
   'link-2': Link2,
+  truck: Truck,
+  'package-check': PackageCheck,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

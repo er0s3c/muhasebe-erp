@@ -37,6 +37,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       list.push({ id: 'new-sales-invoice', label: t('shell.newSalesInvoice'), group: t('shell.quickActions'), path: '/invoices/new?type=sales', icon: 'receipt', keywords: 'yeni satış fatura kes' });
       list.push({ id: 'new-purchase-invoice', label: t('shell.newPurchaseInvoice'), group: t('shell.quickActions'), path: '/invoices/new?type=purchase', icon: 'receipt-text', keywords: 'yeni alış fatura gider' });
     }
+    if (modules.includes('core.invoices') && can('deliveries.manage')) {
+      list.push({ id: 'new-sales-delivery', label: t('shell.newSalesDelivery'), group: t('shell.quickActions'), path: '/delivery-notes/new?type=sales', icon: 'truck', keywords: 'yeni satış irsaliye sevk' });
+      list.push({ id: 'new-purchase-delivery', label: t('shell.newPurchaseDelivery'), group: t('shell.quickActions'), path: '/delivery-notes/new?type=purchase', icon: 'package-check', keywords: 'yeni alış irsaliye mal kabul' });
+    }
     if (modules.includes('core.settings') && can('rates.manage')) {
       list.push({ id: 'enter-rates', label: t('shell.enterRates'), group: t('shell.quickActions'), path: '/settings/currencies', icon: 'coins', keywords: 'döviz kur dolar euro sterlin' });
     }

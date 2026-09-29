@@ -193,7 +193,7 @@ export async function reverseStockDocument(
   if (!original) throw notFound('Stok belgesi');
   if (original.sourceType && !fromSource) {
     throw unprocessable(
-      'Bu stok belgesi bir faturadan oluştu; ters kaydı ilgili belgeden (fatura iptali) yapın',
+      'Bu stok belgesi bir faturadan veya irsaliyeden oluştu; ters kaydı ilgili belgeden (fatura/irsaliye iptali) yapın',
       'STOCK_DOC_HAS_SOURCE',
       { sourceType: original.sourceType },
     );
@@ -362,11 +362,31 @@ export async function getStockDocument(tx: Tx, id: string) {
   let total = dec(0);
   const lines = [...byLine.entries()].map(([lineNo, group]) => {
     const qtyRows = group.filter((r) => r.kind === 'qty');
+    const adjustment = group.find((r) => r.kind === 'cost_adjust');
+    if (qtyRows.length === 0) {
+      // Yalnızca maliyet düzeltmesi taşıyan satır (irsaliyeli alış faturasının fiyat farkı)
+      const a = adjustment!;
+      return {
+        lineNo,
+        itemId: a.item_id,
+        itemCode: a.item_code,
+        itemName: a.item_name,
+        unit: a.unit,
+        direction: 'adjust' as const,
+        warehouseName: a.warehouse_name,
+        qty: toDbAmount(0),
+        value: toDbAmount(dec(a.value).abs()),
+        unitCostBase: null,
+        currencyCode: null,
+        unitCost: null,
+        fxRate: null,
+        adjustment: a.value,
+      };
+    }
     const primary = (isTransfer ? qtyRows.find((r) => dec(r.qty).isNegative()) : qtyRows[0])!;
     const qty = dec(primary.qty).abs();
     const value = dec(primary.value).abs();
     total = total.plus(value);
-    const adjustment = group.find((r) => r.kind === 'cost_adjust');
     const direction = isTransfer ? 'transfer' : dec(primary.qty).isNegative() ? 'out' : 'in';
     return {
       lineNo,

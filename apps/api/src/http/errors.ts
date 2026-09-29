@@ -82,6 +82,13 @@ export function errorHandler(
       .send({ error: { code: 'INVOICE_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP04') {
+    // İrsaliye kuralları (değiştirilemez irsaliye, stok defteriyle tutarsızlık, faturalı irsaliye iptali vb.)
+    void reply
+      .status(422)
+      .send({ error: { code: 'DELIVERY_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

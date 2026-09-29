@@ -62,6 +62,10 @@ export const router = createBrowserRouter([
                   { path: 'invoices/vat-summary', ...page(() => import('../features/invoices/VatSummaryPage'), 'VatSummaryPage') },
                   { path: 'invoices/new', ...page(() => import('../features/invoices/InvoiceEditorPage'), 'InvoiceEditorPage') },
                   { path: 'invoices/:id', ...page(() => import('../features/invoices/InvoiceEditorPage'), 'InvoiceEditorPage') },
+                  { path: 'delivery-notes/sales', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'SalesDeliveryNotesPage') },
+                  { path: 'delivery-notes/purchases', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'PurchaseDeliveryNotesPage') },
+                  { path: 'delivery-notes/new', ...page(() => import('../features/deliveries/DeliveryNoteEditorPage'), 'DeliveryNoteEditorPage') },
+                  { path: 'delivery-notes/:id', ...page(() => import('../features/deliveries/DeliveryNoteEditorPage'), 'DeliveryNoteEditorPage') },
                 ],
               },
               {

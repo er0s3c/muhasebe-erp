@@ -120,6 +120,11 @@ export const invoiceLineSchema = z.object({
   accountId: uuid.nullable().optional(),
   /** İade faturasında, iade edilen orijinal fatura satırı. */
   sourceLineId: uuid.nullable().optional(),
+  /**
+   * Satış/alış faturasında, faturalanan irsaliye satırı. Bağlı satır stok hareketi yapmaz
+   * (mal irsaliyede zaten çıktı/girdi); yalnızca fatura ve yevmiye oluşur.
+   */
+  deliveryLineId: uuid.nullable().optional(),
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
 
@@ -163,6 +168,15 @@ function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx)
       }
       if (l.sourceLineId && !doc.returnOfId) {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'sourceLineId'], message: 'Satır bağı için orijinal fatura seçilmeli' });
+      }
+      if (l.deliveryLineId && doc.type !== 'sales' && doc.type !== 'purchase') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'İrsaliye bağı yalnızca satış ve alış faturasında kullanılır' });
+      }
+      if (l.deliveryLineId && l.sourceLineId) {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'Satır hem iadeye hem irsaliyeye bağlanamaz' });
+      }
+      if (l.deliveryLineId && !l.itemId) {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'itemId'], message: 'İrsaliyeye bağlı satırda stok kartı gerekli' });
       }
     });
   }

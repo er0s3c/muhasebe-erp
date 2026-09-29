@@ -14,6 +14,12 @@ export interface DraftRow {
   currencyCode?: string | null;
   unitCost?: string | null;
   fxRate?: string | null;
+  /**
+   * Yalnızca bellekte: 'delivery_variance' = irsaliyeli alışta fatura fiyat farkının stokta kalan payı.
+   * Bu tutar yevmiyede zaten stok hesabındadır; alış girişinin eksi bakiye kapanış düzeltmesinden (621'e
+   * aktarılan) ayırt edilmesi için işaretlenir. Veritabanına yazılmaz.
+   */
+  tag?: 'delivery_variance';
 }
 
 export interface PlannerItem {
@@ -103,6 +109,14 @@ export class StockPlanner {
     this.states.set(itemId, applyIssue(st, qty, value));
     this.bump(itemId, warehouseId, neg(qty));
     this.rows.push({ lineNo, kind: 'qty', itemId, warehouseId, qty: neg(qty), value: neg(value) });
+  }
+
+  /** Maliyet düzeltmesi: envanter değeri işaretli `value` kadar değişir, miktar aynı kalır (miktar satırı yazılmaz). */
+  adjust(lineNo: number, itemId: string, warehouseId: string, value: MoneyValue, tag?: DraftRow['tag']) {
+    if (value.isZero()) return;
+    const st = this.state(itemId);
+    this.states.set(itemId, { ...st, value: st.value.plus(value) });
+    this.rows.push({ lineNo, kind: 'cost_adjust', itemId, warehouseId, qty: dec(0), value, tag });
   }
 
   /** Depolar arası: değer ortalama maliyetle taşınır; ürünün toplam miktar/değeri değişmez. */

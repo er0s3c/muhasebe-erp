@@ -10,10 +10,12 @@ import { hash } from '@node-rs/argon2';
 import { eq } from 'drizzle-orm';
 import {
   applyRate,
+  createDeliveryNoteSchema,
   createInvoiceSchema,
   isoYear,
   todayIso,
   toDbRate,
+  type CreateDeliveryNoteInput,
   type CreateInvoiceInput,
   type CreateItemInput,
   type CreateJournalInput,
@@ -34,6 +36,8 @@ import { createCategory } from '../modules/inventory/categories';
 import { createStockCount, postStockCount, updateStockCount } from '../modules/inventory/counts';
 import { postStockDocument, reverseStockDocument, type StockCtx } from '../modules/inventory/documents';
 import { createItem } from '../modules/inventory/items';
+import { postDeliveryNote } from '../modules/deliveries/posting';
+import { createDeliveryDraft } from '../modules/deliveries/service';
 import { cancelInvoice, postInvoice } from '../modules/invoices/posting';
 import { createInvoiceDraft, getInvoice, type InvoiceCtx } from '../modules/invoices/service';
 import { createWarehouse } from '../modules/inventory/warehouses';
@@ -201,6 +205,27 @@ async function seedInventory(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string
   await invoice('purchase_return', date(9, 15), 'oto', [L(item.boya, '5', '850', { sourceLineId: boya.lines[0]!.id })], { externalNo: 'LO-311-İ', returnOfId: boya.invoice.id, description: 'Fazla gelen boya iadesi' });
   await invoice('expense', date(9, 3), 'oto', [{ description: 'Şantiye geçici elektrik bağlantısı', quantity: '1', unitPrice: '6500', vatCode: 'KDV-16', accountId: acc('770') } as unknown as LineIn], { externalNo: 'LO-402' });
 
+  // İrsaliyeler: yevmiye yazmaz, stoğu hemen hareket ettirir; yevmiye fatura kesilince oluşur.
+  const delivery = async (
+    type: CreateDeliveryNoteInput['type'],
+    on: string,
+    party: string,
+    lines: { itemId: string; quantity: string; unitCost?: string }[],
+    extra: { externalNo?: string; vehiclePlate?: string; driverName?: string; description?: string } = {},
+  ) => {
+    const input = createDeliveryNoteSchema.parse({ type, partyId: partyId.get(party)!, noteDate: on, warehouseId: main.id, lines, ...extra });
+    return postDeliveryNote(tx, invCtx, await createDeliveryDraft(tx, invCtx, input));
+  };
+  // Alış irsaliyesi (fiyatlı) ve fiyat farklı fatura: elde kalan miktar payı stok maliyetine gider
+  const demirIn = await delivery('purchase', date(9, 5), 'demir', [{ itemId: item.demir, quantity: '30', unitCost: '7000' }], { externalNo: 'DC-İRS-8812', vehiclePlate: '05 DC 118', description: 'Demir mal kabul' });
+  await invoice('purchase', date(9, 12), 'demir', [L(item.demir, '30', '7200', { deliveryLineId: demirIn.lines[0]!.id })], { externalNo: 'DC-2026-0311', description: 'Mal kabul irsaliyesine bağlı fatura (fiyat farklı)' });
+  // Satış irsaliyesi, kısmen faturalandı (kalan 5 adet bekliyor)
+  const boyaOut = await delivery('sales', date(9, 10), 'ali', [{ itemId: item.boya, quantity: '15' }], { vehiclePlate: '05 ABC 123', driverName: 'Hasan Çelik', description: 'A Blok ek boya sevki' });
+  await invoice('sales', date(9, 16), 'ali', [L(item.boya, '10', '1100', { deliveryLineId: boyaOut.lines[0]!.id })], { description: 'Sevk irsaliyesinin ilk kısmı' });
+  // Faturalanmamış: taşerona demir sevki ve tedarikçiden gelen kablo (fatura bekleniyor)
+  await delivery('sales', date(9, 8), 'usta', [{ itemId: item.demir, quantity: '8' }], { description: 'Kalıp taşeronuna demir sevki' });
+  await delivery('purchase', date(9, 18), 'beton', [{ itemId: item.kablo, quantity: '500', unitCost: '15' }], { externalNo: 'HB-İRS-4471', description: 'Kablo mal kabul (fatura bekleniyor)' });
+
   // Eylül sayımı: kum 8 m³ eksik çıkar → sayım noksanlığı otomatik yevmiyeyle yazılır
   const count = await createStockCount(tx, stockCtx, { warehouseId: main.id, countDate: date(9, 20), description: 'Eylül depo sayımı', prefill: 'in_stock' });
   await updateStockCount(tx, stockCtx, count.count.id, {
@@ -216,7 +241,7 @@ async function seedInventory(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string
   // Bekleyen taslak fatura
   await invoice('sales', date(9, 28), 'ali', [L(item.boya, '5', '1100')], { description: 'Ek boya siparişi (taslak)', post: false });
 
-  return 'stok: 7 kart, 2 depo, 9 fatura, 1 sayım';
+  return 'stok: 7 kart, 2 depo, fatura ve irsaliyeler, 1 sayım';
 }
 
 async function main() {

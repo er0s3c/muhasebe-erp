@@ -10,7 +10,7 @@ import { cn } from '../../lib/cn';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCQuery, useCompanyApi } from '../../lib/queries';
 import { useSession } from '../../lib/session';
-import type { AgingReport, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData } from '../../lib/types';
+import type { AgingReport, DeliverySummary, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData } from '../../lib/types';
 
 interface Step {
   key: string;
@@ -79,6 +79,9 @@ export function DashboardPage() {
   const { data: stockSummary } = useCQuery<InventorySummary>(['dashboard', 'stock'], '/api/inventory/summary', { enabled: canInventory });
   const canInvoices = can('invoices.read');
   const { data: invSummary } = useCQuery<InvoiceSummary>(['dashboard', 'invoices'], '/api/invoices/summary', { enabled: canInvoices });
+  const canDeliveries = can('deliveries.read');
+  const { data: delSummary } = useCQuery<DeliverySummary>(['dashboard', 'deliveries'], '/api/delivery-notes/summary', { enabled: canDeliveries });
+  const unbilled = delSummary ? delSummary.sales.openCount + delSummary.purchases.openCount : null;
 
   const { data: posted } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'posted'], `/api/journal-entries?status=posted&limit=200&from=${year}-01-01`, { enabled: canLedger });
   const { data: drafts } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'drafts'], '/api/journal-entries?status=draft&limit=200', { enabled: canLedger });
@@ -152,6 +155,17 @@ export function DashboardPage() {
                   { key: 'monthSales', label: t('dashboard.monthSales'), value: invSummary ? `${money(invSummary.salesNet)} ${company.baseCurrency}` : '—', to: '/invoices/sales' },
                   { key: 'monthPurchases', label: t('dashboard.monthPurchases'), value: invSummary ? `${money(invSummary.purchasesNet)} ${company.baseCurrency}` : '—', to: '/invoices/purchases' },
                   { key: 'draftInvoices', label: t('dashboard.draftInvoices'), value: invSummary ? invSummary.draftCount : '—', to: '/invoices/sales', tone: invSummary && invSummary.draftCount > 0 ? ('warning' as const) : undefined },
+                ]
+              : []),
+            ...(canDeliveries
+              ? [
+                  {
+                    key: 'unbilled',
+                    label: t('dashboard.unbilledDeliveries'),
+                    value: unbilled === null ? '—' : unbilled,
+                    to: delSummary && delSummary.sales.openCount === 0 && delSummary.purchases.openCount > 0 ? '/delivery-notes/purchases?invoicing=open' : '/delivery-notes/sales?invoicing=open',
+                    tone: unbilled ? ('warning' as const) : undefined,
+                  },
                 ]
               : []),
             ...(canInventory

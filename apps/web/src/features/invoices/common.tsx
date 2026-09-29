@@ -7,6 +7,10 @@ import type { Account, InvoiceStatus, InvoiceType, PartyListRow, TaxRate } from 
 
 /** Fatura değişince etkilenen sorgular: stok, cari, yevmiye ve raporlar. */
 export const INVOICE_INVALIDATE = [
+  ['delivery-notes'],
+  ['delivery-note'],
+  ['delivery-open-lines'],
+  ['delivery-summary'],
   ['invoices'],
   ['invoice'],
   ['journal'],

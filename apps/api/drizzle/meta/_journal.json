@@ -57,6 +57,20 @@
       "when": 1790709954511,
       "tag": "0007_invoices_rls_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790712615556,
+      "tag": "0008_deliveries",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790712622671,
+      "tag": "0009_deliveries_rls_rules",
+      "breakpoints": true
     }
   ]
 }

@@ -113,6 +113,15 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
               )}
             </dl>
 
+            {doc.sourceType === 'delivery_note' && doc.sourceId && (
+              <Callout>
+                {t('inventory.mdetail.fromDelivery')}{' '}
+                <Link to={`/delivery-notes/${doc.sourceId}`} className="link" onClick={onClose}>
+                  {t('inventory.mdetail.openDelivery')}
+                </Link>
+              </Callout>
+            )}
+
             {doc.sourceType === 'invoice' && doc.sourceId && (
               <Callout>
                 {t('inventory.mdetail.fromInvoice')}{' '}
@@ -158,8 +167,14 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
                         )}
                       </Td>
                       <Td num>
-                        {l.direction === 'out' ? '−' : l.direction === 'in' ? '+' : ''}
-                        {qtyText(l.qty)} {unitLabel(l.unit)}
+                        {l.direction === 'adjust' ? (
+                          t('inventory.mdetail.direction.adjust')
+                        ) : (
+                          <>
+                            {l.direction === 'out' ? '−' : l.direction === 'in' ? '+' : ''}
+                            {qtyText(l.qty)} {unitLabel(l.unit)}
+                          </>
+                        )}
                       </Td>
                       <Td num className="text-muted">{l.unitCostBase ? money(l.unitCostBase, 4) : '—'}</Td>
                       <Td num>{money(l.value)}</Td>

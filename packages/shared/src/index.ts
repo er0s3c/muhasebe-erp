@@ -11,3 +11,4 @@ export * from './schemas/ledger';
 export * from './schemas/parties';
 export * from './schemas/inventory';
 export * from './schemas/invoices';
+export * from './schemas/deliveries';

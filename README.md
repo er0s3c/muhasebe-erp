@@ -2,7 +2,7 @@
 
 KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef sektör inşaat ve taahhüt; market ve ticaret modülleri aynı çekirdeğin üstüne eklenecek şekilde tasarlandı.
 
-**Durum:** Çekirdek ERP'nin ilk dilimi hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe, cari, stok, fatura). İrsaliye ve kasa/banka sıradaki adımlar: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
+**Durum:** Çekirdek ERP'nin ilk dilimi hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe, cari, stok, fatura, irsaliye). Kasa/banka sıradaki adım: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Neler var?
 
@@ -12,6 +12,7 @@ KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef 
 - **Cari hesaplar:** müşteri/tedarikçi kartı, ekstre, vadeye göre yaşlandırma, açık kalemler; cari kontrol hesabına (120/320) cari olmadan kayıt atılamaz.
 - **Stok:** stok kartı, çoklu depo, giriş/çıkış/fire/transfer/devir, sayım, hareketli ağırlıklı ortalama maliyet, kritik seviye uyarısı, tarih anı stok değeri. Alış maliyeti EUR/GBP/TL girilebilir, hareket günü kuruyla çevrilir. Stok defteri değiştirilemez (düzeltme ters belgeyle); negatif stok şirket ayarıyla açılır.
 - **Fatura:** satış, alış, gider, satış iadesi, alış iadesi. Kayıt; stok hareketini, cari alacak/borcu ve yevmiyeyi **tek işlemde** yazar; numara boşluksuzdur, kaydedilmiş fatura değiştirilemez (iptal = ters kayıt). KDV hariç/dahil fiyat, iskonto, dövizli fatura, orijinale bağlı iade, KDV özeti. **Hesap eşlemesi** ile elle girilen stok belgeleri de otomatik yevmiye üretir; stok değeri ile 150–157 hesapları baştan mutabıktır. Varsayılan hesaplar ve KDV oranları mali müşavirce doğrulanmamıştır.
+- **İrsaliye:** satış (sevk) ve alış (mal kabul) irsaliyesi stoğu hemen hareket ettirir, yevmiyeyi fatura kesilince yazar. Fatura irsaliyeye bağlanır (kısmi/çoklu faturalama, stok tekrar hareket etmez); alışta fiyat farkı elde kalan miktar payı stoğa, satılan payı satılan mal maliyetine gider. Faturalanmamış irsaliyeler stok mutabakatında açıklanan fark olarak görünür. Yasal irsaliye biçimi doğrulanmamıştır.
 - **Kur:** elle giriş ya da KKTC Merkez Bankası XML'inden içe aktarma (resmî adres veya dosya yükleme).
 - **Rol bazlı yetki, sektöre göre menü, denetim izi, Türkçe arayüz** (çoklu dil altyapılı), açık/koyu tema, `Ctrl+K` komut paleti.
 

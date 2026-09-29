@@ -194,6 +194,39 @@ async function main() {
   await go('/settings/account-mapping', '48-hesap-esleme', 'Hesap eşlemesi');
   await go('/accounting/journal', '49-yevmiye-kaynakli', 'Yevmiye kayıtları');
 
+  // İrsaliye: bekleyenler, kısmen faturalanan sevk, fiyat farklı mal kabul, form ve faturada seçici
+  await go('/delivery-notes/sales', '50-satis-irsaliyeleri', 'Satış irsaliyeleri');
+  await page.getByRole('row', { name: /A Blok ek boya sevki/ }).click();
+  await page.getByRole('heading', { name: /^SIR-/, level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '51-irsaliye-detay-kismi');
+  await go('/delivery-notes/purchases', '52-alis-irsaliyeleri', 'Alış irsaliyeleri');
+  await page.getByRole('row', { name: /Demir mal kabul/ }).click();
+  await page.getByRole('heading', { name: /^AIR-/, level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '53-alis-irsaliyesi-faturali');
+  await go('/delivery-notes/new?type=sales', '54-yeni-satis-irsaliyesi', 'Satış irsaliyesi');
+  await go('/delivery-notes/new?type=purchase', '55-yeni-alis-irsaliyesi', 'Alış irsaliyesi');
+  await go('/invoices/new?type=sales', '56a-yeni-satis-faturasi', 'Satış faturası');
+  const cust = page.getByRole('combobox', { name: 'Müşteri' });
+  await cust.click();
+  await cust.fill('Ali');
+  await page.getByRole('listbox').getByRole('option').first().click();
+  await page.getByRole('button', { name: 'İrsaliyeden ekle' }).click();
+  await page.getByRole('dialog').waitFor();
+  await settle(page, 600);
+  await shot(page, '56-faturada-irsaliye-secici');
+  await page.keyboard.press('Escape');
+  await go('/invoices/sales', '57a-satis-faturalari', 'Satış faturaları');
+  await page.getByRole('row', { name: /Sevk irsaliyesinin ilk kısmı/ }).click();
+  await page.getByRole('heading', { name: /^SF-/, level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '57-fatura-irsaliyeye-bagli');
+  await go('/inventory/status', '58a-stok-durumu', 'Stok durumu');
+  await page.getByText('Muhasebe mutabakatı').scrollIntoViewIfNeeded();
+  await settle(page, 400);
+  await shot(page, '58-stok-mutabakat-bekleyen');
+
   // Ayarlar
   await go('/settings/currencies', '11-kurlar', 'Para birimi ve kurlar');
   // Merkez Bankası XML dosyasından içe aktarma (resmî örnek dosya)
@@ -243,7 +276,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);

@@ -19,6 +19,7 @@ import { trContains } from '../../db/search';
 import { accounts, invoiceLines, invoices, items, parties, taxRates, warehouses } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { requireActiveWarehouse } from '../inventory/warehouses';
+import { checkDeliveryLinks } from './delivery-link';
 
 export interface InvoiceCtx {
   companyId: string;
@@ -43,6 +44,8 @@ export interface PreparedLine {
   vatRate: string;
   accountId: string | null;
   sourceLineId: string | null;
+  /** Faturalanan irsaliye satırı (satış/alış faturası); bağlı satır stok hareketi yapmaz. */
+  deliveryLineId: string | null;
   net: MoneyValue;
   vat: MoneyValue;
   gross: MoneyValue;
@@ -51,7 +54,7 @@ export interface PreparedLine {
 /** Kaydedilmiş satır girdisi (DB'den okunan ya da API'den gelen) — hazırlama ortak kullanır. */
 export type LineSource = Pick<
   InvoiceLineInput,
-  'itemId' | 'description' | 'quantity' | 'unit' | 'unitPrice' | 'discountPct' | 'vatCode' | 'accountId' | 'sourceLineId'
+  'itemId' | 'description' | 'quantity' | 'unit' | 'unitPrice' | 'discountPct' | 'vatCode' | 'accountId' | 'sourceLineId' | 'deliveryLineId'
 >;
 
 export async function loadParty(tx: Tx, partyId: string, type: InvoiceType) {
@@ -115,6 +118,13 @@ export async function prepareLines(
     if (isStock && !meta.stock) {
       throw unprocessable(`${label}: gider faturasında stoklu mal kartı kullanılamaz; alış faturası girin`, 'EXPENSE_STOCK_ITEM');
     }
+    if (l.deliveryLineId) {
+      if (type !== 'sales' && type !== 'purchase') {
+        throw unprocessable(`${label}: irsaliye bağı yalnızca satış ve alış faturasında kullanılır`, 'DELIVERY_LINK_TYPE');
+      }
+      if (!isStock) throw unprocessable(`${label}: irsaliyeye bağlı satırda stoklu mal kartı gerekli`, 'DELIVERY_LINK_ITEM');
+      if (l.sourceLineId) throw unprocessable(`${label}: satır hem iadeye hem irsaliyeye bağlanamaz`, 'DELIVERY_LINK_TYPE');
+    }
     if (l.vatCode && !rates.has(l.vatCode)) {
       throw unprocessable(`${label}: ${l.vatCode} KDV kodu ${invoiceDate} tarihinde geçerli değil`, 'VAT_CODE_INVALID');
     }
@@ -141,6 +151,7 @@ export async function prepareLines(
       vatRate: l.vatCode ? rates.get(l.vatCode)! : '0.0000',
       accountId: l.accountId ?? null,
       sourceLineId: l.sourceLineId ?? null,
+      deliveryLineId: l.deliveryLineId ?? null,
     };
   });
 
@@ -246,8 +257,10 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
   const { lines, totals } = await prepareLines(tx, type, input.invoiceDate, input.lines, input.vatIncluded);
   const original = await checkReturnLink(tx, type, party.id, input.returnOfId, lines);
   if (original) await checkReturnQuantities(tx, original.id, lines, id);
+  await checkDeliveryLinks(tx, type, party.id, lines, id);
 
-  const stockLines = lines.some((l) => l.isStock);
+  // Depo yalnızca doğrudan stok hareketi yapan (irsaliyeye bağlı olmayan) mal satırı varsa gerekir
+  const stockLines = lines.some((l) => l.isStock && !l.deliveryLineId);
   if (input.warehouseId) await requireActiveWarehouse(tx, input.warehouseId, 'Depo');
 
   const header = {
@@ -296,6 +309,7 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
       gross: toDbAmount(l.gross),
       accountId: l.accountId,
       sourceLineId: l.sourceLineId,
+      deliveryLineId: l.deliveryLineId,
     })),
   );
   return invoiceId;
@@ -383,6 +397,10 @@ interface LineRowOut extends Record<string, unknown> {
   netBase: string | null;
   vatBase: string | null;
   costValue: string | null;
+  deliveryLineId: string | null;
+  deliveryNoteId: string | null;
+  deliveryNoteNo: string | null;
+  deliveryLineNo: number | null;
 }
 
 export async function getInvoice(tx: Tx, id: string) {
@@ -416,10 +434,14 @@ export async function getInvoice(tx: Tx, id: string) {
            l.description, l.quantity, l.unit, l.unit_price as "unitPrice", l.discount_pct as "discountPct",
            l.vat_code as "vatCode", l.vat_rate as "vatRate", l.net, l.vat, l.gross,
            l.account_id as "accountId", a.code as "accountCode", l.source_line_id as "sourceLineId",
-           l.net_base as "netBase", l.vat_base as "vatBase", l.cost_value as "costValue"
+           l.net_base as "netBase", l.vat_base as "vatBase", l.cost_value as "costValue",
+           l.delivery_line_id as "deliveryLineId", dn.id as "deliveryNoteId", dn.note_no as "deliveryNoteNo",
+           dl.line_no as "deliveryLineNo"
     from invoice_lines l
     left join items it on it.id = l.item_id
     left join accounts a on a.id = l.account_id
+    left join delivery_note_lines dl on dl.id = l.delivery_line_id
+    left join delivery_notes dn on dn.id = dl.note_id
     where l.invoice_id = ${id}
     order by l.line_no`);
 
@@ -476,12 +498,12 @@ export async function listInvoices(tx: Tx, q: ListInvoicesQuery) {
 const sideTypes = (side: 'sales' | 'purchases'): InvoiceType[] =>
   (Object.keys(INVOICE_TYPE_META) as InvoiceType[]).filter((t) => INVOICE_TYPE_META[t].side === side);
 
-/** Aynı tedarikçiden aynı fatura numarası daha önce işlenmiş mi? */
+/** Aynı tedarikçiden aynı fatura numarası daha önce kaydedilmiş mi? (İptal edilen kayıt numarayı tutmaz.) */
 export async function assertExternalNoFree(tx: Tx, partyId: string, externalNo: string, exceptId: string) {
   const [dup] = await tx
     .select({ id: invoices.id, invoiceNo: invoices.invoiceNo })
     .from(invoices)
-    .where(and(eq(invoices.partyId, partyId), eq(invoices.externalNo, externalNo), sql`${invoices.status} <> 'draft'`, sql`${invoices.id} <> ${exceptId}`));
+    .where(and(eq(invoices.partyId, partyId), eq(invoices.externalNo, externalNo), sql`${invoices.status} = 'posted'`, sql`${invoices.id} <> ${exceptId}`));
   if (dup) {
     throw conflict(`Bu cariden ${externalNo} numaralı fatura zaten işlenmiş (${dup.invoiceNo})`, 'EXTERNAL_NO_TAKEN');
   }
