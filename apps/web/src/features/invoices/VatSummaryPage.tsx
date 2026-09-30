@@ -10,7 +10,7 @@ import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { money } from '../../lib/format';
+import { currencySymbol, money, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { VatSummary } from '../../lib/types';
@@ -51,10 +51,10 @@ export function VatSummaryPage() {
       ) : (
         <>
           <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Stat label={t('invoices.vat.output')}>{money(data.totals.salesVat)} {company.baseCurrency}</Stat>
-            <Stat label={t('invoices.vat.input')}>{money(data.totals.purchaseVat)} {company.baseCurrency}</Stat>
+            <Stat label={t('invoices.vat.output')}>{moneyIn(data.totals.salesVat, company.baseCurrency)}</Stat>
+            <Stat label={t('invoices.vat.input')}>{moneyIn(data.totals.purchaseVat, company.baseCurrency)}</Stat>
             <Stat label={payable && payable.isNegative() ? t('invoices.vat.carryover') : t('invoices.vat.payable')}>
-              {money(payable ? payable.abs().toFixed(2) : '0')} {company.baseCurrency}
+              {moneyIn(payable ? payable.abs().toFixed(2) : '0', company.baseCurrency)}
             </Stat>
           </div>
 
@@ -90,7 +90,7 @@ export function VatSummaryPage() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-surface-2">
-                    <Td>{t('common.total')} ({company.baseCurrency})</Td>
+                    <Td>{t('common.total')} ({currencySymbol(company.baseCurrency)})</Td>
                     <Td num>{money(data.totals.salesNet)}</Td>
                     <Td num>{money(data.totals.salesVat)}</Td>
                     <Td num>{money(data.totals.purchaseNet)}</Td>

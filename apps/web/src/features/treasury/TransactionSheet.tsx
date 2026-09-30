@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { applyRate, dec, formatTR, proportionalBase, roundMoney, settlementFxDiff, todayIso, type MoneyValue } from '@erp/shared';
+import { applyRate, dec, formatTR, proportionalBase, roundMoney, settlementFxDiff, todayIso, type MoneyValue, formatMoney } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { Callout } from '../../components/ui/Feedback';
@@ -13,7 +13,7 @@ import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { Account, OpenItem, OpenItemsData, TreasuryTxnDetail, TreasuryTxnType } from '../../lib/types';
@@ -331,11 +331,11 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
           <div className="mr-auto text-sm" aria-live="polite">
             {settle && fx !== null && !fx.isZero() ? (
               <span className={fx.gt(0) ? 'text-success' : 'text-danger'}>
-                {fx.gt(0) ? t('treasury.sheet.fxGain') : t('treasury.sheet.fxLoss')}: <span className="num">{formatTR(fx.abs().toFixed(2))} {base}</span>
+                {fx.gt(0) ? t('treasury.sheet.fxGain') : t('treasury.sheet.fxLoss')}: <span className="num">{formatMoney(fx.abs().toFixed(2), base)}</span>
               </span>
             ) : type === 'exchange' && exch?.diff && !exch.diff.isZero() ? (
               <span className={exch.diff.gt(0) ? 'text-success' : 'text-danger'}>
-                {exch.diff.gt(0) ? t('treasury.sheet.fxGain') : t('treasury.sheet.fxLoss')}: <span className="num">{formatTR(exch.diff.abs().toFixed(2))} {base}</span>
+                {exch.diff.gt(0) ? t('treasury.sheet.fxGain') : t('treasury.sheet.fxLoss')}: <span className="num">{formatMoney(exch.diff.abs().toFixed(2), base)}</span>
               </span>
             ) : null}
           </div>
@@ -409,12 +409,12 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
 
         {from && outflow && (
           <p className="-mt-3 text-[13px] text-muted">
-            {t('treasury.sheet.available', { amount: money(from.balance), currency: from.currencyCode })}
+            {t('treasury.sheet.available', { amount: moneyIn(from.balance, from.currencyCode) })}
           </p>
         )}
 
         <div className={cn('grid gap-4', type === 'exchange' || showRate ? 'sm:grid-cols-2' : 'sm:grid-cols-[minmax(0,260px)]')}>
-          <Field label={t(`treasury.sheet.amount.${type}`, { currency: fromCur })} required>
+          <Field label={t(`treasury.sheet.amount.${type}`, { currency: currencySymbol(fromCur) })} required>
             {(id) => (
               <MoneyInput
                 id={id}
@@ -422,17 +422,17 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
                 onChange={(v) => setAmountInput(v === '' && settle ? null : v)}
                 disabled={!!line}
                 placeholder="0,00"
-                aria-label={t(`treasury.sheet.amount.${type}`, { currency: fromCur })}
+                aria-label={t(`treasury.sheet.amount.${type}`, { currency: currencySymbol(fromCur) })}
               />
             )}
           </Field>
           {type === 'exchange' && (
-            <Field label={t('treasury.sheet.counterAmount', { currency: toCur })} required>
-              {(id) => <MoneyInput id={id} value={counterAmount} onChange={setCounterAmount} placeholder="0,00" aria-label={t('treasury.sheet.counterAmount', { currency: toCur })} />}
+            <Field label={t('treasury.sheet.counterAmount', { currency: currencySymbol(toCur) })} required>
+              {(id) => <MoneyInput id={id} value={counterAmount} onChange={setCounterAmount} placeholder="0,00" aria-label={t('treasury.sheet.counterAmount', { currency: currencySymbol(toCur) })} />}
             </Field>
           )}
           {showRate && (
-            <Field label={t(type === 'exchange' ? 'treasury.sheet.rateTo' : 'treasury.sheet.rate', { currency: rateCur, base })} hint={lookedUpRate ? undefined : t('treasury.sheet.rateMissingHint')}>
+            <Field label={t(type === 'exchange' ? 'treasury.sheet.rateTo' : 'treasury.sheet.rate', { currency: currencySymbol(rateCur), base: currencySymbol(base) })} hint={lookedUpRate ? undefined : t('treasury.sheet.rateMissingHint')}>
               {(id) => (
                 <MoneyInput
                   id={id}
@@ -440,7 +440,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
                   decimals={4}
                   maxDecimals={8}
                   placeholder={lookedUpRate ? formatTR(lookedUpRate.toString(), 4) : '?'}
-                  aria-label={t('treasury.sheet.rate', { currency: rateCur, base })}
+                  aria-label={t('treasury.sheet.rate', { currency: currencySymbol(rateCur), base: currencySymbol(base) })}
                   onChange={setFxRate}
                 />
               )}
@@ -450,11 +450,11 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
 
         {type === 'exchange' && exch?.implied && (
           <p className="-mt-3 text-[13px] text-muted">
-            {t('treasury.sheet.impliedRate', { rate: formatTR(exch.implied.toFixed(4), 4), currency: fromCur === base ? toCur : fromCur, base })}
+            {t('treasury.sheet.impliedRate', { rate: formatTR(exch.implied.toFixed(4), 4), currency: currencySymbol(fromCur === base ? toCur : fromCur), base: currencySymbol(base) })}
           </p>
         )}
-        {rateMissing && <Callout tone="warning">{t('treasury.sheet.rateMissing', { currency: rateCur })}</Callout>}
-        {cashLow && <Callout tone="warning">{t('treasury.sheet.cashLow', { balance: money(from!.balance), currency: from!.currencyCode })}</Callout>}
+        {rateMissing && <Callout tone="warning">{t('treasury.sheet.rateMissing', { currency: currencySymbol(rateCur) })}</Callout>}
+        {cashLow && <Callout tone="warning">{t('treasury.sheet.cashLow', { balance: moneyIn(from!.balance, from!.currencyCode) })}</Callout>}
 
         {settle && (
           <section aria-label={t('treasury.sheet.items')} className="flex flex-col gap-3">
@@ -515,7 +515,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
                       <span>{t('common.description')}</span>
                       <span className="text-right">{t('parties.detail.remaining')}</span>
                       <span className="text-right">{t('treasury.sheet.closeAmount')}</span>
-                      <span className="text-right">{t('treasury.sheet.settleAmount', { currency: fromCur })}</span>
+                      <span className="text-right">{t('treasury.sheet.settleAmount', { currency: currencySymbol(fromCur) })}</span>
                     </div>
                     {openItems.map((it) => {
                       const st = items[it.lineId];
@@ -540,7 +540,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
                             <span className="block font-mono text-xs text-muted">{it.entryNo}</span>
                           </span>
                           <span className="num text-right text-sm">
-                            {money(it.remaining)} {it.currencyCode}
+                            {moneyIn(it.remaining, it.currencyCode)}
                           </span>
                           {st ? (
                             <>
@@ -570,25 +570,25 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
                   </div>
                 )}
 
-                {num(unapplied).gt(0) && <p className="text-[13px] text-muted">{t('treasury.sheet.existingAdvance', { amount: money(unapplied), currency: base })}</p>}
+                {num(unapplied).gt(0) && <p className="text-[13px] text-muted">{t('treasury.sheet.existingAdvance', { amount: moneyIn(unapplied, base) })}</p>}
 
                 <dl className="grid gap-x-8 gap-y-2 rounded-xl border border-border bg-surface-2/50 p-4 text-sm sm:grid-cols-3">
                   <div>
                     <dt className="text-muted">{t('treasury.sheet.allocated')}</dt>
                     <dd className="mt-0.5 tabular-nums">
-                      {money(settleTotal.toFixed(2))} {fromCur}
+                      {moneyIn(settleTotal.toFixed(2), fromCur)}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-muted">{t('treasury.sheet.advance')}</dt>
                     <dd className={cn('mt-0.5 tabular-nums', advance.isNegative() && 'text-danger')}>
-                      {advance.isNegative() ? t('treasury.sheet.exceeds') : `${money(advance.toFixed(2))} ${fromCur}`}
+                      {advance.isNegative() ? t('treasury.sheet.exceeds') : moneyIn(advance.toFixed(2), fromCur)}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-muted">{t('treasury.sheet.fxDiff')}</dt>
                     <dd className={cn('mt-0.5 tabular-nums', fx && fx.gt(0) && 'text-success', fx && fx.isNegative() && 'text-danger')}>
-                      {fx === null ? '—' : fx.isZero() ? t('treasury.sheet.noFxDiff') : `${fx.gt(0) ? '+' : '−'}${money(fx.abs().toFixed(2))} ${base}`}
+                      {fx === null ? '—' : fx.isZero() ? t('treasury.sheet.noFxDiff') : `${fx.gt(0) ? '+' : '−'}${moneyIn(fx.abs().toFixed(2), base)}`}
                     </dd>
                   </div>
                 </dl>
@@ -603,7 +603,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
             <div>
               <dt className="text-muted">{t('treasury.sheet.fxDiff')}</dt>
               <dd className={cn('mt-0.5 tabular-nums', exch.diff?.gt(0) && 'text-success', exch.diff?.isNegative() && 'text-danger')}>
-                {exch.diff === null ? '—' : exch.diff.isZero() ? t('treasury.sheet.noFxDiff') : `${exch.diff.gt(0) ? '+' : '−'}${money(exch.diff.abs().toFixed(2))} ${base}`}
+                {exch.diff === null ? '—' : exch.diff.isZero() ? t('treasury.sheet.noFxDiff') : `${exch.diff.gt(0) ? '+' : '−'}${moneyIn(exch.diff.abs().toFixed(2), base)}`}
               </dd>
             </div>
             <p className="text-[13px] text-muted sm:self-end">{t('treasury.sheet.exchangeNote')}</p>

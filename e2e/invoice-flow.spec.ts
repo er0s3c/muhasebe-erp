@@ -49,7 +49,7 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
   await pick('Kart / hizmet 1', 'boya');
   await page.getByLabel('Miktar 1').fill('10');
   await page.getByLabel('Birim fiyat 1').fill('50');
-  await expect(page.getByTestId('gross-total')).toHaveText('580,00 TRY');
+  await expect(page.getByTestId('gross-total')).toHaveText('₺580,00');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByText(/Fatura kaydedildi: AF-\d{4}-000001/)).toBeVisible();
   await expect(page.getByRole('heading', { name: /AF-\d{4}-000001/, level: 1 })).toBeVisible();
@@ -61,11 +61,11 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
   await pick('Kart / hizmet 1', 'boya');
   await page.getByLabel('Miktar 1').fill('4');
   await page.getByLabel('Birim fiyat 1').fill('100');
-  await expect(page.getByTestId('gross-total')).toHaveText('464,00 TRY');
+  await expect(page.getByTestId('gross-total')).toHaveText('₺464,00');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByRole('heading', { name: /SF-\d{4}-000001/, level: 1 })).toBeVisible();
   await expect(page.getByText('Kaydedildi', { exact: true }).first()).toBeVisible();
-  await expect(page.getByTestId('gross-total')).toHaveText('464,00 TRY');
+  await expect(page.getByTestId('gross-total')).toHaveText('₺464,00');
 
   // Yevmiye ve stok belgesi bağlantıları görünür; yevmiye kaynaklı olduğundan tek başına ters çevrilemez
   await page.getByRole('link', { name: /^YV-\d{4}-\d{6}$/ }).click();
@@ -83,7 +83,7 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
   await page.getByRole('button', { name: 'İade oluştur' }).click();
   await expect(page.getByLabel('Miktar 1')).toHaveValue('4');
   await page.getByLabel('Miktar 1').fill('1');
-  await expect(page.getByTestId('gross-total')).toHaveText('116,00 TRY');
+  await expect(page.getByTestId('gross-total')).toHaveText('₺116,00');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByRole('heading', { name: /SIF-\d{4}-000001/, level: 1 })).toBeVisible();
 
@@ -103,5 +103,5 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
   await nav.getByRole('link', { name: 'KDV özeti' }).click();
   await expect(page.getByText('Hesaplanan KDV').first()).toBeVisible();
   await expect(page.getByText('Devreden KDV')).toBeVisible();
-  await expect(page.getByText('16,00 TRY').first()).toBeVisible();
+  await expect(page.getByText('₺16,00').first()).toBeVisible();
 });

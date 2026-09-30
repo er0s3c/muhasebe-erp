@@ -7,7 +7,7 @@ import { PrintHeader } from '../../components/ui/PrintHeader';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, isZero, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { FxDifferenceData } from '../../lib/types';
@@ -24,7 +24,7 @@ export function FxDifferencePage() {
     `/api/reports/fx-differences?${new URLSearchParams({ from, to })}`,
     { enabled: valid },
   );
-  const net = (v: string) => <span className={Number(v) > 0 ? 'text-success' : Number(v) < 0 ? 'text-danger' : undefined}>{money(v)}</span>;
+  const net = (v: string, withSymbol = false) => <span className={Number(v) > 0 ? 'text-success' : Number(v) < 0 ? 'text-danger' : undefined}>{withSymbol ? moneyIn(v, base) : money(v)}</span>;
 
   return (
     <div className="print-wide">
@@ -49,9 +49,9 @@ export function FxDifferencePage() {
       ) : (
         <div className="flex flex-col gap-5">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Stat label={t('reports.fx.gain')}>{money(data.totals.gain)} {base}</Stat>
-            <Stat label={t('reports.fx.loss')}>{money(data.totals.loss)} {base}</Stat>
-            <Stat label={t('reports.fx.net')}>{net(data.totals.net)} {base}</Stat>
+            <Stat label={t('reports.fx.gain')}>{moneyIn(data.totals.gain, base)}</Stat>
+            <Stat label={t('reports.fx.loss')}>{moneyIn(data.totals.loss, base)}</Stat>
+            <Stat label={t('reports.fx.net')}>{net(data.totals.net, true)}</Stat>
           </div>
           <TableWrap>
             <Table>
@@ -62,9 +62,9 @@ export function FxDifferencePage() {
                   <Th className="w-36">{t('treasury.txn.type')}</Th>
                   <Th>{t('reports.fx.account')}</Th>
                   <Th>{t('reports.fx.party')}</Th>
-                  <Th num>{t('reports.fx.gain')} ({base})</Th>
-                  <Th num>{t('reports.fx.loss')} ({base})</Th>
-                  <Th num>{t('reports.fx.net')} ({base})</Th>
+                  <Th num>{t('reports.fx.gain')} ({currencySymbol(base)})</Th>
+                  <Th num>{t('reports.fx.loss')} ({currencySymbol(base)})</Th>
+                  <Th num>{t('reports.fx.net')} ({currencySymbol(base)})</Th>
                 </tr>
               </thead>
               <tbody>
@@ -80,7 +80,7 @@ export function FxDifferencePage() {
                       <TxnTypeBadge type={r.type} />
                     </Td>
                     <Td>
-                      {r.accountName} <span className="text-xs text-muted">{r.currencyCode}</span>
+                      {r.accountName} <span className="text-xs text-muted">{currencySymbol(r.currencyCode)}</span>
                     </Td>
                     <Td className="text-muted">{r.partyName}</Td>
                     <Td num>{isZero(r.gain) ? '' : money(r.gain)}</Td>

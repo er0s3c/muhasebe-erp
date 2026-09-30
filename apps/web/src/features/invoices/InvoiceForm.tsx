@@ -2,7 +2,7 @@ import { ArrowLeft, Plus, Trash2, Truck, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { CURRENCY_CODES, EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, calcInvoice, dec, formatTR, todayIso } from '@erp/shared';
+import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, calcInvoice, dec, formatTR, todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
@@ -11,9 +11,10 @@ import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { money } from '../../lib/format';
+import { money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCompanyApi, useCQuery } from '../../lib/queries';
 import type { AccountMapping, DeliveryNoteDetail, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
 import { useUnitLabel, useWarehouses } from '../inventory/common';
@@ -419,11 +420,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
             <Field label={t('invoices.form.currency')}>
               {(id) => (
                 <Select id={id} value={currency} onChange={(e) => { setCurrency(e.target.value); setFxRate(''); }}>
-                  {CURRENCY_CODES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
+                  <CurrencyOptions wide />
                 </Select>
               )}
             </Field>
@@ -575,17 +572,17 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
             <dl className="w-full max-w-xs text-sm">
               <div className="flex justify-between py-1">
                 <dt className="text-muted">{t('invoices.netTotal')}</dt>
-                <dd className="num">{money(totals.net.toFixed(2))} {currency}</dd>
+                <dd className="num">{moneyIn(totals.net.toFixed(2), currency)}</dd>
               </div>
               {totals.byRate.filter((g) => !dec(g.vat).isZero()).map((g) => (
                 <div key={g.rate} className="flex justify-between py-1">
                   <dt className="text-muted">{t('invoices.vatAt', { rate: dec(g.rate).toFixed(0) })}</dt>
-                  <dd className="num">{money(g.vat.toFixed(2))} {currency}</dd>
+                  <dd className="num">{moneyIn(g.vat.toFixed(2), currency)}</dd>
                 </div>
               ))}
               <div className="mt-1 flex justify-between border-t border-text pt-2 text-base">
                 <dt>{t('invoices.grossTotal')}</dt>
-                <dd className="num" data-testid="gross-total">{money(totals.gross.toFixed(2))} {currency}</dd>
+                <dd className="num" data-testid="gross-total">{moneyIn(totals.gross.toFixed(2), currency)}</dd>
               </div>
             </dl>
           </div>

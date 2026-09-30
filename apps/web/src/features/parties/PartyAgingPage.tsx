@@ -12,7 +12,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { isZero, money } from '../../lib/format';
+import { currencySymbol, isZero, money } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { AgingReport } from '../../lib/types';
@@ -76,7 +76,7 @@ export function PartyAgingPage() {
                   ))}
                   <Th num>{t('partyAging.unapplied')}</Th>
                   <Th num>
-                    {t('partyAging.total')} ({company.baseCurrency})
+                    {t('partyAging.total')} ({currencySymbol(company.baseCurrency)})
                   </Th>
                 </tr>
               </thead>

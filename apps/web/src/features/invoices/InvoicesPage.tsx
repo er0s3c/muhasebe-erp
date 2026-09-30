@@ -10,7 +10,7 @@ import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { cn } from '../../lib/cn';
-import { formatDateTR, money } from '../../lib/format';
+import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import type { InvoiceListRow, InvoiceStatus, InvoiceType } from '../../lib/types';
 import { InvoiceStatusBadge, InvoiceTypeBadge } from './common';
@@ -137,7 +137,7 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
                     </Td>
                     <Td className="text-muted">{r.dueDate ? formatDateTR(r.dueDate) : '—'}</Td>
                     <Td num className={cn(r.status === 'cancelled' && 'text-muted line-through')}>
-                      {money(r.grossTotal)} {r.currencyCode}
+                      {moneyIn(r.grossTotal, r.currencyCode)}
                     </Td>
                     <Td>
                       <InvoiceStatusBadge status={r.status} />

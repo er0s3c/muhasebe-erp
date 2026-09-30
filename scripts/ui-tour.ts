@@ -28,8 +28,31 @@ async function waitForServer(url: string, tries = 60) {
 }
 
 const settle = (page: Page, ms = 500) => page.waitForLoadState('networkidle').then(() => page.waitForTimeout(ms));
+/** Ekranda simge yerine çıplak para birimi kodu (TRY/GBP/EUR/USD) kalan metinler; veri kaynaklı adlar ("KTB GBP Hesabı") beklenen istisnadır. */
+const bareCodes = new Set<string>();
+async function scanBareCodes(page: Page, name: string) {
+  const found = await page.evaluate(() => {
+    const re = /\b(TRY|GBP|EUR|USD)\b/;
+    const out: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const p = n.parentElement;
+      if (!p || ['SCRIPT', 'STYLE'].includes(p.tagName)) continue;
+      if (re.test(n.textContent ?? '')) out.push(`metin: ${(n.textContent ?? '').trim().slice(0, 70)}`);
+    }
+    for (const el of Array.from(document.querySelectorAll('[aria-label],[placeholder],[title]'))) {
+      for (const attr of ['aria-label', 'placeholder', 'title']) {
+        const v = el.getAttribute(attr);
+        if (v && re.test(v)) out.push(`${attr}: ${v.slice(0, 70)}`);
+      }
+    }
+    return out;
+  });
+  for (const f of found) bareCodes.add(`${name} → ${f}`);
+}
 const shot = async (page: Page, name: string) => {
   await page.screenshot({ path: `${OUT}/${name}.png` });
+  await scanBareCodes(page, name);
   console.log('  ✓', name);
 };
 
@@ -153,7 +176,7 @@ async function main() {
   await stockForm.getByLabel('Miktar 1').fill('5');
   await stockForm.getByLabel('Birim maliyet 1').fill('110');
   await stockForm.getByLabel('Para birimi 1').selectOption('GBP');
-  await stockForm.getByLabel('Tutar (TRY) 1').filter({ hasText: /\d/ }).waitFor();
+  await stockForm.getByLabel('Tutar (₺) 1').filter({ hasText: /\d/ }).waitFor();
   await settle(page, 600);
   await shot(page, '32-stok-giris-formu');
   await page.keyboard.press('Escape');
@@ -285,7 +308,7 @@ async function main() {
   await page.getByRole('button', { name: 'Tahsilat al' }).click();
   const receipt = page.getByRole('dialog');
   await receipt.getByText('Açık kalemler').waitFor();
-  await receipt.getByLabel('Tahsil edilen tutar (TRY)').fill('700.000,00');
+  await receipt.getByLabel('Tahsil edilen tutar (₺)').fill('700.000,00');
   await receipt.getByRole('button', { name: 'Tutarı en eskiden dağıt' }).click();
   await settle(page, 600);
   await shot(page, '65-tahsilat-formu');
@@ -299,7 +322,7 @@ async function main() {
   await page.getByRole('button', { name: 'Ödeme yap' }).click();
   const payment = page.getByRole('dialog');
   await payment.getByText('Açık kalemler').waitFor();
-  await payment.getByLabel('Ödeme hesabı (çıkış)').selectOption({ label: 'KTB TL Vadesiz · TRY' });
+  await payment.getByLabel('Ödeme hesabı (çıkış)').selectOption({ label: 'KTB TL Vadesiz · ₺' });
   await payment.getByRole('button', { name: 'Tümünü seç' }).click();
   await settle(page, 700);
   await shot(page, '66-odeme-formu-kur-farki');
@@ -311,10 +334,10 @@ async function main() {
   await page.getByRole('button', { name: 'Yeni işlem' }).click();
   const exchange = page.getByRole('dialog');
   await exchange.getByRole('tab', { name: 'Döviz alım-satım' }).click();
-  await exchange.getByLabel('Kaynak hesap (çıkış)').selectOption({ label: 'KTB GBP Hesabı · GBP' });
-  await exchange.getByLabel('Hedef hesap (giriş)').selectOption({ label: 'KTB TL Vadesiz · TRY' });
-  await exchange.getByLabel('Çıkan tutar (GBP)').fill('10.000,00');
-  await exchange.getByLabel('Giren tutar (TRY)').fill('648.000,00');
+  await exchange.getByLabel('Kaynak hesap (çıkış)').selectOption({ label: 'KTB GBP Hesabı · £' });
+  await exchange.getByLabel('Hedef hesap (giriş)').selectOption({ label: 'KTB TL Vadesiz · ₺' });
+  await exchange.getByLabel('Çıkan tutar (£)').fill('10.000,00');
+  await exchange.getByLabel('Giren tutar (₺)').fill('648.000,00');
   await settle(page, 700);
   await shot(page, '67-doviz-satis-formu');
   await page.keyboard.press('Escape');
@@ -511,7 +534,10 @@ async function main() {
       const main = document.querySelector('main');
       return main ? main.scrollWidth - main.clientWidth : 0;
     });
-    if (over > 1) overflowing.push(`proje detayı/${tab} (+${over}px)`);
+    if (over > 1) {
+      overflowing.push(`proje detayı/${tab} (+${over}px)`);
+      console.log(`  ✗ Proje detayı/${tab} mobilde taşıyor (+${over}px)`);
+    }
   }
   await m.screenshot({ path: `${OUT}/100-mobil-proje-detay.png` });
   console.log('  ✓ 100-mobil-proje-detay');
@@ -538,6 +564,8 @@ async function main() {
   } else {
     console.log('  ✓ mobilde tahsilat formu taşmıyor');
   }
+
+  console.log(bareCodes.size ? `  ! Çıplak para birimi kodu kalan ${bareCodes.size} yer (veri adları beklenen istisna):\n    ${[...bareCodes].join('\n    ')}` : '  ✓ çıplak para birimi kodu kalmadı');
 
   await browser.close();
   if (overflowing.length) process.exitCode = 1;

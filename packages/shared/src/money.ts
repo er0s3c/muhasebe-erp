@@ -52,6 +52,28 @@ export function formatTR(value: Decimal.Value | null | undefined, dp = 2): strin
 }
 
 /**
+ * Para birimi simgeleri. Yalnızca GÖSTERİM içindir: değer, parametre ve API alanlarında daima kod (TRY, GBP …) kullanılır.
+ * Sistem dört para birimi bilir (`CURRENCY_CODES`); listede olmayan bir kod simge yerine kodun kendisiyle gösterilir.
+ */
+export const CURRENCY_SYMBOLS: Record<string, string> = { TRY: '₺', GBP: '£', EUR: '€', USD: '$' };
+
+const hasSymbol = (code: string) => Object.prototype.hasOwnProperty.call(CURRENCY_SYMBOLS, code);
+
+/** "GBP" -> "£" (bilinmeyen kod olduğu gibi döner). */
+export const currencySymbol = (code: string): string => (hasSymbol(code) ? CURRENCY_SYMBOLS[code]! : code);
+
+/**
+ * Simge önde Türkçe tutar: ("1234.5", "TRY") -> "₺1.234,50"; negatifte işaret simgeden önce: "-₺1.234,50".
+ * Bilinmeyen kodda kod + sabit boşluk öneki ("CHF 1.234,50"). Boş değer boş döner.
+ */
+export function formatMoney(value: Decimal.Value | null | undefined, currency: string, dp = 2): string {
+  const body = formatTR(value, dp);
+  if (body === '') return '';
+  const prefix = hasSymbol(currency) ? CURRENCY_SYMBOLS[currency]! : `${currency}\u00A0`;
+  return body.startsWith('-') ? `-${prefix}${body.slice(1)}` : `${prefix}${body}`;
+}
+
+/**
  * Türkçe girişi kanonik ondalık string'e çevirir: "1.234,56" -> "1234.56".
  * Nokta binlik ayracı, virgül ondalık ayracıdır. Geçersizse null.
  */

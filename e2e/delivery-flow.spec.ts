@@ -66,7 +66,7 @@ test('irsaliye: mal kabul → fiyat farklı fatura → sevk → kısmi fatura; s
   await expect(page.getByLabel('Miktar 1')).toHaveValue('10');
   await page.getByLabel('Tedarikçi fatura no').fill('T-2001');
   await page.getByLabel('Birim fiyat 1').fill('60');
-  await expect(page.getByTestId('gross-total')).toHaveText('696,00 TRY');
+  await expect(page.getByTestId('gross-total')).toHaveText('₺696,00');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByRole('heading', { name: /AF-\d{4}-000001/, level: 1 })).toBeVisible();
   await expect(page.getByRole('link', { name: /İrsaliye: AIR-\d{4}-000001/ })).toBeVisible();
@@ -92,7 +92,7 @@ test('irsaliye: mal kabul → fiyat farklı fatura → sevk → kısmi fatura; s
   await expect(page.getByLabel('Miktar 1')).toHaveValue('4');
   await page.getByLabel('Miktar 1').fill('3');
   await page.getByLabel('Birim fiyat 1').fill('100');
-  await expect(page.getByTestId('gross-total')).toHaveText('348,00 TRY');
+  await expect(page.getByTestId('gross-total')).toHaveText('₺348,00');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByRole('heading', { name: /SF-\d{4}-000001/, level: 1 })).toBeVisible();
 

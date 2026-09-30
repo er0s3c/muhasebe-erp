@@ -9,7 +9,7 @@ import { Card, PageHeader } from '../../components/ui/Card';
 import { EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { StockDocListRow, StockDocType } from '../../lib/types';
@@ -116,7 +116,7 @@ export function MovementsPage() {
                   <Th>{t('inventory.movements.warehouse')}</Th>
                   <Th num>{t('inventory.movements.lines')}</Th>
                   <Th num>
-                    {t('inventory.movements.value')} ({company.baseCurrency})
+                    {t('inventory.movements.value')} ({currencySymbol(company.baseCurrency)})
                   </Th>
                   <Th className="w-10" />
                 </tr>

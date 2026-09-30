@@ -10,7 +10,7 @@ import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { cn } from '../../lib/cn';
-import { formatDateTR, money } from '../../lib/format';
+import { formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ProjectCostReport, ProjectDetail } from '../../lib/types';
@@ -35,7 +35,6 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
   const { totals, rows, budget } = data;
   const hasRows = rows.length > 0;
   const shown = hideEmpty ? rows.filter((r) => r.isActive || Number(r.budget) !== 0 || Number(r.actual) !== 0 || !r.isLeaf) : rows;
-  const suffix = <span className="text-base text-muted">{base}</span>;
 
   return (
     <div className="flex flex-col gap-5">
@@ -63,13 +62,13 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label={t('projects.kpi.budget')} sub={t('projects.overview.budgetSub')}>
-          {money(totals.budget)} {suffix}
+          {moneyIn(totals.budget, base)}
         </Stat>
         <Stat label={t('projects.kpi.actual')} sub={t('projects.overview.actualSub', { pct: totals.spentPct ? money(totals.spentPct, 1) : '—' })}>
-          {money(totals.actual)} {suffix}
+          {moneyIn(totals.actual, base)}
         </Stat>
         <Stat label={t('projects.kpi.eac')} sub={t('projects.overview.eacSub', { etc: money(totals.etc) })}>
-          {money(totals.eac)} {suffix}
+          {moneyIn(totals.eac, base)}
         </Stat>
         <Stat label={t('projects.kpi.variance')} sub={t('projects.overview.varianceSub')}>
           <VarianceText value={totals.variance} />
@@ -78,13 +77,13 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
           {totals.percent ? `%${money(totals.percent, 1)}` : '—'}
         </Stat>
         <Stat label={t('projects.overview.remaining')} sub={t('projects.overview.remainingSub')}>
-          <span className={cn(Number(totals.remaining) < 0 && 'text-danger')}>{money(totals.remaining)}</span> {suffix}
+          <span className={cn(Number(totals.remaining) < 0 && 'text-danger')}>{moneyIn(totals.remaining, base)}</span>
         </Stat>
         <Stat label={t('projects.overview.cpi')} sub={t('projects.overview.cpiSub')}>
           {totals.cpi ? money(totals.cpi, 2) : '—'}
         </Stat>
         <Stat label={t('projects.overview.revenue')} sub={t('projects.overview.revenueSub')}>
-          {money(totals.revenue)} {suffix}
+          {moneyIn(totals.revenue, base)}
         </Stat>
       </div>
 

@@ -12,7 +12,7 @@ import { Modal, Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, isZero, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { JournalEntry, JournalListItem } from '../../lib/types';
@@ -131,7 +131,7 @@ export function JournalPage() {
                 <Th className="w-40">{t('ledger.journal.entryNo')}</Th>
                 <Th>{t('common.description')}</Th>
                 <Th num>
-                  {t('ledger.journal.total')} ({company.baseCurrency})
+                  {t('ledger.journal.total')} ({currencySymbol(company.baseCurrency)})
                 </Th>
                 <Th className="w-32">{t('common.status')}</Th>
               </tr>
@@ -367,7 +367,7 @@ function JournalDetail({
                       <Td className="text-muted">{l.description}</Td>
                       {showForeign && (
                         <Td num>
-                          {l.currencyCode !== company.baseCurrency ? `${money(Number(l.debit) > 0 ? l.debit : l.credit)} ${l.currencyCode}` : ''}
+                          {l.currencyCode !== company.baseCurrency ? moneyIn(Number(l.debit) > 0 ? l.debit : l.credit, l.currencyCode) : ''}
                         </Td>
                       )}
                       {showForeign && <Td num>{l.currencyCode !== company.baseCurrency ? money(l.fxRate, 4) : ''}</Td>}

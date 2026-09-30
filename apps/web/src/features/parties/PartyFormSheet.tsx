@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CURRENCY_CODES } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Sheet } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { errorMessage, fieldErrors } from '../../lib/errors';
 import { useCMutation } from '../../lib/queries';
 import type { Party, PartyKind } from '../../lib/types';
@@ -209,11 +209,7 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
           <Field label={t('parties.form.currency')}>
             {(id) => (
               <Select id={id} value={f.currencyCode} onChange={(e) => set('currencyCode', e.target.value)}>
-                {CURRENCY_CODES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
+                <CurrencyOptions wide />
               </Select>
             )}
           </Field>

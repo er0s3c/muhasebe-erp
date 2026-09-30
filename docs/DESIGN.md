@@ -37,6 +37,7 @@ Yazı tipi **Inter** (OFL, kendi sunucumuzdan) `ss01` özelliğiyle. Ölçek: `t
 - **Rozet:** 6px; `brand` tonu çerçeveli nötrdür; durum tonları sönük dolgulu.
 - **Bildirim:** Obsidian zemin; başarıda sarı sol çizgi, hatada açık kırmızı çizgi + simge.
 - **Bağlantı `.link`:** Ink + alt çizgi. Sarı metin yoktur.
+- **Para birimi:** kod değil simge, tutarın önünde: `₺1.234,56`, negatifte `-₺1.234,56`; başlıkta `(₺)`; kurda `1 £ = ₺64,7268`. Tek kaynak `moneyIn`/`currencySymbol` (`lib/format`), seçiciler `CurrencyOptions` (dar satır içinde yalnızca simge, geniş formda "₺ Türk lirası"); seçenek `value`'su daima koddur.
 
 ## Erişilebilirlik
 

@@ -12,7 +12,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ProjectBudgetDetail, ProjectBudgetRow, ProjectDetail, ProjectWbsRow } from '../../lib/types';
@@ -85,7 +85,7 @@ export function BudgetTab({ project }: { project: ProjectDetail }) {
                   <Th>{t('projects.budget.titleCol')}</Th>
                   <Th className="w-32">{t('common.status')}</Th>
                   <Th className="w-36">{t('projects.budget.approvedAt')}</Th>
-                  <Th num>{t('projects.budget.total', { currency: base })}</Th>
+                  <Th num>{t('projects.budget.total', { currency: currencySymbol(base) })}</Th>
                 </tr>
               </thead>
               <tbody>

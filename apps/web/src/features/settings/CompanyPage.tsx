@@ -7,6 +7,7 @@ import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
+import { useCurrencyLabel } from '../../components/ui/CurrencyOptions';
 import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCQuery, useNavigation } from '../../lib/queries';
 import { useSession } from '../../lib/session';
@@ -25,6 +26,7 @@ interface CompanyRow {
 
 export function CompanyPage() {
   const { t } = useTranslation();
+  const currencyLabel = useCurrencyLabel();
   const toast = useToast();
   const can = useCan();
   const { reload } = useSession();
@@ -121,11 +123,11 @@ export function CompanyPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <dt className="text-muted">{t('settings.company.baseCurrency')}</dt>
-                <dd className="mt-0.5">{c.baseCurrency}</dd>
+                <dd className="mt-0.5">{currencyLabel(c.baseCurrency, true)}</dd>
               </div>
               <div>
                 <dt className="text-muted">{t('settings.company.reportingCurrency')}</dt>
-                <dd className="mt-0.5">{c.reportingCurrency ?? '—'}</dd>
+                <dd className="mt-0.5">{c.reportingCurrency ? currencyLabel(c.reportingCurrency, true) : '—'}</dd>
               </div>
             </div>
             <div>

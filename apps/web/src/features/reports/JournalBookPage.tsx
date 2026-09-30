@@ -9,7 +9,7 @@ import { ExportMenu } from '../../components/ui/ExportMenu';
 import { PrintHeader } from '../../components/ui/PrintHeader';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, isZero, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { JournalBookData } from '../../lib/types';
@@ -60,8 +60,8 @@ export function JournalBookPage() {
                   <Th className="w-40">{t('ledger.accountLedger.entryNo')}</Th>
                   <Th>{t('reports.journalBook.account')}</Th>
                   <Th>{t('common.description')}</Th>
-                  <Th num>{t('common.debit')} ({base})</Th>
-                  <Th num>{t('common.credit')} ({base})</Th>
+                  <Th num>{t('common.debit')} ({currencySymbol(base)})</Th>
+                  <Th num>{t('common.credit')} ({currencySymbol(base)})</Th>
                 </tr>
               </thead>
               <tbody>
@@ -88,7 +88,7 @@ export function JournalBookPage() {
                       <span className="block truncate">{l.description ?? l.entryDescription}</span>
                       {l.currencyCode !== base && (
                         <span className="block text-xs text-muted">
-                          {money(Number(l.debit) > 0 ? l.debit : l.credit)} {l.currencyCode} · {money(l.fxRate, 4)}
+                          {moneyIn(Number(l.debit) > 0 ? l.debit : l.credit, l.currencyCode)} · {money(l.fxRate, 4)}
                         </span>
                       )}
                     </Td>

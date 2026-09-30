@@ -14,7 +14,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, isZero, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { TreasuryAccount, TreasuryStatementData, TreasuryTxnType } from '../../lib/types';
@@ -85,7 +85,7 @@ export function AccountDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-heading">{a.name}</h1>
               <Badge tone="brand">{t(`treasury.kinds.${a.kind}`)}</Badge>
-              <Badge>{a.currencyCode}</Badge>
+              <Badge>{currencySymbol(a.currencyCode)}</Badge>
               {!a.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
             </div>
             <p className="mt-1 text-sm text-muted">
@@ -121,15 +121,15 @@ export function AccountDetailPage() {
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Stat label={t('treasury.detail.balance')}>
-          {money(a.balance)} {a.currencyCode}
+          {moneyIn(a.balance, a.currencyCode)}
         </Stat>
         {foreign ? (
           <>
             <Stat label={t('treasury.detail.cost')} sub={t('treasury.detail.costHint')}>
-              {money(a.balanceBase)} {base}
+              {moneyIn(a.balanceBase, base)}
             </Stat>
             <Stat label={t('treasury.detail.equivalent')} sub={a.equivalent === null ? t('treasury.accounts.noRate') : t('treasury.detail.equivalentHint')}>
-              {a.equivalent === null ? '—' : `${money(a.equivalent)} ${base}`}
+              {a.equivalent === null ? '—' : moneyIn(a.equivalent, base)}
             </Stat>
           </>
         ) : (
@@ -194,11 +194,11 @@ export function AccountDetailPage() {
                 <Th num>{t('treasury.detail.in')}</Th>
                 <Th num>{t('treasury.detail.out')}</Th>
                 <Th num>
-                  {t('common.balance')} ({a.currencyCode})
+                  {t('common.balance')} ({currencySymbol(a.currencyCode)})
                 </Th>
                 {foreign && (
                   <Th num>
-                    {t('common.balance')} ({base})
+                    {t('common.balance')} ({currencySymbol(base)})
                   </Th>
                 )}
               </tr>

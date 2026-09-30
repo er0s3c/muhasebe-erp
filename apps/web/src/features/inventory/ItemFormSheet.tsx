@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CURRENCY_CODES, ITEM_KINDS, ITEM_UNITS } from '@erp/shared';
+import { ITEM_KINDS, ITEM_UNITS } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Sheet } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { errorMessage, fieldErrors } from '../../lib/errors';
 import { useCMutation, useCQuery, useCompanyApi } from '../../lib/queries';
 import type { Item, ItemKind, TaxRate } from '../../lib/types';
@@ -149,11 +150,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
 
   const currencySelect = (id: string, value: string, key: 'purchaseCurrency' | 'saleCurrency') => (
     <Select id={id} value={value} onChange={(e) => set(key, e.target.value)} className="px-2 pr-6">
-      {CURRENCY_CODES.map((c) => (
-        <option key={c} value={c}>
-          {c}
-        </option>
-      ))}
+      <CurrencyOptions />
     </Select>
   );
 

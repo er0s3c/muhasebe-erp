@@ -70,7 +70,7 @@ test('banka ekstresi: içe aktar → kesin eşleşmeleri uygula → eşleşmeyen
 
   // 3) Mutabakat: 3 açık satır, fark −12,00 (ekstre 953 − defter 965)
   await expect(page.getByRole('tab', { name: /^Açık \(3\)/ })).toBeVisible();
-  await expect(page.getByText('-12,00 TRY').first()).toBeVisible();
+  await expect(page.getByText('-₺12,00').first()).toBeVisible();
   await page.getByRole('button', { name: /Kesin eşleşmeleri uygula/ }).click();
   await expect(page.getByText('2 satır eşleştirildi')).toBeVisible();
   await expect(page.getByRole('tab', { name: /^Açık \(1\)/ })).toBeVisible();

@@ -10,7 +10,7 @@ import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Input, Select } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { money } from '../../lib/format';
+import { money, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ProjectListRow, ProjectsSummary } from '../../lib/types';
@@ -82,13 +82,13 @@ export function ProjectsPage() {
             <>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <Stat label={t('projects.kpi.budget')} sub={t('projects.kpi.budgetSub')}>
-                  {money(summary.totals.budget)} <span className="text-base text-muted">{base}</span>
+                  {moneyIn(summary.totals.budget, base)}
                 </Stat>
                 <Stat label={t('projects.kpi.actual')} sub={t('projects.kpi.actualSub')}>
-                  {money(summary.totals.actual)} <span className="text-base text-muted">{base}</span>
+                  {moneyIn(summary.totals.actual, base)}
                 </Stat>
                 <Stat label={t('projects.kpi.eac')} sub={t('projects.kpi.eacSub')}>
-                  {money(summary.totals.eac)} <span className="text-base text-muted">{base}</span>
+                  {moneyIn(summary.totals.eac, base)}
                 </Stat>
                 <Stat label={t('projects.kpi.variance')} sub={t('projects.kpi.varianceSub')}>
                   <VarianceText value={summary.totals.variance} />
@@ -97,9 +97,9 @@ export function ProjectsPage() {
               {Number(summary.unallocatedCost) !== 0 && (
                 <Callout tone="info" title={t('projects.unallocated.title')}>
                   {t('projects.unallocated.body', {
-                    amount: `${money(summary.unallocatedCost)} ${base}`,
-                    allocated: `${money(summary.allocatedCost)} ${base}`,
-                    total: `${money(summary.ledgerCost)} ${base}`,
+                    amount: moneyIn(summary.unallocatedCost, base),
+                    allocated: moneyIn(summary.allocatedCost, base),
+                    total: moneyIn(summary.ledgerCost, base),
                   })}
                 </Callout>
               )}

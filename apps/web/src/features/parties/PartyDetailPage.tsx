@@ -14,10 +14,11 @@ import { Modal } from '../../components/ui/Sheet';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
+import { useCurrencyLabel } from '../../components/ui/CurrencyOptions';
 import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, isZero, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useNavigation } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { OpenItem, OpenItemsData, PartyDetail, PartyStatementData } from '../../lib/types';
@@ -28,6 +29,7 @@ type Tab = 'statement' | 'openItems' | 'card';
 
 export function PartyDetailPage() {
   const { t } = useTranslation();
+  const currencyLabel = useCurrencyLabel();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
@@ -113,7 +115,7 @@ export function PartyDetailPage() {
               {/* Dövizli bakiye yalnızca defter para biriminden farklıysa anlamlıdır */}
               {summary.byCurrency.some((c) => c.currency !== company.baseCurrency) && (
                 <span className="block">
-                  {t('parties.detail.currencyBalances')}: {summary.byCurrency.map((c) => `${money(c.balance)} ${c.currency}`).join(' · ')}
+                  {t('parties.detail.currencyBalances')}: {summary.byCurrency.map((c) => moneyIn(c.balance, c.currency)).join(' · ')}
                 </span>
               )}
               {limit ? (
@@ -179,7 +181,7 @@ export function PartyDetailPage() {
                 ['form.taxNumber', party.taxNumber],
                 ['form.taxOffice', party.taxOffice],
                 ['form.address', party.address],
-                ['form.currency', party.currencyCode],
+                ['form.currency', currencyLabel(party.currencyCode, true)],
                 ['form.creditLimit', party.creditLimit ? money(party.creditLimit) : null],
                 ['form.paymentTerm', String(party.paymentTermDays)],
                 ['form.notes', party.notes],
@@ -269,7 +271,7 @@ function StatementTab({ partyId }: { partyId: string }) {
                 <Th num>{t('common.debit')}</Th>
                 <Th num>{t('common.credit')}</Th>
                 <Th num>
-                  {t('common.balance')} ({company.baseCurrency})
+                  {t('common.balance')} ({currencySymbol(company.baseCurrency)})
                 </Th>
               </tr>
             </thead>
@@ -294,7 +296,7 @@ function StatementTab({ partyId }: { partyId: string }) {
                   <Td>{l.description}</Td>
                   <Td className="text-muted">{l.dueDate ? formatDateTR(l.dueDate) : ''}</Td>
                   <Td num className="text-muted">
-                    {l.currencyCode !== company.baseCurrency ? `${money(Number(l.debit) > 0 ? l.debit : l.credit)} ${l.currencyCode}` : ''}
+                    {l.currencyCode !== company.baseCurrency ? moneyIn(Number(l.debit) > 0 ? l.debit : l.credit, l.currencyCode) : ''}
                   </Td>
                   <Td num>{isZero(l.debitBase) ? '' : money(l.debitBase)}</Td>
                   <Td num>{isZero(l.creditBase) ? '' : money(l.creditBase)}</Td>
@@ -380,7 +382,7 @@ function OpenItemsTab({ partyId }: { partyId: string }) {
                       <Th>{t('common.description')}</Th>
                       <Th num>{t('parties.detail.amount')}</Th>
                       <Th num>
-                        {t('parties.detail.remaining')} ({company.baseCurrency})
+                        {t('parties.detail.remaining')} ({currencySymbol(company.baseCurrency)})
                       </Th>
                       <Th className="w-40">{t('parties.detail.overdue')}</Th>
                     </tr>
@@ -392,7 +394,7 @@ function OpenItemsTab({ partyId }: { partyId: string }) {
                         <Td className="font-mono text-[13px]">{it.entryNo}</Td>
                         <Td>{it.description}</Td>
                         <Td num className="text-muted">
-                          {money(it.amount)} {it.currencyCode}
+                          {moneyIn(it.amount, it.currencyCode)}
                         </Td>
                         <Td num>
                           {money(it.remainingBase)}

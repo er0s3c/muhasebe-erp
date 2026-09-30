@@ -11,7 +11,7 @@ import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { DeliveryNoteDetail, InvoiceDetail, InvoiceType } from '../../lib/types';
@@ -139,7 +139,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
           </Callout>
         )}
         {creditLimit && (
-          <Callout tone="warning">{t('invoices.view.creditLimit', { limit: money(creditLimit.limit), balance: money(creditLimit.balance), currency: base })}</Callout>
+          <Callout tone="warning">{t('invoices.view.creditLimit', { limit: moneyIn(creditLimit.limit, base), balance: moneyIn(creditLimit.balance, base) })}</Callout>
         )}
         {inv.returnOfId && (
           <Callout>
@@ -169,8 +169,8 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
             <Item label={t('invoices.dueDate')}>{inv.dueDate ? formatDateTR(inv.dueDate) : '—'}</Item>
             {inv.externalNo && <Item label={t('invoices.form.externalNo')}>{inv.externalNo}</Item>}
             <Item label={t('invoices.form.currency')}>
-              {inv.currencyCode}
-              {foreign && inv.fxRate && <span className="ml-2 text-muted">1 {inv.currencyCode} = {money(inv.fxRate, 4)} {base}</span>}
+              {currencySymbol(inv.currencyCode)}
+              {foreign && inv.fxRate && <span className="ml-2 text-muted">1 {currencySymbol(inv.currencyCode)} = {moneyIn(inv.fxRate, base, 4)}</span>}
             </Item>
             {inv.warehouseName && <Item label={t('invoices.form.warehouse')}>{inv.warehouseName}</Item>}
             <Item label={t('invoices.view.priceMode')}>{inv.vatIncluded ? t('invoices.view.vatIncluded') : t('invoices.view.vatExcluded')}</Item>
@@ -259,20 +259,20 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
           <dl className="w-full max-w-xs text-sm">
             <div className="flex justify-between py-1">
               <dt className="text-muted">{t('invoices.netTotal')}</dt>
-              <dd className="num">{money(inv.netTotal)} {inv.currencyCode}</dd>
+              <dd className="num">{moneyIn(inv.netTotal, inv.currencyCode)}</dd>
             </div>
             <div className="flex justify-between py-1">
               <dt className="text-muted">{t('invoices.vatTotal')}</dt>
-              <dd className="num">{money(inv.vatTotal)} {inv.currencyCode}</dd>
+              <dd className="num">{moneyIn(inv.vatTotal, inv.currencyCode)}</dd>
             </div>
             <div className="mt-1 flex justify-between border-t border-text pt-2 text-base">
               <dt>{t('invoices.grossTotal')}</dt>
-              <dd className="num" data-testid="gross-total">{money(inv.grossTotal)} {inv.currencyCode}</dd>
+              <dd className="num" data-testid="gross-total">{moneyIn(inv.grossTotal, inv.currencyCode)}</dd>
             </div>
             {foreign && inv.grossTotalBase && (
               <div className="flex justify-between py-1 text-muted">
                 <dt>{t('invoices.baseEquivalent')}</dt>
-                <dd className="num">{money(inv.grossTotalBase)} {base}</dd>
+                <dd className="num">{moneyIn(inv.grossTotalBase, base)}</dd>
               </div>
             )}
           </dl>

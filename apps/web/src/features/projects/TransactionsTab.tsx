@@ -8,7 +8,7 @@ import { EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { formatDateTR, isZero, money } from '../../lib/format';
+import { formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ProjectDetail, ProjectTransactionsData, ProjectWbsRow } from '../../lib/types';
@@ -67,11 +67,11 @@ export function TransactionsTab({ project }: { project: ProjectDetail }) {
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Stat label={t('projects.tx.count')}>{data.total}</Stat>
-            <Stat label={t('projects.tx.cost')} sub={base}>
-              {money(data.costNet)}
+            <Stat label={t('projects.tx.cost')}>
+              {moneyIn(data.costNet, base)}
             </Stat>
-            <Stat label={t('projects.tx.revenue')} sub={base}>
-              {money(data.revenueNet)}
+            <Stat label={t('projects.tx.revenue')}>
+              {moneyIn(data.revenueNet, base)}
             </Stat>
           </div>
           <TableWrap>

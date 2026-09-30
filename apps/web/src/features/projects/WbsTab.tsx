@@ -52,7 +52,7 @@ export function WbsTab({ project }: { project: ProjectDetail }) {
           description={t('projects.wbs.desc')}
           action={
             canManage && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {leaves.length > 0 && (
                   <Button onClick={() => setProgressOpen(true)}>
                     <Gauge className="size-4" aria-hidden />

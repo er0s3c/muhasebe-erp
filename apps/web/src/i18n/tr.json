@@ -192,7 +192,7 @@
     "registrationClosedHint": "Hesabınız yoksa şirket yöneticinizden sizi kullanıcı olarak eklemesini isteyin.",
     "invalid": "E-posta veya şifre hatalı",
     "features": [
-      "Çoklu para birimi: TL, GBP, EUR, USD",
+      "Çoklu para birimi: ₺, £, €, $",
       "Değiştirilemez defter ve denetim izi",
       "Şirketler arası tam veri yalıtımı"
     ],
@@ -340,7 +340,7 @@
       "manual": "Elle giriş",
       "importKktcmb": "Merkez Bankası'ndan getir",
       "importFile": "XML dosyası yükle",
-      "importInfo": "Kaynak: KKTC Merkez Bankası resmî kurları. Alış = Döviz Alış, Satış = Döviz Satış (efektif kurlar kaydedilmez). Yalnızca GBP, EUR ve USD alınır; seçili tarih için çekilir.",
+      "importInfo": "Kaynak: KKTC Merkez Bankası resmî kurları. Alış = Döviz Alış, Satış = Döviz Satış (efektif kurlar kaydedilmez). Yalnızca £, € ve $ alınır; seçili tarih için çekilir.",
       "imported": "{{source}} ({{date}}) kurları yüklendi: {{summary}}",
       "importSkippedNote": "Diğer para birimleri atlandı"
     },
@@ -577,7 +577,7 @@
     "PARTY_KIND_IN_USE": "Cari diğer türde hareket gördüğü için türü daraltılamaz.",
     "RATE_SOURCE_UNAVAILABLE": "Merkez Bankası kur servisine ulaşılamadı. XML dosyasını indirip elle yükleyebilirsiniz.",
     "RATE_XML_INVALID": "Kur dosyası geçersiz veya beklenen biçimde değil.",
-    "RATE_XML_NO_SUPPORTED": "Dosyada desteklenen para birimi (GBP, EUR, USD) yok.",
+    "RATE_XML_NO_SUPPORTED": "Dosyada desteklenen para birimi (£, €, $) yok.",
     "ENTRY_HAS_SOURCE": "Bu yevmiye bir belgeden otomatik oluştu; ters kaydı ilgili belgeden (fatura iptali, ters stok belgesi) yapın.",
     "STOCK_DOC_HAS_SOURCE": "Bu stok belgesi bir faturadan veya irsaliyeden oluştu; ters kaydı fatura ya da irsaliye iptalinden yapın.",
     "INVOICE_RULE_VIOLATION": "Fatura kuralı ihlali",
@@ -892,7 +892,7 @@
       "reversedBy": "Bu belge ters çevrildi: {{no}}",
       "reversalOf": "Ters kayıt — orijinal belge: {{no}}",
       "fromCount": "Sayım kaydını aç",
-      "fx": "Orijinal: {{cost}} {{currency}} × {{rate}}",
+      "fx": "Orijinal: {{cost}} × {{rate}}",
       "direction": {
         "in": "Giriş",
         "out": "Çıkış",
@@ -1102,7 +1102,7 @@
       "createReturn": "İade oluştur",
       "cancel": "Faturayı iptal et",
       "cancelledTitle": "Bu fatura {{date}} tarihinde iptal edildi",
-      "creditLimit": "Cari kredi limiti aşıldı: bakiye {{balance}} {{currency}}, limit {{limit}} {{currency}}.",
+      "creditLimit": "Cari kredi limiti aşıldı: bakiye {{balance}}, limit {{limit}}.",
       "returns": "İadeler",
       "priceMode": "Fiyat türü",
       "vatIncluded": "KDV dahil",
@@ -1173,7 +1173,7 @@
     "invoicingCol": "Faturalama",
     "pending": {
       "title": "Faturalanmamış irsaliyeler",
-      "summary": "{{count}} irsaliye, kalan değer {{value}} {{currency}}",
+      "summary": "{{count}} irsaliye, kalan değer {{value}}",
       "none": "Faturalanmamış irsaliye yok",
       "show": "Listele"
     },
@@ -1361,7 +1361,7 @@
       "toAccount": "Hedef hesap (giriş)",
       "outAccount": "Ödeme hesabı (çıkış)",
       "inAccount": "Tahsilat hesabı (giriş)",
-      "available": "Hesap bakiyesi: {{amount}} {{currency}}",
+      "available": "Hesap bakiyesi: {{amount}}",
       "amount": {
         "receipt": "Tahsil edilen tutar ({{currency}})",
         "payment": "Ödenen tutar ({{currency}})",
@@ -1376,7 +1376,7 @@
       "rateMissingHint": "Bu tarih için kayıtlı kur yok; kuru girin.",
       "rateMissing": "{{currency}} için bu tarihte kayıtlı kur yok. Kuru yukarıya girin ya da Ayarlar'dan kur ekleyin.",
       "impliedRate": "Fiili kur: 1 {{currency}} = {{rate}} {{base}}",
-      "cashLow": "Kasada şu an {{balance}} {{currency}} var ve bu çıkış bakiyeyi aşıyor. Kasa eksiye düşemez; kaydederken işlem tarihindeki bakiye denetlenir.",
+      "cashLow": "Kasada şu an {{balance}} var ve bu çıkış bakiyeyi aşıyor. Kasa eksiye düşemez; kaydederken işlem tarihindeki bakiye denetlenir.",
       "items": "Kapatılacak kalemler",
       "customer": "Müşteri",
       "supplier": "Tedarikçi",
@@ -1394,7 +1394,7 @@
       "selectItem": "{{name}} kalemini seç",
       "closeAmountOf": "Kapatılan tutar: {{name}}",
       "settleAmountOf": "Karşılık tutar: {{name}}",
-      "existingAdvance": "Carinin kapatılmamış avansı: {{amount}} {{currency}}",
+      "existingAdvance": "Carinin kapatılmamış avansı: {{amount}}",
       "allocated": "Kalemlere ayrılan",
       "advance": "Avans (kalan)",
       "exceeds": "Tutarı aşıyor",
@@ -1928,6 +1928,14 @@
     "unknownUser": "—",
     "statusCol": "Durum",
     "actions": "İşlemler"
+  },
+  "currencies": {
+    "names": {
+      "TRY": "Türk lirası",
+      "GBP": "İngiliz sterlini",
+      "EUR": "Euro",
+      "USD": "ABD doları"
+    }
   },
   "projects": {
     "title": "Projeler",

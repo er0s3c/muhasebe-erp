@@ -5,12 +5,13 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { z } from 'zod';
-import { CURRENCY_CODES, SECTORS, createCompanySchema, type CreateCompanyInput } from '@erp/shared';
+import { SECTORS, createCompanySchema, type CreateCompanyInput } from '@erp/shared';
 import { BrandMark } from '../../components/layout/Brand';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { errorMessage } from '../../lib/errors';
 import { useLicense } from '../../lib/license';
 import { useSession } from '../../lib/session';
@@ -106,11 +107,7 @@ export function CreateCompanyPage() {
                 <Field label={t('onboarding.baseCurrency')} hint={t('onboarding.baseCurrencyHint')}>
                   {(id) => (
                     <Select id={id} {...register('baseCurrency')}>
-                      {CURRENCY_CODES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
+                      <CurrencyOptions wide />
                     </Select>
                   )}
                 </Field>
@@ -121,11 +118,7 @@ export function CreateCompanyPage() {
                       {...register('reportingCurrency', { setValueAs: (v: string) => (v === '' ? null : v) })}
                     >
                       <option value="">{t('onboarding.reportingNone')}</option>
-                      {CURRENCY_CODES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
+                      <CurrencyOptions wide />
                     </Select>
                   )}
                 </Field>

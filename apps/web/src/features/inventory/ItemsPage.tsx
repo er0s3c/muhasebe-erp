@@ -10,7 +10,7 @@ import { EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { cn } from '../../lib/cn';
-import { money } from '../../lib/format';
+import { currencySymbol, money, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { InventorySummary, ItemKind, ItemListRow } from '../../lib/types';
@@ -92,7 +92,7 @@ export function ItemsPage() {
 
       <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Stat label={t('inventory.items.kpiItems')}>{summary ? summary.itemCount : '—'}</Stat>
-        <Stat label={t('inventory.items.kpiValue')}>{summary ? `${money(summary.stockValue)} ${company.baseCurrency}` : '—'}</Stat>
+        <Stat label={t('inventory.items.kpiValue')}>{summary ? moneyIn(summary.stockValue, company.baseCurrency) : '—'}</Stat>
         <button type="button" className="group rounded-2xl text-left" onClick={() => setLow(!onlyLow)} aria-pressed={onlyLow}>
           <Stat label={t('inventory.items.kpiLow')} className={cn('transition-colors group-hover:border-text', onlyLow && 'border-text')}>
             <span className={cn(summary && summary.lowCount > 0 && 'text-warning')}>{summary ? summary.lowCount : '—'}</span>
@@ -157,7 +157,7 @@ export function ItemsPage() {
                   <Th num>{t('inventory.items.onHand')}</Th>
                   <Th num>{t('inventory.items.avgCost')}</Th>
                   <Th num>
-                    {t('inventory.items.value')} ({company.baseCurrency})
+                    {t('inventory.items.value')} ({currencySymbol(company.baseCurrency)})
                   </Th>
                   <Th className="w-10" />
                 </tr>
