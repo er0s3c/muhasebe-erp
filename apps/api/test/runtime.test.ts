@@ -135,7 +135,7 @@ describe('kayıt bayrağı ve çerez', () => {
       const cookie = res.cookies.find((c) => c.name === 'refresh_token');
       expect(cookie?.httpOnly).toBe(true);
       expect(cookie?.path).toBe('/api/auth');
-      expect(String(cookie?.sameSite).toLowerCase()).toBe('lax');
+      expect(String(cookie?.sameSite).toLowerCase()).toBe('strict');
       expect(Boolean(cookie?.secure)).toBe(secure);
     }
   });

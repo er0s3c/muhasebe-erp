@@ -101,6 +101,22 @@ export async function accountIds(
   return map;
 }
 
+/** Bir şirkete verilen rolde üye ekler ve o üyenin oturumuyla istemci döndürür. */
+export async function addMember(
+  app: FastifyInstance,
+  owner: ReturnType<typeof client>,
+  companyId: string,
+  role: string,
+  name = role,
+): Promise<{ client: ReturnType<typeof client>; userId: string; email: string; token: string }> {
+  const email = `${name.replace(/_/g, '-')}-${randomUUID().slice(0, 8)}@example.com`;
+  const add = await owner.post('/api/company/members', { email, fullName: `${name} Kişi`, role, password: PASSWORD });
+  if (add.statusCode !== 201) throw new Error(`member failed: ${add.body}`);
+  const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password: PASSWORD } });
+  const token = login.json().accessToken as string;
+  return { client: client(app, token, companyId), userId: add.json().member.userId as string, email, token };
+}
+
 export const thisYear = new Date().getUTCFullYear();
 export const day = (m: number, d: number, y = thisYear) =>
   `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -167,4 +183,17 @@ export async function expectDbError(
 export async function orgOf(app: FastifyInstance, token: string): Promise<string> {
   const payload = app.jwt.decode<{ org: string }>(token);
   return payload!.org;
+}
+
+/** Tablo sahibi rolle KALICI ham sorgu (asOwner geri alır); test verisini zamanlarını oynatmak için. */
+export async function execAsOwner(sql: string, params?: unknown[]): Promise<{ rows: any[]; rowCount: number | null }> {
+  const c = new pg.Client({
+    connectionString: process.env.TEST_MIGRATION_DATABASE_URL ?? 'postgres://erp:erp@localhost:5432/erp_test',
+  });
+  await c.connect();
+  try {
+    return await c.query(sql, params);
+  } finally {
+    await c.end();
+  }
 }

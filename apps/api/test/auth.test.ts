@@ -58,19 +58,19 @@ describe('kimlik doğrulama', async () => {
     expect((await client(app, 'bozuk.token.degeri').get('/api/me')).statusCode).toBe(401);
   });
 
-  it('refresh token döner ve kullanılan token tekrar sunulursa tüm oturumlar kapanır', async () => {
+  it('refresh token döner; döndürülen token hemen tekrar sunulursa 409 (çakışma) verir ve yeni oturum bozulmaz', async () => {
     const s = await registerUser(app, 'Refresh');
     const first = await app.inject({ method: 'POST', url: '/api/auth/refresh', cookies: { refresh_token: s.cookie } });
     expect(first.statusCode).toBe(200);
     const newCookie = first.cookies.find((c) => c.name === 'refresh_token')!.value;
     expect(newCookie).not.toBe(s.cookie);
 
-    // Eski token'ın yeniden kullanımı = çalınma şüphesi
-    const reuse = await app.inject({ method: 'POST', url: '/api/auth/refresh', cookies: { refresh_token: s.cookie } });
-    expect(reuse.statusCode).toBe(401);
-    // Yeni token da iptal edilmiş olmalı
-    const afterReuse = await app.inject({ method: 'POST', url: '/api/auth/refresh', cookies: { refresh_token: newCookie } });
-    expect(afterReuse.statusCode).toBe(401);
+    // Tolerans penceresi içinde eski token: çakışma (yeni token verilmez, oturumlar kapanmaz)
+    const race = await app.inject({ method: 'POST', url: '/api/auth/refresh', cookies: { refresh_token: s.cookie } });
+    expect(race.statusCode).toBe(409);
+    expect(race.json().error.code).toBe('REFRESH_CONFLICT');
+    const next = await app.inject({ method: 'POST', url: '/api/auth/refresh', cookies: { refresh_token: newCookie } });
+    expect(next.statusCode).toBe(200);
   });
 
   it('çıkış refresh tokenını iptal eder', async () => {

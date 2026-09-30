@@ -42,6 +42,8 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/companies',
+    // Her çağrı ~150 hesaplık plan tohumlar; IP başına dakikada 10 (RATE_LIMIT_ENABLED iken).
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     authedRoute(app, async ({ tx, user, req, reply }) => {
       const input = createCompanySchema.parse(req.body);
       const company = await createCompany(tx, user, input, req.ip);

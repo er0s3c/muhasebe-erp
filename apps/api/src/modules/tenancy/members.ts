@@ -6,10 +6,20 @@ import { addMemberSchema, updateMemberSchema, uuid } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { memberships, users } from '../../db/schema';
 import { tenantRoute } from '../../http/context';
-import { AppError, notFound, unprocessable } from '../../http/errors';
+import { AppError, forbidden, notFound, unprocessable } from '../../http/errors';
 import { TR } from '../../db/search';
 
 const userIdParam = z.object({ userId: uuid });
+
+/**
+ * `members.manage` iznine yönetici (admin) de sahiptir; ancak `owner` rolünü vermek, almak ya da bir sahibin
+ * üyeliğini değiştirmek yalnızca sahiplere aittir. Aksi halde yönetici kendini sahip yapabilir ya da sahibi çıkarabilir.
+ */
+function requireOwnerFor(callerRole: string, ...roles: (string | null | undefined)[]) {
+  if (callerRole !== 'owner' && roles.includes('owner')) {
+    throw forbidden('Sahip rolünü yalnızca şirket sahipleri verebilir, değiştirebilir veya kaldırabilir', 'OWNER_ONLY');
+  }
+}
 
 export const memberRoutes: FastifyPluginAsync = async (app) => {
   const manage = { permission: 'members.manage' } as const;
@@ -34,8 +44,9 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/company/members',
-    tenantRoute(app, manage, async ({ tx, req, reply, company, user }) => {
+    tenantRoute(app, manage, async ({ tx, req, reply, company, user, role }) => {
       const input = addMemberSchema.parse(req.body);
+      requireOwnerFor(role, input.role);
 
       let [target] = await tx.select().from(users).where(eq(users.email, input.email));
       if (target && target.organizationId !== user.orgId) {
@@ -70,9 +81,15 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch(
     '/api/company/members/:userId',
-    tenantRoute(app, manage, async ({ tx, req, company }) => {
+    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole }) => {
       const { userId } = userIdParam.parse(req.params);
       const { role } = updateMemberSchema.parse(req.body);
+      const [current] = await tx
+        .select({ role: memberships.role })
+        .from(memberships)
+        .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)));
+      if (!current) throw notFound('Üye');
+      requireOwnerFor(callerRole, role, current.role);
       await assertNotLastOwner(tx, company.id, userId, role);
       const [row] = await tx
         .update(memberships)
@@ -86,8 +103,14 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete(
     '/api/company/members/:userId',
-    tenantRoute(app, manage, async ({ tx, req, company }) => {
+    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole }) => {
       const { userId } = userIdParam.parse(req.params);
+      const [current] = await tx
+        .select({ role: memberships.role })
+        .from(memberships)
+        .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)));
+      if (!current) throw notFound('Üye');
+      requireOwnerFor(callerRole, current.role);
       await assertNotLastOwner(tx, company.id, userId, null);
       const deleted = await tx
         .delete(memberships)
@@ -99,7 +122,10 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
   );
 };
 
-/** Şirketin sahipsiz kalmasını engeller. */
+/**
+ * Şirketin sahipsiz kalmasını engeller. Sahip üyelik satırları kilitlenir: iki sahibin aynı anda birbirini
+ * düşürmesi (ikisi de "hâlâ iki sahip var" görüp geçmesi) böylece serileşir.
+ */
 async function assertNotLastOwner(
   tx: Tx,
   companyId: string,
@@ -107,16 +133,12 @@ async function assertNotLastOwner(
   newRole: string | null,
 ) {
   if (newRole === 'owner') return;
-  const [target] = await tx
-    .select({ role: memberships.role })
+  const owners = await tx
+    .select({ userId: memberships.userId })
     .from(memberships)
-    .where(and(eq(memberships.companyId, companyId), eq(memberships.userId, userId)));
-  if (target?.role !== 'owner') return;
-  const [owners] = await tx
-    .select({ n: sql<number>`count(*)::int` })
-    .from(memberships)
-    .where(and(eq(memberships.companyId, companyId), eq(memberships.role, 'owner')));
-  if ((owners?.n ?? 0) <= 1) {
+    .where(and(eq(memberships.companyId, companyId), eq(memberships.role, 'owner')))
+    .for('update');
+  if (owners.some((o) => o.userId === userId) && owners.length <= 1) {
     throw unprocessable('Şirketin en az bir sahibi olmalı', 'LAST_OWNER');
   }
 }

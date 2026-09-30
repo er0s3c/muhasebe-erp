@@ -66,11 +66,20 @@ export const refreshTokens = pgTable(
     tokenHash: text().notNull(),
     expiresAt: timestamp({ withTimezone: true }).notNull(),
     revokedAt: timestamp({ withTimezone: true }),
+    /** Döndürme (rotasyon) ile iptal edildiyse zamanı; kısa tolerans penceresinde çakışan istekleri ayırt eder. */
+    rotatedAt: timestamp({ withTimezone: true }),
+    /** Aynı oturumun art arda döndürülen token'ları; oturumun mutlak ömrü ilk girişten sayılır. */
+    familyId: uuid().notNull().default(sql`gen_random_uuid()`),
+    familyStartedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
     userAgent: text(),
     ip: text(),
   },
-  (t) => [uniqueIndex('refresh_tokens_hash_uq').on(t.tokenHash), index('refresh_tokens_user_idx').on(t.userId)],
+  (t) => [
+    uniqueIndex('refresh_tokens_hash_uq').on(t.tokenHash),
+    index('refresh_tokens_user_idx').on(t.userId),
+    index('refresh_tokens_expires_idx').on(t.expiresAt),
+  ],
 );
 
 export const companies = pgTable(

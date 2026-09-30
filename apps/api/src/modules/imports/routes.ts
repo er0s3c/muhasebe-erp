@@ -65,12 +65,14 @@ export const importRoutes: FastifyPluginAsync = async (app) => {
   for (const kind of IMPORT_KINDS) {
     const handler = IMPORT_HANDLERS[kind];
     const guard = { module: handler.module, permission: handler.permission };
+    // Ayrıştırma/ön izleme/yazma pahalıdır (dosya çözme, doğrulama); şablon indirme sınırsızdır.
+    const heavy = { ...guard, limit: { name: 'import', max: 30, windowMs: 60_000 } };
     const base = `/api/imports/${kind}`;
 
     app.post(
       `${base}/parse`,
       { bodyLimit: IMPORT_BODY_LIMIT },
-      tenantRoute(app, guard, async ({ req }): Promise<ImportParseResult> => {
+      tenantRoute(app, heavy, async ({ req }): Promise<ImportParseResult> => {
         const input = importParseSchema.parse(req.body);
         // Base64 kabaca 4/3 büyür; şişirilmiş gövde çözülmeden reddedilir
         if (input.contentBase64.length > Math.ceil((IMPORT_LIMITS.maxFileBytes * 4) / 3) + 16) {
@@ -95,7 +97,7 @@ export const importRoutes: FastifyPluginAsync = async (app) => {
     app.post(
       `${base}/preview`,
       { bodyLimit: IMPORT_BODY_LIMIT },
-      tenantRoute(app, guard, async ({ tx, req, company, user }): Promise<ImportPreview> => {
+      tenantRoute(app, heavy, async ({ tx, req, company, user }): Promise<ImportPreview> => {
         const input = importRunSchema.parse(req.body);
         const ctx: ImportCtx = { tx, company, userId: user.id };
         return toPreview(kind, await handler.plan(ctx, input.rows, input.options));
@@ -105,7 +107,7 @@ export const importRoutes: FastifyPluginAsync = async (app) => {
     app.post(
       `${base}/commit`,
       { bodyLimit: IMPORT_BODY_LIMIT },
-      tenantRoute(app, guard, async ({ tx, req, company, user }): Promise<ImportCommitResult> => {
+      tenantRoute(app, heavy, async ({ tx, req, company, user }): Promise<ImportCommitResult> => {
         const input = importRunSchema.parse(req.body);
         const ctx: ImportCtx = { tx, company, userId: user.id };
         const plan = await handler.plan(ctx, input.rows, input.options);

@@ -1,13 +1,27 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { changePasswordSchema, loginSchema, registerSchema } from '@erp/shared';
+import type { Queryable } from '../../db/client';
 import { organizations, refreshTokens, users } from '../../db/schema';
 import { authedRoute } from '../../http/context';
 import { AppError, unauthorized } from '../../http/errors';
+import { assertSameOrigin } from '../../http/origin';
 
 const REFRESH_COOKIE = 'refresh_token';
+
+/**
+ * Döndürülen (rotasyonla iptal edilen) bir yenileme token'ının bu süre içinde yeniden sunulması, aynı çerezle
+ * eşzamanlı çalışan iki sekmenin çakışması sayılır (çalınma değil). Bu pencerede yeni token VERİLMEZ, yalnızca
+ * 409 döner; istemci güncel çerezle bir kez daha dener. Pencere dışı yeniden kullanım çalınma işaretidir.
+ */
+const ROTATION_GRACE_MS = 10_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Başarısız giriş sayaçları: (e-posta+IP) başına 5, e-posta başına (tüm IP'ler) 30, 15 dakikada. */
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_PER_IP_EMAIL = 5;
+const LOGIN_MAX_PER_EMAIL = 30;
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
@@ -15,33 +29,61 @@ const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 let dummyHash: Promise<string> | undefined;
 const getDummyHash = () => (dummyHash ??= hash('dummy-password-for-timing'));
 
+interface SessionFamily {
+  id: string;
+  startedAt: Date;
+}
+
 async function issueSession(
   app: FastifyInstance,
   req: FastifyRequest,
   reply: FastifyReply,
   user: { id: string; organizationId: string },
+  opts: { db?: Queryable; family?: SessionFamily } = {},
 ) {
+  const db = opts.db ?? app.db;
   const accessToken = app.jwt.sign(
     { sub: user.id, org: user.organizationId },
     { expiresIn: app.config.ACCESS_TOKEN_TTL_SECONDS },
   );
   const refreshToken = randomBytes(32).toString('base64url');
-  const ttlMs = app.config.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
-  await app.db.insert(refreshTokens).values({
+  const now = Date.now();
+  const familyStart = opts.family?.startedAt ?? new Date(now);
+  // Yenilemeyle uzasa da oturum, ilk girişten SESSION_MAX_DAYS sonra biter.
+  const expiresAt = Math.min(
+    now + app.config.REFRESH_TOKEN_TTL_DAYS * DAY_MS,
+    familyStart.getTime() + app.config.SESSION_MAX_DAYS * DAY_MS,
+  );
+  await db.insert(refreshTokens).values({
     userId: user.id,
     tokenHash: sha256(refreshToken),
-    expiresAt: new Date(Date.now() + ttlMs),
+    expiresAt: new Date(expiresAt),
     userAgent: req.headers['user-agent']?.slice(0, 300) ?? null,
     ip: req.ip,
+    ...(opts.family ? { familyId: opts.family.id, familyStartedAt: opts.family.startedAt } : {}),
   });
   void reply.setCookie(REFRESH_COOKIE, refreshToken, {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'strict',
     secure: app.config.COOKIE_SECURE,
     path: '/api/auth',
-    maxAge: Math.floor(ttlMs / 1000),
+    maxAge: Math.max(0, Math.floor((expiresAt - now) / 1000)),
   });
   return accessToken;
+}
+
+/** Süresi dolmuş ve uzun süre önce iptal edilmiş token satırlarını siler (girişte, kullanıcı başına). */
+async function purgeOldTokens(app: FastifyInstance, userId: string) {
+  try {
+    await app.db.delete(refreshTokens).where(
+      and(
+        eq(refreshTokens.userId, userId),
+        sql`(${refreshTokens.expiresAt} < now() or ${refreshTokens.revokedAt} < now() - interval '30 days')`,
+      ),
+    );
+  } catch (err) {
+    app.log.warn({ err }, 'eski yenileme token kayıtları temizlenemedi');
+  }
 }
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
@@ -49,6 +91,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   const limit = { rateLimit: { max: 10, timeWindow: '1 minute' } };
 
   app.post('/api/auth/register', { config: limit }, async (req, reply) => {
+    assertSameOrigin(req, app.config);
     if (!app.config.REGISTRATION_ENABLED) {
       throw new AppError(403, 'REGISTRATION_DISABLED', 'Yeni kayıt bu kurulumda kapalı');
     }
@@ -84,20 +127,39 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/api/auth/login', { config: limit }, async (req, reply) => {
+    assertSameOrigin(req, app.config);
     const input = loginSchema.parse(req.body);
+
+    // Yalnızca başarısız denemeler sayılır; IP sahteciliğine karşı (e-posta+IP) yanında e-posta başına genel sayaç da var.
+    const ipEmailKey = `login-fail:${req.ip}|${input.email}`;
+    const emailKey = `login-fail:${input.email}`;
+    const wait = Math.max(
+      app.limiter.blocked(ipEmailKey, LOGIN_MAX_PER_IP_EMAIL),
+      app.limiter.blocked(emailKey, LOGIN_MAX_PER_EMAIL),
+    );
+    if (wait > 0) {
+      void reply.header('retry-after', String(wait));
+      throw new AppError(429, 'RATE_LIMITED', 'Çok fazla başarısız giriş denemesi; lütfen biraz sonra tekrar deneyin');
+    }
+
     const [user] = await app.db.select().from(users).where(eq(users.email, input.email));
 
     const ok = await verify(user?.passwordHash ?? (await getDummyHash()), input.password);
     if (!user || !ok || !user.isActive) {
+      app.limiter.hit(ipEmailKey, LOGIN_WINDOW_MS);
+      app.limiter.hit(emailKey, LOGIN_WINDOW_MS);
       throw new AppError(401, 'INVALID_CREDENTIALS', 'E-posta veya şifre hatalı');
     }
+    app.limiter.reset(ipEmailKey);
 
     await app.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
     const accessToken = await issueSession(app, req, reply, user);
+    await purgeOldTokens(app, user.id);
     return { accessToken, user: { id: user.id, email: user.email, fullName: user.fullName } };
   });
 
   app.post('/api/auth/refresh', { config: limit }, async (req, reply) => {
+    assertSameOrigin(req, app.config);
     const token = req.cookies[REFRESH_COOKIE];
     if (!token) throw unauthorized();
 
@@ -108,7 +170,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!row) throw unauthorized();
 
     if (row.revokedAt) {
-      // Kullanılmış bir token'ın tekrar sunulması çalınma işaretidir: kullanıcının tüm oturumlarını kapat.
+      if (row.rotatedAt && Date.now() - row.rotatedAt.getTime() <= ROTATION_GRACE_MS) {
+        throw new AppError(409, 'REFRESH_CONFLICT', 'Oturum aynı anda başka bir istekle yenilendi; tekrar deneyin');
+      }
+      // Tolerans dışında kullanılmış bir token'ın tekrar sunulması çalınma işaretidir: kullanıcının tüm oturumlarını kapat.
       await app.db
         .update(refreshTokens)
         .set({ revokedAt: new Date() })
@@ -117,19 +182,35 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       throw unauthorized();
     }
     if (row.expiresAt.getTime() < Date.now()) throw unauthorized();
+    if (row.familyStartedAt.getTime() + app.config.SESSION_MAX_DAYS * DAY_MS < Date.now()) {
+      await app.db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.id, row.id));
+      void reply.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+      throw unauthorized('Oturumun azami süresi doldu; yeniden giriş yapın');
+    }
 
     const [user] = await app.db.select().from(users).where(eq(users.id, row.userId));
     if (!user?.isActive) throw unauthorized();
 
-    await app.db
-      .update(refreshTokens)
-      .set({ revokedAt: new Date() })
-      .where(eq(refreshTokens.id, row.id));
-    const accessToken = await issueSession(app, req, reply, user);
+    // İptal + yeni token tek işlemde ve tek kazananlı: aynı token'la eşzamanlı ikinci istek 0 satır günceller.
+    const accessToken = await app.db.transaction(async (tx) => {
+      const rotated = await tx
+        .update(refreshTokens)
+        .set({ revokedAt: new Date(), rotatedAt: new Date() })
+        .where(and(eq(refreshTokens.id, row.id), isNull(refreshTokens.revokedAt)))
+        .returning({ id: refreshTokens.id });
+      if (rotated.length === 0) {
+        throw new AppError(409, 'REFRESH_CONFLICT', 'Oturum aynı anda başka bir istekle yenilendi; tekrar deneyin');
+      }
+      return issueSession(app, req, reply, user, {
+        db: tx,
+        family: { id: row.familyId, startedAt: row.familyStartedAt },
+      });
+    });
     return { accessToken, user: { id: user.id, email: user.email, fullName: user.fullName } };
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
+    assertSameOrigin(req, app.config);
     const token = req.cookies[REFRESH_COOKIE];
     if (token) {
       await app.db
@@ -143,6 +224,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/auth/change-password',
+    { config: limit },
     authedRoute(app, async ({ tx, user, req }) => {
       const input = changePasswordSchema.parse(req.body);
       const [row] = await tx.select().from(users).where(eq(users.id, user.id));
@@ -150,11 +232,18 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         throw new AppError(401, 'INVALID_CREDENTIALS', 'Mevcut şifre hatalı');
       }
       await tx.update(users).set({ passwordHash: await hash(input.newPassword) }).where(eq(users.id, user.id));
-      // Diğer oturumları kapat.
+      // Diğer oturumları kapat; bu isteği gönderen oturum (çerez varsa) açık kalır.
+      const current = req.cookies[REFRESH_COOKIE];
       await tx
         .update(refreshTokens)
         .set({ revokedAt: new Date() })
-        .where(and(eq(refreshTokens.userId, user.id), isNull(refreshTokens.revokedAt)));
+        .where(
+          and(
+            eq(refreshTokens.userId, user.id),
+            isNull(refreshTokens.revokedAt),
+            ...(current ? [ne(refreshTokens.tokenHash, sha256(current))] : []),
+          ),
+        );
       return { ok: true };
     }),
   );

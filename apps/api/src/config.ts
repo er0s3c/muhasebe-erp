@@ -40,6 +40,8 @@ const envSchema = z
     CORS_ORIGIN: z.string().optional(),
     ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().default(15 * 60),
     REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().default(30),
+    /** Yenilemeyle uzasa da bir oturumun (ilk girişten itibaren) mutlak ömrü. */
+    SESSION_MAX_DAYS: z.coerce.number().int().min(1).default(90),
     /** Testlerde kapatılır. */
     RATE_LIMIT_ENABLED: flag(true),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),

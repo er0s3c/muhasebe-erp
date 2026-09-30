@@ -103,6 +103,13 @@ export function errorHandler(
       .send({ error: { code: 'BANK_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP07') {
+    // Denetim kaydı yalnızca eklenir (sahip rolü dahil değiştirilemez/silinemez)
+    void reply
+      .status(422)
+      .send({ error: { code: 'AUDIT_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

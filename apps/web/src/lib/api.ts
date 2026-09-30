@@ -63,11 +63,19 @@ async function raw(path: string, opts: RequestOptions): Promise<Response> {
 export function refreshSession(): Promise<boolean> {
   refreshing ??= (async () => {
     try {
-      const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' });
-      if (!res.ok) return false;
-      const data = (await res.json()) as { accessToken: string };
-      accessToken = data.accessToken;
-      return true;
+      // Başka bir sekme aynı çerezle aynı anda yenilediyse sunucu 409 döner; çerez artık güncel olduğundan bir kez daha denenir.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' });
+        if (res.status === 409 && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 250));
+          continue;
+        }
+        if (!res.ok) return false;
+        const data = (await res.json()) as { accessToken: string };
+        accessToken = data.accessToken;
+        return true;
+      }
+      return false;
     } catch {
       return false;
     } finally {

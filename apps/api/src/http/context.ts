@@ -10,7 +10,19 @@ import {
 import type { Config } from '../config';
 import { setContext, withContext, type Db, type Tx } from '../db/client';
 import { companies, companyModules, memberships, users } from '../db/schema';
-import { forbidden, unauthorized, badRequest } from './errors';
+import { AppError, forbidden, unauthorized, badRequest } from './errors';
+import type { MemoryLimiter } from './limits';
+
+/**
+ * Kayıtlı bir işleyicinin hangi kapıdan geçtiğini gösterir; rota–izin sözleşme testi (test/security.test.ts)
+ * her `/api/*` rotasının ya kamuya açık listede ya da bir kapıdan geçtiğini bunu okuyarak doğrular.
+ */
+export const GUARD = Symbol.for('erp.route.guard');
+export interface GuardMeta {
+  kind: 'authed' | 'tenant';
+  permission?: Permission;
+  module?: string;
+}
 
 export interface AccessTokenPayload {
   sub: string;
@@ -23,6 +35,8 @@ declare module 'fastify' {
     config: Config;
     /** Merkez Bankası kur XML'ini indirir; testlerde değiştirilebilir. */
     rateFetcher: (isoDate?: string) => Promise<string>;
+    /** Bellek içi oran sınırlayıcı (RATE_LIMIT_ENABLED kapalıyken hiçbir şeyi engellemez). */
+    limiter: MemoryLimiter;
   }
 }
 declare module '@fastify/jwt' {
@@ -73,7 +87,7 @@ export function authedRoute<T>(
   app: FastifyInstance,
   handler: (ctx: AuthCtx) => Promise<T>,
 ): RouteHandlerMethod {
-  return async (req, reply) => {
+  const route: RouteHandlerMethod = async (req, reply) => {
     const user = await authenticate(req);
     return withContext(app.db, { userId: user.id, orgId: user.orgId, ip: req.ip }, async (tx) => {
       // Token geçerli olsa da kullanıcı pasifleştirilmiş olabilir.
@@ -85,12 +99,15 @@ export function authedRoute<T>(
       return handler({ tx, user, req, reply });
     });
   };
+  return Object.assign(route, { [GUARD]: { kind: 'authed' } satisfies GuardMeta });
 }
 
 export interface TenantRouteOptions {
   permission?: Permission;
   /** Modül kayıt anahtarı; şirketin sektöründe açık değilse 403. */
   module?: string;
+  /** Kullanıcı başına oran sınırı (ağır uçlar: dışa/içe aktarma, kur indirme). Sınır aşılırsa 429. */
+  limit?: { name: string; max: number; windowMs: number };
 }
 
 /**
@@ -103,8 +120,15 @@ export function tenantRoute<T>(
   options: TenantRouteOptions,
   handler: (ctx: TenantCtx) => Promise<T>,
 ): RouteHandlerMethod {
-  return async (req, reply) => {
+  const route: RouteHandlerMethod = async (req, reply) => {
     const user = await authenticate(req);
+    if (options.limit) {
+      const r = app.limiter.consume(`${options.limit.name}:${user.id}`, options.limit.max, options.limit.windowMs);
+      if (!r.ok) {
+        void reply.header('retry-after', String(r.retryAfterSec));
+        throw new AppError(429, 'RATE_LIMITED', 'Çok fazla istek; lütfen biraz sonra tekrar deneyin');
+      }
+    }
     const companyId = req.headers['x-company-id'];
     if (typeof companyId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(companyId)) {
       throw badRequest('X-Company-Id başlığı gerekli', 'COMPANY_REQUIRED');
@@ -160,4 +184,7 @@ export function tenantRoute<T>(
       });
     });
   };
+  return Object.assign(route, {
+    [GUARD]: { kind: 'tenant', permission: options.permission, module: options.module } satisfies GuardMeta,
+  });
 }

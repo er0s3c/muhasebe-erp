@@ -130,7 +130,7 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
    */
   app.post(
     '/api/exchange-rates/import',
-    tenantRoute(app, settings('rates.manage'), async ({ tx, req, user, company }) => {
+    tenantRoute(app, { ...settings('rates.manage'), limit: { name: 'rate-import', max: 10, windowMs: 60_000 } }, async ({ tx, req, user, company }) => {
       const body = z
         .discriminatedUnion('source', [
           z.object({ source: z.literal('kktcmb'), date: isoDate.optional() }),

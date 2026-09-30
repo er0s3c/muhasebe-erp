@@ -5,10 +5,11 @@ import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyServerOptions, type RouteOptions } from 'fastify';
 import type { Config } from './config';
 import type { Db } from './db/client';
 import { errorHandler } from './http/errors';
+import { MemoryLimiter } from './http/limits';
 import { authRoutes } from './modules/auth/routes';
 import { inventoryRoutes } from './modules/inventory/routes';
 import { deliveryRoutes } from './modules/deliveries/routes';
@@ -30,6 +31,8 @@ export interface BuildAppOptions {
   logger?: boolean;
   /** Varsayılan: resmî Merkez Bankası adresinden indirir (sertifika doğrulaması açık). */
   rateFetcher?: (isoDate?: string) => Promise<string>;
+  /** Yalnızca testler: kaydedilen her rotayı gözlemler (rota–izin sözleşme testi). */
+  onRoute?: (route: RouteOptions) => void;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -55,13 +58,21 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     },
   };
   const app = Fastify(serverOptions);
+  if (opts.onRoute) app.addHook('onRoute', opts.onRoute);
 
   app.decorate('db', opts.db);
   app.decorate('config', config);
   app.decorate('rateFetcher', opts.rateFetcher ?? fetchKktcmbXml);
+  app.decorate('limiter', new MemoryLimiter(config.RATE_LIMIT_ENABLED));
 
   app.addHook('onRequest', async (req, reply) => {
     void reply.header('x-request-id', req.id);
+  });
+  // API yanıtları (oturum, mali veri) tarayıcı ve ara önbelleklerde saklanmasın; dışa aktarmalar kendi başlığını koyar.
+  app.addHook('onSend', async (req, reply) => {
+    if (req.url.startsWith('/api/') && !reply.hasHeader('cache-control')) {
+      void reply.header('cache-control', 'no-store');
+    }
   });
 
   await app.register(helmet, {

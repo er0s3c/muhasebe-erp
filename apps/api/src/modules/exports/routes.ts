@@ -18,7 +18,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
   for (const def of EXPORTS) {
     app.get(
       `/api/exports/${def.key}`,
-      tenantRoute(app, { module: def.module, permission: def.permission }, async ({ tx, req, reply, company }) => {
+      tenantRoute(app, { module: def.module, permission: def.permission, limit: { name: 'export', max: 30, windowMs: 60_000 } }, async ({ tx, req, reply, company }) => {
         const { format } = formatSchema.parse(req.query);
         if (!def.formats.includes(format)) throw badRequest(`Bu rapor yalnızca ${def.formats.join(', ').toUpperCase()} olarak alınabilir`, 'EXPORT_FORMAT_UNSUPPORTED');
         const q = def.schema.parse(req.query);
