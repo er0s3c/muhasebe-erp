@@ -8,9 +8,19 @@ export type ModuleStatus = 'available' | 'planned';
 export interface ModuleDef {
   key: string;
   labelKey: string;
+  /** Türkçe ad (hata iletilerinde kullanılır; arayüz `labelKey` çevirisini kullanır). */
+  label: string;
   /** 'all' = her sektörde açık (çekirdek). */
   sectors: readonly Sector[] | 'all';
   status: ModuleStatus;
+  /** true: kapatılamaz (panel ve ayarlar olmadan şirket yönetilemez); `company_modules` istisnası yok sayılır. */
+  locked?: boolean;
+  /**
+   * Bu modülün çalışması için AÇIK olması gereken diğer modüller (gözlenen servis bağımlılıkları: fatura stok/cari/defter
+   * kullanır, kasa-banka defter ve cari kullanır, cari bakiyeleri defter satırlarından türer, stok otomatik yevmiye yazar).
+   * Bir modül kapatılırsa ona bağlı modüller de çalışamaz; bağımlı açıkken kapatılamaz.
+   */
+  requires?: readonly string[];
 }
 
 /**
@@ -19,22 +29,31 @@ export interface ModuleDef {
  * 'planned' modüller henüz hiçbir şirkete açılmaz.
  */
 export const MODULES: readonly ModuleDef[] = [
-  { key: 'core.dashboard', labelKey: 'modules.dashboard', sectors: 'all', status: 'available' },
-  { key: 'core.ledger', labelKey: 'modules.ledger', sectors: 'all', status: 'available' },
-  { key: 'core.parties', labelKey: 'modules.parties', sectors: 'all', status: 'available' },
-  { key: 'core.inventory', labelKey: 'modules.inventory', sectors: 'all', status: 'available' },
-  { key: 'core.invoices', labelKey: 'modules.invoices', sectors: 'all', status: 'available' },
-  { key: 'core.treasury', labelKey: 'modules.treasury', sectors: 'all', status: 'available' },
-  { key: 'core.settings', labelKey: 'modules.settings', sectors: 'all', status: 'available' },
+  { key: 'core.dashboard', labelKey: 'modules.dashboard', label: 'Genel bakış', sectors: 'all', status: 'available', locked: true },
+  { key: 'core.ledger', labelKey: 'modules.ledger', label: 'Muhasebe', sectors: 'all', status: 'available' },
+  { key: 'core.parties', labelKey: 'modules.parties', label: 'Cari hesaplar', sectors: 'all', status: 'available', requires: ['core.ledger'] },
+  { key: 'core.inventory', labelKey: 'modules.inventory', label: 'Stok', sectors: 'all', status: 'available', requires: ['core.ledger'] },
+  {
+    key: 'core.invoices',
+    labelKey: 'modules.invoices',
+    label: 'Fatura ve irsaliye',
+    sectors: 'all',
+    status: 'available',
+    requires: ['core.ledger', 'core.parties', 'core.inventory'],
+  },
+  { key: 'core.treasury', labelKey: 'modules.treasury', label: 'Kasa ve banka', sectors: 'all', status: 'available', requires: ['core.ledger', 'core.parties'] },
+  { key: 'core.settings', labelKey: 'modules.settings', label: 'Ayarlar', sectors: 'all', status: 'available', locked: true },
   {
     key: 'construction.projects',
     labelKey: 'modules.constructionProjects',
+    label: 'Şantiye ve projeler',
     sectors: ['CONSTRUCTION'],
     status: 'planned',
   },
   {
     key: 'retail.pos',
     labelKey: 'modules.retailPos',
+    label: 'Hızlı satış (POS)',
     sectors: ['RETAIL_MARKET'],
     status: 'planned',
   },
@@ -353,6 +372,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'settings.read',
   },
   {
+    key: 'modules',
+    labelKey: 'nav.modules',
+    path: '/settings/modules',
+    icon: 'puzzle',
+    group: 'settings',
+    module: 'core.settings',
+    permission: 'settings.read',
+  },
+  {
     key: 'account-mapping',
     labelKey: 'nav.accountMapping',
     path: '/settings/account-mapping',
@@ -383,20 +411,113 @@ export interface ModuleOverride {
 
 /**
  * Şirketin açık modülleri: sektör varsayılanları + `company_modules` istisnaları.
- * Bir istisna yalnızca kayıtta 'available' olan ve sektöre uyan bir modülü kapatabilir;
- * sektöre uymayan modül istisnayla açılamaz.
+ * Bir istisna yalnızca kayıtta 'available' olan, sektöre uyan ve KİLİTLİ olmayan bir modülü kapatabilir;
+ * sektöre uymayan modül istisnayla açılamaz. Gereksinimi (`requires`) kapalı olan modül de kapanır (geçişli):
+ * bu, ham SQL ile yazılmış tutarsız bir istisna satırına karşı savunmadır.
  */
 export function resolveEnabledModules(
   sector: Sector,
   overrides: readonly ModuleOverride[] = [],
   registry: readonly ModuleDef[] = MODULES,
 ): Set<string> {
+  const byKey = new Map(registry.map((m) => [m.key, m]));
   const enabled = new Set<string>();
   for (const mod of registry) {
     if (isModuleAvailableForSector(mod, sector)) enabled.add(mod.key);
   }
   for (const o of overrides) {
-    if (!o.enabled) enabled.delete(o.module);
+    if (!o.enabled && !byKey.get(o.module)?.locked) enabled.delete(o.module);
+  }
+  // Gereksinimi eksik modülleri düşür (kararlı hale gelene dek)
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const key of [...enabled]) {
+      const missing = (byKey.get(key)?.requires ?? []).some((r) => !enabled.has(r));
+      if (missing) {
+        enabled.delete(key);
+        changed = true;
+      }
+    }
   }
   return enabled;
+}
+
+export type ModuleToggleReason =
+  | 'UNKNOWN'
+  | 'PLANNED'
+  | 'SECTOR_MISMATCH'
+  | 'LOCKED'
+  | 'REQUIRED_BY'
+  | 'MISSING_REQUIREMENT';
+
+export type ModuleToggleCheck = { ok: true } | { ok: false; reason: ModuleToggleReason; modules: string[] };
+
+/**
+ * Bir modülü açma/kapatma isteğinin geçerli olup olmadığını denetler (API ve arayüz aynı kuralı kullanır).
+ * Zaten istenen durumdaysa sorun yoktur (etkisiz).
+ */
+export function checkModuleToggle(
+  sector: Sector,
+  overrides: readonly ModuleOverride[],
+  key: string,
+  enable: boolean,
+  registry: readonly ModuleDef[] = MODULES,
+): ModuleToggleCheck {
+  const mod = registry.find((m) => m.key === key);
+  if (!mod) return { ok: false, reason: 'UNKNOWN', modules: [] };
+  if (mod.status === 'planned') return { ok: false, reason: 'PLANNED', modules: [] };
+  if (!isModuleAvailableForSector(mod, sector)) return { ok: false, reason: 'SECTOR_MISMATCH', modules: [] };
+  if (mod.locked) return { ok: false, reason: 'LOCKED', modules: [] };
+
+  const enabled = resolveEnabledModules(sector, overrides, registry);
+  if (enable) {
+    const missing = (mod.requires ?? []).filter((r) => !enabled.has(r));
+    return missing.length > 0 ? { ok: false, reason: 'MISSING_REQUIREMENT', modules: missing } : { ok: true };
+  }
+  const dependents = registry.filter((m) => enabled.has(m.key) && m.requires?.includes(key)).map((m) => m.key);
+  return dependents.length > 0 ? { ok: false, reason: 'REQUIRED_BY', modules: dependents } : { ok: true };
+}
+
+export interface ModuleDescription {
+  key: string;
+  labelKey: string;
+  label: string;
+  status: ModuleStatus;
+  /** Sektörün varsayılanında açık mı (planlı/sektöre uymayan modül false). */
+  sectorDefault: boolean;
+  /** `company_modules` istisnası: false = kapatılmış, null = istisna yok. */
+  override: false | null;
+  enabled: boolean;
+  locked: boolean;
+  requires: string[];
+  /** Şu anda AÇIK olup bu modüle bağlı olanlar (varsa kapatılamaz). */
+  dependents: string[];
+  /** Kapatma/açma engeli (yoksa null). */
+  blocked: { reason: ModuleToggleReason; modules: string[] } | null;
+}
+
+/** Ayarlar > Modüller ekranı için her modülün durumu ve neden değiştirilemeyeceği. */
+export function describeModules(
+  sector: Sector,
+  overrides: readonly ModuleOverride[],
+  registry: readonly ModuleDef[] = MODULES,
+): ModuleDescription[] {
+  const enabled = resolveEnabledModules(sector, overrides, registry);
+  return registry.map((m) => {
+    const isEnabled = enabled.has(m.key);
+    const check = checkModuleToggle(sector, overrides, m.key, !isEnabled, registry);
+    return {
+      key: m.key,
+      labelKey: m.labelKey,
+      label: m.label,
+      status: m.status,
+      sectorDefault: isModuleAvailableForSector(m, sector),
+      override: overrides.some((o) => o.module === m.key && !o.enabled) ? false : null,
+      enabled: isEnabled,
+      locked: m.locked ?? false,
+      requires: [...(m.requires ?? [])],
+      dependents: registry.filter((d) => enabled.has(d.key) && d.requires?.includes(m.key)).map((d) => d.key),
+      blocked: check.ok ? null : { reason: check.reason, modules: check.modules },
+    };
+  });
 }

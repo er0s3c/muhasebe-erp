@@ -1,16 +1,21 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 import {
+  MODULES,
   NAV_GROUPS,
   NAV_ITEMS,
   ROLE_PERMISSIONS,
+  checkModuleToggle,
   createCompanySchema,
+  describeModules,
   hasPermission,
   updateCompanySchema,
+  type ModuleToggleReason,
 } from '@erp/shared';
-import { companies, memberships, users } from '../../db/schema';
+import { companies, companyModules, memberships, users } from '../../db/schema';
 import { authedRoute, tenantRoute } from '../../http/context';
-import { unauthorized } from '../../http/errors';
+import { notFound, unauthorized, unprocessable } from '../../http/errors';
 import { publicUser } from '../auth/routes';
 import { createCompany } from './service';
 
@@ -106,6 +111,63 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
         .where(and(eq(companies.id, company.id)))
         .returning();
       return { company: row };
+    }),
+  );
+
+  // ---- Modül istisnaları (Ayarlar > Modüller) -------------------------------------------------
+  const labelsOf = (keys: string[]) => keys.map((k) => MODULES.find((m) => m.key === k)?.label ?? k).join(', ');
+  const toggleMessage = (reason: ModuleToggleReason, modules: string[]): string => {
+    switch (reason) {
+      case 'PLANNED':
+        return 'Bu modül henüz kullanıma açılmadı';
+      case 'SECTOR_MISMATCH':
+        return 'Bu modül şirketinizin faaliyet alanında bulunmuyor';
+      case 'LOCKED':
+        return 'Bu modül kapatılamaz';
+      case 'REQUIRED_BY':
+        return `Bu modül şu etkin modüller için gerekli; önce onları kapatın: ${labelsOf(modules)}`;
+      case 'MISSING_REQUIREMENT':
+        return `Bu modülün çalışması için önce şu modülleri açın: ${labelsOf(modules)}`;
+      default:
+        return 'Geçersiz modül';
+    }
+  };
+
+  app.get(
+    '/api/company/modules',
+    tenantRoute(app, { module: 'core.settings', permission: 'settings.read' }, async ({ tx, company }) => {
+      const overrides = await tx.select({ module: companyModules.module, enabled: companyModules.enabled }).from(companyModules);
+      return { modules: describeModules(company.sector, overrides) };
+    }),
+  );
+
+  /**
+   * Modülü kapatır (istisna satırı yazar) ya da açar (istisna satırını siler). Sektör/planlı/kilitli/bağımlılık
+   * kuralları `checkModuleToggle` ile denetlenir. Şirket satırı kilitlenir: iki yöneticinin eşzamanlı geçişi
+   * (biri bağımlıyı açarken öteki gereksinimi kapatması) kuralı aşamaz.
+   */
+  app.put(
+    '/api/company/modules/:key',
+    tenantRoute(app, { module: 'core.settings', permission: 'settings.manage' }, async ({ tx, req, company }) => {
+      const { key } = z.object({ key: z.string().min(3).max(60) }).parse(req.params);
+      const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+      await tx.execute(sql`select id from companies where id = ${company.id} for update`);
+      const current = async () => tx.select({ module: companyModules.module, enabled: companyModules.enabled }).from(companyModules);
+
+      const check = checkModuleToggle(company.sector, await current(), key, enabled);
+      if (!check.ok) {
+        if (check.reason === 'UNKNOWN') throw notFound('Modül');
+        throw unprocessable(toggleMessage(check.reason, check.modules), `MODULE_${check.reason}`, { modules: check.modules });
+      }
+      if (enabled) {
+        await tx.delete(companyModules).where(and(eq(companyModules.companyId, company.id), eq(companyModules.module, key)));
+      } else {
+        await tx
+          .insert(companyModules)
+          .values({ companyId: company.id, module: key, enabled: false })
+          .onConflictDoUpdate({ target: [companyModules.companyId, companyModules.module], set: { enabled: false } });
+      }
+      return { modules: describeModules(company.sector, await current()) };
     }),
   );
 };

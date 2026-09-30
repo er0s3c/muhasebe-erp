@@ -32,7 +32,7 @@ export function RequireCompany() {
   return <Outlet />;
 }
 
-/** Modül şirketin sektöründe etkin değilse sayfayı hiç göstermez (sunucu da 403 verir). */
+/** Modül şirkette etkin değilse sayfayı hiç göstermez (sunucu da 403 verir). */
 export function RequireModule({ module }: { module: string }) {
   const { t } = useTranslation();
   const { data, isPending } = useNavigation();

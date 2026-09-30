@@ -118,6 +118,7 @@ export const router = createBrowserRouter([
                   { path: 'settings/tax-rates', ...page(() => import('../features/settings/TaxRatesPage'), 'TaxRatesPage') },
                   { path: 'settings/periods', ...page(() => import('../features/settings/PeriodsPage'), 'PeriodsPage') },
                   { path: 'settings/custom-codes', ...page(() => import('../features/settings/CustomCodesPage'), 'CustomCodesPage') },
+                  { path: 'settings/modules', ...page(() => import('../features/settings/ModulesPage'), 'ModulesPage') },
                   { path: 'settings/account-mapping', ...page(() => import('../features/settings/AccountMappingPage'), 'AccountMappingPage') },
                   { path: 'reports/data-export', ...page(() => import('../features/reports/DataExportPage'), 'DataExportPage') },
                 ],

@@ -8,7 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { cn } from '../../lib/cn';
 import { formatDateTR, money } from '../../lib/format';
-import { useCan, useCQuery, useCompanyApi, useNavigation } from '../../lib/queries';
+import { useCan, useCQuery, useCompanyApi, useModuleEnabled } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import type { AgingReport, DeliverySummary, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData, TreasurySummary } from '../../lib/types';
 
@@ -71,19 +71,24 @@ export function DashboardPage() {
   const year = today.slice(0, 4);
   const foreign = CURRENCY_CODES.filter((c) => c !== company.baseCurrency);
 
-  const canLedger = can('ledger.read');
-  const canReports = can('reports.read');
+  // Kapalı modülün uçları 403 verir ve kartları anlamsızdır: sorgu da kart da modül açıkken çalışır.
+  const ledgerOn = useModuleEnabled('core.ledger');
+  const partiesOn = useModuleEnabled('core.parties');
+  const inventoryOn = useModuleEnabled('core.inventory');
+  const invoicesOn = useModuleEnabled('core.invoices');
+  const treasuryOn = useModuleEnabled('core.treasury');
+  const canLedger = can('ledger.read') && ledgerOn;
+  const canReports = can('reports.read') && ledgerOn;
   const canMembers = can('members.manage');
-  const canParties = can('parties.read');
-  const canInventory = can('inventory.read');
+  const canParties = can('parties.read') && partiesOn;
+  const canInventory = can('inventory.read') && inventoryOn;
   const { data: stockSummary } = useCQuery<InventorySummary>(['dashboard', 'stock'], '/api/inventory/summary', { enabled: canInventory });
-  const canInvoices = can('invoices.read');
+  const canInvoices = can('invoices.read') && invoicesOn;
   const { data: invSummary } = useCQuery<InvoiceSummary>(['dashboard', 'invoices'], '/api/invoices/summary', { enabled: canInvoices });
-  const canDeliveries = can('deliveries.read');
+  const canDeliveries = can('deliveries.read') && invoicesOn;
   const { data: delSummary } = useCQuery<DeliverySummary>(['dashboard', 'deliveries'], '/api/delivery-notes/summary', { enabled: canDeliveries });
   const unbilled = delSummary ? delSummary.sales.openCount + delSummary.purchases.openCount : null;
-  const { data: nav } = useNavigation();
-  const canTreasury = can('treasury.read') && (nav?.modules.includes('core.treasury') ?? false);
+  const canTreasury = can('treasury.read') && treasuryOn;
   const { data: treasury } = useCQuery<TreasurySummary>(['dashboard', 'treasury'], '/api/treasury/summary', { enabled: canTreasury });
 
   const { data: posted } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'posted'], `/api/journal-entries?status=posted&limit=200&from=${year}-01-01`, { enabled: canLedger });
@@ -116,7 +121,7 @@ export function DashboardPage() {
       to: '/settings/tax-rates',
     });
   }
-  if (can('ledger.post')) {
+  if (can('ledger.post') && ledgerOn) {
     steps.push({ key: 'journal', title: t('dashboard.stepJournal'), description: t('dashboard.stepJournalDesc'), done: (posted?.entries.length ?? 0) > 0, to: '/accounting/journal?new=1' });
   }
   if (canMembers) {

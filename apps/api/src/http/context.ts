@@ -180,7 +180,7 @@ export function tenantRoute<T>(
 
       const role = member.role as Role;
       if (options.module && !enabledModules.has(options.module)) {
-        throw forbidden('Bu modül şirketinizin sektöründe etkin değil', 'MODULE_DISABLED');
+        throw forbidden('Bu modül şirketinizde etkin değil', 'MODULE_DISABLED');
       }
       if (options.permission && !hasPermission(role, options.permission)) {
         throw forbidden();

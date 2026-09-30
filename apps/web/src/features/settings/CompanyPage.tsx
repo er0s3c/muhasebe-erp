@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
@@ -135,6 +136,11 @@ export function CompanyPage() {
                     {t((MODULE_LABEL_KEYS[m as keyof typeof MODULE_LABEL_KEYS] ?? 'modules.dashboard') as never)}
                   </Badge>
                 ))}
+              </dd>
+              <dd className="mt-2">
+                <Link to="/settings/modules" className="text-sm link">
+                  {t('settings.modules.manage')}
+                </Link>
               </dd>
             </div>
           </dl>

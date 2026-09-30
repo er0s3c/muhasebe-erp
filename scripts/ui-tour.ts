@@ -405,6 +405,7 @@ async function main() {
   await go('/settings/custom-codes', '14-ozel-kodlar', 'Özel kodlar');
   await go('/settings/members', '15-kullanicilar', /Kullanıcılar/);
   await go('/settings/company', '16-sirket', 'Şirket bilgileri');
+  await go('/settings/modules', '17-moduller', 'Modüller');
 
   // Komut paleti
   await page.goto(`${BASE}/`);
@@ -442,7 +443,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/reports/journal-book', '/reports/general-ledger', '/reports/sales', '/reports/purchases', '/reports/item-profit', '/reports/fx-differences', '/reports/data-export', '/accounting/openings', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/reports/journal-book', '/reports/general-ledger', '/reports/sales', '/reports/purchases', '/reports/item-profit', '/reports/fx-differences', '/reports/data-export', '/accounting/openings', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members', '/settings/modules']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);

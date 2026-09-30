@@ -90,7 +90,7 @@
     "retailPos": "Hızlı satış (POS)",
     "parties": "Cari hesaplar",
     "inventory": "Stok",
-    "invoices": "Fatura",
+    "invoices": "Fatura ve irsaliye",
     "treasury": "Kasa ve banka"
   },
   "nav": {
@@ -137,7 +137,8 @@
     "reportItemProfit": "Stok kârlılığı",
     "reportFx": "Kambiyo raporu",
     "dataExport": "Veri dışa aktarma",
-    "openings": "Açılış bakiyeleri"
+    "openings": "Açılış bakiyeleri",
+    "modules": "Modüller"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -382,6 +383,41 @@
       },
       "empty": "Bu kapsamda özel kod yok",
       "added": "Kod eklendi"
+    },
+    "modules": {
+      "title": "Modüller",
+      "subtitle": "Kullanmadığınız bölümleri kapatın; menüden kalkar ve o bölümün işlemleri durur. Kapatılan modülün verisi silinmez, yeniden açınca olduğu gibi gelir.",
+      "enabled": "Açık",
+      "disabled": "Kapalı",
+      "locked": "Zorunlu",
+      "planned": "Yakında",
+      "notInSector": "Bu faaliyet alanında yok",
+      "requires": "Gerektirir: {{modules}}",
+      "turnOff": "Kapat",
+      "turnOn": "Aç",
+      "offMsg": "{{module}} kapatıldı",
+      "onMsg": "{{module}} açıldı",
+      "readOnly": "Modülleri açıp kapatmak için yönetici yetkisi gerekir.",
+      "blocked": {
+        "LOCKED": "Bu modül olmadan şirket yönetilemez; kapatılamaz.",
+        "PLANNED": "Bu modül henüz kullanıma açılmadı.",
+        "SECTOR_MISMATCH": "Bu modül şirketinizin faaliyet alanında bulunmuyor.",
+        "REQUIRED_BY": "Önce bu modüle bağlı şu modülleri kapatın: {{modules}}",
+        "MISSING_REQUIREMENT": "Açmak için önce şunları açın: {{modules}}",
+        "UNKNOWN": "Geçersiz modül."
+      },
+      "manage": "Modülleri yönet",
+      "desc": {
+        "core.dashboard": "Genel bakış ve sayaçlar.",
+        "core.ledger": "Hesap planı, yevmiye, mizan, kebir ve açılış bakiyeleri.",
+        "core.parties": "Müşteri ve tedarikçi kartları, ekstre, yaşlandırma.",
+        "core.inventory": "Stok kartları, depolar, hareketler, sayım ve stok durumu.",
+        "core.invoices": "Satış, alış ve gider faturaları, iadeler ve irsaliyeler.",
+        "core.treasury": "Kasa ve banka hesapları, tahsilat, ödeme, virman, döviz ve banka mutabakatı.",
+        "core.settings": "Şirket, kullanıcılar, kurlar, dönemler ve bu ekran.",
+        "construction.projects": "Şantiye, proje ve hakediş takibi.",
+        "retail.pos": "Market için hızlı satış ekranı."
+      }
     }
   },
   "ledger": {
@@ -466,7 +502,8 @@
       "partyControlHint": "Bu bir cari hesabı: satırı bir cariye bağlayın.",
       "source": {
         "invoice": "Fatura",
-        "stock_document": "Stok belgesi"
+        "stock_document": "Stok belgesi",
+        "treasury": "Kasa/banka hareketi"
       },
       "sourceOpen": "{{label}}",
       "sourceLocked": "Bu kayıt bir belgeden otomatik oluştu; ters kaydı ilgili belgeden (fatura iptali, ters stok belgesi) yapılır."
@@ -511,7 +548,7 @@
   "errors": {
     "UNAUTHORIZED": "Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.",
     "FORBIDDEN": "Bu işlem için yetkiniz yok.",
-    "MODULE_DISABLED": "Bu bölüm şirketinizde etkin değil.",
+    "MODULE_DISABLED": "Bu bölüm şirketinizde kapalı. Ayarlar > Modüller bölümünden açabilirsiniz.",
     "INVALID_CREDENTIALS": "E-posta veya şifre hatalı.",
     "EMAIL_TAKEN": "Bu e-posta adresi zaten kayıtlı.",
     "PERIOD_MISSING": "Bu tarih için mali dönem tanımlı değil. Ayarlar > Mali dönemler bölümünden yılı ekleyin.",
@@ -544,7 +581,12 @@
     "DELIVERY_ALREADY_CANCELLED": "İrsaliye zaten iptal edilmiş.",
     "INVOICE_NOT_DRAFT": "Yalnızca taslak fatura düzenlenebilir veya silinebilir.",
     "INVOICE_ALREADY_CANCELLED": "Fatura zaten iptal edilmiş.",
-    "TREASURY_RULE_VIOLATION": "Kasa/banka kuralı ihlali"
+    "TREASURY_RULE_VIOLATION": "Kasa/banka kuralı ihlali",
+    "MODULE_REQUIRED_BY": "Bu modül açık olan başka modüller için gerekli; önce onları kapatın.",
+    "MODULE_MISSING_REQUIREMENT": "Bu modülün çalışması için gereken modüller kapalı; önce onları açın.",
+    "MODULE_LOCKED": "Bu modül kapatılamaz.",
+    "MODULE_PLANNED": "Bu modül henüz kullanıma açılmadı.",
+    "MODULE_SECTOR_MISMATCH": "Bu modül şirketinizin faaliyet alanında bulunmuyor."
   },
   "parties": {
     "title": "Cari hesaplar",

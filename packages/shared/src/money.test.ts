@@ -74,12 +74,16 @@ describe('module registry', () => {
     expect(retail.has('construction.projects')).toBe(false);
   });
 
-  it('istisna modülü kapatabilir ama sektöre uymayanı açamaz', () => {
+  it('istisna modülü kapatabilir ama sektöre uymayanı açamaz; kilitli modül kapanmaz', () => {
     const enabled = resolveEnabledModules('COMMERCE', [
       { module: 'core.settings', enabled: false },
+      { module: 'core.dashboard', enabled: false },
+      { module: 'core.treasury', enabled: false },
       { module: 'retail.pos', enabled: true },
     ]);
-    expect(enabled.has('core.settings')).toBe(false);
+    expect(enabled.has('core.settings')).toBe(true);
+    expect(enabled.has('core.dashboard')).toBe(true);
+    expect(enabled.has('core.treasury')).toBe(false);
     expect(enabled.has('retail.pos')).toBe(false);
   });
 });

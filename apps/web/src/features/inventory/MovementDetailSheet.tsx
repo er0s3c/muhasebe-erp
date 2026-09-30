@@ -12,7 +12,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, money } from '../../lib/format';
-import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { StockDocDetail } from '../../lib/types';
 import { DocTypeBadge, STOCK_INVALIDATE, qtyText, useUnitLabel } from './common';
@@ -32,6 +32,7 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
   const company = useCompany();
   const unitLabel = useUnitLabel();
   const canMove = useCan()('inventory.move');
+  const invoicesOn = useModuleEnabled('core.invoices');
   const { data, isPending, error } = useCQuery<StockDocDetail>(['stock-doc', id], id ? `/api/stock-documents/${id}` : null);
   const [reversing, setReversing] = useState(false);
   const [revDate, setRevDate] = useState(todayIso());
@@ -116,18 +117,22 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
             {doc.sourceType === 'delivery_note' && doc.sourceId && (
               <Callout>
                 {t('inventory.mdetail.fromDelivery')}{' '}
-                <Link to={`/delivery-notes/${doc.sourceId}`} className="link" onClick={onClose}>
-                  {t('inventory.mdetail.openDelivery')}
-                </Link>
+                {invoicesOn && (
+                  <Link to={`/delivery-notes/${doc.sourceId}`} className="link" onClick={onClose}>
+                    {t('inventory.mdetail.openDelivery')}
+                  </Link>
+                )}
               </Callout>
             )}
 
             {doc.sourceType === 'invoice' && doc.sourceId && (
               <Callout>
                 {t('inventory.mdetail.fromInvoice')}{' '}
-                <Link to={`/invoices/${doc.sourceId}`} className="link" onClick={onClose}>
-                  {t('inventory.mdetail.openInvoice')}
-                </Link>
+                {invoicesOn && (
+                  <Link to={`/invoices/${doc.sourceId}`} className="link" onClick={onClose}>
+                    {t('inventory.mdetail.openInvoice')}
+                  </Link>
+                )}
               </Callout>
             )}
 

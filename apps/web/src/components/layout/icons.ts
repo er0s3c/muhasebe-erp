@@ -21,6 +21,7 @@ import {
   Package,
   PackageCheck,
   Percent,
+  Puzzle,
   Receipt,
   ReceiptText,
   Repeat,
@@ -71,6 +72,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   repeat: Repeat,
   download: Download,
   upload: Upload,
+  puzzle: Puzzle,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

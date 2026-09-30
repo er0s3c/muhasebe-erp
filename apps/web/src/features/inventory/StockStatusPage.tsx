@@ -1,5 +1,5 @@
 import { Boxes } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
@@ -13,13 +13,25 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { isZero, money } from '../../lib/format';
-import { useCQuery } from '../../lib/queries';
+import { useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { StockStatusReport } from '../../lib/types';
 import { qtyText, useCategories, useUnitLabel, useWarehouses } from './common';
+
+/** İrsaliye modülü (fatura modülüyle birlikte) kapalıysa bağlantı yerine düz metin. */
+function PendingLink({ enabled, to, children }: { enabled: boolean; to: string; children: ReactNode }) {
+  return enabled ? (
+    <Link to={to} className="link">
+      {children}
+    </Link>
+  ) : (
+    <span>{children}</span>
+  );
+}
 
 export function StockStatusPage() {
   const { t } = useTranslation();
   const unitLabel = useUnitLabel();
+  const invoicesOn = useModuleEnabled('core.invoices');
   const [params, setParams] = useSearchParams();
   const [asOf, setAsOf] = useState(todayIso());
   const [warehouseId, setWarehouseId] = useState('');
@@ -192,15 +204,15 @@ export function StockStatusPage() {
                 {!isZero(ledger.pendingDeliveries.total) && (
                   <dd className="mt-0.5 text-xs text-muted">
                     {!isZero(ledger.pendingDeliveries.sales) && (
-                      <Link to="/delivery-notes/sales?invoicing=open" className="link">
+                      <PendingLink enabled={invoicesOn} to="/delivery-notes/sales?invoicing=open">
                         {t('inventory.status.reconcilePendingSales')}: {money(ledger.pendingDeliveries.sales)}
-                      </Link>
+                      </PendingLink>
                     )}
                     {!isZero(ledger.pendingDeliveries.sales) && !isZero(ledger.pendingDeliveries.purchases) && <br />}
                     {!isZero(ledger.pendingDeliveries.purchases) && (
-                      <Link to="/delivery-notes/purchases?invoicing=open" className="link">
+                      <PendingLink enabled={invoicesOn} to="/delivery-notes/purchases?invoicing=open">
                         {t('inventory.status.reconcilePendingPurchases')}: {money(ledger.pendingDeliveries.purchases)}
-                      </Link>
+                      </PendingLink>
                     )}
                   </dd>
                 )}

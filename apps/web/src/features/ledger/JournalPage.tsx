@@ -13,7 +13,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, isZero, money } from '../../lib/format';
-import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { JournalEntry, JournalListItem } from '../../lib/types';
 import { JournalForm } from './JournalForm';
@@ -184,8 +184,15 @@ export function JournalPage() {
   );
 }
 
+/** Yevmiyeyi üreten belge türü: ad, ilgili modül ve belgeye giden yol (modül kapalıysa bağlantı verilmez). */
+const SOURCES: Record<string, { labelKey: string; module: string; to: (id: string) => string }> = {
+  invoice: { labelKey: 'ledger.journal.source.invoice', module: 'core.invoices', to: (id) => `/invoices/${id}` },
+  stock_document: { labelKey: 'ledger.journal.source.stock_document', module: 'core.inventory', to: (id) => `/inventory/movements?open=${id}` },
+  treasury: { labelKey: 'ledger.journal.source.treasury', module: 'core.treasury', to: (id) => `/treasury/transactions?open=${id}` },
+};
+
 function sourceLabel(type: string, t: (k: never) => string): string {
-  return type === 'invoice' ? t('ledger.journal.source.invoice' as never) : t('ledger.journal.source.stock_document' as never);
+  return t((SOURCES[type]?.labelKey ?? 'ledger.journal.source.stock_document') as never);
 }
 
 function SourceBadge({ type }: { type: string }) {
@@ -193,13 +200,16 @@ function SourceBadge({ type }: { type: string }) {
   return <Badge className="ml-2">{sourceLabel(type, t as never)}</Badge>;
 }
 
-/** Yevmiyeyi üreten belgeye (fatura ya da stok belgesi) giden bağlantı */
+/** Yevmiyeyi üreten belgeye (fatura, stok belgesi, kasa/banka hareketi) giden bağlantı; o modül kapalıysa yalnız ad. */
 function SourceLink({ type, id }: { type: string; id: string }) {
   const { t } = useTranslation();
-  const to = type === 'invoice' ? `/invoices/${id}` : `/inventory/movements?open=${id}`;
+  const src = SOURCES[type];
+  const enabled = useModuleEnabled(src?.module ?? '');
+  const text = t('ledger.journal.sourceOpen', { label: sourceLabel(type, t as never) });
+  if (!src || !enabled) return <span className="text-muted">{text}</span>;
   return (
-    <Link to={to} className="link">
-      {t('ledger.journal.sourceOpen', { label: sourceLabel(type, t as never) })} →
+    <Link to={src.to(id)} className="link">
+      {text} →
     </Link>
   );
 }
@@ -219,6 +229,7 @@ function JournalDetail({
   const toast = useToast();
   const company = useCompany();
   const canPost = useCan()('ledger.post');
+  const partiesOn = useModuleEnabled('core.parties');
   const { data, isPending } = useCQuery<{ entry: JournalEntry }>(['journal-entry', id], id ? `/api/journal-entries/${id}` : null);
   const entry = data?.entry;
   const [reversing, setReversing] = useState(false);
@@ -328,9 +339,13 @@ function JournalDetail({
                         <span className="ml-2 text-muted">{l.accountName}</span>
                         {l.partyId && (
                           <span className="mt-0.5 block text-xs">
-                            <Link to={`/parties/${l.partyId}`} className="link">
-                              {l.partyName}
-                            </Link>
+                            {partiesOn ? (
+                              <Link to={`/parties/${l.partyId}`} className="link">
+                                {l.partyName}
+                              </Link>
+                            ) : (
+                              <span>{l.partyName}</span>
+                            )}
                             {l.dueDate && <span className="ml-2 text-muted">{t('parties.detail.dueDate')}: {formatDateTR(l.dueDate)}</span>}
                           </span>
                         )}

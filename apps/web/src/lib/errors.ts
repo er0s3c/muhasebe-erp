@@ -2,7 +2,7 @@ import i18n from '../i18n';
 import { ApiError } from './api';
 
 /** Ayrıntılı (Türkçe) sunucu mesajının genel çeviriden daha yararlı olduğu kodlar. */
-const SERVER_MESSAGE_CODES = new Set(['LEDGER_RULE_VIOLATION', 'TREASURY_RULE_VIOLATION']);
+const SERVER_MESSAGE_CODES = new Set(['LEDGER_RULE_VIOLATION', 'TREASURY_RULE_VIOLATION', 'MODULE_REQUIRED_BY', 'MODULE_MISSING_REQUIREMENT']);
 
 /** Hata koduna göre çevrilmiş mesaj; çeviri yoksa sunucu mesajı. */
 export function errorMessage(err: unknown): string {

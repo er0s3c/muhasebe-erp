@@ -67,6 +67,12 @@ export interface NavigationData {
 
 export const useNavigation = () => useCQuery<NavigationData>(['navigation'], '/api/navigation');
 
+/** Modül şirkette açık mı (menü ve sayfa kapıları ile aynı kaynak: `/api/navigation`). Yüklenirken false. */
+export function useModuleEnabled(key: string): boolean {
+  const { data } = useNavigation();
+  return data?.modules.includes(key) ?? false;
+}
+
 export function useCan() {
   const { data } = useNavigation();
   return (permission: string) => data?.permissions.includes(permission) ?? false;
