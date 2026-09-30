@@ -1,10 +1,31 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { RouterProvider } from 'react-router-dom';
+import { PageLoading } from '../components/ui/Feedback';
 import { ToastProvider } from '../components/ui/Toast';
+import { ActivationPage } from '../features/license/ActivationPage';
+import { usePublicConfig } from '../lib/queries';
 import { ApiError } from '../lib/api';
 import { SessionProvider } from '../lib/session';
 import { router } from './router';
+
+/**
+ * Lisans kapısı: sunucu lisans denetimiyle çalışıyor ve kurulum henüz etkinleştirilmemişse (lisanssız) yönlendirici hiç
+ * kurulmaz; yalnızca etkinleştirme sayfası gösterilir. Durum bilinmiyorsa (sunucuya ulaşılamıyor) uygulama normal açılır
+ * ve kendi hata ekranlarını gösterir.
+ */
+function LicenseGate({ children }: { children: ReactNode }) {
+  const { data, isPending } = usePublicConfig();
+  if (isPending) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PageLoading />
+      </div>
+    );
+  }
+  if (data?.license?.enforced && data.license.state === 'unlicensed') return <ActivationPage />;
+  return <>{children}</>;
+}
 
 export function App() {
   const [queryClient] = useState(
@@ -23,11 +44,13 @@ export function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider>
-        <ToastProvider>
-          <RouterProvider router={router} />
-        </ToastProvider>
-      </SessionProvider>
+      <LicenseGate>
+        <SessionProvider>
+          <ToastProvider>
+            <RouterProvider router={router} />
+          </ToastProvider>
+        </SessionProvider>
+      </LicenseGate>
     </QueryClientProvider>
   );
 }

@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  BadgeCheck,
   BarChart3,
   BookMarked,
   BookOpen,
@@ -16,6 +17,7 @@ import {
   Landmark,
   LayoutDashboard,
   Library,
+  MonitorSmartphone,
   ListTree,
   Link2,
   Package,
@@ -40,6 +42,8 @@ import {
 /** Modül kaydındaki (shared) ikon adı -> bileşen */
 const NAV_ICONS: Record<string, LucideIcon> = {
   'layout-dashboard': LayoutDashboard,
+  'badge-check': BadgeCheck,
+  'monitor-smartphone': MonitorSmartphone,
   'book-open': BookOpen,
   'list-tree': ListTree,
   scale: Scale,

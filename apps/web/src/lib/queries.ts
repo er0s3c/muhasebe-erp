@@ -42,6 +42,8 @@ export interface PublicConfig {
   registrationEnabled: boolean;
   mailEnabled: boolean;
   version: string;
+  /** Lisans özeti: kurulum lisanssızsa arayüz etkinleştirme sayfasını gösterir (ayrıntı `/api/license`'ta). */
+  license: { enforced: boolean; state: 'unlicensed' | 'active' | 'grace' | 'restricted' | null; reason: string | null };
 }
 
 /** Oturum açmadan önce gereken, gizli olmayan sunucu ayarları (kayıt açık mı vb.). */

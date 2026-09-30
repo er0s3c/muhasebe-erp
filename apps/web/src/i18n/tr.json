@@ -138,7 +138,9 @@
     "reportFx": "Kambiyo raporu",
     "dataExport": "Veri dışa aktarma",
     "openings": "Açılış bakiyeleri",
-    "modules": "Modüller"
+    "modules": "Modüller",
+    "license": "Lisans",
+    "devices": "Cihazlar"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -1796,5 +1798,129 @@
     },
     "reverseHint": "Yanlış yüklenen açılış yevmiyesi, Yevmiye kayıtları sayfasından normal ters kayıtla geri alınır.",
     "noAccess": "Bu sayfadaki hiçbir içe aktarma için yetkiniz ya da etkin modülünüz yok."
+  },
+  "license": {
+    "state": {
+      "unlicensed": "Lisanssız",
+      "active": "Etkin",
+      "grace": "Tolerans süresinde",
+      "restricted": "Salt-okunur"
+    },
+    "kind": {
+      "commercial": "Ticari",
+      "trial": "Deneme",
+      "demo": "Demo"
+    },
+    "sentTitle": "Lisans sunucusuna hangi bilgiler gönderilir?",
+    "sentBody": "Yalnızca: kurulum kimliği, sunucu parmak izi (makine ve veritabanı kimliğinden üretilmiş bir özet), uygulama sürümü ve düzenli olarak kayıtlı cihaz ile şirket sayıları. Muhasebe verileriniz, kullanıcılarınız, müşterileriniz ve belgeleriniz lisans sunucusuna GÖNDERİLMEZ.",
+    "activation": {
+      "title": "Lisansınızı etkinleştirin",
+      "subtitle": "Bu kurulum henüz etkinleştirilmemiş. Satıcınızdan aldığınız etkinleştirme kodunu girin.",
+      "codeLabel": "Etkinleştirme kodu",
+      "codeHint": "25 karakter (5 gruplu). Büyük/küçük harf ve tireler önemli değildir.",
+      "codePlaceholder": "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX",
+      "invalidShape": "Kod 25 harf ya da rakamdan oluşmalı.",
+      "submit": "Etkinleştir",
+      "footer": "Sorun yaşıyorsanız satıcınızla iletişime geçin.",
+      "notConfigured": "Bu kurulumda lisans sunucusu adresi tanımlı değil; aşağıdaki çevrimdışı etkinleştirmeyi kullanın ya da kurulum sorumlusundan LICENSE_SERVER_URL ayarını isteyin."
+    },
+    "offline": {
+      "title": "İnternet erişimi yok mu? Çevrimdışı etkinleştirme",
+      "intro": "Sunucu lisans sunucusuna ulaşamıyorsa satıcınız lisansı sizin için çevrimdışı imzalayabilir.",
+      "step1": "1. İstek kodunu oluşturun ve satıcınıza iletin.",
+      "create": "İstek kodu oluştur",
+      "code": "İstek kodu",
+      "copy": "Kopyala",
+      "copied": "Kopyalandı",
+      "step2": "2. Satıcınızın gönderdiği lisans metnini (erp1… ile başlayan uzun metin) yapıştırın.",
+      "lease": "Lisans metni",
+      "apply": "Uygula",
+      "pending": "Bir istek kodu oluşturuldu; satıcınızın yanıtını bekliyorsunuz. Yeni bir kod oluşturursanız öncekinin yanıtı geçersiz olur."
+    },
+    "page": {
+      "title": "Lisans",
+      "subtitle": "Lisans durumu, kapsam ve kullanım. Yönetim işlemleri yalnızca şirket sahibine açıktır.",
+      "notEnforced": "Bu ortamda lisans denetimi kapalı (geliştirme). Üretim paketi her zaman lisans ister.",
+      "status": "Durum",
+      "customer": "Müşteri",
+      "kind": "Tür",
+      "validUntil": "Abonelik bitişi",
+      "leaseUntil": "Kira yenileme sınırı",
+      "graceUntil": "Tolerans sonu",
+      "offlineBadge": "Çevrimdışı lisans",
+      "scope": "Kapsam ve kullanım",
+      "sectors": "Sektörler",
+      "companies": "Şirket",
+      "devices": "Cihaz",
+      "manageDevices": "Cihazları yönet",
+      "install": "Kurulum",
+      "installationId": "Kurulum kimliği",
+      "installationHint": "Satıcınız destek için isteyebilir.",
+      "fingerprint": "Sunucu parmak izi",
+      "fingerprintStrong": "Güçlü",
+      "fingerprintWeak": "Zayıf",
+      "fingerprintWeakHint": "Ana makine kimliği okunamadı; lisans yalnızca veritabanı kümesine bağlı. Kurulum belgesindeki /etc/machine-id bağlantısını yapın.",
+      "lastCheck": "Son kontrol",
+      "lastSuccess": "Son başarılı yenileme",
+      "lastError": "Son hata",
+      "refresh": "Şimdi yenile",
+      "refreshed": "Lisans yenilendi.",
+      "refreshFailed": "Lisans yenilenemedi.",
+      "serverNotConfigured": "Lisans sunucusu adresi tanımlı değil; çevrimiçi yenileme yapılamaz.",
+      "moveTitle": "Sunucu taşıma",
+      "moveBody": "Uygulamayı başka bir sunucuya taşıyacaksanız önce bu sunucudaki lisansı kaldırın (satıcıya bildirilir); sonra yeni sunucuda aynı kodla etkinleştirin. Kaldırdıktan sonra bu sunucu yeniden etkinleştirilene kadar kullanılamaz.",
+      "moveAction": "Bu sunucuda lisansı kaldır",
+      "moveConfirmTitle": "Lisans bu sunucudan kaldırılsın mı?",
+      "moveConfirmBody": "Kaldırdıktan sonra tüm kullanıcılar yeniden etkinleştirme yapılana kadar uygulamayı kullanamaz. Verilerinizin yedeğini aldığınızdan emin olun.",
+      "moveConfirm": "Evet, kaldır",
+      "moved": "Lisans kaldırıldı.",
+      "daysLeft_one": "{{count}} gün kaldı",
+      "daysLeft_other": "{{count}} gün kaldı"
+    },
+    "banner": {
+      "restrictedTitle": "Salt-okunur mod",
+      "graceTitle": "Lisans doğrulanamıyor",
+      "graceBody": "Lisans sunucusuyla bağlantı kurulamadı. {{date}} tarihine kadar normal çalışmaya devam edebilirsiniz; sonrasında yalnızca görüntüleme ve dışa aktarma açık kalır. Sunucunun internet (HTTPS) erişimini kontrol edin.",
+      "expiringTitle": "Lisansınız yakında bitiyor",
+      "expiringBody_one": "Abonelik {{count}} gün sonra ({{date}}) sona erecek. Yenilemek için satıcınızla iletişime geçin.",
+      "expiringBody_other": "Abonelik {{count}} gün sonra ({{date}}) sona erecek. Yenilemek için satıcınızla iletişime geçin.",
+      "manage": "Lisansı yönet"
+    },
+    "sectorLock": {
+      "single": "Lisansınız yalnızca “{{sector}}” sektörünü kapsıyor.",
+      "multi": "Lisansınız yalnızca şu sektörleri kapsıyor: {{sectors}}.",
+      "limit": "Lisansınız en fazla {{limit}} şirkete izin veriyor ve sınıra ulaştınız.",
+      "usage": "Şirket kullanımı: {{used}} / {{limit}}"
+    }
+  },
+  "devices": {
+    "title": "Cihazlar",
+    "subtitle": "Lisansınızdaki cihaz koltukları. Giriş yapılan her kayıtlı tarayıcı/bilgisayar bir cihazdır; kullanılmayan cihazları kaldırarak koltuk açabilirsiniz.",
+    "notEnforced": "Bu ortamda lisans denetimi kapalı olduğundan cihaz kaydı tutulmuyor (geliştirme).",
+    "seats": "Kullanılan koltuk",
+    "seatsOf": "{{active}} / {{limit}}",
+    "info": "Bir cihaz, {{days}} gün kullanılmazsa koltuktan düşer. Tarayıcı çerezlerini temizleyen ya da gizli pencerede giren kullanıcı yeni bir cihaz olarak sayılır; eski kaydını buradan kaldırabilirsiniz.",
+    "empty": "Henüz kayıtlı cihaz yok.",
+    "name": "Ad",
+    "user": "Son kullanıcı",
+    "lastSeen": "Son görülme",
+    "ip": "IP",
+    "status": {
+      "active": "Etkin",
+      "idle": "Boşta",
+      "revoked": "Kaldırıldı"
+    },
+    "current": "Bu cihaz",
+    "rename": "Yeniden adlandır",
+    "renameTitle": "Cihazı yeniden adlandır",
+    "renamed": "Cihaz adı güncellendi.",
+    "revoke": "Kaldır",
+    "revokeTitle": "Cihaz kaldırılsın mı?",
+    "revokeBody": "“{{name}}” cihazının oturumu kapanır ve koltuğu boşalır. Kullanıcı yeniden giriş yaparsa (boş koltuk varsa) yeni bir cihaz olarak kaydolur.",
+    "revokeCurrent": "Bu, şu an kullandığınız cihaz: kaldırırsanız oturumunuz kapanır.",
+    "revoked": "Cihaz kaldırıldı.",
+    "unknownUser": "—",
+    "statusCol": "Durum",
+    "actions": "İşlemler"
   }
 }

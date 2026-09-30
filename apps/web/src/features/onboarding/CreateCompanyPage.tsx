@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Check } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { Card } from '../../components/ui/Card';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { errorMessage } from '../../lib/errors';
+import { useLicense } from '../../lib/license';
 import { useSession } from '../../lib/session';
 
 type FormInput = z.input<typeof createCompanySchema>;
@@ -21,14 +22,29 @@ export function CreateCompanyPage() {
   const { createCompany, companies } = useSession();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  // Lisans sektörleri satıcı tarafından belirlenir: seçim yalnızca lisanslı sektörlerle sınırlıdır (sunucu da doğrular).
+  const license = useLicense().data;
+  const locked = license?.enforced && license.license ? license.license : null;
+  const sectors: readonly (typeof SECTORS)[number][] = locked ? locked.sectors : SECTORS;
+  const limitReached = locked !== null && (license?.usage.companies ?? 0) >= locked.companyLimit;
+  // Salt-okunur modda şirket açılamaz (sunucu 402 verir); baştan söyle
+  const restricted = license?.enforced === true && license.state === 'restricted';
   const {
     register,
     handleSubmit,
+    getValues,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormInput, unknown, CreateCompanyInput>({
     resolver: zodResolver(createCompanySchema),
     defaultValues: { sector: 'CONSTRUCTION', baseCurrency: 'TRY', reportingCurrency: 'GBP' },
   });
+
+  const sectorKey = sectors.join(',');
+  useEffect(() => {
+    if (!sectors.includes(getValues('sector'))) setValue('sector', sectors[0]!);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectorKey]);
 
   const onSubmit = handleSubmit(async (values) => {
     setError(null);
@@ -60,13 +76,25 @@ export function CreateCompanyPage() {
 
             <form onSubmit={onSubmit} className="mt-7 flex flex-col gap-5" noValidate>
               {error && <Callout tone="danger">{error}</Callout>}
+              {restricted && <Callout tone="danger" title={t('license.banner.restrictedTitle')}>{license?.message}</Callout>}
+              {limitReached && locked && <Callout tone="warning">{t('license.sectorLock.limit', { limit: locked.companyLimit })}</Callout>}
               <Field label={t('onboarding.companyName')} error={errors.name?.message} required>
                 {(id) => <Input id={id} autoFocus autoComplete="organization" {...register('name')} />}
               </Field>
-              <Field label={t('onboarding.sector')} hint={t('onboarding.sectorHint')} required>
+              <Field
+                label={t('onboarding.sector')}
+                hint={
+                  locked
+                    ? sectors.length === 1
+                      ? t('license.sectorLock.single', { sector: t(`sectors.${sectors[0]!}`) })
+                      : t('license.sectorLock.multi', { sectors: sectors.map((s) => t(`sectors.${s}`)).join(', ') })
+                    : t('onboarding.sectorHint')
+                }
+                required
+              >
                 {(id) => (
                   <Select id={id} {...register('sector')}>
-                    {SECTORS.map((s) => (
+                    {sectors.map((s) => (
                       <option key={s} value={s}>
                         {t(`sectors.${s}`)}
                       </option>
@@ -111,7 +139,7 @@ export function CreateCompanyPage() {
                 </Field>
               </div>
               <div className="mt-2 flex items-center gap-3">
-                <Button type="submit" variant="primary" loading={isSubmitting}>
+                <Button type="submit" variant="primary" loading={isSubmitting} disabled={limitReached || restricted}>
                   {t('onboarding.create')}
                 </Button>
                 {companies.length > 0 && (

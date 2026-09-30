@@ -119,6 +119,8 @@ export const router = createBrowserRouter([
                   { path: 'settings/periods', ...page(() => import('../features/settings/PeriodsPage'), 'PeriodsPage') },
                   { path: 'settings/custom-codes', ...page(() => import('../features/settings/CustomCodesPage'), 'CustomCodesPage') },
                   { path: 'settings/modules', ...page(() => import('../features/settings/ModulesPage'), 'ModulesPage') },
+                  { path: 'settings/license', ...page(() => import('../features/settings/LicensePage'), 'LicensePage') },
+                  { path: 'settings/devices', ...page(() => import('../features/settings/DevicesPage'), 'DevicesPage') },
                   { path: 'settings/account-mapping', ...page(() => import('../features/settings/AccountMappingPage'), 'AccountMappingPage') },
                   { path: 'reports/data-export', ...page(() => import('../features/reports/DataExportPage'), 'DataExportPage') },
                 ],

@@ -3,12 +3,19 @@ import { ApiError } from './api';
 
 /** Ayrıntılı (Türkçe) sunucu mesajının genel çeviriden daha yararlı olduğu kodlar. */
 const SERVER_MESSAGE_CODES = new Set(['LEDGER_RULE_VIOLATION', 'TREASURY_RULE_VIOLATION', 'MODULE_REQUIRED_BY', 'MODULE_MISSING_REQUIREMENT']);
+/**
+ * Lisans ve cihaz hataları: sunucu mesajı (Türkçe) sayıyı, nedeni ve yönlendirmeyi içerir ("en fazla 3 cihaz", "süreniz doldu" …);
+ * satıcı sunucusundan iletilen hatalar da (INVALID_CODE, ACTIVATION_LIMIT …) satıcının kendi açıklamasıyla gösterilir.
+ */
+const SERVER_MESSAGE_PREFIXES = ['LICENSE_', 'DEVICE_'];
+const SERVER_MESSAGE_LICENSE_CODES = new Set(['INVALID_CODE', 'ACTIVATION_LIMIT', 'INSTALLATION_IN_USE', 'INSTALLATION_KEY_MISMATCH', 'CLOCK_SKEW', 'NOT_ACTIVATED', 'NO_PENDING_REQUEST', 'OWNER_ONLY', 'FINGERPRINT_CHANGED', 'UNKNOWN_INSTALLATION', 'DEACTIVATED', 'REPLAY']);
+const fromServer = (code: string) => SERVER_MESSAGE_CODES.has(code) || SERVER_MESSAGE_LICENSE_CODES.has(code) || SERVER_MESSAGE_PREFIXES.some((p) => code.startsWith(p));
 
 /** Hata koduna göre çevrilmiş mesaj; çeviri yoksa sunucu mesajı. */
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     const key = `errors.${err.code}`;
-    if (i18n.exists(key) && !SERVER_MESSAGE_CODES.has(err.code)) return i18n.t(key as never);
+    if (i18n.exists(key) && !fromServer(err.code)) return i18n.t(key as never);
     return err.message;
   }
   if (err instanceof TypeError) return i18n.t('errors.NETWORK');

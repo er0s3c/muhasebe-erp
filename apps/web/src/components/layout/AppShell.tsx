@@ -1,11 +1,12 @@
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronsUpDown, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Sun, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { api } from '../../lib/api';
+import { fmtDate, useLicense } from '../../lib/license';
 import { useNavigation, usePublicConfig } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { Button } from '../ui/Button';
@@ -106,6 +107,7 @@ export function AppShell() {
 
         <main id="main" className="flex-1 overflow-y-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-8 sm:py-8">
+            <LicenseBanner />
             <VerifyEmailBanner />
             <Outlet />
           </div>
@@ -386,4 +388,42 @@ function VerifyEmailBanner() {
       </Callout>
     </div>
   );
+}
+
+/**
+ * Lisans uyarıları: salt-okunur mod (kırmızı), tolerans süresi (sarı) ve bitişe 14 gün kala hatırlatma.
+ * Lisans denetimi kapalıyken (geliştirme) hiçbir şey göstermez.
+ */
+function LicenseBanner() {
+  const { t } = useTranslation();
+  const { data } = useLicense();
+  if (!data?.enforced) return null;
+
+  const manage = data.isOwner ? (
+    <Link to="/settings/license">
+      <Button size="sm">{t('license.banner.manage')}</Button>
+    </Link>
+  ) : undefined;
+
+  let banner: ReactNode = null;
+  if (data.state === 'restricted') {
+    banner = (
+      <Callout tone="danger" title={t('license.banner.restrictedTitle')} action={manage}>
+        {data.message}
+      </Callout>
+    );
+  } else if (data.state === 'grace') {
+    banner = (
+      <Callout tone="warning" title={t('license.banner.graceTitle')} action={manage}>
+        {t('license.banner.graceBody', { date: fmtDate(data.graceUntil) })}
+      </Callout>
+    );
+  } else if (data.state === 'active' && data.expiresSoon && data.daysUntilExpiry !== null) {
+    banner = (
+      <Callout tone="warning" title={t('license.banner.expiringTitle')} action={manage}>
+        {t('license.banner.expiringBody', { count: Math.max(0, data.daysUntilExpiry), date: fmtDate(data.license?.validUntil) })}
+      </Callout>
+    );
+  }
+  return banner ? <div className="mb-6 print:hidden" data-testid="license-banner">{banner}</div> : null;
 }
