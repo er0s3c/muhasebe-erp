@@ -12,6 +12,7 @@ import { journalLines, parties } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { TR, trContains } from '../../db/search';
 import { nextNumber } from '../settings/numbering';
+import { assertReportSize, maxReportRows } from '../../http/limits';
 import { buildAgingReport, computeOpenItems, type PartyAllocation, type PartyLine } from './aging';
 
 const PARTY_SEQUENCE = 'PARTY';
@@ -192,7 +193,9 @@ export async function partyStatement(tx: Tx, id: string, q: { from: string; to: 
     join journal_entries e on e.id = l.entry_id and e.status = 'posted'
     join accounts a on a.id = l.account_id
     where l.party_id = ${id} and e.entry_date between ${q.from}::date and ${q.to}::date
-    order by e.entry_date, e.entry_no, l.line_no`);
+    order by e.entry_date, e.entry_no, l.line_no
+    limit ${maxReportRows() + 1}`);
+  assertReportSize(lines.rows.length);
 
   const openingNet = dec(opening.rows[0]?.d ?? 0).minus(opening.rows[0]?.c ?? 0);
   let running = openingNet;

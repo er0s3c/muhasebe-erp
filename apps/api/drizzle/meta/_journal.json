@@ -127,6 +127,13 @@
       "when": 1790747570491,
       "tag": "0017_account_security_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790749129212,
+      "tag": "0018_perf_indexes",
+      "breakpoints": true
     }
   ]
 }

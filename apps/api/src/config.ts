@@ -53,9 +53,11 @@ const envSchema = z
       .transform((v) => (v === undefined ? undefined : v === 'true')),
     /** Yeni kuruluş kaydı (`POST /api/auth/register`). Özel kurulumda ilk sahip kaydından sonra kapatılır. */
     REGISTRATION_ENABLED: flag(true),
+    /** Aynı anda çalışabilecek dışa aktarma sayısı (bellek içi üretilir; aşılırsa 429 EXPORT_BUSY). */
+    EXPORT_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(2),
     DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
-    /** 0 = kapalı. Yavaş bir sorgunun bağlantı havuzunu tıkamasını önler; değer yük ölçümünden sonra ayarlanır. */
-    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(0),
+    /** Tek bir SQL ifadesi için üst süre (ms); 0 = kapalı. Yavaş bir sorgunun bağlantı havuzunu tıkamasını önler (yük ölçümünde en ağır istek ~2 sn). */
+    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(60_000),
     SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(20_000),
     /**
      * Giden posta (parola sıfırlama, e-posta doğrulama). `SMTP_URL` (örn. smtps://kullanici:parola@smtp.ornek.com:465)

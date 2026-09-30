@@ -34,8 +34,8 @@ export interface XlsxLimits {
 
 export const DEFAULT_XLSX_LIMITS: XlsxLimits = {
   maxCompressed: 5 * 1024 * 1024,
-  maxEntryBytes: 30 * 1024 * 1024,
-  maxTotalBytes: 80 * 1024 * 1024,
+  maxEntryBytes: 10 * 1024 * 1024,
+  maxTotalBytes: 24 * 1024 * 1024,
   maxRows: 20_000,
   maxCols: 60,
 };

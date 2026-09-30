@@ -536,6 +536,31 @@ describe('fatura', async () => {
     expect((await a.c.get('/api/invoices')).json().total).toBe(0);
   });
 
+  it('eşzamanlılık: aynı kartları kullanan çok sayıda fatura oluştur+kaydet isteği kilitlenmeden hepsi kaydedilir', async () => {
+    // Satır eklerken yabancı anahtar denetimi kartlarda KEY SHARE kilidi alır; sonradan FOR UPDATE'e yükseltmek eşzamanlı
+    // isteklerde kilitlenme (409 RETRY) yaratıyordu. Kartlar satırlardan önce kilitlendiği için hepsi başarılı olmalı.
+    const { c, main } = await setup('Kilit');
+    const cust = await mkParty(c, 'Müşteri');
+    const a = await mkItem(c, 'Kalem A');
+    const b = await mkItem(c, 'Kalem B');
+    await receipt(c, day(3, 1), main.id, a.id, '1000', '5');
+    await receipt(c, day(3, 1), main.id, b.id, '1000', '5');
+    const results = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        inv(c, {
+          post: true,
+          type: 'sales',
+          partyId: cust.id,
+          invoiceDate: day(3, 5 + (i % 3)),
+          lines: i % 2 ? [line(a.id, '1', '10'), line(b.id, '1', '10')] : [line(b.id, '1', '10'), line(a.id, '1', '10')],
+        }),
+      ),
+    );
+    expect(results.map((r) => r.statusCode)).toEqual(Array(12).fill(201));
+    expect(await stockInfo(c, a.id)).toMatchObject({ qty: '988.0000' });
+    expect(await stockInfo(c, b.id)).toMatchObject({ qty: '988.0000' });
+  });
+
   it('eşzamanlılık: aynı stoğu satan iki fatura → yalnızca biri kaydedilir; aynı taslak iki kez kaydedilemez', async () => {
     const { c, main } = await setup('Es');
     const cust = await mkParty(c, 'Müşteri');

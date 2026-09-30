@@ -12,6 +12,7 @@ import { TR, trContains } from '../../db/search';
 import { items, taxRates } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { nextNumber } from '../settings/numbering';
+import { assertReportSize, maxReportRows } from '../../http/limits';
 import { requireCategory } from './categories';
 
 async function generateCode(tx: Tx, companyId: string, taken?: ReadonlySet<string>): Promise<string> {
@@ -230,7 +231,9 @@ export async function itemStatement(tx: Tx, id: string, q: ItemMovementsQuery) {
     join stock_documents d on d.id = m.document_id
     join warehouses w on w.id = m.warehouse_id
     where m.item_id = ${id} and m.movement_date between ${q.from}::date and ${q.to}::date ${whCond}
-    order by m.movement_date, m.seq`);
+    order by m.movement_date, m.seq
+    limit ${maxReportRows() + 1}`);
+  assertReportSize(rows.rows.length);
 
   const open = opening.rows[0]!;
   let runQty = dec(open.qty);

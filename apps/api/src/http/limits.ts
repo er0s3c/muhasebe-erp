@@ -1,3 +1,5 @@
+import { AppError } from './errors';
+
 /**
  * Bellek içi, süreç başına sabit pencereli sayaç. Tek uygulama örneği varsayar (çok örnekli barındırmada
  * paylaşılan bir depo gerekir; docs/OPERATIONS.md). `enabled=false` iken hiçbir şeyi engellemez (testler).
@@ -58,5 +60,43 @@ export class MemoryLimiter {
 
   reset(key: string): void {
     this.entries.delete(key);
+  }
+}
+
+/** Ekstre/defter türü raporların tek yanıtta döndürebileceği en çok satır (aşılırsa tarih aralığı daraltılır). */
+let reportRowLimit = 20_000;
+export const maxReportRows = () => reportRowLimit;
+/** Yalnızca testler: tavanı küçültüp aşımı az veriyle sınamak için. */
+export function setReportRowLimit(n: number): void {
+  reportRowLimit = n;
+}
+
+/** Sorgu `MAX_REPORT_ROWS + 1` satır getirdiyse tavan aşılmıştır. */
+export function assertReportSize(rowCount: number, hint = 'tarih aralığını daraltın'): void {
+  if (rowCount > reportRowLimit) {
+    throw new AppError(422, 'REPORT_TOO_LARGE', `Rapor ${reportRowLimit.toLocaleString('tr-TR')} satırdan büyük; ${hint}`);
+  }
+}
+
+/**
+ * Basit sayaçlı semafor: en çok `max` eş zamanlı iş; dolu iken `tryAcquire` false döner (bekletmez).
+ * Bellek içi büyük dışa aktarmaların (tam veri, defter) süreci tıkamasını sınırlar.
+ */
+export class Semaphore {
+  private held = 0;
+  constructor(readonly max: number) {}
+
+  tryAcquire(): boolean {
+    if (this.held >= this.max) return false;
+    this.held += 1;
+    return true;
+  }
+
+  release(): void {
+    this.held = Math.max(0, this.held - 1);
+  }
+
+  get busy(): number {
+    return this.held;
   }
 }

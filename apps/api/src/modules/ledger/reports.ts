@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { dec, sum, toDbAmount, type MoneyValue } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { notFound, unprocessable } from '../../http/errors';
+import { assertReportSize, maxReportRows } from '../../http/limits';
 
 export interface TrialBalanceRow {
   accountId: string;
@@ -215,7 +216,9 @@ export async function accountLedger(
     join accounts a on a.id = l.account_id
     where e.status = 'posted' and e.entry_date between ${q.from}::date and ${q.to}::date
       and l.account_id in (select id from tree)
-    order by e.entry_date, e.entry_no, l.line_no`);
+    order by e.entry_date, e.entry_no, l.line_no
+    limit ${maxReportRows() + 1}`);
+  assertReportSize(lines.rows.length);
 
   const openingNet = dec(opening.rows[0]?.d ?? 0).minus(opening.rows[0]?.c ?? 0);
   let running = openingNet;

@@ -10,6 +10,7 @@ import {
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { forbidden } from '../../http/errors';
+import { lockItems } from '../inventory/balances';
 import { cancelDeliveryNote, postDeliveryNote } from './posting';
 import {
   createDeliveryDraft,
@@ -59,6 +60,8 @@ export const deliveryRoutes: FastifyPluginAsync = async (app) => {
       // Taslak hazırlama ile stok hareketini işleme ayrı yetkilerdir
       if (input.post && !hasPermission(c.role, 'deliveries.post')) throw forbidden();
       const ctx = deliveryCtx(c);
+      // Kartlar, satırlar yazılmadan ÖNCE kilitlenir (yabancı anahtar KEY SHARE -> FOR UPDATE yükseltmesi kilitlenme yaratır)
+      if (input.post) await lockItems(c.tx, input.lines.map((l) => l.itemId));
       const id = await createDeliveryDraft(c.tx, ctx, input);
       const result = input.post ? await postDeliveryNote(c.tx, ctx, id) : await getDeliveryNote(c.tx, id);
       void c.reply.code(201);
@@ -73,6 +76,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (app) => {
       const input = updateDeliveryNoteSchema.parse(c.req.body);
       if (input.post && !hasPermission(c.role, 'deliveries.post')) throw forbidden();
       const ctx = deliveryCtx(c);
+      if (input.post && input.lines) await lockItems(c.tx, input.lines.map((l) => l.itemId));
       await updateDeliveryDraft(c.tx, ctx, id, input);
       return input.post ? postDeliveryNote(c.tx, ctx, id) : getDeliveryNote(c.tx, id);
     }),

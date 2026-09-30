@@ -10,7 +10,7 @@ import type { Config } from './config';
 import type { Db } from './db/client';
 import { existsSync } from 'node:fs';
 import { errorHandler } from './http/errors';
-import { MemoryLimiter } from './http/limits';
+import { MemoryLimiter, Semaphore } from './http/limits';
 import { createMailer, type Mailer } from './modules/mail/mailer';
 import { accountRoutes } from './modules/auth/account';
 import { registerWebApp, webNotFoundHandler } from './http/static';
@@ -70,6 +70,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.decorate('config', config);
   app.decorate('rateFetcher', opts.rateFetcher ?? fetchKktcmbXml);
   app.decorate('limiter', new MemoryLimiter(config.RATE_LIMIT_ENABLED));
+  app.decorate('exportGate', new Semaphore(config.EXPORT_CONCURRENCY));
   app.decorate('mailer', opts.mailer ?? createMailer(config, app.log));
 
   app.addHook('onRequest', async (req, reply) => {

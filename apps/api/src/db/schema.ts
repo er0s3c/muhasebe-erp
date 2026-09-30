@@ -435,6 +435,11 @@ export const journalEntries = pgTable(
       foreignColumns: [t.id, t.companyId],
     }),
     index('journal_entries_date_idx').on(t.companyId, t.entryDate),
+    // Raporlar yalnızca kaydedilmiş fişleri tarih aralığıyla okur
+    index('journal_entries_posted_date_idx').on(t.companyId, t.entryDate).where(sql`${t.status} = 'posted'`),
+    // Ters kayıt eşleşmeleri (açık kalem nötrlüğü, ters çevrilmiş fiş denetimleri)
+    index('journal_entries_reversal_of_idx').on(t.reversalOfId).where(sql`${t.reversalOfId} is not null`),
+    index('journal_entries_reversed_by_idx').on(t.reversedById).where(sql`${t.reversedById} is not null`),
     // Bir kaynak (fatura, stok belgesi) için tek asıl yevmiye; ters kayıtlar (reversal_of_id dolu) hariç
     uniqueIndex('journal_entries_source_uq')
       .on(t.companyId, t.sourceType, t.sourceId)
@@ -1227,6 +1232,8 @@ export const treasuryTransactions = pgTable(
     unique('treasury_transactions_id_company_uq').on(t.id, t.companyId),
     unique('treasury_transactions_no_uq').on(t.companyId, t.txnNo),
     index('treasury_transactions_date_idx').on(t.companyId, t.txnDate),
+    index('treasury_transactions_journal_idx').on(t.journalEntryId),
+    index('treasury_transactions_cancel_journal_idx').on(t.cancelJournalEntryId).where(sql`${t.cancelJournalEntryId} is not null`),
     index('treasury_transactions_account_idx').on(t.companyId, t.accountId),
     index('treasury_transactions_party_idx').on(t.companyId, t.partyId),
     foreignKey({
@@ -1303,6 +1310,7 @@ export const partyAllocations = pgTable(
   (t) => [
     unique('party_allocations_settle_uq').on(t.settleLineId),
     index('party_allocations_charge_idx').on(t.chargeLineId),
+    index('party_allocations_txn_idx').on(t.transactionId),
     index('party_allocations_party_idx').on(t.companyId, t.partyId),
     foreignKey({
       name: 'party_allocations_party_fk',

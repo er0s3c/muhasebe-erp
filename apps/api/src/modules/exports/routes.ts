@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { EXPORT_FORMATS } from '@erp/shared';
 import { renderCsv } from '../../files/csv-write';
 import { writeXlsx, XLSX_CONTENT_TYPE } from '../../files/xlsx-write';
-import { badRequest } from '../../http/errors';
+import { AppError, badRequest } from '../../http/errors';
 import { tenantRoute } from '../../http/context';
 import { EXPORTS } from './registry';
 
@@ -22,18 +22,27 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
         const { format } = formatSchema.parse(req.query);
         if (!def.formats.includes(format)) throw badRequest(`Bu rapor yalnızca ${def.formats.join(', ').toUpperCase()} olarak alınabilir`, 'EXPORT_FORMAT_UNSUPPORTED');
         const q = def.schema.parse(req.query);
-        const tables = await def.build({ tx, company }, q as never);
-        const name = def.fileName(q as never);
-
-        void reply
-          .header('cache-control', 'no-store')
-          .header('content-disposition', `attachment; filename="${name}.${format}"`);
-        if (format === 'csv') {
-          void reply.header('content-type', 'text/csv; charset=utf-8');
-          return renderCsv(tables[0]!);
+        // Dışa aktarmalar bellekte üretilir: aynı anda en çok EXPORT_CONCURRENCY tane (aşılırsa beklemeden 429).
+        if (!app.exportGate.tryAcquire()) {
+          void reply.header('retry-after', '5');
+          throw new AppError(429, 'EXPORT_BUSY', 'Şu anda başka dışa aktarmalar çalışıyor; birkaç saniye sonra tekrar deneyin');
         }
-        void reply.header('content-type', XLSX_CONTENT_TYPE);
-        return Buffer.from(writeXlsx(tables));
+        try {
+          const tables = await def.build({ tx, company }, q as never);
+          const name = def.fileName(q as never);
+
+          void reply
+            .header('cache-control', 'no-store')
+            .header('content-disposition', `attachment; filename="${name}.${format}"`);
+          if (format === 'csv') {
+            void reply.header('content-type', 'text/csv; charset=utf-8');
+            return renderCsv(tables[0]!);
+          }
+          void reply.header('content-type', XLSX_CONTENT_TYPE);
+          return Buffer.from(writeXlsx(tables));
+        } finally {
+          app.exportGate.release();
+        }
       }),
     );
   }

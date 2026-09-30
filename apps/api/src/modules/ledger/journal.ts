@@ -457,6 +457,8 @@ export async function listJournalEntries(tx: Tx, q: ListEntriesQuery) {
     q.status ? eq(journalEntries.status, q.status) : undefined,
   ].filter((c) => c !== undefined);
 
+  // Sayfalama ÖNCE uygulanır; satır toplamı yalnızca dönen sayfadaki fişler için hesaplanır (bağıntılı alt sorgu).
+  // Eskiden tüm süzülmüş fişler satırlarıyla birleştirilip gruplanır, sonra sayfalanırdı (veri büyüdükçe doğrusal yavaşlar).
   const rows = await tx
     .select({
       id: journalEntries.id,
@@ -468,12 +470,11 @@ export async function listJournalEntries(tx: Tx, q: ListEntriesQuery) {
       reversedById: journalEntries.reversedById,
       sourceType: journalEntries.sourceType,
       sourceId: journalEntries.sourceId,
-      totalBase: sql<string>`coalesce(sum(${journalLines.debitBase}), 0)`,
+      // Sütunlar açıkça nitelenir: Drizzle tek tablolu sorguda ${table.column} ifadelerini niteliksiz yazar ve alt sorgu kendi tablosuna bağlanırdı
+      totalBase: sql<string>`coalesce((select sum(l.debit_base) from journal_lines l where l.entry_id = "journal_entries"."id"), 0)`,
     })
     .from(journalEntries)
-    .leftJoin(journalLines, eq(journalLines.entryId, journalEntries.id))
     .where(and(...conditions))
-    .groupBy(journalEntries.id)
     .orderBy(desc(journalEntries.entryDate), desc(journalEntries.entryNo), desc(journalEntries.createdAt))
     .limit(q.limit)
     .offset(q.offset);

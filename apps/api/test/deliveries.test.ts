@@ -570,6 +570,28 @@ describe('irsaliye', async () => {
     });
   });
 
+  it('eşzamanlılık: aynı kartları sevk eden çok sayıda irsaliye oluştur+kaydet isteği kilitlenmeden hepsi kaydedilir', async () => {
+    const { c, main } = await setup('Kilit');
+    const cust = await mkParty(c, 'Müşteri');
+    const a = await mkItem(c, 'Kalem A');
+    const b = await mkItem(c, 'Kalem B');
+    await receipt(c, day(3, 1), main.id, a.id, '1000', '5');
+    await receipt(c, day(3, 1), main.id, b.id, '1000', '5');
+    const results = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        c.post('/api/delivery-notes', {
+          post: true,
+          type: 'sales',
+          partyId: cust.id,
+          noteDate: day(3, 5 + (i % 3)),
+          warehouseId: main.id,
+          lines: i % 2 ? [dline(a.id, '1'), dline(b.id, '1')] : [dline(b.id, '1'), dline(a.id, '1')],
+        }),
+      ),
+    );
+    expect(results.map((r) => r.statusCode)).toEqual(Array(12).fill(201));
+  });
+
   it('eşzamanlılık: aynı irsaliye satırını iki fatura aynı anda faturalayamaz; fatura ve iptal yarışında yalnızca biri kazanır', async () => {
     const { c, main } = await setup('Yaris');
     const cust = await mkParty(c, 'Müşteri');

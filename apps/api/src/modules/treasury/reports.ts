@@ -3,6 +3,7 @@ import { dec, toDbAmount, type TreasuryStatementQuery } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { accounts } from '../../db/schema';
 import { eq } from 'drizzle-orm';
+import { assertReportSize, maxReportRows } from '../../http/limits';
 import { getTreasuryAccountRow } from './accounts';
 
 interface StatementRow extends Record<string, unknown> {
@@ -43,7 +44,9 @@ export async function treasuryStatement(tx: Tx, id: string, q: TreasuryStatement
     join journal_entries e on e.id = l.entry_id and e.status = 'posted'
     left join treasury_transactions t on e.source_type = 'treasury' and t.id = e.source_id
     where l.account_id = ${ta.accountId} and e.entry_date between ${q.from}::date and ${q.to}::date
-    order by e.entry_date, e.entry_no, l.line_no`);
+    order by e.entry_date, e.entry_no, l.line_no
+    limit ${maxReportRows() + 1}`);
+  assertReportSize(rows.rows.length);
 
   const openingDoc = dec(opening.rows[0]?.doc ?? 0);
   const openingBase = dec(opening.rows[0]?.base ?? 0);

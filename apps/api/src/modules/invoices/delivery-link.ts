@@ -61,6 +61,17 @@ interface InfoRow extends Record<string, unknown> {
   adjust_value: string | null;
 }
 
+/**
+ * İrsaliye satırlarını id sırasıyla kilitler. Fatura oluşturup aynı istekte kaydederken, satırlar yazılmadan ÖNCE
+ * çağrılmalıdır: satır eklemek yabancı anahtar denetimiyle `FOR KEY SHARE` kilidi alır; sonradan `FOR UPDATE`'e
+ * yükseltmek, aynı satırı kullanan iki eşzamanlı istekte birbirini bekleyen kilitlenmeye yol açar.
+ */
+export async function lockDeliveryLines(tx: Tx, ids: readonly string[]): Promise<void> {
+  const unique = [...new Set(ids)].sort();
+  if (unique.length === 0) return;
+  await tx.execute(sql`select id from delivery_note_lines where id in (${uuidList(unique)}) order by id for update`);
+}
+
 async function loadInfo(tx: Tx, ids: readonly string[], lock: boolean) {
   // Kilit ayrı bir sorguyla alınır: bekleme sırasında biten bir irsaliye iptali (durum değişikliği)
   // bir sonraki sorgunun taze görüntüsünde görünür.

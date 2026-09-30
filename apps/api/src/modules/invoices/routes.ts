@@ -10,8 +10,11 @@ import {
   updateInvoiceSchema,
   vatSummaryQuerySchema,
 } from '@erp/shared';
+import type { Tx } from '../../db/client';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { forbidden } from '../../http/errors';
+import { lockItems } from '../inventory/balances';
+import { lockDeliveryLines } from './delivery-link';
 import { itemProfitability, salesReport } from './analytics';
 import { cancelInvoice, postInvoice } from './posting';
 import { invoiceSummary, vatSummary } from './reports';
@@ -31,6 +34,16 @@ const invoiceCtx = ({ company, user }: TenantCtx): InvoiceCtx => ({
   reportingCurrency: company.reportingCurrency,
   allowNegativeStock: company.allowNegativeStock,
 });
+
+/**
+ * Oluştur/güncelle + kaydet tek istekte yapılırken kilitler, satırlar yazılmadan ÖNCE alınmalıdır (aksi halde
+ * satır eklerken yabancı anahtar denetiminin aldığı KEY SHARE kilidi sonradan FOR UPDATE'e yükselir ve aynı kartı/
+ * irsaliye satırını kullanan eşzamanlı iki istek kilitlenir). Sıra, kayıt işlemindekiyle aynıdır: irsaliye satırları, kartlar.
+ */
+async function lockForPosting(tx: Tx, lines: readonly { itemId?: string | null; deliveryLineId?: string | null }[]) {
+  await lockDeliveryLines(tx, lines.flatMap((l) => (l.deliveryLineId ? [l.deliveryLineId] : [])));
+  await lockItems(tx, lines.flatMap((l) => (l.itemId ? [l.itemId] : [])));
+}
 
 export const invoiceRoutes: FastifyPluginAsync = async (app) => {
   const read = { module: 'core.invoices', permission: 'invoices.read' } as const;
@@ -56,6 +69,7 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       // Taslak hazırlama ile muhasebeleştirme ayrı yetkilerdir
       if (input.post && !hasPermission(c.role, 'invoices.post')) throw forbidden();
       const ctx = invoiceCtx(c);
+      if (input.post) await lockForPosting(c.tx, input.lines);
       const id = await createInvoiceDraft(c.tx, ctx, input);
       const result = input.post ? await postInvoice(c.tx, ctx, id) : await getInvoice(c.tx, id);
       void c.reply.code(201);
@@ -70,6 +84,7 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       const input = updateInvoiceSchema.parse(c.req.body);
       if (input.post && !hasPermission(c.role, 'invoices.post')) throw forbidden();
       const ctx = invoiceCtx(c);
+      if (input.post && input.lines) await lockForPosting(c.tx, input.lines);
       await updateInvoiceDraft(c.tx, ctx, id, input);
       return input.post ? postInvoice(c.tx, ctx, id) : getInvoice(c.tx, id);
     }),

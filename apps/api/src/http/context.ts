@@ -11,7 +11,7 @@ import type { Config } from '../config';
 import { setContext, withContext, type Db, type Tx } from '../db/client';
 import { companies, companyModules, memberships, users } from '../db/schema';
 import { AppError, forbidden, unauthorized, badRequest } from './errors';
-import type { MemoryLimiter } from './limits';
+import type { MemoryLimiter, Semaphore } from './limits';
 import type { Mailer } from '../modules/mail/mailer';
 
 /**
@@ -38,6 +38,8 @@ declare module 'fastify' {
     rateFetcher: (isoDate?: string) => Promise<string>;
     /** Bellek içi oran sınırlayıcı (RATE_LIMIT_ENABLED kapalıyken hiçbir şeyi engellemez). */
     limiter: MemoryLimiter;
+    /** Bellek içi dışa aktarmalar için eşzamanlılık kapısı. */
+    exportGate: Semaphore;
     /** Giden posta (SMTP, günlük modu ya da kapalı). */
     mailer: Mailer;
   }
