@@ -5,6 +5,7 @@ import { afterAll } from 'vitest';
 import { buildApp } from '../src/app';
 import { loadConfig, type Config } from '../src/config';
 import { createDb, type DbHandle } from '../src/db/client';
+import type { Mailer } from '../src/modules/mail/mailer';
 
 export const PASSWORD = 'Sifre-12345-xyz';
 
@@ -15,11 +16,11 @@ export interface TestApp {
 
 /** Test dosyası başına bir uygulama örneği; dosya bitince kapanır. */
 export async function makeApp(
-  opts: { rateFetcher?: (isoDate?: string) => Promise<string>; configOverrides?: Partial<Config> } = {},
+  opts: { rateFetcher?: (isoDate?: string) => Promise<string>; configOverrides?: Partial<Config>; mailer?: Mailer } = {},
 ): Promise<TestApp> {
   const config = { ...loadConfig(), ...opts.configOverrides };
   const handle = createDb(config.DATABASE_URL);
-  const app = await buildApp({ db: handle.db, config, logger: false, rateFetcher: opts.rateFetcher });
+  const app = await buildApp({ db: handle.db, config, logger: false, rateFetcher: opts.rateFetcher, mailer: opts.mailer });
   await app.ready();
   afterAll(async () => {
     await app.close();
@@ -110,7 +111,7 @@ export async function addMember(
   name = role,
 ): Promise<{ client: ReturnType<typeof client>; userId: string; email: string; token: string }> {
   const email = `${name.replace(/_/g, '-')}-${randomUUID().slice(0, 8)}@example.com`;
-  const add = await owner.post('/api/company/members', { email, fullName: `${name} Kişi`, role, password: PASSWORD });
+  const add = await owner.post('/api/company/members', { email, fullName: `${name} Kişi`, role, password: PASSWORD, mustChangePassword: false });
   if (add.statusCode !== 201) throw new Error(`member failed: ${add.body}`);
   const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password: PASSWORD } });
   const token = login.json().accessToken as string;

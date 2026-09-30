@@ -336,8 +336,8 @@ describe('genel muhasebe', async () => {
 
   it('muhasebe uçları rol izinlerine uyar (izleyici yazamaz, satış rolü okuyamaz)', async () => {
     const { c, ids, company } = await setup('Yetki');
-    await c.post('/api/company/members', { email: 'v-led@example.com', fullName: 'İzleyici', role: 'viewer', password: 'Izleyici-12345' });
-    await c.post('/api/company/members', { email: 's-led@example.com', fullName: 'Satış', role: 'sales', password: 'Satis-1234567' });
+    await c.post('/api/company/members', { email: 'v-led@example.com', fullName: 'İzleyici', role: 'viewer', password: 'Izleyici-12345', mustChangePassword: false });
+    await c.post('/api/company/members', { email: 's-led@example.com', fullName: 'Satış', role: 'sales', password: 'Satis-1234567', mustChangePassword: false });
     const tok = async (email: string, password: string) =>
       (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password } })).json().accessToken;
     const viewer = client(app, await tok('v-led@example.com', 'Izleyici-12345'), company.id);

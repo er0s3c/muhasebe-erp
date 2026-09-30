@@ -54,7 +54,7 @@ describe('ayarlar: kur, KDV, dönem, özel kod', async () => {
     expect((await c.put('/api/exchange-rates', rate('GBP', 'GBP', '1', day(4, 1)))).statusCode).toBe(400);
     expect((await c.put('/api/exchange-rates', rate('GBP', 'TRY', 'abc', day(4, 1)))).statusCode).toBe(400);
 
-    await c.post('/api/company/members', { email: 'viewer-kur@example.com', fullName: 'İzleyici', role: 'viewer', password: 'Izleyici-12345' });
+    await c.post('/api/company/members', { email: 'viewer-kur@example.com', fullName: 'İzleyici', role: 'viewer', password: 'Izleyici-12345', mustChangePassword: false });
     const tok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'viewer-kur@example.com', password: 'Izleyici-12345' } })).json().accessToken;
     expect((await client(app, tok, company.id).put('/api/exchange-rates', rate('GBP', 'TRY', '40', day(4, 1)))).statusCode).toBe(403);
   });

@@ -74,7 +74,7 @@ describe('irsaliye', async () => {
 
   async function memberClient(owner: C, companyId: string, role: string) {
     const email = `${role}-${randomUUID().slice(0, 8)}@example.com`;
-    const add = await owner.post('/api/company/members', { email, fullName: `${role} Kişi`, role, password: PASSWORD });
+    const add = await owner.post('/api/company/members', { email, fullName: `${role} Kişi`, role, password: PASSWORD, mustChangePassword: false });
     if (add.statusCode !== 201) throw new Error(`member failed: ${add.body}`);
     const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password: PASSWORD } });
     return client(app, login.json().accessToken as string, companyId);
@@ -580,8 +580,15 @@ describe('irsaliye', async () => {
     const mk = (d: number) => inv(c, { post: true, type: 'sales', partyId: cust.id, invoiceDate: day(3, d), lines: [invLine(item.id, '4', '20', dl)] });
 
     const [a, b] = await Promise.all([mk(10), mk(11)]);
-    expect([a.statusCode, b.statusCode].sort()).toEqual([201, 422]);
-    const loser = a.statusCode === 422 ? a : b;
+    // Tam olarak biri kazanır. Kaybeden ya kalan miktar denetimine (422) ya da veritabanının kilitlenme (deadlock)
+    // seçimine (409 RETRY: işlem geri alındı, yeniden denenebilir) takılır; ikinci durumda yeniden denenince 422 alır.
+    expect([a.statusCode, b.statusCode].filter((s) => s === 201)).toHaveLength(1);
+    let loser = a.statusCode === 201 ? b : a;
+    if (loser.statusCode === 409) {
+      expect(loser.json().error.code).toBe('RETRY');
+      loser = await mk(12);
+    }
+    expect(loser.statusCode).toBe(422);
     expect(loser.json().error.code).toBe('DELIVERY_QTY_EXCEEDED');
     expect((await getNote(c, dn.note.id)).lines[0]).toMatchObject({ invoicedQty: '4.0000', remainingQty: '0.0000' });
 

@@ -149,7 +149,7 @@ describe('Merkez Bankası kurlarını içe aktarma (API)', async () => {
     expect(none.statusCode).toBe(422);
     expect(none.json().error.code).toBe('RATE_XML_NO_SUPPORTED');
 
-    await c.post('/api/company/members', { email: 'viewer-imp@example.com', fullName: 'İzleyici', role: 'viewer', password: 'Izleyici-12345' });
+    await c.post('/api/company/members', { email: 'viewer-imp@example.com', fullName: 'İzleyici', role: 'viewer', password: 'Izleyici-12345', mustChangePassword: false });
     const tok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'viewer-imp@example.com', password: 'Izleyici-12345' } })).json().accessToken;
     const res = await client(app, tok, company.id).post('/api/exchange-rates/import', { source: 'xml', xml: SAMPLE });
     expect(res.statusCode).toBe(403);

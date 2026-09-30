@@ -12,6 +12,7 @@ import { setContext, withContext, type Db, type Tx } from '../db/client';
 import { companies, companyModules, memberships, users } from '../db/schema';
 import { AppError, forbidden, unauthorized, badRequest } from './errors';
 import type { MemoryLimiter } from './limits';
+import type { Mailer } from '../modules/mail/mailer';
 
 /**
  * Kayıtlı bir işleyicinin hangi kapıdan geçtiğini gösterir; rota–izin sözleşme testi (test/security.test.ts)
@@ -37,6 +38,8 @@ declare module 'fastify' {
     rateFetcher: (isoDate?: string) => Promise<string>;
     /** Bellek içi oran sınırlayıcı (RATE_LIMIT_ENABLED kapalıyken hiçbir şeyi engellemez). */
     limiter: MemoryLimiter;
+    /** Giden posta (SMTP, günlük modu ya da kapalı). */
+    mailer: Mailer;
   }
 }
 declare module '@fastify/jwt' {
@@ -73,6 +76,9 @@ export interface TenantCtx extends AuthCtx {
   enabledModules: Set<string>;
 }
 
+const passwordChangeRequired = () =>
+  forbidden('Devam etmeden önce şifrenizi değiştirmelisiniz', 'PASSWORD_CHANGE_REQUIRED');
+
 async function authenticate(req: FastifyRequest): Promise<AuthUser> {
   try {
     await req.jwtVerify();
@@ -86,16 +92,19 @@ async function authenticate(req: FastifyRequest): Promise<AuthUser> {
 export function authedRoute<T>(
   app: FastifyInstance,
   handler: (ctx: AuthCtx) => Promise<T>,
+  /** allowMustChange: parolasını değiştirmesi gereken kullanıcı bu uca yine de erişebilir (oturum bilgisi, parola değiştirme). */
+  opts: { allowMustChange?: boolean } = {},
 ): RouteHandlerMethod {
   const route: RouteHandlerMethod = async (req, reply) => {
     const user = await authenticate(req);
     return withContext(app.db, { userId: user.id, orgId: user.orgId, ip: req.ip }, async (tx) => {
       // Token geçerli olsa da kullanıcı pasifleştirilmiş olabilir.
       const [row] = await tx
-        .select({ isActive: users.isActive })
+        .select({ isActive: users.isActive, mustChangePassword: users.mustChangePassword })
         .from(users)
         .where(eq(users.id, user.id));
       if (!row?.isActive) throw unauthorized();
+      if (row.mustChangePassword && !opts.allowMustChange) throw passwordChangeRequired();
       return handler({ tx, user, req, reply });
     });
   };
@@ -139,11 +148,13 @@ export function tenantRoute<T>(
         .select({
           role: memberships.role,
           isActive: users.isActive,
+          mustChangePassword: users.mustChangePassword,
         })
         .from(memberships)
         .innerJoin(users, eq(users.id, memberships.userId))
         .where(and(eq(memberships.companyId, companyId), eq(memberships.userId, user.id)));
       if (!member || !member.isActive) throw forbidden('Bu şirkete erişiminiz yok', 'NOT_A_MEMBER');
+      if (member.mustChangePassword) throw passwordChangeRequired();
 
       await setContext(tx, { userId: user.id, orgId: user.orgId, companyId, ip: req.ip });
 

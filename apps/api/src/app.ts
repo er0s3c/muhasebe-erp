@@ -11,6 +11,8 @@ import type { Db } from './db/client';
 import { existsSync } from 'node:fs';
 import { errorHandler } from './http/errors';
 import { MemoryLimiter } from './http/limits';
+import { createMailer, type Mailer } from './modules/mail/mailer';
+import { accountRoutes } from './modules/auth/account';
 import { registerWebApp, webNotFoundHandler } from './http/static';
 import { authRoutes } from './modules/auth/routes';
 import { inventoryRoutes } from './modules/inventory/routes';
@@ -35,6 +37,8 @@ export interface BuildAppOptions {
   rateFetcher?: (isoDate?: string) => Promise<string>;
   /** Yalnızca testler: kaydedilen her rotayı gözlemler (rota–izin sözleşme testi). */
   onRoute?: (route: RouteOptions) => void;
+  /** Giden posta; verilmezse yapılandırmadan (SMTP_URL / günlük modu / kapalı) kurulur. Testler bellek içi bir posta kutusu verir. */
+  mailer?: Mailer;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -66,6 +70,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.decorate('config', config);
   app.decorate('rateFetcher', opts.rateFetcher ?? fetchKktcmbXml);
   app.decorate('limiter', new MemoryLimiter(config.RATE_LIMIT_ENABLED));
+  app.decorate('mailer', opts.mailer ?? createMailer(config, app.log));
 
   app.addHook('onRequest', async (req, reply) => {
     void reply.header('x-request-id', req.id);
@@ -125,11 +130,12 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   /** Oturum açmadan önce arayüzün ihtiyaç duyduğu, gizli olmayan ayarlar. */
   app.get('/api/public-config', async () => ({
     registrationEnabled: config.REGISTRATION_ENABLED,
-    mailEnabled: false,
+    mailEnabled: app.mailer.enabled,
     version: config.APP_VERSION,
   }));
 
   await app.register(authRoutes);
+  await app.register(accountRoutes);
   await app.register(tenancyRoutes);
   await app.register(memberRoutes);
   await app.register(settingsRoutes);

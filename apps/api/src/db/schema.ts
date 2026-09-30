@@ -50,10 +50,53 @@ export const users = pgTable(
     passwordHash: text().notNull(),
     fullName: text().notNull(),
     isActive: boolean().notNull().default(true),
+    /** E-posta adresinin doğrulandığı an; posta altyapısı kapalıyken kayıtta otomatik dolar. */
+    emailVerifiedAt: timestamp({ withTimezone: true }),
+    /** Yönetici ilk parolayı belirlediğinde true; kullanıcı değiştirene dek şirket uçları kapalıdır. */
+    mustChangePassword: boolean().notNull().default(false),
     createdAt: createdAt(),
     lastLoginAt: timestamp({ withTimezone: true }),
   },
   (t) => [uniqueIndex('users_email_uq').on(t.email)],
+);
+
+/** Tek kullanımlık, süreli bağlantı jetonları (e-posta doğrulama, parola sıfırlama). Yalnızca sha256 özeti saklanır. */
+export const userTokens = pgTable(
+  'user_tokens',
+  {
+    id: id(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    purpose: text().notNull(),
+    tokenHash: text().notNull(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    usedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+    ip: text(),
+  },
+  (t) => [
+    uniqueIndex('user_tokens_hash_uq').on(t.tokenHash),
+    index('user_tokens_user_idx').on(t.userId, t.purpose),
+    check('user_tokens_purpose_ck', sql`${t.purpose} in ('verify_email','reset_password')`),
+  ],
+);
+
+/** Kimlik doğrulama ve yetki olayları (yalnızca eklenir). Kiracı tablosu değildir; destek/inceleme içindir. */
+export const securityEvents = pgTable(
+  'security_events',
+  {
+    id: id(),
+    at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    organizationId: uuid(),
+    userId: uuid(),
+    email: text(),
+    event: text().notNull(),
+    ip: text(),
+    userAgent: text(),
+    meta: jsonb(),
+  },
+  (t) => [index('security_events_org_idx').on(t.organizationId, t.at), index('security_events_user_idx').on(t.userId, t.at)],
 );
 
 export const refreshTokens = pgTable(

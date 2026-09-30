@@ -58,7 +58,7 @@ describe('stok', async () => {
   /** Şirkete verilen rolde kullanıcı ekler ve onun istemcisini döndürür. */
   async function memberClient(owner: C, companyId: string, role: string) {
     const email = `${role}-${randomUUID().slice(0, 8)}@example.com`;
-    const add = await owner.post('/api/company/members', { email, fullName: `${role} Kişi`, role, password: PASSWORD });
+    const add = await owner.post('/api/company/members', { email, fullName: `${role} Kişi`, role, password: PASSWORD, mustChangePassword: false });
     if (add.statusCode !== 201) throw new Error(`member failed: ${add.body}`);
     const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password: PASSWORD } });
     return client(app, login.json().accessToken as string, companyId);

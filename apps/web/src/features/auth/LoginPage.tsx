@@ -61,6 +61,11 @@ export function LoginPage() {
         <Field label={t('auth.password')} error={errors.password?.message}>
           {(id) => <Input id={id} type="password" autoComplete="current-password" {...register('password')} />}
         </Field>
+        {publicConfig.data?.mailEnabled && (
+          <Link to="/forgot-password" className="link self-start text-sm">
+            {t('auth.forgotLink')}
+          </Link>
+        )}
         <Button type="submit" variant="primary" loading={isSubmitting} className="mt-2 w-full">
           {t('auth.login')}
         </Button>

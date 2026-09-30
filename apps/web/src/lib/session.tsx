@@ -7,6 +7,9 @@ export interface SessionUser {
   id: string;
   email: string;
   fullName: string;
+  emailVerified: boolean;
+  /** Yönetici parolayı belirlediyse true: kullanıcı kendi parolasını seçene dek başka ekran açılmaz. */
+  mustChangePassword: boolean;
 }
 export interface CompanySummary {
   id: string;

@@ -2,12 +2,16 @@ import { hash } from '@node-rs/argon2';
 import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { addMemberSchema, updateMemberSchema, uuid } from '@erp/shared';
+import { WEAK_PASSWORD_MESSAGE, addMemberSchema, isWeakPassword, updateMemberSchema, uuid } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { memberships, users } from '../../db/schema';
 import { tenantRoute } from '../../http/context';
 import { AppError, forbidden, notFound, unprocessable } from '../../http/errors';
 import { TR } from '../../db/search';
+import { recordSecurityEvent } from '../auth/events';
+import { issueUserToken } from '../auth/tokens';
+import { queueMail } from '../mail/queue';
+import { verifyEmailMail } from '../mail/templates';
 
 const userIdParam = z.object({ userId: uuid });
 
@@ -56,6 +60,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         if (!input.password) {
           throw unprocessable('Yeni kullanıcı için ilk şifre gerekli', 'PASSWORD_REQUIRED');
         }
+        if (isWeakPassword(input.password, { email: input.email })) throw unprocessable(WEAK_PASSWORD_MESSAGE, 'WEAK_PASSWORD');
         [target] = await tx
           .insert(users)
           .values({
@@ -63,8 +68,15 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
             email: input.email,
             passwordHash: await hash(input.password),
             fullName: input.fullName,
+            // Yöneticinin belirlediği ilk parola geçicidir: kullanıcı ilk girişte kendi parolasını seçer.
+            mustChangePassword: input.mustChangePassword,
+            emailVerifiedAt: app.mailer.enabled ? null : new Date(),
           })
           .returning();
+        if (app.mailer.enabled) {
+          const token = await issueUserToken(tx, target!.id, 'verify_email', req.ip);
+          queueMail(app, verifyEmailMail(target!.email, target!.fullName, `${app.config.APP_BASE_URL}/verify-email?token=${encodeURIComponent(token)}`));
+        }
       }
 
       const [existing] = await tx
@@ -74,6 +86,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
       if (existing) throw new AppError(409, 'ALREADY_MEMBER', 'Kullanıcı bu şirkete zaten üye');
 
       await tx.insert(memberships).values({ companyId: company.id, userId: target!.id, role: input.role });
+      await recordSecurityEvent(app.db, app.log, req, { event: 'member_added', organizationId: user.orgId, userId: target!.id, email: target!.email, meta: { companyId: company.id, role: input.role, by: user.id } });
       void reply.code(201);
       return { member: { userId: target!.id, email: target!.email, fullName: target!.fullName, role: input.role } };
     }),
@@ -81,7 +94,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch(
     '/api/company/members/:userId',
-    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole }) => {
+    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole, user }) => {
       const { userId } = userIdParam.parse(req.params);
       const { role } = updateMemberSchema.parse(req.body);
       const [current] = await tx
@@ -97,13 +110,14 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)))
         .returning();
       if (!row) throw notFound('Üye');
+      await recordSecurityEvent(app.db, app.log, req, { event: 'member_role_changed', organizationId: user.orgId, userId, meta: { companyId: company.id, from: current.role, to: role, by: user.id } });
       return { member: { userId, role: row.role } };
     }),
   );
 
   app.delete(
     '/api/company/members/:userId',
-    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole }) => {
+    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole, user }) => {
       const { userId } = userIdParam.parse(req.params);
       const [current] = await tx
         .select({ role: memberships.role })
@@ -117,6 +131,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)))
         .returning({ id: memberships.id });
       if (deleted.length === 0) throw notFound('Üye');
+      await recordSecurityEvent(app.db, app.log, req, { event: 'member_removed', organizationId: user.orgId, userId, meta: { companyId: company.id, role: current.role, by: user.id } });
       return { ok: true };
     }),
   );

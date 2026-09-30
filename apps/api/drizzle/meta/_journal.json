@@ -113,6 +113,20 @@
       "when": 1790745887691,
       "tag": "0015_security_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790747569536,
+      "tag": "0016_account_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790747570491,
+      "tag": "0017_account_security_rules",
+      "breakpoints": true
     }
   ]
 }

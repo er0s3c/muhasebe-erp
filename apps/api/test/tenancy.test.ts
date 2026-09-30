@@ -108,11 +108,11 @@ describe('şirket kurulumu ve kiracı yalıtımı', async () => {
     const oc = client(app, owner.token, company.id);
 
     const add = await oc.post('/api/company/members', {
-      email: 'muhasebeci@example.com', fullName: 'Muhasebe Müdürü', role: 'accountant', password: 'Muhasebe-12345',
+      email: 'muhasebeci@example.com', fullName: 'Muhasebe Müdürü', role: 'accountant', password: 'Kirmizi-Defter-7171', mustChangePassword: false,
     });
     expect(add.statusCode).toBe(201);
     const addViewer = await oc.post('/api/company/members', {
-      email: 'izleyici@example.com', fullName: 'İzleyici Kişi', role: 'viewer', password: 'Izleyici-12345',
+      email: 'izleyici@example.com', fullName: 'İzleyici Kişi', role: 'viewer', password: 'Gri-Defter-828282', mustChangePassword: false,
     });
     expect(addViewer.statusCode).toBe(201);
     expect((await oc.post('/api/company/members', { email: 'izleyici@example.com', fullName: 'İzleyici Kişi', role: 'viewer' })).json().error.code).toBe('ALREADY_MEMBER');
@@ -121,8 +121,8 @@ describe('şirket kurulumu ve kiracı yalıtımı', async () => {
       const r = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password } });
       return r.json().accessToken as string;
     };
-    const viewer = client(app, await login('izleyici@example.com', 'Izleyici-12345'), company.id);
-    const accountant = client(app, await login('muhasebeci@example.com', 'Muhasebe-12345'), company.id);
+    const viewer = client(app, await login('izleyici@example.com', 'Gri-Defter-828282'), company.id);
+    const accountant = client(app, await login('muhasebeci@example.com', 'Kirmizi-Defter-7171'), company.id);
 
     // İzleyici okur ama yazamaz
     expect((await viewer.get('/api/accounts')).statusCode).toBe(200);
@@ -140,7 +140,7 @@ describe('şirket kurulumu ve kiracı yalıtımı', async () => {
     const owner = await registerUser(app, 'Menu');
     const company = await createCompany(app, owner.token);
     const oc = client(app, owner.token, company.id);
-    await oc.post('/api/company/members', { email: 'satis@example.com', fullName: 'Satış Temsilcisi', role: 'sales', password: 'Satis-1234567' });
+    await oc.post('/api/company/members', { email: 'satis@example.com', fullName: 'Satış Temsilcisi', role: 'sales', password: 'Mavi-Kalem-737373', mustChangePassword: false });
 
     const nav = (await oc.get('/api/navigation')).json();
     const keys = nav.groups.flatMap((g: any) => g.items.map((i: any) => i.key));
@@ -148,7 +148,7 @@ describe('şirket kurulumu ve kiracı yalıtımı', async () => {
     expect(nav.modules).toEqual(expect.arrayContaining(['core.ledger', 'core.settings', 'core.dashboard']));
     expect(nav.modules).not.toContain('retail.pos');
 
-    const salesToken = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'satis@example.com', password: 'Satis-1234567' } })).json().accessToken;
+    const salesToken = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'satis@example.com', password: 'Mavi-Kalem-737373' } })).json().accessToken;
     const salesNav = (await client(app, salesToken, company.id).get('/api/navigation')).json();
     const salesKeys = salesNav.groups.flatMap((g: any) => g.items.map((i: any) => i.key));
     expect(salesKeys).toContain('dashboard');

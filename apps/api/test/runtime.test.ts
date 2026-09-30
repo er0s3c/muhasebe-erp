@@ -165,3 +165,23 @@ describe('çalışma zamanı rolü denetimi', () => {
     }
   });
 });
+
+describe('yapılandırma: posta ve boş değerler', () => {
+  it('boş ortam değişkeni tanımsız sayılır (compose ${X:-} boş string geçirir)', () => {
+    const c = loadConfig({ ...base, NODE_ENV: 'production', SMTP_URL: '', MAIL_FROM: '', APP_BASE_URL: '', WEB_DIST_DIR: '', CORS_ORIGIN: '' });
+    expect(c.MAIL_MODE).toBe('off');
+    expect(c.WEB_DIST_DIR).toBeUndefined();
+    expect(c.CORS_ORIGIN).toEqual([]);
+  });
+
+  it('SMTP_URL MAIL_FROM ister; posta açıkken üretimde APP_BASE_URL zorunlu; log taşıyıcısı üretimde yasak', () => {
+    expect(() => loadConfig({ ...base, SMTP_URL: 'smtps://u:p@smtp.example.com:465' })).toThrow(/MAIL_FROM/);
+    const smtp = { ...base, SMTP_URL: 'smtps://u:p@smtp.example.com:465', MAIL_FROM: 'ERP <no-reply@example.com>' };
+    expect(() => loadConfig({ ...smtp, NODE_ENV: 'production' })).toThrow(/APP_BASE_URL/);
+    const ok = loadConfig({ ...smtp, NODE_ENV: 'production', APP_BASE_URL: 'https://erp.example.com/' });
+    expect(ok.MAIL_MODE).toBe('smtp');
+    expect(ok.APP_BASE_URL).toBe('https://erp.example.com');
+    expect(() => loadConfig({ ...base, NODE_ENV: 'production', MAIL_TRANSPORT: 'log', APP_BASE_URL: 'https://erp.example.com' })).toThrow(/MAIL_TRANSPORT/);
+    expect(loadConfig({ ...base, MAIL_TRANSPORT: 'log' }).MAIL_MODE).toBe('log');
+  });
+});

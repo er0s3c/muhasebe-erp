@@ -290,7 +290,7 @@ describe('cari (müşteri / tedarikçi)', async () => {
     const { c, company } = await setup('Roller');
     const p = await mkParty(c, 'Müşteri');
     const login = async (email: string, role: string) => {
-      await c.post('/api/company/members', { email, fullName: `Kişi ${role}`, role, password: 'Sifre-12345-xyz' });
+      await c.post('/api/company/members', { email, fullName: `Kişi ${role}`, role, password: 'Sifre-12345-xyz', mustChangePassword: false });
       const r = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password: 'Sifre-12345-xyz' } });
       return client(app, r.json().accessToken, company.id);
     };

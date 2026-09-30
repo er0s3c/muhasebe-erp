@@ -2,12 +2,16 @@ import { createHash, randomBytes } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
-import { changePasswordSchema, loginSchema, registerSchema } from '@erp/shared';
+import { WEAK_PASSWORD_MESSAGE, changePasswordSchema, isWeakPassword, loginSchema, registerSchema } from '@erp/shared';
 import type { Queryable } from '../../db/client';
 import { organizations, refreshTokens, users } from '../../db/schema';
 import { authedRoute } from '../../http/context';
-import { AppError, unauthorized } from '../../http/errors';
+import { AppError, unauthorized, unprocessable } from '../../http/errors';
 import { assertSameOrigin } from '../../http/origin';
+import { queueMail } from '../mail/queue';
+import { verifyEmailMail } from '../mail/templates';
+import { recordSecurityEvent } from './events';
+import { issueUserToken } from './tokens';
 
 const REFRESH_COOKIE = 'refresh_token';
 
@@ -28,6 +32,23 @@ const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 // Bilinmeyen e-postada da doğrulama süresi harcansın (kullanıcı sayımını zamanlamayla anlamayı zorlaştırır).
 let dummyHash: Promise<string> | undefined;
 const getDummyHash = () => (dummyHash ??= hash('dummy-password-for-timing'));
+
+interface UserRow {
+  id: string;
+  email: string;
+  fullName: string;
+  emailVerifiedAt: Date | null;
+  mustChangePassword: boolean;
+}
+
+/** İstemciye dönen kullanıcı özeti (oturum durumunu ve zorunlu parola değişimini içerir). */
+export const publicUser = (u: UserRow) => ({
+  id: u.id,
+  email: u.email,
+  fullName: u.fullName,
+  emailVerified: u.emailVerifiedAt !== null,
+  mustChangePassword: u.mustChangePassword,
+});
 
 interface SessionFamily {
   id: string;
@@ -96,6 +117,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError(403, 'REGISTRATION_DISABLED', 'Yeni kayıt bu kurulumda kapalı');
     }
     const input = registerSchema.parse(req.body);
+    if (isWeakPassword(input.password, { email: input.email })) throw unprocessable(WEAK_PASSWORD_MESSAGE, 'WEAK_PASSWORD');
     const passwordHash = await hash(input.password);
 
     const [existing] = await app.db
@@ -116,14 +138,20 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
           email: input.email,
           passwordHash,
           fullName: input.fullName,
+          // Posta altyapısı yoksa doğrulama mümkün değildir; kalıcı bir uyarı çıkmasın diye doğrulanmış sayılır.
+          emailVerifiedAt: app.mailer.enabled ? null : new Date(),
         })
-        .returning({ id: users.id, organizationId: users.organizationId, email: users.email, fullName: users.fullName });
+        .returning();
       return u!;
     });
 
+    if (app.mailer.enabled) {
+      const token = await issueUserToken(app.db, user.id, 'verify_email', req.ip);
+      queueMail(app, verifyEmailMail(user.email, user.fullName, `${app.config.APP_BASE_URL}/verify-email?token=${encodeURIComponent(token)}`));
+    }
     const accessToken = await issueSession(app, req, reply, user);
     void reply.code(201);
-    return { accessToken, user: { id: user.id, email: user.email, fullName: user.fullName } };
+    return { accessToken, user: publicUser(user) };
   });
 
   app.post('/api/auth/login', { config: limit }, async (req, reply) => {
@@ -148,6 +176,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!user || !ok || !user.isActive) {
       app.limiter.hit(ipEmailKey, LOGIN_WINDOW_MS);
       app.limiter.hit(emailKey, LOGIN_WINDOW_MS);
+      await recordSecurityEvent(app.db, app.log, req, { event: 'login_failed', organizationId: user?.organizationId, userId: user?.id, email: input.email });
       throw new AppError(401, 'INVALID_CREDENTIALS', 'E-posta veya şifre hatalı');
     }
     app.limiter.reset(ipEmailKey);
@@ -155,7 +184,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     await app.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
     const accessToken = await issueSession(app, req, reply, user);
     await purgeOldTokens(app, user.id);
-    return { accessToken, user: { id: user.id, email: user.email, fullName: user.fullName } };
+    await recordSecurityEvent(app.db, app.log, req, { event: 'login_succeeded', organizationId: user.organizationId, userId: user.id, email: user.email });
+    return { accessToken, user: publicUser(user) };
   });
 
   app.post('/api/auth/refresh', { config: limit }, async (req, reply) => {
@@ -179,6 +209,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         .set({ revokedAt: new Date() })
         .where(and(eq(refreshTokens.userId, row.userId), isNull(refreshTokens.revokedAt)));
       void reply.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+      await recordSecurityEvent(app.db, app.log, req, { event: 'refresh_reuse_detected', userId: row.userId });
       throw unauthorized();
     }
     if (row.expiresAt.getTime() < Date.now()) throw unauthorized();
@@ -206,7 +237,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         family: { id: row.familyId, startedAt: row.familyStartedAt },
       });
     });
-    return { accessToken, user: { id: user.id, email: user.email, fullName: user.fullName } };
+    return { accessToken, user: publicUser(user) };
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
@@ -231,7 +262,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       if (!row || !(await verify(row.passwordHash, input.currentPassword))) {
         throw new AppError(401, 'INVALID_CREDENTIALS', 'Mevcut şifre hatalı');
       }
-      await tx.update(users).set({ passwordHash: await hash(input.newPassword) }).where(eq(users.id, user.id));
+      if (input.newPassword === input.currentPassword) throw unprocessable('Yeni şifre mevcut şifreden farklı olmalı', 'SAME_PASSWORD');
+      if (isWeakPassword(input.newPassword, { email: row.email })) throw unprocessable(WEAK_PASSWORD_MESSAGE, 'WEAK_PASSWORD');
+      await tx
+        .update(users)
+        .set({ passwordHash: await hash(input.newPassword), mustChangePassword: false })
+        .where(eq(users.id, user.id));
       // Diğer oturumları kapat; bu isteği gönderen oturum (çerez varsa) açık kalır.
       const current = req.cookies[REFRESH_COOKIE];
       await tx
@@ -244,7 +280,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
             ...(current ? [ne(refreshTokens.tokenHash, sha256(current))] : []),
           ),
         );
+      await recordSecurityEvent(app.db, app.log, req, { event: 'password_changed', organizationId: row.organizationId, userId: row.id, email: row.email });
       return { ok: true };
-    }),
+    }, { allowMustChange: true }),
   );
 };

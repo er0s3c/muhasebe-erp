@@ -11,6 +11,7 @@ import {
 import { companies, memberships, users } from '../../db/schema';
 import { authedRoute, tenantRoute } from '../../http/context';
 import { unauthorized } from '../../http/errors';
+import { publicUser } from '../auth/routes';
 import { createCompany } from './service';
 
 export const tenancyRoutes: FastifyPluginAsync = async (app) => {
@@ -18,7 +19,13 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
     '/api/me',
     authedRoute(app, async ({ tx, user }) => {
       const [me] = await tx
-        .select({ id: users.id, email: users.email, fullName: users.fullName })
+        .select({
+          id: users.id,
+          email: users.email,
+          fullName: users.fullName,
+          emailVerifiedAt: users.emailVerifiedAt,
+          mustChangePassword: users.mustChangePassword,
+        })
         .from(users)
         .where(eq(users.id, user.id));
       if (!me) throw unauthorized();
@@ -36,8 +43,8 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
         .innerJoin(companies, eq(companies.id, memberships.companyId))
         .where(eq(memberships.userId, user.id))
         .orderBy(companies.name);
-      return { user: me, companies: myCompanies };
-    }),
+      return { user: publicUser(me), companies: myCompanies };
+    }, { allowMustChange: true }),
   );
 
   app.post(

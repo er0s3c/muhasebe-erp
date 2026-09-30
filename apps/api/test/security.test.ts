@@ -303,6 +303,9 @@ describe('sözleşme testleri', async () => {
     'POST /api/auth/login',
     'POST /api/auth/refresh',
     'POST /api/auth/logout',
+    'POST /api/auth/forgot-password',
+    'POST /api/auth/reset-password',
+    'POST /api/auth/verify-email',
   ].sort();
 
   it('her /api rotası kamuya açık listede ya da tenantRoute/authedRoute kapısındadır (liste birebir)', () => {
@@ -356,7 +359,9 @@ describe('sözleşme testleri', async () => {
          where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
            and not exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'company_id' and not a.attisdropped)
          order by 1`);
-      expect(global.rows.map((r) => r.relname)).toEqual(['companies', 'currencies', 'organizations', 'refresh_tokens', 'users']);
+      expect(global.rows.map((r) => r.relname)).toEqual([
+        'companies', 'currencies', 'organizations', 'refresh_tokens', 'security_events', 'user_tokens', 'users',
+      ]);
     });
   });
 

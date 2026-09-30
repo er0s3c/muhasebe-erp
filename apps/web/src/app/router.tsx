@@ -4,7 +4,11 @@ import { AppShell } from '../components/layout/AppShell';
 import { PageLoading } from '../components/ui/Feedback';
 import { NotFoundPage } from '../features/NotFoundPage';
 import { LoginPage } from '../features/auth/LoginPage';
+import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
+import { PasswordChangeRequiredPage } from '../features/auth/PasswordChangeRequiredPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
+import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
+import { VerifyEmailPage } from '../features/auth/VerifyEmailPage';
 import { CreateCompanyPage } from '../features/onboarding/CreateCompanyPage';
 import { PublicOnly, RequireAuth, RequireCompany, RequireModule } from './guards';
 
@@ -23,12 +27,22 @@ export const router = createBrowserRouter([
     children: [
       { path: '/login', element: <LoginPage /> },
       { path: '/register', element: <RegisterPage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
+    ],
+  },
+  {
+    // E-postadaki bağlantılar: oturum açıkken de çalışmalı (PublicOnly dışında)
+    hydrateFallbackElement: <PageLoading />,
+    children: [
+      { path: '/reset-password', element: <ResetPasswordPage /> },
+      { path: '/verify-email', element: <VerifyEmailPage /> },
     ],
   },
   {
     element: <RequireAuth />,
     hydrateFallbackElement: <PageLoading />,
     children: [
+      { path: '/password-change', element: <PasswordChangeRequiredPage /> },
       { path: '/company/new', element: <CreateCompanyPage /> },
       {
         element: <RequireCompany />,

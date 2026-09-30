@@ -6,9 +6,10 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { api } from '../../lib/api';
-import { useNavigation } from '../../lib/queries';
+import { useNavigation, usePublicConfig } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { Button } from '../ui/Button';
+import { Callout } from '../ui/Feedback';
 import { Field, Input } from '../ui/Field';
 import { Modal } from '../ui/Sheet';
 import { useToast } from '../ui/Toast';
@@ -105,6 +106,7 @@ export function AppShell() {
 
         <main id="main" className="flex-1 overflow-y-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-8 sm:py-8">
+            <VerifyEmailBanner />
             <Outlet />
           </div>
         </main>
@@ -294,9 +296,6 @@ function ChangePasswordModal({ open, onOpenChange }: { open: boolean; onOpenChan
   const [next, setNext] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const { logout } = useSession();
-  const navigate = useNavigate();
-
   useEffect(() => {
     if (open) {
       setCurrent('');
@@ -312,9 +311,6 @@ function ChangePasswordModal({ open, onOpenChange }: { open: boolean; onOpenChan
       await api('/api/auth/change-password', { method: 'POST', body: { currentPassword: current, newPassword: next } });
       toast.success(t('auth.passwordChanged'));
       onOpenChange(false);
-      // Diğer oturumlar kapandı; bu oturum da yeniden girişle tazelenir.
-      await logout();
-      navigate('/login');
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -351,5 +347,43 @@ function ChangePasswordModal({ open, onOpenChange }: { open: boolean; onOpenChan
         </Field>
       </form>
     </Modal>
+  );
+}
+
+/** E-posta doğrulanmamışsa (ve posta açıksa) yeniden gönderme bağlantısı içeren uyarı. */
+function VerifyEmailBanner() {
+  const { t } = useTranslation();
+  const { user } = useSession();
+  const publicConfig = usePublicConfig();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  if (!user || user.emailVerified || !publicConfig.data?.mailEnabled) return null;
+
+  const resend = async () => {
+    setBusy(true);
+    try {
+      await api('/api/auth/resend-verification', { method: 'POST' });
+      toast.success(t('auth.verifyResent'));
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mb-6 print:hidden">
+      <Callout
+        tone="warning"
+        title={t('auth.verifyBannerTitle')}
+        action={
+          <Button size="sm" loading={busy} onClick={resend}>
+            {t('auth.verifyResend')}
+          </Button>
+        }
+      >
+        {t('auth.verifyBannerBody', { email: user.email })}
+      </Callout>
+    </div>
   );
 }

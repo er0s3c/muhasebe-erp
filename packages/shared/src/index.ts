@@ -1,5 +1,6 @@
 export * from './money';
 export * from './dates';
+export * from './password';
 export * from './invoice-calc';
 export * from './treasury-calc';
 export * from './permissions';

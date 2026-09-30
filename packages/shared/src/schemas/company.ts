@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SECTORS } from '../module-registry';
 import { ROLES } from '../permissions';
+import { passwordSchema } from './auth';
 import { currencyCode } from './common';
 
 export const createCompanySchema = z.object({
@@ -28,7 +29,9 @@ export const addMemberSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   role: z.enum(ROLES),
   /** İlk şifre; kullanıcı ilk girişte değiştirmelidir. Mevcut (aynı kuruluştaki) kullanıcı eklenirken yok sayılır. */
-  password: z.string().min(10).max(200).optional(),
+  password: passwordSchema.optional(),
+  /** Yeni kullanıcı için: ilk girişte parolayı değiştirmeye zorla (varsayılan: evet). Hizmet hesapları için kapatılabilir. */
+  mustChangePassword: z.boolean().default(true),
 });
 export type AddMemberInput = z.infer<typeof addMemberSchema>;
 
@@ -37,6 +40,6 @@ export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(200),
-  newPassword: z.string().min(10, 'Şifre en az 10 karakter olmalı').max(200),
+  newPassword: passwordSchema,
 });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
