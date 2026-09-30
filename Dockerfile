@@ -9,7 +9,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/license-server/package.json apps/license-server/
 COPY packages/shared/package.json packages/shared/
+COPY packages/license-core/package.json packages/license-core/
 RUN npm ci
 COPY . .
 RUN npm run build
@@ -22,7 +24,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/license-server/package.json apps/license-server/
 COPY packages/shared/package.json packages/shared/
+COPY packages/license-core/package.json packages/license-core/
 RUN npm ci --omit=dev -w @erp/api
 
 # ---- 3) Çalışma zamanı ------------------------------------------------------------------------------------

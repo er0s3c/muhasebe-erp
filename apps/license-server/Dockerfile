@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1
+# Lisans sunucusu imajı (satıcı VPS'inde çalışır; MÜŞTERİYE VERİLMEZ).
+# Derleme (depo kökünden):  docker build -f apps/license-server/Dockerfile -t muhasebe-lisans --build-arg APP_VERSION=1.0.0 .
+ARG NODE_VERSION=22
+
+FROM node:${NODE_VERSION}-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/license-server/package.json apps/license-server/
+COPY packages/shared/package.json packages/shared/
+COPY packages/license-core/package.json packages/license-core/
+RUN npm ci
+COPY packages packages
+COPY apps/license-server apps/license-server
+RUN npm run build -w @erp/license-server
+
+FROM node:${NODE_VERSION}-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/license-server/package.json apps/license-server/
+COPY packages/shared/package.json packages/shared/
+COPY packages/license-core/package.json packages/license-core/
+RUN npm ci --omit=dev -w @erp/license-server
+
+FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+ARG APP_VERSION=dev
+ENV NODE_ENV=production \
+    APP_VERSION=${APP_VERSION} \
+    PORT=4000 \
+    MIGRATIONS_DIR=/app/dist/drizzle
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/apps/license-server/dist ./dist
+USER node
+EXPOSE 4000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "dist/server.js"]

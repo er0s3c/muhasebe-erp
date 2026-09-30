@@ -1,0 +1,17 @@
+# Lisans sunucusu ters vekili (otomatik HTTPS). Herkese açık olan YALNIZCA /v1/* ve /healthz'dir (müşteri uygulamaları kullanır);
+# yönetim paneli ve /admin/api yalnızca LICENSE_ADMIN_ALLOW ile izin verilen adreslerden açılır
+# (varsayılan herkes; kendi IP adresinizle kısıtlamanız önerilir: LICENSE_ADMIN_ALLOW="203.0.113.7/32").
+{$LICENSE_DOMAIN} {
+	encode zstd gzip
+
+	@public path /v1/* /healthz
+	handle @public {
+		reverse_proxy license:4000
+	}
+
+	handle {
+		@denied not remote_ip {$LICENSE_ADMIN_ALLOW:0.0.0.0/0 ::/0}
+		respond @denied "Erişim reddedildi" 403
+		reverse_proxy license:4000
+	}
+}

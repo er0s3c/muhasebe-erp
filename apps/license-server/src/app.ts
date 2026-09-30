@@ -1,0 +1,63 @@
+import cookie from '@fastify/cookie';
+import helmet from '@fastify/helmet';
+import Fastify, { type FastifyInstance, type FastifyServerOptions, type RouteOptions } from 'fastify';
+import type { Signer } from '@erp/license-core';
+import type { Config } from './config';
+import type { Db } from './db/client';
+import { errorHandler } from './errors';
+import { MemoryLimiter } from './limits';
+import { adminApiRoutes } from './modules/admin-api';
+import { adminAuthRoutes } from './modules/admin-auth';
+import { publicRoutes } from './modules/public';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    db: Db;
+    config: Config;
+    signer: Signer;
+    limiter: MemoryLimiter;
+    /** Satıcı saati (ms); testlerde değiştirilebilir. */
+    now: () => number;
+  }
+}
+
+export interface BuildOptions {
+  db: Db;
+  config: Config;
+  signer: Signer;
+  logger?: boolean;
+  now?: () => number;
+  /** Testler: kayıtlı tüm rotaları toplamak için. */
+  onRoute?: (route: RouteOptions) => void;
+}
+
+export async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
+  const { config } = opts;
+  const serverOptions: FastifyServerOptions = {
+    logger: opts.logger === false ? false : { level: config.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.cookie'] },
+    // Fastify çalışma zamanında atlama sayısını (number) destekler; tip tanımı eksiktir.
+    trustProxy: config.TRUST_PROXY as FastifyServerOptions['trustProxy'],
+    bodyLimit: 64 * 1024,
+    requestTimeout: 30_000,
+  };
+  const app = Fastify(serverOptions);
+  if (opts.onRoute) app.addHook('onRoute', opts.onRoute);
+  const now = opts.now ?? Date.now;
+  app.decorate('db', opts.db);
+  app.decorate('config', config);
+  app.decorate('signer', opts.signer);
+  app.decorate('limiter', new MemoryLimiter(config.RATE_LIMIT_ENABLED, now));
+  app.decorate('now', now);
+
+  app.addHook('onSend', async (_req, reply) => {
+    void reply.header('cache-control', 'no-store');
+  });
+  await app.register(helmet);
+  await app.register(cookie);
+  app.setErrorHandler(errorHandler);
+
+  await app.register(publicRoutes);
+  await app.register(adminAuthRoutes);
+  await app.register(adminApiRoutes);
+  return app;
+}
