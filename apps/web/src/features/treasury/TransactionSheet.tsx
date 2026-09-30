@@ -28,6 +28,12 @@ interface Props {
   initialPartyId?: string;
   /** Hesap sayfasından açılırsa hesap hazır gelir */
   initialAccountId?: string;
+  /**
+   * Banka ekstresi satırından hareket oluşturma (satır kilitli mod): tarih, tutar ve hesap satırdan gelir ve
+   * değiştirilemez; yalnızca satırın yönüne uyan türler seçilebilir; kayıt `create-transaction` ucuyla yapılır
+   * (hareket ve eşleşme aynı işlemde).
+   */
+  line?: { id: string; date: string; /** Mutlak tutar (kanonik) */ amount: string; direction: 'in' | 'out'; accountId: string; description: string };
   onSaved: (result: TreasuryTxnDetail) => void;
 }
 
@@ -44,14 +50,18 @@ const num = (v: string | null | undefined) => dec(v && v !== '' ? v : 0);
  * Kasa/banka hareketi formu: tahsilat/ödeme (açık kalem eşleştirmeli, kur farkı önizlemeli), virman,
  * döviz alım-satım ve diğer tahsilat/ödeme. Önizleme sunucudakiyle aynı ortak formülleri kullanır.
  */
-export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', initialPartyId = '', initialAccountId = '', onSaved }: Props) {
+export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', initialPartyId = '', initialAccountId = '', line, onSaved }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
   const company = useCompany();
   const base = company.baseCurrency;
 
-  const [type, setType] = useState<TreasuryTxnType>(initialType);
-  const [date, setDate] = useState(todayIso());
+  const startType: TreasuryTxnType = line ? (line.direction === 'in' ? 'receipt' : 'payment') : initialType;
+  const allowedTypes = line
+    ? TXN_TYPES.filter((k) => (line.direction === 'in' ? k === 'receipt' || k === 'other_receipt' : k === 'payment' || k === 'other_payment'))
+    : TXN_TYPES;
+  const [type, setType] = useState<TreasuryTxnType>(startType);
+  const [date, setDate] = useState(line?.date ?? todayIso());
   const [accountId, setAccountId] = useState('');
   const [toAccountId, setToAccountId] = useState('');
   /** null: kalemlerin karşılık toplamı (otomatik) */
@@ -73,19 +83,20 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
 
   useEffect(() => {
     if (!open) return;
-    setType(initialType);
-    setDate(todayIso());
-    setAccountId(initialAccountId);
+    setType(startType);
+    setDate(line?.date ?? todayIso());
+    setAccountId(line?.accountId ?? initialAccountId);
     setToAccountId('');
     setAmountInput(null);
     setCounterAmount('');
     setFxRate('');
     setPartyId(initialPartyId);
     setGlAccountId('');
-    setDescription('');
+    setDescription(line?.description ?? '');
     setItems({});
     setError(null);
-  }, [open, initialType, initialPartyId, initialAccountId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, startType, initialPartyId, initialAccountId, line?.id]);
 
   const { data: accData } = useTreasuryAccounts(open);
   // Varsayılan hesap: defter para birimindeki hesaplar önce, sonra banka, sonra kasa
@@ -140,7 +151,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
 
   const selected = openItems.filter((it) => items[it.lineId]);
   const settleTotal = selected.reduce((s, it) => s.plus(num(effSettle(it, items[it.lineId]!))), dec(0));
-  const amount = amountInput ?? (selected.length > 0 ? settleTotal.toFixed(2) : '');
+  const amount = line?.amount ?? amountInput ?? (selected.length > 0 ? settleTotal.toFixed(2) : '');
   const advance = num(amount).minus(settleTotal);
 
   // Kur farkı önizlemesi (tahsilat/ödeme): kalemin taşıdığı defter tutarı ile karşılığın defter tutarı
@@ -221,13 +232,12 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
 
   const save = useCMutation(
     (_: void, call) =>
-      call<TreasuryTxnDetail>('/api/treasury/transactions', {
+      call<TreasuryTxnDetail>(line ? `/api/bank-statement-lines/${line.id}/create-transaction` : '/api/treasury/transactions', {
         method: 'POST',
         body: {
           type,
-          date,
-          accountId,
-          amount,
+          // Satır kilitli modda tarih, tutar ve hesabı sunucu ekstre satırından alır
+          ...(line ? {} : { date, accountId, amount }),
           ...(description.trim() ? { description: description.trim() } : {}),
           ...(settle
             ? {
@@ -305,7 +315,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
       wide
       open={open}
       onOpenChange={onOpenChange}
-      title={t('treasury.sheet.title')}
+      title={line ? t('treasury.sheet.lineTitle') : t('treasury.sheet.title')}
       footer={
         <>
           <div className="mr-auto text-sm" aria-live="polite">
@@ -350,19 +360,21 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
           </Callout>
         )}
 
+        {line && <Callout>{t('treasury.sheet.fromLine')}</Callout>}
+
         <div>
           <p className="mb-1.5 text-[13px]">{t('treasury.sheet.type')}</p>
-          <SegmentedTabs value={type} onChange={changeType} items={TXN_TYPES.map((k) => ({ key: k, label: t(`treasury.types.${k}`) }))} />
+          <SegmentedTabs value={type} onChange={changeType} items={allowedTypes.map((k) => ({ key: k, label: t(`treasury.types.${k}`) }))} />
           <p className="mt-2 text-[13px] text-muted">{t(`treasury.sheet.hints.${type}`)}</p>
         </div>
 
         <div className={cn('grid gap-4', pair ? 'sm:grid-cols-[160px_1fr_1fr]' : 'sm:grid-cols-[160px_1fr]')}>
           <Field label={t('treasury.sheet.date')} required>
-            {(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}
+            {(id) => <Input id={id} type="date" value={date} disabled={!!line} onChange={(e) => setDate(e.target.value)} />}
           </Field>
           <Field label={pair ? t('treasury.sheet.fromAccount') : outflow ? t('treasury.sheet.outAccount') : t('treasury.sheet.inAccount')} required>
             {(id) => (
-              <Select id={id} value={accountId} onChange={(e) => changeAccount(e.target.value)}>
+              <Select id={id} value={accountId} disabled={!!line} onChange={(e) => changeAccount(e.target.value)}>
                 {accountOptions}
               </Select>
             )}
@@ -398,6 +410,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
                 id={id}
                 value={amount}
                 onChange={(v) => setAmountInput(v === '' && settle ? null : v)}
+                disabled={!!line}
                 placeholder="0,00"
                 aria-label={t(`treasury.sheet.amount.${type}`, { currency: fromCur })}
               />

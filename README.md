@@ -2,7 +2,7 @@
 
 KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef sektör inşaat ve taahhüt; market ve ticaret modülleri aynı çekirdeğin üstüne eklenecek şekilde tasarlandı.
 
-**Durum:** Çekirdek ERP'nin ilk dilimi hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe, cari, stok, fatura, irsaliye, kasa ve banka, raporlar ve dışa aktarma). Sıradaki adımlar: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
+**Durum:** Çekirdek ERP'nin ilk dilimi hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe, cari, stok, fatura, irsaliye, kasa ve banka, raporlar ve dışa aktarma, içe aktarma, banka mutabakatı). Sıradaki adımlar: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Neler var?
 
@@ -16,6 +16,7 @@ KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef 
 - **Kasa ve banka:** kasa/banka hesapları (her biri bir muhasebe hesabına bağlı, çoklu para birimi), tahsilat ve ödeme (cari açık kalemleriyle elle eşleştirilir: kısmi, çoklu kalem, farklı para birimi, avans), **gerçekleşen kur farkı otomatik yazılır**, virman, döviz alım-satım (ortalama maliyetle), banka masrafı/faiz, iptal (ters kayıt), kasa eksi bakiye denetimi. Kur değerlemesi ve avans mahsubu sonraki adımdır; kambiyo hesapları ve kasa kuralı doğrulanmamıştır.
 - **Raporlar ve dışa aktarma:** yevmiye defteri, kebir, satış/alış raporu, stok kârlılığı, kambiyo raporu; tüm raporlar **Excel (.xlsx), CSV ve yazdır/PDF** olarak alınabilir, tam veri dışa aktarma tek Excel dosyasıdır. PDF, tarayıcının yazdır penceresinden “PDF olarak kaydet”tir; yevmiye defteri/kebir çıktıları yasal onaylı defter yerine geçmez.
 - **İçe aktarma:** cari ve stok kartları ile cari/stok/mizan açılış bakiyeleri Excel ya da CSV dosyasından aktarılır (sütun eşleme, satır satır ön izleme, hata varsa hiçbir kayıt yazılmaz). Açılış kaydının karşı hesabı ve mizan açılışı akışı mali müşavirce doğrulanmamıştır.
+- **Banka mutabakatı:** banka ekstresi (Excel/CSV) içe aktarılır ve defter kayıtlarıyla eşleştirilir (tutar birebir, ±3 gün; kesin/olası öneri, elle ve otomatik); eşleşmeyen ekstre satırından tek tıkla hareket oluşturulur; ekstre kapanış bakiyesi ile defter bakiyesi farkı ekranda açıklanır. Eşleşmiş hareket/fiş iptal edilemez. Bankaya özgü ekstre biçimleri doğrulanmamıştır.
 - **Kur:** elle giriş ya da KKTC Merkez Bankası XML'inden içe aktarma (resmî adres veya dosya yükleme).
 - **Rol bazlı yetki, sektöre göre menü, denetim izi, Türkçe arayüz** (çoklu dil altyapılı), açık/koyu tema, `Ctrl+K` komut paleti.
 

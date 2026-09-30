@@ -16,3 +16,4 @@ export * from './schemas/deliveries';
 export * from './schemas/treasury';
 export * from './schemas/reports';
 export * from './schemas/imports';
+export * from './schemas/bank-statements';

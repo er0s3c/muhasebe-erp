@@ -5,6 +5,7 @@ import {
   fullDataQuerySchema,
   fxDifferencesQuerySchema,
   generalLedgerQuerySchema,
+  isoDate,
   itemMovementsQuerySchema,
   itemProfitQuerySchema,
   journalBookQuerySchema,
@@ -23,6 +24,7 @@ import {
 import type { ReportTable } from '../../files/table';
 import {
   accountLedgerTable,
+  bankReconciliationTable,
   fxDifferencesTable,
   generalLedgerTable,
   itemCardTable,
@@ -95,6 +97,14 @@ export const EXPORTS: readonly ExportDef[] = [
   def({ key: 'purchase-report', ...invoices, schema: salesReportQuerySchema, build: (ctx, q) => salesReportTable(ctx, 'purchases', q), file: (q) => `alis-raporu-${q.groupBy}-${q.from}_${q.to}` }),
   def({ key: 'item-profitability', ...invoices, schema: itemProfitQuerySchema, build: itemProfitTable, file: range('stok-karliligi') }),
   def({ key: 'fx-differences', module: 'core.treasury', permission: 'reports.read', schema: fxDifferencesQuerySchema, build: fxDifferencesTable, file: range('kambiyo-raporu') }),
+  def({
+    key: 'bank-reconciliation',
+    module: 'core.treasury',
+    permission: 'treasury.read',
+    schema: z.object({ accountId: uuid, from: isoDate.optional(), to: isoDate.optional() }),
+    build: bankReconciliationTable,
+    file: (q) => `banka-mutabakati-${q.from ?? 'baslangic'}_${q.to ?? todayIso()}`,
+  }),
   def({ key: 'full-data', module: 'core.settings', permission: 'data.export', schema: fullDataQuerySchema, build: fullDataTables, file: () => `tum-veriler-${todayIso()}`, formats: ['xlsx'] }),
 ];
 

@@ -14,6 +14,7 @@ import { invoiceRoutes } from './modules/invoices/routes';
 import { treasuryRoutes } from './modules/treasury/routes';
 import { exportRoutes } from './modules/exports/routes';
 import { importRoutes } from './modules/imports/routes';
+import { bankStatementRoutes } from './modules/bank-statements/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
@@ -74,6 +75,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(treasuryRoutes);
   await app.register(exportRoutes);
   await app.register(importRoutes);
+  await app.register(bankStatementRoutes);
 
   return app;
 }

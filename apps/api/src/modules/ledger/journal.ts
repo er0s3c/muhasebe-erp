@@ -333,6 +333,13 @@ export async function reverseJournalEntry(
   if (original.reversalOfId) {
     throw unprocessable('Ters kayıt tekrar ters çevrilemez; yeni yevmiye girin', 'ENTRY_IS_REVERSAL');
   }
+  // Banka ekstresiyle eşleşmiş satırı olan fiş ters çevrilemez: önce eşleşme kaldırılır
+  const reconciled = await tx.execute(sql`
+    select 1 from bank_statement_lines b join journal_lines l on l.id = b.journal_line_id
+    where b.status = 'matched' and l.entry_id = ${id} limit 1`);
+  if (reconciled.rows.length > 0) {
+    throw unprocessable('Bu fişin banka satırı ekstreyle eşleşmiş; ters kayıttan önce Banka ekstresi sekmesinden eşleşmeyi kaldırın', 'ENTRY_RECONCILED');
+  }
 
   const date = opts.entryDate ?? todayIso();
   const period = await requireOpenPeriod(tx, date);

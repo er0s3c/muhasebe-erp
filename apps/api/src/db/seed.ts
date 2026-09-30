@@ -23,8 +23,10 @@ import {
   type CreateJournalInput,
   type CreatePartyInput,
   type CreateStockDocumentInput,
+  type Sector,
 } from '@erp/shared';
 import { loadConfig } from '../config';
+import type { CompanyInfo } from '../http/context';
 import { createDb, withContext, type Tx } from './client';
 import { customCodes, exchangeRates, memberships, organizations, users, warehouses } from './schema';
 import { createParty } from '../modules/parties/service';
@@ -41,7 +43,9 @@ import { createItem } from '../modules/inventory/items';
 import { postDeliveryNote } from '../modules/deliveries/posting';
 import { createDeliveryDraft } from '../modules/deliveries/service';
 import { openItemsFor } from '../modules/parties/service';
-import { createTreasuryAccount } from '../modules/treasury/accounts';
+import { autoMatch, ledgerCandidates } from '../modules/bank-statements/service';
+import { bankStatementHandler } from '../modules/imports/handlers/bank-statement';
+import { createTreasuryAccount, getTreasuryAccountRow } from '../modules/treasury/accounts';
 import { cancelTreasuryTransaction, postTreasuryTransaction } from '../modules/treasury/posting';
 import { cancelInvoice, postInvoice } from '../modules/invoices/posting';
 import { createInvoiceDraft, getInvoice, type InvoiceCtx } from '../modules/invoices/service';
@@ -255,7 +259,7 @@ async function seedInventory(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string
  * yüksek kurlu tahsilatı (kur kârı), tedarikçi ödemesi, EUR faturasının ödemesi (kur zararı), virman,
  * döviz alım-satım, banka masrafı, faiz geliri ve iptal edilmiş bir hareket. Hepsi otomatik yevmiye üretir.
  */
-async function seedTreasury(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string): Promise<string> {
+async function seedTreasury(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string): Promise<{ summary: string; bankTlId: string }> {
   const account = (input: Record<string, unknown>) => createTreasuryAccount(tx, ctx, createTreasuryAccountSchema.parse(input));
   const bankTl = await account({ kind: 'bank', name: 'KTB TL Vadesiz', currency: 'TRY', bankName: 'Örnek Banka', branch: 'Lefkoşa', linkAccountId: acc('102.001') });
   const bankGbp = await account({ kind: 'bank', name: 'KTB GBP Hesabı', currency: 'GBP', bankName: 'Örnek Banka', branch: 'Lefkoşa', linkAccountId: acc('102.002') });
@@ -313,7 +317,46 @@ async function seedTreasury(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
   await txn({ type: 'other_payment', date: date(9, 1), accountId: bankTl.id, amount: '125', glAccountId: acc('770'), description: 'Havale masrafı' });
   await txn({ type: 'other_receipt', date: date(9, 26), accountId: bankTl.id, amount: '2150', glAccountId: acc('642'), description: 'Vadesiz hesap faiz geliri' });
 
-  return 'kasa/banka: 4 hesap, 11 hareket';
+  return { summary: 'kasa/banka: 4 hesap, 11 hareket', bankTlId: bankTl.id };
+}
+
+/**
+ * TL banka hesabı için örnek ekstre: defterdeki (ters çevrilmemiş) banka satırlarından üretilir; bazı satırların tarihi
+ * bir gün kayar (öneride "1 gün fark"), iki defter kaydı ekstrede yoktur ("eşleşmemiş defter kaydı") ve üç ekstre satırının
+ * defterde karşılığı yoktur ("hareket oluştur" için). Kesin eşleşmeler uygulanır; olası ve öneri olmayan satırlar açık kalır.
+ */
+async function seedBankStatement(tx: Tx, ctx: LedgerCtx, company: CompanyInfo, bankTlId: string): Promise<string> {
+  const ta = await getTreasuryAccountRow(tx, bankTlId);
+  const candidates = await ledgerCandidates(tx, ta, `${year}-01-01`, date(12, 31));
+  const skipped = (desc: string) => /havale masrafı|kira/i.test(desc);
+  const shift = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+  const raw = candidates
+    .filter((c) => !skipped(c.description))
+    .map((c, i) => ({ date: i % 3 === 2 ? shift(c.entryDate, 1) : c.entryDate, description: c.description.slice(0, 70), amount: Number(c.amount), ref: `DKN-${1001 + i}` }));
+  raw.push(
+    { date: date(9, 27), description: 'Gelen EFT — açıklamasız', amount: 1000, ref: 'DKN-2001' },
+    { date: date(9, 28), description: 'Hesap işletim ücreti', amount: -35, ref: 'DKN-2002' },
+    { date: date(9, 29), description: 'Kart aidatı', amount: -250, ref: 'DKN-2003' },
+  );
+  raw.sort((a, b) => a.date.localeCompare(b.date));
+  let balance = 0;
+  const rows = raw.map((r, i) => {
+    balance = Math.round((balance + r.amount) * 100) / 100;
+    return { row: i + 2, cells: { date: r.date, description: r.description, reference: r.ref, amount: r.amount.toFixed(2), balance: balance.toFixed(2) } };
+  });
+
+  const plan = await bankStatementHandler.plan({ tx, company, userId: ctx.userId }, rows, {
+    accountId: bankTlId,
+    numberFormat: 'en',
+    fileName: 'ktb-tl-ekstre-ornek.csv',
+  });
+  if (plan.rows.some((r) => r.status === 'error') || plan.general.some((m) => m.severity === 'error')) {
+    throw new Error(`Örnek ekstre doğrulanamadı: ${JSON.stringify([...plan.general, ...plan.rows.filter((r) => r.status === 'error')])}`);
+  }
+  await plan.apply();
+  const auto = await autoMatch(tx, ctx, bankTlId, { from: `${year}-01-01`, to: date(12, 31) });
+  return `banka ekstresi: ${rows.length} satır, ${auto.matched} kesin eşleşme`;
 }
 
 async function main() {
@@ -474,7 +517,8 @@ async function main() {
     }
 
     const stockSummary = await seedInventory(tx, ctx, partyId, acc);
-    const treasurySummary = await seedTreasury(tx, ctx, partyId, acc);
+    const treasury = await seedTreasury(tx, ctx, partyId, acc);
+    const treasurySummary = `${treasury.summary}; ${await seedBankStatement(tx, ctx, { ...company, sector: company.sector as Sector }, treasury.bankTlId)}`;
 
     // Geçmiş aylar kapansın (yılın ilk yarısı)
     for (let m = 1; m <= 6; m++) {

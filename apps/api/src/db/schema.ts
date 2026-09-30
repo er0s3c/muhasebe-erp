@@ -1279,3 +1279,117 @@ export const partyAllocations = pgTable(
     ),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Banka ekstresi ve mutabakat (M8c)
+// ---------------------------------------------------------------------------
+
+/**
+ * İçe aktarılmış banka ekstresi (bir dosya). Değişmez; yalnızca hiç eşleşmemiş ekstre "geri alma" ile silinebilir.
+ * `fileHash`: eşlenmiş satırların içeriğinden (dosya baytlarından değil) türetilir; aynı ekstre iki kez alınamaz.
+ */
+export const bankStatements = pgTable(
+  'bank_statements',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    accountId: uuid().notNull(),
+    fileName: text().notNull(),
+    fileHash: text().notNull(),
+    fromDate: date({ mode: 'string' }).notNull(),
+    toDate: date({ mode: 'string' }).notNull(),
+    /** Ekstredeki açılış/kapanış bakiyesi (hesap para biriminde); bakiye sütunu yoksa ve girilmediyse boş. */
+    openingBalance: money(),
+    closingBalance: money(),
+    lineCount: integer().notNull(),
+    /** Kullanılan sütun eşlemesi (alan → sütun başlığı): sonraki içe aktarmada hazır gelir. */
+    mapping: jsonb().notNull().default(sql`'{}'::jsonb`),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('bank_statements_id_company_uq').on(t.id, t.companyId),
+    unique('bank_statements_hash_uq').on(t.companyId, t.accountId, t.fileHash),
+    index('bank_statements_account_idx').on(t.companyId, t.accountId, t.toDate),
+    foreignKey({
+      name: 'bank_statements_account_fk',
+      columns: [t.accountId, t.companyId],
+      foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId],
+    }),
+    check('bank_statements_range_ck', sql`${t.fromDate} <= ${t.toDate}`),
+  ],
+);
+
+/**
+ * Ekstre satırı: `amount` işaretlidir (+ hesaba giren, − çıkan; hesap para biriminde). Eşleşme ayrı tabloda
+ * değil bu satırdadır çünkü `journal_lines` ve `treasury_transactions` değiştirilemez. Bir defter satırı
+ * yalnızca bir ekstre satırıyla eşleşir (`bank_statement_lines_gl_uq`).
+ */
+export const bankStatementLines = pgTable(
+  'bank_statement_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    statementId: uuid().notNull(),
+    accountId: uuid().notNull(),
+    /** Kaynak dosyadaki satır numarası. */
+    lineNo: integer().notNull(),
+    txnDate: date({ mode: 'string' }).notNull(),
+    valueDate: date({ mode: 'string' }),
+    description: text().notNull().default(''),
+    reference: text(),
+    amount: money().notNull(),
+    /** Ekstredeki satır sonrası bakiye (varsa). */
+    balance: money(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    /** tarih|tutar|açıklama|referans|sıra: çakışan dönemli ekstrelerde aynı satır ikinci kez alınmaz. */
+    dedupeKey: text().notNull(),
+    /** open | matched | ignored */
+    status: text().notNull().default('open'),
+    journalLineId: uuid(),
+    transactionId: uuid(),
+    matchedAt: timestamp({ withTimezone: true }),
+    matchedBy: uuid().references(() => users.id),
+    ignoreReason: text(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('bank_statement_lines_id_company_uq').on(t.id, t.companyId),
+    unique('bank_statement_lines_dedupe_uq').on(t.companyId, t.accountId, t.dedupeKey),
+    unique('bank_statement_lines_gl_uq').on(t.companyId, t.journalLineId),
+    index('bank_statement_lines_statement_idx').on(t.companyId, t.statementId, t.lineNo),
+    index('bank_statement_lines_account_idx').on(t.companyId, t.accountId, t.txnDate),
+    foreignKey({
+      name: 'bank_statement_lines_statement_fk',
+      columns: [t.statementId, t.companyId],
+      foreignColumns: [bankStatements.id, bankStatements.companyId],
+    }),
+    foreignKey({
+      name: 'bank_statement_lines_account_fk',
+      columns: [t.accountId, t.companyId],
+      foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId],
+    }),
+    foreignKey({
+      name: 'bank_statement_lines_journal_line_fk',
+      columns: [t.journalLineId, t.companyId],
+      foreignColumns: [journalLines.id, journalLines.companyId],
+    }),
+    foreignKey({
+      name: 'bank_statement_lines_transaction_fk',
+      columns: [t.transactionId, t.companyId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId],
+    }),
+    check('bank_statement_lines_status_ck', sql`${t.status} in ('open','matched','ignored')`),
+    check('bank_statement_lines_amount_ck', sql`${t.amount} <> 0`),
+    check(
+      'bank_statement_lines_match_ck',
+      sql`(${t.status} = 'matched') = (${t.journalLineId} is not null and ${t.matchedAt} is not null)`,
+    ),
+  ],
+);

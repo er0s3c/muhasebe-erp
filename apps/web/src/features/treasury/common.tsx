@@ -8,6 +8,8 @@ import type { TreasuryAccount, TreasuryTxnStatus, TreasuryTxnType } from '../../
 /** Kasa/banka hareketi değişince etkilenen sorgular: bakiyeler, cari, yevmiye ve raporlar. */
 export const TREASURY_INVALIDATE = [
   ['treasury'],
+  // Yeni kasa/banka hesabı hesap planına alt hesap ekler; yevmiye formunun hesap listesi bayat kalmasın
+  ['accounts'],
   ['journal'],
   ['journal-entry'],
   ['parties'],

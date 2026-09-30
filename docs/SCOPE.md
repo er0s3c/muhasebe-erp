@@ -84,7 +84,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Kasa ve banka hesapları, çoklu para birimi, hesap ekstresi (hesap + defter para birimi bakiyesi) | ✅ |
 | Tahsilat/ödeme (fatura eşleştirmeli), virman, döviz alım-satım (ortalama maliyet), diğer tahsilat/ödeme (masraf, faiz), iptal (ters kayıt) | ✅ |
 | Kasa eksi bakiyeye düşmez (banka düşebilir) | ✅ ⚠️ kural doğrulanmadı |
-| Banka ekstresi içe aktarma ve eşleştirme | 🔜 M8 |
+| Banka ekstresi içe aktarma (genel sütun eşleme), defter kayıtlarıyla eşleştirme (kesin/olası öneri, elle, otomatik), eşleşmeyen satırdan hareket oluşturma, mutabakat farkı | ✅ ⚠️ bankaya özgü biçimler doğrulanmadı |
 | Çek/senet portföyü ve takas | ⏳ |
 | Banka teminat mektupları | ⏳ Faz B |
 

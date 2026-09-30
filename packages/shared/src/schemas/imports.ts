@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isoDate, uuid } from './common';
 
 /** İçe aktarılabilen veri türleri. */
-export const IMPORT_KINDS = ['parties', 'items', 'party_openings', 'stock_openings', 'ledger_openings'] as const;
+export const IMPORT_KINDS = ['parties', 'items', 'party_openings', 'stock_openings', 'ledger_openings', 'bank_statement'] as const;
 export type ImportKind = (typeof IMPORT_KINDS)[number];
 
 export const IMPORT_KIND_LABELS: Record<ImportKind, string> = {
@@ -11,6 +11,7 @@ export const IMPORT_KIND_LABELS: Record<ImportKind, string> = {
   party_openings: 'Cari açılış bakiyeleri',
   stock_openings: 'Stok açılışı',
   ledger_openings: 'Genel mizan açılışı',
+  bank_statement: 'Banka ekstresi',
 };
 
 /** Sınırlar (API ve arayüz aynı değerleri kullanır). */
@@ -104,6 +105,17 @@ export const IMPORT_FIELDS: Record<ImportKind, readonly ImportFieldDef[]> = {
     f('credit', 'Alacak', false, ['alacak bakiye', 'alacak bakiyesi', 'alacak tutarı'], ''),
     f('fxRate', 'Kur', false, ['döviz kuru'], '', 'Dövizli hesapta; boşsa açılış tarihindeki kayıtlı kur'),
   ],
+  bank_statement: [
+    f('date', 'Tarih', true, ['işlem tarihi', 'hareket tarihi', 'muhasebe tarihi'], '05.01.2026'),
+    f('valueDate', 'Valör', false, ['valör tarihi', 'değer tarihi', 'valor'], '05.01.2026'),
+    f('description', 'Açıklama', false, ['işlem açıklaması', 'hareket açıklaması', 'detay', 'işlem', 'tanım'], 'Havale — Ali Yılmaz'),
+    f('reference', 'Referans', false, ['dekont no', 'dekont', 'referans no', 'belge no', 'işlem no', 'fiş no'], 'DKN-1001'),
+    f('amount', 'Tutar', false, ['işlem tutarı', 'miktar'], '12.500,00', 'Eksi işaretli tutar (+ giriş, − çıkış) ya da Yön ile birlikte'),
+    f('moneyIn', 'Giriş (Alacak)', false, ['giriş', 'yatan', 'alacak', 'gelen', 'alacak tutarı', 'tahsilat'], '', 'Ayrı sütun kullanılıyorsa: hesaba giren'),
+    f('moneyOut', 'Çıkış (Borç)', false, ['çıkış', 'çekilen', 'borç', 'giden', 'borç tutarı', 'ödeme'], '', 'Ayrı sütun kullanılıyorsa: hesaptan çıkan'),
+    f('direction', 'Yön', false, ['borç/alacak', 'b/a', 'işlem yönü'], '', 'Giriş/Çıkış ya da Alacak/Borç (Tutar ile birlikte)'),
+    f('balance', 'Bakiye', false, ['kalan bakiye', 'son bakiye', 'bakiye tutarı'], '', 'Ekstre kapanış bakiyesi için (isteğe bağlı)'),
+  ],
 };
 
 export const importRowSchema = z.object({
@@ -165,12 +177,24 @@ export const ledgerOpeningsOptionsSchema = z.object({
   numberFormat,
 });
 
+export const bankStatementOptionsSchema = z.object({
+  /** Ekstrenin ait olduğu banka hesabı. */
+  accountId: uuid,
+  numberFormat,
+  /** Ekstre kapanış bakiyesi (sütun yoksa elle); verilmezse bakiye sütunundan hesaplanır. */
+  closingBalance: z.string().trim().max(40).optional(),
+  fileName: z.string().trim().max(200).optional(),
+  /** Kullanılan sütun eşlemesi (alan → sütun başlığı); sonraki içe aktarmada önerilir. */
+  mapping: z.record(z.string().max(64), z.string().max(200)).optional(),
+});
+
 export const IMPORT_OPTION_SCHEMAS = {
   parties: partiesImportOptionsSchema,
   items: itemsImportOptionsSchema,
   party_openings: partyOpeningsOptionsSchema,
   stock_openings: stockOpeningsOptionsSchema,
   ledger_openings: ledgerOpeningsOptionsSchema,
+  bank_statement: bankStatementOptionsSchema,
 } as const satisfies Record<ImportKind, z.ZodType>;
 
 export const importRunSchema = z.object({

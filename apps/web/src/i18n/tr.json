@@ -1331,7 +1331,9 @@
       "glAccount": "Karşı hesap",
       "glAccountHint": "Cari, dövizli ve kasa/banka hesapları listelenmez.",
       "pickGl": "Hesap seçin…",
-      "description": "Açıklama"
+      "description": "Açıklama",
+      "fromLine": "Ekstre satırından hareket oluşturuluyor: tarih, tutar ve hesap satırdan gelir.",
+      "lineTitle": "Ekstre satırından hareket oluştur"
     },
     "view": {
       "title": "Hareket",
@@ -1358,6 +1360,91 @@
       "cancelledMsg": "Hareket iptal edildi",
       "cancelDate": "İptal tarihi",
       "cancelReason": "İptal nedeni"
+    },
+    "recon": {
+      "tabs": {
+        "statement": "Hesap ekstresi",
+        "bank": "Banka ekstresi"
+      },
+      "title": "Banka ekstresi ve mutabakat",
+      "subtitle": "Bankadan aldığınız ekstreyi defter kayıtlarıyla eşleştirin; fark kapanana kadar eşleşmeyen satırları inceleyin.",
+      "import": "Ekstre içe aktar",
+      "autoMatch": "Kesin eşleşmeleri uygula",
+      "autoMatched": "{{count}} satır eşleştirildi",
+      "autoNone": "Uygulanacak kesin eşleşme yok",
+      "empty": {
+        "title": "Henüz banka ekstresi yok",
+        "description": "Bankadan indirdiğiniz Excel ya da CSV ekstresini içe aktarın; satırlar defter kayıtlarıyla eşleştirilir."
+      },
+      "stats": {
+        "closing": "Ekstre kapanış bakiyesi",
+        "closingSub": "{{date}} itibarıyla",
+        "closingUnknown": "Ekstrede bakiye yok",
+        "ledger": "Defter bakiyesi",
+        "difference": "Fark",
+        "differenceSub": "Ekstre − defter",
+        "reconciled": "Mutabık",
+        "openLines": "Eşleşmemiş ekstre satırı",
+        "unmatchedLedger": "Eşleşmemiş defter kaydı"
+      },
+      "filter": {
+        "open": "Açık",
+        "matched": "Eşleşen",
+        "ignored": "Yoksayılan",
+        "all": "Tümü"
+      },
+      "cols": {
+        "date": "Tarih",
+        "description": "Açıklama",
+        "amount": "Tutar",
+        "match": "Eşleşme",
+        "actions": "İşlem"
+      },
+      "suggest": {
+        "exact": "Kesin",
+        "probable": "Olası",
+        "none": "Öneri yok",
+        "days": "{{count}} gün fark",
+        "same": "Aynı gün"
+      },
+      "actions": {
+        "match": "Eşleştir",
+        "create": "Hareket oluştur",
+        "ignore": "Yoksay",
+        "unmatch": "Eşleşmeyi kaldır",
+        "restore": "Geri al",
+        "candidates": "Adaylar",
+        "hide": "Gizle",
+        "cancel": "Vazgeç"
+      },
+      "matchedTo": "Fiş {{no}}",
+      "matchedOk": "Satır eşleştirildi",
+      "unmatchedOk": "Eşleşme kaldırıldı",
+      "ignoredOk": "Satır yoksayıldı",
+      "restoredOk": "Satır yeniden açıldı",
+      "ignoreTitle": "Satırı yoksay",
+      "ignoreHint": "Yoksayılan satır mutabakat farkına ve açık satırlara dahil edilmez. Nedenini yazabilirsiniz (isteğe bağlı).",
+      "ignoreReason": "Neden",
+      "noLines": "Bu süzgeçte satır yok",
+      "ledger": {
+        "title": "Eşleşmemiş defter kayıtları",
+        "hint": "Defterde olup ekstrede karşılığı bulunmayan kayıtlar: bankaya henüz yansımamış ya da hatalı girilmiş olabilir.",
+        "empty": "Eşleşmemiş defter kaydı yok",
+        "entry": "Fiş",
+        "party": "Cari"
+      },
+      "statements": {
+        "title": "İçe aktarılan ekstreler",
+        "file": "Dosya",
+        "range": "Aralık",
+        "lines": "Satır",
+        "matched": "Eşleşen",
+        "closing": "Kapanış",
+        "undo": "Geri al",
+        "undoTitle": "İçe aktarmayı geri al",
+        "undoBody": "“{{name}}” ekstresi ve satırları silinecek. Hiçbir satırı eşleşmemiş olmalı.",
+        "undone": "Ekstre geri alındı"
+      }
     }
   },
   "reports": {
@@ -1528,7 +1615,8 @@
       "items": "Stok kartlarını toplu oluşturur. Kategori yoksa açılır; birim, KDV kodu ve para birimi doğrulanır. Var olan kod ve barkodlar atlanır.",
       "party_openings": "Cari açılış bakiyelerini tek bir açılış yevmiyesi olarak yazar: müşteri bakiyesi 120, tedarikçi bakiyesi 320 hesabına gider; fark açılış karşı hesabına (varsayılan 500) yazılır.",
       "stock_openings": "Depo başına bir stok açılış belgesi oluşturur. Stok defteri ve muhasebe (stok hesabı / açılış karşı hesabı) birlikte güncellenir; stok durumu ile muhasebe mutabakatı bozulmaz.",
-      "ledger_openings": "Mizan bakiyelerini tek bir açılış yevmiyesi olarak yazar. Cari (120/320) ve stok (150–157) hesapları burada girilmez; onlar için cari ve stok açılışını kullanın."
+      "ledger_openings": "Mizan bakiyelerini tek bir açılış yevmiyesi olarak yazar. Cari (120/320) ve stok (150–157) hesapları burada girilmez; onlar için cari ve stok açılışını kullanın.",
+      "bank_statement": "Banka ekstresi satırlarını içe aktarır; satırlar ardından defter kayıtlarıyla eşleştirilir. Borç = çıkan, Alacak = giren kabul edilir. Aynı satır ikinci kez alınmaz."
     },
     "file": {
       "title": "Dosyanızı seçin",
@@ -1570,7 +1658,10 @@
       "requiredMissing": "Zorunlu alan eşlenmedi: {{fields}}",
       "openingAmountMissing": "Borç, Alacak ya da Tutar sütunlarından en az biri eşlenmeli",
       "next": "Ön izleme",
-      "back": "Geri"
+      "back": "Geri",
+      "closingBalance": "Ekstre kapanış bakiyesi",
+      "closingBalanceHint": "İsteğe bağlı; ekstrede Bakiye sütunu yoksa mutabakat farkı için girin.",
+      "bankAmountMissing": "Tutar, Giriş ya da Çıkış sütunlarından en az biri eşlenmeli"
     },
     "preview": {
       "title": "Ön izleme",

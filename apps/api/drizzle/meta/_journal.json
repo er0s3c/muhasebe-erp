@@ -85,6 +85,20 @@
       "when": 1790717124390,
       "tag": "0011_treasury_rls_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790725167768,
+      "tag": "0012_bank_statements",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790725210072,
+      "tag": "0013_bank_rls_rules",
+      "breakpoints": true
     }
   ]
 }

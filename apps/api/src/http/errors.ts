@@ -96,6 +96,13 @@ export function errorHandler(
       .send({ error: { code: 'TREASURY_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP06') {
+    // Banka ekstresi kuralları (değiştirilemez satır, tutar/işaret uyuşmazlığı, eşleşmiş fişin ters çevrilmesi vb.)
+    void reply
+      .status(422)
+      .send({ error: { code: 'BANK_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

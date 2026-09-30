@@ -1,4 +1,4 @@
-import { formatDateTR, ITEM_UNIT_LABELS, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
+import { formatDateTR, ITEM_UNIT_LABELS, sum, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -8,6 +8,7 @@ import { itemStatement } from '../inventory/items';
 import { stockStatus } from '../inventory/reports';
 import { itemProfitability, salesReport } from '../invoices/analytics';
 import { vatSummary } from '../invoices/reports';
+import { reconciliation } from '../bank-statements/service';
 import { partyAging, partyOpenItems, partyStatement } from '../parties/service';
 import { fxDifferences } from '../treasury/fx-report';
 import { TXN_LABEL } from '../treasury/posting';
@@ -500,3 +501,63 @@ export async function fxDifferencesTable(ctx: BuildCtx, q: { from: string; to: s
 }
 
 export { PARTY_KIND_LABEL, STOCK_DOC_LABEL, unit as unitLabel };
+
+const BANK_STATUS_LABEL = { open: 'Açık', matched: 'Eşleşti', ignored: 'Yoksayıldı' } as const;
+
+/** Banka mutabakatı: ekstre satırları (durumları ve eşleştikleri fişle) ve eşleşmemiş defter kayıtları. */
+export async function bankReconciliationTable(ctx: BuildCtx, q: { accountId: string; from?: string; to?: string }): Promise<ReportTable[]> {
+  const d = await reconciliation(ctx.tx, q.accountId, { from: q.from, to: q.to });
+  const cur = d.account.currencyCode;
+  const s = d.summary;
+  const subtitle = sub(
+    ctx,
+    `${d.account.name} (${cur})`,
+    period(d.from, d.to),
+    s.statementClosing !== null ? `Ekstre kapanışı ${s.statementClosing} · defter ${s.ledgerBalance} · fark ${s.difference}` : `Defter bakiyesi ${s.ledgerBalance}`,
+  );
+  return [
+    {
+      key: 'ekstre-satirlari',
+      title: 'Banka ekstresi satırları',
+      sheet: 'Ekstre satırları',
+      subtitle,
+      columns: [
+        col('date', 'Tarih', 'date'),
+        col('description', 'Açıklama', 'text', 44),
+        col('reference', 'Referans', 'text', 18),
+        col('amount', `Tutar (${cur})`, 'money'),
+        col('status', 'Durum', 'text', 14),
+        col('entryNo', 'Fiş no', 'text', 18),
+        col('txnNo', 'Hareket no', 'text', 18),
+        col('note', 'Not', 'text', 30),
+      ],
+      rows: d.lines.map((l) => ({
+        date: l.txnDate,
+        description: l.description,
+        reference: l.reference,
+        amount: l.amount,
+        status: BANK_STATUS_LABEL[l.status],
+        entryNo: l.match?.entryNo ?? null,
+        txnNo: l.match?.txnNo ?? null,
+        note: l.ignoreReason,
+      })),
+      totals: { amount: sum(d.lines.map((l) => l.amount)).toFixed(4) },
+    },
+    {
+      key: 'eslesmemis-defter',
+      title: 'Eşleşmemiş defter kayıtları',
+      sheet: 'Eşleşmemiş defter',
+      subtitle,
+      columns: [
+        col('date', 'Tarih', 'date'),
+        col('entryNo', 'Fiş no', 'text', 18),
+        col('description', 'Açıklama', 'text', 44),
+        col('txnNo', 'Hareket no', 'text', 18),
+        col('party', 'Cari', 'text', 28),
+        col('amount', `Tutar (${cur})`, 'money'),
+      ],
+      rows: d.unmatchedLedger.map((c) => ({ date: c.entryDate, entryNo: c.entryNo, description: c.description, txnNo: c.txnNo, party: c.partyName, amount: c.amount })),
+      totals: { amount: sum(d.unmatchedLedger.map((c) => c.amount)).toFixed(4) },
+    },
+  ];
+}

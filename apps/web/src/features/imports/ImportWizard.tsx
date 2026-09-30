@@ -35,6 +35,7 @@ const STEPS = ['file', 'map', 'preview', 'done'] as const;
 const NEEDS_OFFSET: readonly ImportKind[] = ['party_openings', 'ledger_openings'];
 const NEEDS_DATE: readonly ImportKind[] = ['party_openings', 'stock_openings', 'ledger_openings'];
 const NEEDS_SKIP: readonly ImportKind[] = ['parties', 'items'];
+const NEEDS_CLOSING: readonly ImportKind[] = ['bank_statement'];
 /** Önizleme tablosunda gösterilen en çok satır (yanıt zaten tüm satırları taşır; DOM'u şişirmemek için). */
 const SHOW_ROWS = 500;
 
@@ -52,6 +53,10 @@ interface Props {
   kind: ImportKind;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Her isteğe eklenen sabit seçenekler (örn. ekstrenin banka hesabı). */
+  fixedOptions?: Record<string, unknown>;
+  /** Önceki içe aktarmada kullanılan eşleme (alan → sütun başlığı): başlık aynıysa öneri yerine kullanılır. */
+  previousMapping?: Record<string, string>;
   /** Başarılı içe aktarmadan sonra (sorgular zaten yenilenir). */
   onDone?: (result: ImportCommitResult) => void;
 }
@@ -61,7 +66,7 @@ interface Props {
  * eşlenmiş satırlar yeniden gönderilir. Ön izleme ve gerçek içe aktarma aynı doğrulamayı çalıştırır ve tek bir
  * hata bile varsa hiçbir kayıt yazılmaz.
  */
-export function ImportWizard({ kind, open, onOpenChange, onDone }: Props) {
+export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousMapping, onDone }: Props) {
   const { t } = useTranslation();
   const { company, call } = useCompanyApi();
   const qc = useQueryClient();
@@ -80,6 +85,7 @@ export function ImportWizard({ kind, open, onOpenChange, onDone }: Props) {
   const [openingDate, setOpeningDate] = useState(`${todayIso().slice(0, 4)}-01-01`);
   const [offsetAccountId, setOffsetAccountId] = useState('');
   const [plugDifference, setPlugDifference] = useState(true);
+  const [closingBalance, setClosingBalance] = useState('');
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [filter, setFilter] = useState<'all' | 'error' | 'skip'>('all');
   const [result, setResult] = useState<ImportCommitResult | null>(null);
@@ -104,6 +110,7 @@ export function ImportWizard({ kind, open, onOpenChange, onDone }: Props) {
     setPreview(null);
     setFilter('all');
     setResult(null);
+    setClosingBalance('');
     if (fileInput.current) fileInput.current.value = '';
   };
   const close = (o: boolean) => {
@@ -112,7 +119,15 @@ export function ImportWizard({ kind, open, onOpenChange, onDone }: Props) {
   };
 
   const options = (): Record<string, unknown> => ({
+    ...fixedOptions,
     numberFormat,
+    ...(NEEDS_CLOSING.includes(kind)
+      ? {
+          fileName,
+          ...(closingBalance.trim() ? { closingBalance: closingBalance.trim() } : {}),
+          mapping: Object.fromEntries(fields.flatMap((f) => (mapping[f.key] === null || mapping[f.key] === undefined ? [] : [[f.key, parsed?.headers[mapping[f.key]!] ?? '']]))),
+        }
+      : {}),
     ...(NEEDS_SKIP.includes(kind) ? { skipDuplicates } : {}),
     ...(NEEDS_DATE.includes(kind) ? { openingDate } : {}),
     ...(NEEDS_OFFSET.includes(kind) && offsetAccountId ? { offsetAccountId } : {}),
@@ -141,7 +156,13 @@ export function ImportWizard({ kind, open, onOpenChange, onDone }: Props) {
     try {
       const res = await call<ImportParseResult>(`/api/imports/${kind}/parse`, { method: 'POST', body: { fileName: name, contentBase64: b64, sheet } });
       setParsed(res);
-      setMapping(res.suggestedMapping);
+      // Önceki içe aktarmadaki eşleme (başlık aynıysa) önerinin önüne geçer
+      const remembered = { ...res.suggestedMapping };
+      for (const [key, header] of Object.entries(previousMapping ?? {})) {
+        const idx = res.headers.indexOf(header);
+        if (idx >= 0 && key in remembered) remembered[key] = idx;
+      }
+      setMapping(remembered);
       setNumberFormat(res.suggestedNumberFormat);
       setStep('map');
     } catch (e) {
@@ -188,7 +209,8 @@ export function ImportWizard({ kind, open, onOpenChange, onDone }: Props) {
   // --- Eşleme adımı doğrulaması --------------------------------------------------------------------------
   const missingRequired = fields.filter((f) => f.required && (mapping[f.key] === null || mapping[f.key] === undefined));
   const openingAmountMissing = kind === 'party_openings' && ['debit', 'credit', 'amount'].every((k) => mapping[k] === null || mapping[k] === undefined);
-  const canPreview = !missingRequired.length && !openingAmountMissing && (!NEEDS_DATE.includes(kind) || openingDate !== '');
+  const bankAmountMissing = kind === 'bank_statement' && ['amount', 'moneyIn', 'moneyOut'].every((k) => mapping[k] === null || mapping[k] === undefined);
+  const canPreview = !missingRequired.length && !openingAmountMissing && !bankAmountMissing && (!NEEDS_DATE.includes(kind) || openingDate !== '');
 
   const runPreview = async () => {
     setBusy(true);
@@ -412,11 +434,13 @@ export function ImportWizard({ kind, open, onOpenChange, onDone }: Props) {
             </Table>
           </TableWrap>
 
-          {(missingRequired.length > 0 || openingAmountMissing) && (
+          {(missingRequired.length > 0 || openingAmountMissing || bankAmountMissing) && (
             <Callout tone="warning">
               {missingRequired.length > 0
                 ? t('imports.map.requiredMissing', { fields: missingRequired.map((f) => f.label).join(', ') })
-                : t('imports.map.openingAmountMissing')}
+                : bankAmountMissing
+                  ? t('imports.map.bankAmountMissing')
+                  : t('imports.map.openingAmountMissing')}
             </Callout>
           )}
 
@@ -435,6 +459,11 @@ export function ImportWizard({ kind, open, onOpenChange, onDone }: Props) {
               {NEEDS_DATE.includes(kind) && (
                 <Field label={t('imports.map.openingDate')} hint={t('imports.map.openingDateHint')} required>
                   {(id) => <Input id={id} type="date" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} />}
+                </Field>
+              )}
+              {NEEDS_CLOSING.includes(kind) && (
+                <Field label={t('imports.map.closingBalance')} hint={t('imports.map.closingBalanceHint')}>
+                  {(id) => <Input id={id} inputMode="decimal" value={closingBalance} onChange={(e) => setClosingBalance(e.target.value)} placeholder="0,00" />}
                 </Field>
               )}
               {NEEDS_OFFSET.includes(kind) && (

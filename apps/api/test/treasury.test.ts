@@ -598,8 +598,10 @@ describe('kasa ve banka', async () => {
     expect((await open(c, cust.id)).items).toHaveLength(0);
 
     await fund(c, ids, cash.id, '100');
-    const pay = (d: number) => txn(c, { type: 'payment', date: day(4, d), accountId: cash.id, amount: '80', partyId: sup.id });
-    const [p1, p2] = await Promise.all([pay(1), pay(2)]);
+    // Aynı tarihli iki çıkış: bakiye denetimi işlem tarihine kadarki hareketlere bakar (geriye dönük tarihte sonrası denetlenmez),
+    // bu yüzden farklı tarihler isteklerin işlenme sırasına göre sonucu değiştirirdi (test kararsızlığı)
+    const pay = () => txn(c, { type: 'payment', date: day(4, 1), accountId: cash.id, amount: '80', partyId: sup.id });
+    const [p1, p2] = await Promise.all([pay(), pay()]);
     expect([p1.statusCode, p2.statusCode].sort()).toEqual([201, 422]);
     expect((p1.statusCode === 422 ? p1 : p2).json().error.code).toBe('CASH_INSUFFICIENT');
     expect(await balanceOf(c, cash.id)).toMatchObject({ balance: '20.0000' });

@@ -94,3 +94,9 @@ Sistem kişi adı, e-posta, ileride kimlik/pasaport ve bordro verisi işleyecekt
 - **Mizan açılışı** cari kontrol (120/320…) ve stok (150–157) hesaplarını bilerek reddeder; bu hesapların bakiyesi cari ve stok açılışından girilmelidir (alt defter ↔ hesap ayrışmasın). Yıl sonu kapanış/devir akışı henüz yoktur (M9).
 - Açılış yevmiyeleri kaynaksızdır ve normal ters kayıtla geri alınabilir; aynı dosyanın iki kez yüklenmesi engellenmez.
 - **Dosya biçimi:** eski Windows CSV'leri (windows-1254) okunur; bankaya/muhasebe programına özgü biçimler doğrulanmamıştır, sütunlar kullanıcı tarafından eşlenir.
+
+## 9. Banka ekstresi
+
+- Banka ekstresi biçimleri (sütun adları, borç/alacak yönü, bakiye sütunu) bankadan bankaya değişir ve **bankaya özgü olarak doğrulanmamıştır**; sütunlar kullanıcı tarafından eşlenir. Ekstrede Borç = çıkan, Alacak = giren varsayılır (banka defteri görünümü); bankanız tersini kullanıyorsa Tutar + Yön ya da işaretli tutar sütununu kullanın.
+- Eşleştirme önerileri (tutar birebir, tarih ±3 gün) yalnızca yardımcıdır; “kesin” öneriler dahil hiçbir eşleşme yasal mutabakat belgesi yerine geçmez. Mali müşavirinizle banka mutabakat sürecini ve saklama biçimini teyit edin.
+- Ekstre dosyası sunucuda saklanmaz; yalnızca satırları (tarih, tutar, açıklama, referans) veritabanına yazılır ve eşleşmiş satırlar denetim izinde tutulur.

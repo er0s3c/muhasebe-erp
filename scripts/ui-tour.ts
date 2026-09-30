@@ -227,12 +227,43 @@ async function main() {
   await settle(page, 400);
   await shot(page, '58-stok-mutabakat-bekleyen');
 
+  const csvFile = (text: string) => ({ name: 'dosya.csv', mimeType: 'text/csv', buffer: Buffer.from(text, 'utf8') });
+  const wizard = page.getByRole('dialog');
+
   // Kasa ve banka: hesaplar, ekstre, hareketler, tahsilat/ödeme/döviz formları
   await go('/treasury/accounts', '60-kasa-banka-hesaplari', 'Kasa ve banka hesapları');
   await page.getByRole('row', { name: /KTB GBP Hesabı/ }).click();
   await page.getByRole('heading', { name: 'KTB GBP Hesabı', level: 1 }).waitFor();
   await settle(page, 700);
   await shot(page, '61-hesap-ekstresi-gbp');
+  // Banka ekstresi ve mutabakat (TL banka hesabı)
+  await go('/treasury/accounts', '89a-kasa-banka-hesaplari', 'Kasa ve banka hesapları');
+  await page.getByRole('row', { name: /KTB TL Vadesiz/ }).click();
+  await page.getByRole('heading', { name: 'KTB TL Vadesiz', level: 1 }).waitFor();
+  await page.getByRole('tab', { name: 'Banka ekstresi' }).click();
+  await page.getByRole('heading', { name: 'Banka ekstresi ve mutabakat' }).waitFor();
+  await settle(page, 700);
+  await shot(page, '89-banka-mutabakat-acik');
+  await page.getByRole('tab', { name: /^Eşleşen/ }).click();
+  await settle(page, 300);
+  await shot(page, '90-banka-mutabakat-eslesen');
+  await page.getByRole('tab', { name: /^Açık/ }).click();
+  await page.getByRole('row', { name: /Hesap işletim ücreti/ }).getByRole('button', { name: 'Hareket oluştur' }).click();
+  await wizard.getByText('Ekstre satırından hareket oluşturuluyor').waitFor();
+  await settle(page, 500);
+  await shot(page, '91-ekstre-satirindan-hareket');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Ekstre içe aktar' }).first().click();
+  await wizard.getByText('Dosyanızı seçin').waitFor();
+  await wizard.locator('input[type=file]').setInputFiles(csvFile('İşlem Tarihi;Açıklama;Dekont No;Borç;Alacak;Bakiye\n01.10.2026;Havale — kira;D-1;1.500,00;;10.000,00\n02.10.2026;EFT gelen;D-2;;750,00;10.750,00\n'));
+  await wizard.getByText('Sütunları eşleyin').waitFor();
+  await page.waitForTimeout(300);
+  await shot(page, '92-ekstre-esleme');
+  await wizard.getByRole('button', { name: 'Ön izleme' }).click();
+  await wizard.getByText('Henüz hiçbir kayıt yazılmadı').waitFor();
+  await settle(page, 300);
+  await shot(page, '93-ekstre-onizleme');
+  await page.keyboard.press('Escape');
   await go('/treasury/transactions', '62-kasa-banka-hareketleri', 'Kasa ve banka hareketleri');
   await page.getByRole('row', { name: /Seramik faturası \(GBP\) tahsilatı/ }).click();
   await page.getByRole('dialog').getByText('TAH-').first().waitFor();
@@ -320,8 +351,6 @@ async function main() {
   if (screenViewport) await page.setViewportSize(screenViewport);
 
   // İçe aktarma sihirbazı ve açılış bakiyeleri
-  const csvFile = (text: string) => ({ name: 'dosya.csv', mimeType: 'text/csv', buffer: Buffer.from(text, 'utf8') });
-  const wizard = page.getByRole('dialog');
   await go('/parties', '80-cariler-ice-aktar-dugmesi', 'Cari hesaplar');
   await page.getByRole('button', { name: 'İçe aktar' }).click();
   await wizard.getByText('Dosyanızı seçin').waitFor();

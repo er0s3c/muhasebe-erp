@@ -300,6 +300,13 @@ export async function cancelTreasuryTransaction(tx: Tx, ctx: LedgerCtx, id: stri
   const [txn] = await tx.select().from(treasuryTransactions).where(eq(treasuryTransactions.id, id)).for('update');
   if (!txn) throw notFound('Kasa/banka hareketi');
   if (txn.status === 'cancelled') throw unprocessable('Hareket zaten iptal edilmiş', 'TREASURY_ALREADY_CANCELLED');
+  // Banka ekstresiyle eşleşmiş hareket iptal edilemez: önce eşleşme kaldırılır (mutabakat sessizce bozulmasın)
+  const reconciled = await tx.execute(sql`
+    select 1 from bank_statement_lines b join journal_lines l on l.id = b.journal_line_id
+    where b.status = 'matched' and l.entry_id = ${txn.journalEntryId} limit 1`);
+  if (reconciled.rows.length > 0) {
+    throw unprocessable('Bu hareketin banka satırı ekstreyle eşleşmiş; iptal etmeden önce Banka ekstresi sekmesinden eşleşmeyi kaldırın', 'TXN_RECONCILED');
+  }
 
   const date = input.date ?? todayIso();
   if (date < txn.txnDate) throw unprocessable('İptal tarihi hareket tarihinden önce olamaz', 'CANCEL_DATE_BEFORE_TXN');

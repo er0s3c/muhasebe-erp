@@ -9,6 +9,7 @@ import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
+import { SegmentedTabs } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
@@ -19,6 +20,7 @@ import { useCompany } from '../../lib/session';
 import type { TreasuryAccount, TreasuryStatementData, TreasuryTxnType } from '../../lib/types';
 import { AccountFormSheet } from './AccountFormSheet';
 import { TREASURY_INVALIDATE, TxnTypeBadge } from './common';
+import { ReconciliationTab } from './ReconciliationTab';
 import { TransactionDetailSheet } from './TransactionDetailSheet';
 import { TransactionSheet } from './TransactionSheet';
 
@@ -43,6 +45,7 @@ export function AccountDetailPage() {
   );
 
   const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState<'statement' | 'bank'>('statement');
   const [newType, setNewType] = useState<TreasuryTxnType | null>(null);
   const [openTxn, setOpenTxn] = useState<string | null>(null);
   const toggleActive = useCMutation((v: { isActive: boolean }, call) => call(`/api/treasury/accounts/${id}`, { method: 'PATCH', body: v }), TREASURY_INVALIDATE);
@@ -153,6 +156,22 @@ export function AccountDetailPage() {
         </div>
       )}
 
+      {a.kind === 'bank' && (
+        <SegmentedTabs
+          className="mb-5"
+          value={tab}
+          onChange={setTab}
+          items={[
+            { key: 'statement', label: t('treasury.recon.tabs.statement') },
+            { key: 'bank', label: t('treasury.recon.tabs.bank') },
+          ]}
+        />
+      )}
+
+      {a.kind === 'bank' && tab === 'bank' ? (
+        <ReconciliationTab account={a} />
+      ) : (
+        <>
       <div className="mb-4 flex flex-wrap items-end gap-4">
         <h2 className="mr-auto text-[15px]">{t('treasury.detail.statement')}</h2>
         <Field label={t('common.from')}>{(fid) => <Input id={fid} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />}</Field>
@@ -236,6 +255,8 @@ export function AccountDetailPage() {
             </tfoot>
           </Table>
         </TableWrap>
+      )}
+        </>
       )}
 
       <AccountFormSheet open={editing} onOpenChange={setEditing} account={a} onSaved={() => undefined} />
