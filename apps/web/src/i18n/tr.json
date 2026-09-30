@@ -102,9 +102,11 @@
       "stock": "Stok",
       "invoices": "Fatura ve irsaliye",
       "treasury": "Kasa ve banka",
+      "construction": "Şantiye",
       "reports": "Raporlar"
     },
     "dashboard": "Genel bakış",
+    "projects": "Projeler",
     "journal": "Yevmiye kayıtları",
     "accounts": "Hesap planı",
     "trialBalance": "Mizan",

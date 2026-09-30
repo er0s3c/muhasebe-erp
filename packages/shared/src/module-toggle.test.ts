@@ -44,7 +44,7 @@ describe('modül kaydı bütünlüğü', () => {
 describe('resolveEnabledModules: gereksinim kapanışı', () => {
   it('muhasebe kapatılırsa ona bağlı tüm modüller kapanır (ham SQL ile yazılmış istisnaya karşı savunma)', () => {
     const enabled = resolveEnabledModules('CONSTRUCTION', off('core.ledger'));
-    for (const k of ['core.ledger', 'core.parties', 'core.inventory', 'core.invoices', 'core.treasury']) expect(enabled.has(k), k).toBe(false);
+    for (const k of ['core.ledger', 'core.parties', 'core.inventory', 'core.invoices', 'core.treasury', 'construction.projects']) expect(enabled.has(k), k).toBe(false);
     expect(enabled.has('core.settings')).toBe(true);
     expect(enabled.has('core.dashboard')).toBe(true);
   });
@@ -103,7 +103,8 @@ describe('describeModules', () => {
     expect(by['core.inventory']).toMatchObject({ enabled: true, override: null, dependents: ['core.invoices'] });
     expect(by['core.inventory']!.blocked).toEqual({ reason: 'REQUIRED_BY', modules: ['core.invoices'] });
     expect(by['core.settings']).toMatchObject({ locked: true, blocked: { reason: 'LOCKED', modules: [] } });
-    expect(by['construction.projects']).toMatchObject({ enabled: false, sectorDefault: false, blocked: { reason: 'PLANNED' } });
+    expect(by['construction.projects']).toMatchObject({ enabled: true, sectorDefault: true, blocked: null });
+    expect(by['retail.pos']).toMatchObject({ enabled: false, sectorDefault: false, blocked: { reason: 'PLANNED' } });
     expect(list).toHaveLength(MODULES.length);
   });
 });

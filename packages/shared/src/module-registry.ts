@@ -48,7 +48,9 @@ export const MODULES: readonly ModuleDef[] = [
     labelKey: 'modules.constructionProjects',
     label: 'Şantiye ve projeler',
     sectors: ['CONSTRUCTION'],
-    status: 'planned',
+    status: 'available',
+    // Maliyet boyutu yevmiye satırlarında taşınır; proje raporu defterden türer
+    requires: ['core.ledger'],
   },
   {
     key: 'retail.pos',
@@ -59,7 +61,16 @@ export const MODULES: readonly ModuleDef[] = [
   },
 ];
 
-export type NavGroupKey = 'overview' | 'parties' | 'invoices' | 'treasury' | 'stock' | 'accounting' | 'reports' | 'settings';
+export type NavGroupKey =
+  | 'overview'
+  | 'parties'
+  | 'invoices'
+  | 'treasury'
+  | 'stock'
+  | 'construction'
+  | 'accounting'
+  | 'reports'
+  | 'settings';
 
 export interface NavItemDef {
   key: string;
@@ -78,6 +89,7 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
   { key: 'invoices', labelKey: 'nav.groups.invoices' },
   { key: 'treasury', labelKey: 'nav.groups.treasury' },
   { key: 'stock', labelKey: 'nav.groups.stock' },
+  { key: 'construction', labelKey: 'nav.groups.construction' },
   { key: 'accounting', labelKey: 'nav.groups.accounting' },
   { key: 'reports', labelKey: 'nav.groups.reports' },
   { key: 'settings', labelKey: 'nav.groups.settings' },
@@ -217,6 +229,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'stock',
     module: 'core.inventory',
     permission: 'inventory.read',
+  },
+  {
+    key: 'projects',
+    labelKey: 'nav.projects',
+    path: '/projects',
+    icon: 'hard-hat',
+    group: 'construction',
+    module: 'construction.projects',
+    permission: 'projects.read',
   },
   {
     key: 'journal',

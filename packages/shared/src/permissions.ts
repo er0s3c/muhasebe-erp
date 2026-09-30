@@ -24,6 +24,9 @@ export const PERMISSIONS = [
   'treasury.post',
   'reports.read',
   'data.export',
+  'projects.read',
+  'projects.manage',
+  'projects.budget',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -60,6 +63,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'treasury.post',
     'reports.read',
     'data.export',
+    'projects.read',
+    'projects.manage',
+    'projects.budget',
   ],
   // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
   // Faturayı taslak olarak hazırlar; muhasebeleştirmeyi (invoices.post) muhasebeci yapar.
@@ -77,8 +83,18 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   // Şantiye sorumlusu: malzeme sarfı/transferi/sayım girer, stok kartı açmaz; mal kabul (alış irsaliyesi)
   // ve sevk irsaliyesi işler, faturaya dokunmaz.
-  site_manager: ['settings.read', 'inventory.read', 'inventory.move', 'deliveries.read', 'deliveries.manage', 'deliveries.post'],
-  viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'deliveries.read', 'treasury.read', 'reports.read'],
+  // Proje: şantiye şefi proje/iş kalemi/ilerleme girer; bütçeyi (projects.budget) muhasebe/yönetim onaylar.
+  site_manager: [
+    'settings.read',
+    'inventory.read',
+    'inventory.move',
+    'deliveries.read',
+    'deliveries.manage',
+    'deliveries.post',
+    'projects.read',
+    'projects.manage',
+  ],
+  viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'deliveries.read', 'treasury.read', 'reports.read', 'projects.read'],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {

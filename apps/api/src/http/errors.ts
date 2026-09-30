@@ -117,6 +117,13 @@ export function errorHandler(
       .send({ error: { code: 'LICENSE_STATE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP09') {
+    // Proje kuralları (yaprak olmayan iş kalemi, kapalı projeye kayıt, değiştirilemez onaylı bütçe vb.)
+    void reply
+      .status(422)
+      .send({ error: { code: 'PROJECT_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

@@ -61,7 +61,13 @@ describe('module registry', () => {
   });
 
   it('planlanan modüller henüz kimseye açılmaz', () => {
-    expect(resolveEnabledModules('CONSTRUCTION').has('construction.projects')).toBe(false);
+    expect(resolveEnabledModules('RETAIL_MARKET').has('retail.pos')).toBe(false);
+  });
+
+  it('proje modülü yalnızca inşaat şirketine açılır', () => {
+    expect(resolveEnabledModules('CONSTRUCTION').has('construction.projects')).toBe(true);
+    expect(resolveEnabledModules('COMMERCE').has('construction.projects')).toBe(false);
+    expect(resolveEnabledModules('RETAIL_MARKET').has('construction.projects')).toBe(false);
   });
 
   it('sektör yalıtımı: inşaatta market modülü yok, markette inşaat modülü yok', () => {

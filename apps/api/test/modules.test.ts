@@ -24,9 +24,11 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     expect(m['core.ledger'].dependents).toEqual(expect.arrayContaining(['core.parties', 'core.inventory', 'core.invoices', 'core.treasury']));
     expect(m['core.ledger'].blocked).toMatchObject({ reason: 'REQUIRED_BY' });
     expect(m['core.dashboard']).toMatchObject({ locked: true, blocked: { reason: 'LOCKED' } });
-    expect(m['construction.projects']).toMatchObject({ status: 'planned', enabled: false, blocked: { reason: 'PLANNED' } });
-    // Sektöre uymayan modül (inşaat şirketinde POS) açılamaz
-    expect(m['retail.pos']).toMatchObject({ enabled: false, sectorDefault: false });
+    // Proje modülü inşaat şirketinde açık; yalnızca muhasebeye bağlı
+    expect(m['construction.projects']).toMatchObject({ status: 'available', enabled: true, sectorDefault: true, requires: ['core.ledger'] });
+    expect(m['core.ledger'].dependents).toContain('construction.projects');
+    // Planlı ve sektöre uymayan modül (inşaat şirketinde POS) açılamaz
+    expect(m['retail.pos']).toMatchObject({ enabled: false, sectorDefault: false, blocked: { reason: 'PLANNED' } });
   });
 
   it('faturayı kapatınca menü grubu ve uçlar kalkar; açınca geri gelir ve istisna satırı silinir', async () => {
@@ -96,13 +98,15 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
       expect(r.statusCode).toBe(422);
       expect(r.json().error.code).toBe('MODULE_LOCKED');
     }
-    const planned = await put(c, 'construction.projects', true);
+    // Planlı modül (POS): henüz kullanıma açılmadı. Sektöre uymayan planlı modülde planlı kuralı önce gelir.
+    const planned = await put(c, 'retail.pos', true);
     expect(planned.statusCode).toBe(422);
     expect(planned.json().error.code).toBe('MODULE_PLANNED');
-    // Sektöre uymayan planlı modül: planlı kuralı önce gelir (SECTOR_MISMATCH birim testinde, özel kayıtla sınanır)
-    const mismatch = await put(c, 'retail.pos', true);
+    // Sektöre uymayan kullanılabilir modül: ticaret şirketinde proje modülü açılamaz
+    const commerce = await setup('RetSektor', 'COMMERCE');
+    const mismatch = await put(commerce.c, 'construction.projects', true);
     expect(mismatch.statusCode).toBe(422);
-    expect(mismatch.json().error.code).toBe('MODULE_PLANNED');
+    expect(mismatch.json().error.code).toBe('MODULE_SECTOR_MISMATCH');
     const unknown = await put(c, 'core.nope', false);
     expect(unknown.statusCode).toBe(404);
     // Gövde şeması

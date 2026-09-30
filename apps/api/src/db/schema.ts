@@ -507,6 +507,196 @@ export const journalEntries = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Şantiye / proje (Faz B1): proje, iş kırılımı (WBS), bütçe revizyonları, ilerleme.
+// Gerçekleşen maliyet ayrı tutulmaz: yevmiye satırlarındaki proje/iş kalemi boyutundan türer.
+// ---------------------------------------------------------------------------
+
+export const projects = pgTable(
+  'projects',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    /** 'own': kendi projesi; 'contract': işverene yapılan iş (işveren carisi zorunlu). */
+    kind: text().notNull().default('own'),
+    status: text().notNull().default('planned'),
+    clientPartyId: uuid(),
+    startDate: date({ mode: 'string' }),
+    endDate: date({ mode: 'string' }),
+    location: text(),
+    description: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('projects_company_code_uq').on(t.companyId, t.code),
+    unique('projects_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'projects_client_fk',
+      columns: [t.clientPartyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    index('projects_status_idx').on(t.companyId, t.status),
+    check('projects_kind_ck', sql`${t.kind} in ('own','contract')`),
+    check('projects_status_ck', sql`${t.status} in ('planned','active','on_hold','completed','cancelled')`),
+    check(
+      'projects_client_ck',
+      sql`(${t.kind} = 'contract' and ${t.clientPartyId} is not null) or (${t.kind} = 'own' and ${t.clientPartyId} is null)`,
+    ),
+    check('projects_dates_ck', sql`${t.startDate} is null or ${t.endDate} is null or ${t.endDate} >= ${t.startDate}`),
+  ],
+);
+
+/** İş kırılımı ağacı; maliyet yalnızca yaprak düğümlere yazılır (tetikleyici denetler). */
+export const projectWbs = pgTable(
+  'project_wbs',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    projectId: uuid().notNull(),
+    parentId: uuid(),
+    code: text().notNull(),
+    name: text().notNull(),
+    sortOrder: integer().notNull().default(0),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('project_wbs_project_code_uq').on(t.projectId, t.code),
+    unique('project_wbs_id_company_uq').on(t.id, t.companyId),
+    // Satırlar (iş kalemi, proje) çiftiyle bağlanır: iş kalemi etiketlenen projeye ait olmak zorundadır
+    unique('project_wbs_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'project_wbs_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'project_wbs_parent_fk',
+      columns: [t.parentId, t.projectId],
+      foreignColumns: [t.id, t.projectId],
+    }),
+    index('project_wbs_parent_idx').on(t.projectId, t.parentId),
+    check('project_wbs_parent_ck', sql`${t.parentId} is null or ${t.parentId} <> ${t.id}`),
+  ],
+);
+
+/** Bütçe revizyonu: taslak → onaylı (değiştirilemez) → yenisi onaylanınca 'superseded'. Yürürlükteki = en yüksek numaralı onaylı. */
+export const projectBudgets = pgTable(
+  'project_budgets',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    projectId: uuid().notNull(),
+    revisionNo: integer().notNull(),
+    status: text().notNull().default('draft'),
+    title: text(),
+    approvedAt: timestamp({ withTimezone: true }),
+    approvedBy: uuid().references(() => users.id),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('project_budgets_revision_uq').on(t.projectId, t.revisionNo),
+    unique('project_budgets_id_company_uq').on(t.id, t.companyId),
+    unique('project_budgets_id_project_uq').on(t.id, t.projectId),
+    // Projede en çok bir taslak revizyon
+    uniqueIndex('project_budgets_draft_uq')
+      .on(t.projectId)
+      .where(sql`${t.status} = 'draft'`),
+    foreignKey({
+      name: 'project_budgets_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    check('project_budgets_status_ck', sql`${t.status} in ('draft','approved','superseded')`),
+    check(
+      'project_budgets_approved_ck',
+      sql`(${t.status} = 'draft' and ${t.approvedAt} is null) or (${t.status} <> 'draft' and ${t.approvedAt} is not null)`,
+    ),
+    check('project_budgets_rev_ck', sql`${t.revisionNo} >= 1`),
+  ],
+);
+
+export const projectBudgetLines = pgTable(
+  'project_budget_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    budgetId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    wbsId: uuid().notNull(),
+    /** Şirket defter para biriminde, 2 ondalık. */
+    amount: numeric({ precision: 19, scale: 2 }).notNull(),
+  },
+  (t) => [
+    unique('project_budget_lines_uq').on(t.budgetId, t.wbsId),
+    foreignKey({
+      name: 'project_budget_lines_budget_fk',
+      columns: [t.budgetId, t.projectId],
+      foreignColumns: [projectBudgets.id, projectBudgets.projectId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'project_budget_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'project_budget_lines_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('project_budget_lines_wbs_idx').on(t.wbsId),
+    check('project_budget_lines_amount_ck', sql`${t.amount} >= 0`),
+  ],
+);
+
+/** İş kalemi ilerleme kayıtları: yalnızca eklenir; asOf tarihine kadarki en son kayıt geçerlidir. */
+export const projectProgress = pgTable(
+  'project_progress',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    projectId: uuid().notNull(),
+    wbsId: uuid().notNull(),
+    asOfDate: date({ mode: 'string' }).notNull(),
+    percent: numeric({ precision: 5, scale: 2 }).notNull(),
+    /** Elle tamamlanmaya kalan maliyet tahmini (defter para birimi); boşsa formülle hesaplanır. */
+    etcOverride: numeric({ precision: 19, scale: 2 }),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: 'project_progress_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'project_progress_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('project_progress_wbs_idx').on(t.wbsId, t.asOfDate, t.createdAt),
+    check('project_progress_percent_ck', sql`${t.percent} between 0 and 100`),
+    check('project_progress_etc_ck', sql`${t.etcOverride} is null or ${t.etcOverride} >= 0`),
+  ],
+);
+
 export const journalLines = pgTable(
   'journal_lines',
   {
@@ -534,6 +724,10 @@ export const journalLines = pgTable(
     partyId: uuid(),
     /** Yaşlandırma vadeye göre yapılır; yoksa fiş tarihi kullanılır. */
     dueDate: date({ mode: 'string' }),
+    /** Proje boyutu (yalnızca gelir/gider/maliyet hesaplarında; tetikleyici denetler). Kayıttan sonra değişmez. */
+    projectId: uuid(),
+    /** Projenin yaprak iş kalemi. */
+    wbsId: uuid(),
   },
   (t) => [
     foreignKey({
@@ -551,6 +745,23 @@ export const journalLines = pgTable(
       columns: [t.partyId, t.companyId],
       foreignColumns: [parties.id, parties.companyId],
     }),
+    foreignKey({
+      name: 'journal_lines_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'journal_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    index('journal_lines_project_idx')
+      .on(t.companyId, t.projectId, t.wbsId)
+      .where(sql`${t.projectId} is not null`),
+    index('journal_lines_wbs_idx')
+      .on(t.wbsId)
+      .where(sql`${t.wbsId} is not null`),
+    check('journal_lines_wbs_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
     unique('journal_lines_entry_line_uq').on(t.entryId, t.lineNo),
     // Cari eşleştirmesi (party_allocations) satıra bileşik anahtarla bağlanır
     unique('journal_lines_id_company_uq').on(t.id, t.companyId),
@@ -749,9 +960,29 @@ export const stockMovements = pgTable(
     currencyCode: text().references(() => currencies.code),
     unitCost: unitCost(),
     fxRate: rate(),
+    /** Proje boyutu: yalnızca sarf/fire hareketlerinde (tetikleyici denetler). */
+    projectId: uuid(),
+    wbsId: uuid(),
   },
   (t) => [
     unique('stock_movements_seq_uq').on(t.seq),
+    foreignKey({
+      name: 'stock_movements_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'stock_movements_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    index('stock_movements_project_idx')
+      .on(t.projectId, t.wbsId)
+      .where(sql`${t.projectId} is not null`),
+    index('stock_movements_wbs_idx')
+      .on(t.wbsId)
+      .where(sql`${t.wbsId} is not null`),
+    check('stock_movements_wbs_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
     foreignKey({
       name: 'stock_movements_document_fk',
       columns: [t.documentId, t.companyId],
@@ -1155,9 +1386,29 @@ export const invoiceLines = pgTable(
     /** Kaydetme anında yazılır: irsaliye satırının bu satıra düşen değer ve maliyet düzeltmesi payı. */
     deliveryValue: money(),
     deliveryAdjust: money(),
+    /** Proje boyutu: yalnızca stoksuz alış/gider/alış iadesi satırında (net tarafa yazılır). */
+    projectId: uuid(),
+    wbsId: uuid(),
   },
   (t) => [
     unique('invoice_lines_uq').on(t.invoiceId, t.lineNo),
+    foreignKey({
+      name: 'invoice_lines_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'invoice_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    index('invoice_lines_project_idx')
+      .on(t.projectId, t.wbsId)
+      .where(sql`${t.projectId} is not null`),
+    index('invoice_lines_wbs_idx')
+      .on(t.wbsId)
+      .where(sql`${t.wbsId} is not null`),
+    check('invoice_lines_wbs_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
     unique('invoice_lines_id_company_uq').on(t.id, t.companyId),
     index('invoice_lines_item_idx').on(t.companyId, t.itemId),
     foreignKey({
