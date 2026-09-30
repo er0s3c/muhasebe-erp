@@ -194,11 +194,19 @@ export function buildOtherJournal(i: {
   treasury: { accountId: string; currency: string; amount: MoneyValue; baseValue: MoneyValue; rate: MoneyValue };
   counterAccountId: string;
   text: string;
+  /** Karşı hesap satırının proje boyutu (inşaat). */
+  projectId?: string | null;
+  wbsId?: string | null;
 }): AutoJournalLine[] {
   const o = { baseCurrency: i.baseCurrency };
   const tSide: Side = i.kind === 'receipt' ? 'debit' : 'credit';
   const cSide: Side = i.kind === 'receipt' ? 'credit' : 'debit';
   const treasury = makeLine(o, tSide, i.treasury.accountId, i.treasury.currency, i.treasury.amount, i.treasury.baseValue, { description: i.text });
   if (i.treasury.currency !== i.baseCurrency) treasury.fxRate = toDbRate(i.treasury.rate);
-  return [treasury, makeLine(o, cSide, i.counterAccountId, i.baseCurrency, i.treasury.baseValue, i.treasury.baseValue, { description: i.text })];
+  const counterExtra: Partial<AutoJournalLine> = {
+    description: i.text,
+    ...(i.projectId ? { projectId: i.projectId } : {}),
+    ...(i.wbsId ? { wbsId: i.wbsId } : {}),
+  };
+  return [treasury, makeLine(o, cSide, i.counterAccountId, i.baseCurrency, i.treasury.baseValue, i.treasury.baseValue, counterExtra)];
 }

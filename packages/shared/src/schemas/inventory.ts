@@ -183,6 +183,10 @@ export const stockLineSchema = z.object({
   /** Verilmezse hareket tarihindeki kayıtlı kur kullanılır. */
   fxRate: rateString.optional(),
   note: optionalText(200),
+  /** Proje boyutu (inşaat): yalnızca sarf (`issue`) ve fire (`waste`) satırlarında; tüketim/fire maliyeti projeye yazılır. */
+  projectId: uuid.optional(),
+  /** Projenin yaprak iş kalemi; projesiz verilemez. */
+  wbsId: uuid.optional(),
 });
 export type StockLineInput = z.infer<typeof stockLineSchema>;
 
@@ -208,6 +212,12 @@ export const createStockDocumentSchema = z
       ctx.addIssue({ code: 'custom', path: ['toWarehouseId'], message: 'Hedef depo yalnızca transferde kullanılır' });
     }
     doc.lines.forEach((line, i) => {
+      if (line.wbsId && !line.projectId) {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'wbsId'], message: 'İş kalemi için proje seçilmeli' });
+      }
+      if (line.projectId && doc.type !== 'issue' && doc.type !== 'waste') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'projectId'], message: 'Proje yalnızca malzeme sarfı ve fire satırlarında kullanılır' });
+      }
       if (inbound && line.unitCost === undefined) {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'unitCost'], message: 'Birim maliyet girilmeli' });
       }

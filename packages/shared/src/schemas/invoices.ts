@@ -130,6 +130,13 @@ export const invoiceLineSchema = z.object({
    * (mal irsaliyede zaten çıktı/girdi); yalnızca fatura ve yevmiye oluşur.
    */
   deliveryLineId: uuid.nullable().optional(),
+  /**
+   * Proje boyutu (inşaat): yalnızca alış, gider ve alış iadesi faturasının stoksuz (hizmet/serbest) satırında.
+   * Stoklu kalem projeye doğrudan değil, stoktan proje sarfı anında yazılır.
+   */
+  projectId: uuid.nullable().optional(),
+  /** Projenin yaprak iş kalemi; projesiz verilemez. */
+  wbsId: uuid.nullable().optional(),
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
 
@@ -162,6 +169,11 @@ function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx)
   if (doc.dueDate && doc.dueDate < doc.invoiceDate) {
     ctx.addIssue({ code: 'custom', path: ['dueDate'], message: 'Vade tarihi fatura tarihinden önce olamaz' });
   }
+  doc.lines.forEach((l, i) => {
+    if (l.wbsId && !l.projectId) {
+      ctx.addIssue({ code: 'custom', path: ['lines', i, 'wbsId'], message: 'İş kalemi için proje seçilmeli' });
+    }
+  });
   if (doc.type) {
     const meta = INVOICE_TYPE_META[doc.type];
     if (doc.returnOfId && !meta.isReturn) {
@@ -182,6 +194,9 @@ function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx)
       }
       if (l.deliveryLineId && !l.itemId) {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'itemId'], message: 'İrsaliyeye bağlı satırda stok kartı gerekli' });
+      }
+      if (l.projectId && doc.type !== 'purchase' && doc.type !== 'expense' && doc.type !== 'purchase_return') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'projectId'], message: 'Proje şimdilik yalnızca alış, gider ve alış iadesi faturası kalemlerine yazılır' });
       }
     });
   }

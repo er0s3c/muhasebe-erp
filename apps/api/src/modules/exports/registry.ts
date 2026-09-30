@@ -33,6 +33,8 @@ import {
   partyAgingTable,
   partyOpenItemsTable,
   partyStatementTable,
+  projectCostReportTable,
+  projectsSummaryTable,
   salesReportTable,
   stockStatusTable,
   trialBalanceTable,
@@ -105,6 +107,15 @@ export const EXPORTS: readonly ExportDef[] = [
     build: bankReconciliationTable,
     file: (q) => `banka-mutabakati-${q.from ?? 'baslangic'}_${q.to ?? todayIso()}`,
   }),
+  def({
+    key: 'project-cost-report',
+    module: 'construction.projects',
+    permission: 'projects.read',
+    schema: z.object({ projectId: uuid, asOf: isoDate }),
+    build: projectCostReportTable,
+    file: (q) => `proje-maliyet-${q.asOf}`,
+  }),
+  def({ key: 'projects-summary', module: 'construction.projects', permission: 'projects.read', schema: z.object({ asOf: isoDate }), build: projectsSummaryTable, file: asOf('proje-ozeti') }),
   def({ key: 'full-data', module: 'core.settings', permission: 'data.export', schema: fullDataQuerySchema, build: fullDataTables, file: () => `tum-veriler-${todayIso()}`, formats: ['xlsx'] }),
 ];
 

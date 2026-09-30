@@ -232,6 +232,8 @@ export async function postTreasuryTransaction(tx: Tx, ctx: LedgerCtx, input: Cre
         treasury: { accountId: from.accountId, currency: from.currencyCode, amount, baseValue, rate },
         counterAccountId: gl.id,
         text,
+        projectId: input.projectId,
+        wbsId: input.wbsId,
       }),
       itemLineIndex: [],
     };

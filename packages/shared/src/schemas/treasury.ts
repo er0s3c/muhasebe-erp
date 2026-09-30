@@ -110,6 +110,10 @@ export const createTreasuryTransactionSchema = z
     counterAmount: positiveMoney.optional(),
     /** Diğer tahsilat/ödeme: karşı muhasebe hesabı. */
     glAccountId: uuid.optional(),
+    /** Diğer tahsilat/ödeme: karşı hesap satırının proje boyutu (yalnızca gelir/gider/maliyet hesabıysa). */
+    projectId: uuid.optional(),
+    /** Projenin yaprak iş kalemi; projesiz verilemez. */
+    wbsId: uuid.optional(),
     /**
      * Kasa/banka para biriminin defter para birimine işlem kuru. Boşsa hareket tarihindeki kayıtlı kur.
      * Döviz alım-satımda yalnızca iki hesap da yabancıysa (hedef para birimi kuru) kullanılır.
@@ -145,6 +149,10 @@ export const createTreasuryTransactionSchema = z
     } else if (t.glAccountId) {
       issue('glAccountId', 'Karşı hesap yalnızca diğer tahsilat/ödemede kullanılır');
     }
+    if (t.projectId && t.type !== 'other_receipt' && t.type !== 'other_payment') {
+      issue('projectId', 'Proje yalnızca diğer tahsilat/ödemede kullanılır (cari ödemesinde maliyet faturada doğar)');
+    }
+    if (t.wbsId && !t.projectId) issue('wbsId', 'İş kalemi için proje seçilmeli');
   });
 export type CreateTreasuryTransactionInput = z.infer<typeof createTreasuryTransactionSchema>;
 

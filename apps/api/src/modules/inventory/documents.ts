@@ -17,6 +17,7 @@ import type { Tx } from '../../db/client';
 import { items, journalEntries, stockDocuments, stockMovements } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { reverseJournalEntry } from '../ledger/journal';
+import { validateDimensions } from '../projects/dimension';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
@@ -100,6 +101,8 @@ export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, he
         currencyCode: r.currencyCode ?? null,
         unitCost: r.unitCost ?? null,
         fxRate: r.fxRate ?? null,
+        projectId: r.projectId ?? null,
+        wbsId: r.wbsId ?? null,
       })),
     );
   }
@@ -113,6 +116,12 @@ export async function postStockDocument(tx: Tx, ctx: StockCtx, input: CreateStoc
   const itemIds = [...new Set(input.lines.map((l) => l.itemId))];
   const plannerItems = await loadStockableItems(tx, itemIds);
   const period = await requireOpenPeriod(tx, input.docDate);
+  // Proje/iş kalemi etiketleri (yalnızca etiketli satır varsa sorgu yapar)
+  await validateDimensions(
+    tx,
+    ctx.companyId,
+    input.lines.map((l, i) => ({ label: `Satır ${i + 1}`, projectId: l.projectId, wbsId: l.wbsId })),
+  );
 
   await lockItems(tx, itemIds);
   const states = await loadItemStates(tx, itemIds);
@@ -156,6 +165,16 @@ export async function postStockDocument(tx: Tx, ctx: StockCtx, input: CreateStoc
       planner.transfer(lineNo, line.itemId, warehouse.id, toWarehouse!.id, qty);
     } else {
       planner.issue(lineNo, line.itemId, warehouse.id, qty);
+    }
+  }
+  // Proje/iş kalemi (yalnızca sarf ve fire): çıkış satırlarına yazılır, yevmiyede tüketim/fire tarafı buna göre bölünür
+  if (input.type === 'issue' || input.type === 'waste') {
+    for (const r of planner.rows) {
+      const l = input.lines[r.lineNo - 1];
+      if (r.kind === 'qty' && l?.projectId) {
+        r.projectId = l.projectId;
+        r.wbsId = l.wbsId ?? null;
+      }
     }
   }
 
@@ -249,6 +268,9 @@ export async function reverseStockDocument(
     currencyCode: r.currencyCode,
     unitCost: r.unitCost,
     fxRate: r.fxRate,
+    // Ters hareket önceki proje etiketini nötrler
+    projectId: r.projectId,
+    wbsId: r.wbsId,
   }));
   const reversal = await insertDocument(
     tx,
@@ -305,6 +327,10 @@ interface LineRow extends Record<string, unknown> {
   currency_code: string | null;
   unit_cost: string | null;
   fx_rate: string | null;
+  project_id: string | null;
+  project_code: string | null;
+  wbs_id: string | null;
+  wbs_code: string | null;
 }
 
 interface DocHead extends Record<string, unknown> {
@@ -348,10 +374,13 @@ export async function getStockDocument(tx: Tx, id: string) {
 
   const rows = await tx.execute<LineRow>(sql`
     select m.line_no, m.kind, m.item_id, i.code as item_code, i.name as item_name, i.unit,
-           m.warehouse_id, w.name as warehouse_name, m.qty, m.value, m.currency_code, m.unit_cost, m.fx_rate
+           m.warehouse_id, w.name as warehouse_name, m.qty, m.value, m.currency_code, m.unit_cost, m.fx_rate,
+           m.project_id, pr.code as project_code, m.wbs_id, pw.code as wbs_code
     from stock_movements m
     join items i on i.id = m.item_id
     join warehouses w on w.id = m.warehouse_id
+    left join projects pr on pr.id = m.project_id
+    left join project_wbs pw on pw.id = m.wbs_id
     where m.document_id = ${id}
     order by m.line_no, m.seq`);
 
@@ -403,6 +432,10 @@ export async function getStockDocument(tx: Tx, id: string) {
       unitCost: primary.unit_cost,
       fxRate: primary.fx_rate,
       adjustment: adjustment ? adjustment.value : null,
+      projectId: primary.project_id,
+      projectCode: primary.project_code,
+      wbsId: primary.wbs_id,
+      wbsCode: primary.wbs_code,
     };
   });
   return { document, lines, totalValue: toDbAmount(total) };

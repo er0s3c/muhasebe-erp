@@ -18,6 +18,7 @@ import type { Tx } from '../../db/client';
 import { trContains } from '../../db/search';
 import { accounts, invoiceLines, invoices, items, parties, taxRates, warehouses } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
+import { validateDimensions } from '../projects/dimension';
 import { requireActiveWarehouse } from '../inventory/warehouses';
 import { checkDeliveryLinks } from './delivery-link';
 
@@ -46,6 +47,9 @@ export interface PreparedLine {
   sourceLineId: string | null;
   /** Faturalanan irsaliye satırı (satış/alış faturası); bağlı satır stok hareketi yapmaz. */
   deliveryLineId: string | null;
+  /** Proje boyutu (yalnızca stoksuz alış/gider/alış iadesi satırı). */
+  projectId: string | null;
+  wbsId: string | null;
   net: MoneyValue;
   vat: MoneyValue;
   gross: MoneyValue;
@@ -54,7 +58,18 @@ export interface PreparedLine {
 /** Kaydedilmiş satır girdisi (DB'den okunan ya da API'den gelen) — hazırlama ortak kullanır. */
 export type LineSource = Pick<
   InvoiceLineInput,
-  'itemId' | 'description' | 'quantity' | 'unit' | 'unitPrice' | 'discountPct' | 'vatCode' | 'accountId' | 'sourceLineId' | 'deliveryLineId'
+  | 'itemId'
+  | 'description'
+  | 'quantity'
+  | 'unit'
+  | 'unitPrice'
+  | 'discountPct'
+  | 'vatCode'
+  | 'accountId'
+  | 'sourceLineId'
+  | 'deliveryLineId'
+  | 'projectId'
+  | 'wbsId'
 >;
 
 export async function loadParty(tx: Tx, partyId: string, type: InvoiceType) {
@@ -96,6 +111,7 @@ export async function prepareLines(
   invoiceDate: string,
   lines: readonly LineSource[],
   vatIncluded: boolean,
+  companyId: string,
 ) {
   const meta = INVOICE_TYPE_META[type];
   const itemIds = [...new Set(lines.map((l) => l.itemId).filter((v): v is string => !!v))];
@@ -125,6 +141,17 @@ export async function prepareLines(
       if (!isStock) throw unprocessable(`${label}: irsaliyeye bağlı satırda stoklu mal kartı gerekli`, 'DELIVERY_LINK_ITEM');
       if (l.sourceLineId) throw unprocessable(`${label}: satır hem iadeye hem irsaliyeye bağlanamaz`, 'DELIVERY_LINK_TYPE');
     }
+    if (l.projectId || l.wbsId) {
+      if (!INVOICE_TYPE_META[type].isReturn && meta.side === 'sales') {
+        throw unprocessable(`${label}: proje şimdilik yalnızca alış, gider ve alış iadesi faturası kalemlerine yazılır`, 'PROJECT_INVOICE_TYPE');
+      }
+      if (type === 'sales_return') {
+        throw unprocessable(`${label}: proje şimdilik yalnızca alış, gider ve alış iadesi faturası kalemlerine yazılır`, 'PROJECT_INVOICE_TYPE');
+      }
+      if (isStock || l.deliveryLineId) {
+        throw unprocessable(`${label}: stoklu kalem projeye doğrudan yazılamaz; malzeme stoktan projeye sarf edilir`, 'PROJECT_ON_STOCK_LINE');
+      }
+    }
     if (l.vatCode && !rates.has(l.vatCode)) {
       throw unprocessable(`${label}: ${l.vatCode} KDV kodu ${invoiceDate} tarihinde geçerli değil`, 'VAT_CODE_INVALID');
     }
@@ -152,8 +179,16 @@ export async function prepareLines(
       accountId: l.accountId ?? null,
       sourceLineId: l.sourceLineId ?? null,
       deliveryLineId: l.deliveryLineId ?? null,
+      projectId: l.projectId ?? null,
+      wbsId: l.wbsId ?? null,
     };
   });
+  // Proje/iş kalemi etiketleri (yalnızca etiketli satır varsa sorgu yapar)
+  await validateDimensions(
+    tx,
+    companyId,
+    prepared.map((p) => ({ label: `Satır ${p.lineNo}`, projectId: p.projectId, wbsId: p.wbsId })),
+  );
 
   const totals = calcInvoice(
     prepared.map((p) => ({ quantity: p.quantity, unitPrice: p.unitPrice, discountPct: p.discountPct, vatRate: p.vatRate })),
@@ -254,7 +289,7 @@ type DraftInput = Omit<CreateInvoiceInput, 'type' | 'post'> | Omit<UpdateInvoice
 async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: DraftInput, id?: string) {
   const party = await loadParty(tx, input.partyId, type);
   const currency = input.currency ?? party.currencyCode;
-  const { lines, totals } = await prepareLines(tx, type, input.invoiceDate, input.lines, input.vatIncluded);
+  const { lines, totals } = await prepareLines(tx, type, input.invoiceDate, input.lines, input.vatIncluded, ctx.companyId);
   const original = await checkReturnLink(tx, type, party.id, input.returnOfId, lines);
   if (original) await checkReturnQuantities(tx, original.id, lines, id);
   await checkDeliveryLinks(tx, type, party.id, lines, id);
@@ -310,6 +345,8 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
       accountId: l.accountId,
       sourceLineId: l.sourceLineId,
       deliveryLineId: l.deliveryLineId,
+      projectId: l.projectId,
+      wbsId: l.wbsId,
     })),
   );
   return invoiceId;
@@ -401,6 +438,12 @@ interface LineRowOut extends Record<string, unknown> {
   deliveryNoteId: string | null;
   deliveryNoteNo: string | null;
   deliveryLineNo: number | null;
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  wbsId: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
 }
 
 export async function getInvoice(tx: Tx, id: string) {
@@ -436,10 +479,14 @@ export async function getInvoice(tx: Tx, id: string) {
            l.account_id as "accountId", a.code as "accountCode", l.source_line_id as "sourceLineId",
            l.net_base as "netBase", l.vat_base as "vatBase", l.cost_value as "costValue",
            l.delivery_line_id as "deliveryLineId", dn.id as "deliveryNoteId", dn.note_no as "deliveryNoteNo",
-           dl.line_no as "deliveryLineNo"
+           dl.line_no as "deliveryLineNo",
+           l.project_id as "projectId", pr.code as "projectCode", pr.name as "projectName",
+           l.wbs_id as "wbsId", pw.code as "wbsCode", pw.name as "wbsName"
     from invoice_lines l
     left join items it on it.id = l.item_id
     left join accounts a on a.id = l.account_id
+    left join projects pr on pr.id = l.project_id
+    left join project_wbs pw on pw.id = l.wbs_id
     left join delivery_note_lines dl on dl.id = l.delivery_line_id
     left join delivery_notes dn on dn.id = dl.note_id
     where l.invoice_id = ${id}

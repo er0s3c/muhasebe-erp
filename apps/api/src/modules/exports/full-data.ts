@@ -262,5 +262,59 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     ),
   );
 
+  // Projeler (yalnızca projesi olan şirketlerde): proje, iş kırılımı ve bütçe revizyon satırları
+  const projectRows = await query(
+    'Projeler',
+    sql`select p.code, p.name, p.kind, p.status, c.name as client, p.start_date::text as start_date, p.end_date::text as end_date, p.location
+        from projects p left join parties c on c.id = p.client_party_id order by p.code`,
+  );
+  if (projectRows.length > 0) {
+    const PROJECT_KIND: Record<string, string> = { own: 'Kendi projesi', contract: 'İşverene yapılan iş' };
+    const PROJECT_STATUS: Record<string, string> = { planned: 'Planlanan', active: 'Aktif', on_hold: 'Beklemede', completed: 'Tamamlandı', cancelled: 'İptal' };
+    tables.push(
+      table(
+        'Projeler',
+        'Projeler',
+        [col('code', 'Kod', 'text', 12), col('name', 'Ad', 'text', 36), col('kind', 'Tür', 'text', 20), col('status', 'Durum', 'text', 12), col('client', 'İşveren', 'text', 28), col('start', 'Başlangıç', 'date'), col('end', 'Bitiş', 'date'), col('location', 'Konum', 'text', 28)],
+        projectRows.map((r) => ({ code: s(r.code), name: s(r.name), kind: PROJECT_KIND[String(r.kind)] ?? s(r.kind), status: PROJECT_STATUS[String(r.status)] ?? s(r.status), client: s(r.client), start: s(r.start_date), end: s(r.end_date), location: s(r.location) })),
+        'Proje kartları',
+      ),
+    );
+    const wbsRows = await query(
+      'İş kırılımı',
+      sql`select p.code as project, w.code, w.name, pw.code as parent, w.is_active
+          from project_wbs w join projects p on p.id = w.project_id left join project_wbs pw on pw.id = w.parent_id
+          order by p.code, w.code`,
+    );
+    tables.push(
+      table(
+        'İş kırılımı',
+        'İş kırılımı',
+        [col('project', 'Proje', 'text', 12), col('code', 'İş kalemi', 'text', 16), col('name', 'Ad', 'text', 36), col('parent', 'Üst iş kalemi', 'text', 16), col('active', 'Aktif', 'text', 8)],
+        wbsRows.map((r) => ({ project: s(r.project), code: s(r.code), name: s(r.name), parent: s(r.parent), active: bool(r.is_active) })),
+        'İş kırılımı ağacı',
+      ),
+    );
+    const budgetRows = await query(
+      'Proje bütçeleri',
+      sql`select p.code as project, b.revision_no, b.status, w.code as wbs, w.name as wbs_name, l.amount
+          from project_budget_lines l
+          join project_budgets b on b.id = l.budget_id
+          join projects p on p.id = b.project_id
+          join project_wbs w on w.id = l.wbs_id
+          order by p.code, b.revision_no, w.code`,
+    );
+    const BUDGET_STATUS: Record<string, string> = { draft: 'Taslak', approved: 'Onaylı', superseded: 'Devre dışı' };
+    tables.push(
+      table(
+        'Proje bütçeleri',
+        'Proje bütçeleri',
+        [col('project', 'Proje', 'text', 12), col('rev', 'Revizyon', 'int'), col('status', 'Durum', 'text', 12), col('wbs', 'İş kalemi', 'text', 16), col('name', 'Ad', 'text', 36), col('amount', `Bütçe (${b})`, 'money')],
+        budgetRows.map((r) => ({ project: s(r.project), rev: Number(r.revision_no), status: BUDGET_STATUS[String(r.status)] ?? s(r.status), wbs: s(r.wbs), name: s(r.wbs_name), amount: s(r.amount) })),
+        'Tüm bütçe revizyonları',
+      ),
+    );
+  }
+
   return tables;
 }

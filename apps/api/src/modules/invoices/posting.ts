@@ -108,8 +108,11 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       accountId: l.accountId,
       sourceLineId: l.sourceLineId,
       deliveryLineId: l.deliveryLineId,
+      projectId: l.projectId,
+      wbsId: l.wbsId,
     })),
     inv.vatIncluded,
+    ctx.companyId,
   );
   if (totals.gross.isZero()) throw unprocessable('Fatura tutarı sıfır olamaz', 'INVOICE_TOTAL_ZERO');
 
@@ -273,6 +276,8 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       accountId: l.accountId,
       isStock: l.isStock,
       costValue: costByLine.get(l.lineNo) ?? dec(0),
+      projectId: l.projectId,
+      wbsId: l.wbsId,
     })),
   });
 

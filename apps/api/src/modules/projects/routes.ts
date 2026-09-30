@@ -5,8 +5,11 @@ import {
   createProjectSchema,
   createWbsSchema,
   idParam,
+  projectCostReportQuerySchema,
   projectListQuerySchema,
   projectStatusSchema,
+  projectTransactionsQuerySchema,
+  projectsSummaryQuerySchema,
   putBudgetLinesSchema,
   todayIso,
   updateProjectSchema,
@@ -16,6 +19,7 @@ import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { approveBudget, createBudget, deleteBudget, getBudget, listBudgets, putBudgetLines } from './budgets';
 import { progressOverview, recordProgress } from './progress';
+import { projectCostReport, projectOptions, projectTransactions, projectsSummary } from './reports';
 import { createProject, deleteProject, getProject, listProjects, setProjectStatus, updateProject, type ProjectCtx } from './service';
 import { createWbs, deleteWbs, listWbs, updateWbs } from './wbs';
 
@@ -27,6 +31,24 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   const read = { module: 'construction.projects', permission: 'projects.read' } as const;
   const manage = { module: 'construction.projects', permission: 'projects.manage' } as const;
   const budget = { module: 'construction.projects', permission: 'projects.budget' } as const;
+
+  // --- Raporlar ve seçiciler (sabit yollar :id'den önce eşleşir) -------------
+
+  app.get('/api/projects/summary', tenantRoute(app, read, async ({ tx, req }) => projectsSummary(tx, projectsSummaryQuerySchema.parse(req.query).asOf ?? todayIso())));
+
+  app.get('/api/projects/options', tenantRoute(app, read, async ({ tx }) => projectOptions(tx)));
+
+  app.get(
+    '/api/projects/:id/cost-report',
+    tenantRoute(app, read, async ({ tx, req }) =>
+      projectCostReport(tx, idParam.parse(req.params).id, projectCostReportQuerySchema.parse(req.query).asOf ?? todayIso()),
+    ),
+  );
+
+  app.get(
+    '/api/projects/:id/transactions',
+    tenantRoute(app, read, async ({ tx, req }) => projectTransactions(tx, idParam.parse(req.params).id, projectTransactionsQuerySchema.parse(req.query))),
+  );
 
   // --- Proje ---------------------------------------------------------------
 

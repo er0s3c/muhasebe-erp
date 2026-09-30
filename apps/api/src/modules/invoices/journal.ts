@@ -39,6 +39,9 @@ export interface JournalInvoiceLine {
   isStock: boolean;
   /** Stokta hareket eden maliyet (defter para birimi, pozitif): çıkışta maliyet, girişte değer. */
   costValue: MoneyValue;
+  /** Proje boyutu (yalnızca stoksuz alış/gider/alış iadesi satırı): gider satırına yazılır, KDV ve cari satırına yazılmaz. */
+  projectId?: string | null;
+  wbsId?: string | null;
 }
 
 export interface BuildJournalInput {
@@ -116,12 +119,14 @@ export function buildInvoiceJournal(i: BuildJournalInput): BuiltJournal {
   line(partyDebit ? 'debit' : 'credit', acc(meta.control), totalDoc, totalBase, { partyId: i.partyId, dueDate: i.dueDate });
 
   // 2) Gövde: satış tarafında gelir/iade; alış tarafında stok ve gider
-  const groups = new Map<string, { net: MoneyValue; base: MoneyValue }>();
-  const addGroup = (accountId: string, net: MoneyValue, base: MoneyValue) => {
-    const g = groups.get(accountId) ?? { net: dec(0), base: dec(0) };
+  // Gövde satırları hesap + proje + iş kalemi bazında toplanır: projesiz satırlar eskisi gibi hesap başına tek satır olur
+  const groups = new Map<string, { accountId: string; projectId: string | null; wbsId: string | null; net: MoneyValue; base: MoneyValue }>();
+  const addGroup = (accountId: string, net: MoneyValue, base: MoneyValue, projectId: string | null = null, wbsId: string | null = null) => {
+    const key = `${accountId}|${projectId ?? ''}|${wbsId ?? ''}`;
+    const g = groups.get(key) ?? { accountId, projectId, wbsId, net: dec(0), base: dec(0) };
     g.net = g.net.plus(net);
     g.base = g.base.plus(base);
-    groups.set(accountId, g);
+    groups.set(key, g);
   };
   let stockNetBase = dec(0);
   for (const l of i.lines) {
@@ -132,10 +137,15 @@ export function buildInvoiceJournal(i: BuildJournalInput): BuiltJournal {
       // Alış iadesinde stok satırı, stok defterindeki çıkış değeriyle aşağıda ayrıca yazılır
       if (!meta.isReturn) addGroup(acc('stock'), l.net, l.netBase);
     } else {
-      addGroup(l.accountId ?? acc('default_expense'), l.net, l.netBase);
+      addGroup(l.accountId ?? acc('default_expense'), l.net, l.netBase, l.projectId ?? null, l.wbsId ?? null);
     }
   }
-  for (const [accountId, g] of groups) line(bodySide, accountId, g.net, g.base);
+  for (const g of groups.values()) {
+    line(bodySide, g.accountId, g.net, g.base, {
+      ...(g.projectId ? { projectId: g.projectId } : {}),
+      ...(g.wbsId ? { wbsId: g.wbsId } : {}),
+    });
+  }
 
   // 3) KDV (oran başına ayrı satır: KDV raporu ve mutabakat için okunaklı)
   const vatGroups = new Map<string, { vat: MoneyValue; base: MoneyValue }>();

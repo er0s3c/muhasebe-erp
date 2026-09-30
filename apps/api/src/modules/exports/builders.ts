@@ -10,6 +10,7 @@ import { itemProfitability, salesReport } from '../invoices/analytics';
 import { vatSummary } from '../invoices/reports';
 import { reconciliation } from '../bank-statements/service';
 import { partyAging, partyOpenItems, partyStatement } from '../parties/service';
+import { projectCostReport, projectsSummary } from '../projects/reports';
 import { fxDifferences } from '../treasury/fx-report';
 import { TXN_LABEL } from '../treasury/posting';
 import { treasuryStatement } from '../treasury/reports';
@@ -558,6 +559,111 @@ export async function bankReconciliationTable(ctx: BuildCtx, q: { accountId: str
       ],
       rows: d.unmatchedLedger.map((c) => ({ date: c.entryDate, entryNo: c.entryNo, description: c.description, txnNo: c.txnNo, party: c.partyName, amount: c.amount })),
       totals: { amount: sum(d.unmatchedLedger.map((c) => c.amount)).toFixed(4) },
+    },
+  ];
+}
+
+// --- Proje (inşaat) ------------------------------------------------------------
+
+const PROJECT_KIND_LABEL: Record<string, string> = { own: 'Kendi projesi', contract: 'İşverene yapılan iş' };
+const PROJECT_STATUS_LABEL: Record<string, string> = { planned: 'Planlanan', active: 'Aktif', on_hold: 'Beklemede', completed: 'Tamamlandı', cancelled: 'İptal' };
+
+/** Proje maliyet raporu: iş kırılımı ağacı, yürürlükteki bütçe, gerçekleşen, tamamlanma, ETC/EAC ve sapma. */
+export async function projectCostReportTable(ctx: BuildCtx, q: { projectId: string; asOf: string }): Promise<ReportTable[]> {
+  const r = await projectCostReport(ctx.tx, q.projectId, q.asOf);
+  const cur = ctx.company.baseCurrency;
+  const rev = r.budget ? `Bütçe rev. ${r.budget.revisionNo}` : 'Onaylı bütçe yok';
+  const row = (x: (typeof r.rows)[number]) => ({
+    code: `${'  '.repeat(Math.max(0, x.depth - 1))}${x.code}`,
+    name: x.name,
+    budget: x.budget,
+    actual: x.actual,
+    remaining: x.remaining,
+    spentPct: x.spentPct,
+    percent: x.percent,
+    earnedValue: x.hasProgress ? x.earnedValue : null,
+    etc: x.etc,
+    eac: x.eac,
+    variance: x.variance,
+    cpi: x.cpi,
+  });
+  return [
+    {
+      key: 'proje-maliyet',
+      title: `Proje maliyet raporu — ${r.project.code} ${r.project.name}`,
+      sheet: 'Proje maliyeti',
+      subtitle: sub(ctx, formatDateTR(q.asOf), rev, `${cur} cinsinden`),
+      columns: [
+        col('code', 'İş kalemi', 'text', 16),
+        col('name', 'Ad', 'text', 36),
+        col('budget', 'Bütçe', 'money'),
+        col('actual', 'Gerçekleşen', 'money'),
+        col('remaining', 'Kalan bütçe', 'money'),
+        col('spentPct', 'Harcama %', 'money'),
+        col('percent', 'Tamamlanma %', 'money'),
+        col('earnedValue', 'Kazanılmış değer', 'money'),
+        col('etc', 'Tamamlanmaya kalan (ETC)', 'money'),
+        col('eac', 'Tahmini toplam (EAC)', 'money'),
+        col('variance', 'Sapma (bütçe − EAC)', 'money'),
+        col('cpi', 'CPI', 'rate'),
+      ],
+      rows: r.rows.map(row),
+      totals: { budget: r.totals.budget, actual: r.totals.actual, etc: r.totals.etc, eac: r.totals.eac, variance: r.totals.variance },
+    },
+  ];
+}
+
+/** Şirketin projeleri: bütçe, gerçekleşen, EAC ve sapma + defterle mutabakat satırları. */
+export async function projectsSummaryTable(ctx: BuildCtx, q: { asOf: string }): Promise<ReportTable[]> {
+  const d = await projectsSummary(ctx.tx, q.asOf);
+  const cur = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'projeler',
+      title: 'Proje özeti',
+      sheet: 'Projeler',
+      subtitle: sub(ctx, formatDateTR(q.asOf), `${cur} cinsinden`),
+      columns: [
+        col('code', 'Proje', 'text', 12),
+        col('name', 'Ad', 'text', 36),
+        col('kind', 'Tür', 'text', 20),
+        col('status', 'Durum', 'text', 12),
+        col('budget', 'Bütçe', 'money'),
+        col('actual', 'Gerçekleşen', 'money'),
+        col('percent', 'Tamamlanma %', 'money'),
+        col('etc', 'ETC', 'money'),
+        col('eac', 'EAC', 'money'),
+        col('variance', 'Sapma', 'money'),
+        col('cpi', 'CPI', 'rate'),
+        col('revenue', 'Gelir (etiketli)', 'money'),
+      ],
+      rows: d.projects.map((p) => ({
+        code: p.code,
+        name: p.name,
+        kind: PROJECT_KIND_LABEL[p.kind] ?? p.kind,
+        status: PROJECT_STATUS_LABEL[p.status] ?? p.status,
+        budget: p.budget,
+        actual: p.actual,
+        percent: p.percent,
+        etc: p.etc,
+        eac: p.eac,
+        variance: p.variance,
+        cpi: p.cpi,
+        revenue: p.revenue,
+      })),
+      totals: { budget: d.totals.budget, actual: d.totals.actual, etc: d.totals.etc, eac: d.totals.eac, variance: d.totals.variance },
+    },
+    {
+      key: 'proje-mutabakat',
+      title: 'Defterle mutabakat (maliyet tarafı)',
+      sheet: 'Mutabakat',
+      subtitle: sub(ctx, formatDateTR(q.asOf)),
+      columns: [col('label', 'Kalem', 'text', 44), col('amount', `Tutar (${cur})`, 'money')],
+      rows: [
+        { label: 'Projelere etiketli maliyet', amount: d.allocatedCost },
+        { label: 'Projesiz maliyet', amount: d.unallocatedCost },
+        { label: 'Defterdeki toplam maliyet tarafı', amount: d.ledgerCost },
+      ],
     },
   ];
 }
