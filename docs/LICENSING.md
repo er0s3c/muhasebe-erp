@@ -94,16 +94,59 @@ curl https://<alan-adı>/healthz        # {"ok":true,...}
   ile izin verilen adreslere kısıtlıdır: kendi IP adresinizi yazın (varsayılan "herkes" yalnızca ilk kurulum içindir). IP'niz değişiyorsa VPN/sabit IP kullanın.
 - Veritabanı portu yayınlanmaz. Yönetici parolası/TOTP sırrı diskte şifrelidir (`LICENSE_DATA_KEY`).
 
-### 4.4 Yönetici hesabı (panel: parola + zorunlu TOTP)
+**Cloudflare Tunnel varyantı** (80/443 açmadan; paylaşılan sunucuda): Caddy port yayınlamaz, TLS Cloudflare'de biter, Caddy istemci adresini
+`Cf-Connecting-IP`'den alır (`LICENSE_ADMIN_ALLOW` ve oran sınırı doğru çalışır; bu varyantta "DNS only" uyarısı geçerli değildir).
+
+```bash
+cloudflared tunnel create muhasebe-lisans                       # ~/.cloudflared/<tünel-id>.json üretir
+mkdir -p /etc/muhasebe-lisans-tunnel && install -m 400 -o 65532 -g 65532 ~/.cloudflared/<tünel-id>.json /etc/muhasebe-lisans-tunnel/
+cat > /etc/muhasebe-lisans-tunnel/config.yml <<EOF
+tunnel: <tünel-id>
+credentials-file: /etc/cloudflared/<tünel-id>.json
+ingress:
+  - hostname: <alan-adı>
+    service: http://caddy:80
+  - service: http_status:404
+EOF
+chown -R 65532:65532 /etc/muhasebe-lisans-tunnel
+cloudflared tunnel route dns muhasebe-lisans <alan-adı>
+# .env: CLOUDFLARED_DIR=/etc/muhasebe-lisans-tunnel
+docker compose -f deploy/license/docker-compose.yml -f deploy/license/docker-compose.tunnel.yml --env-file deploy/license/.env up -d --build
+```
+
+> `TRUST_PROXY` sayısal atlama değeri (`1`) almaz: Fastify ≥ 5.12 sayıyı güvenlik gereği yok sayar ve tüm istekler vekilin adresinden gelmiş görünür
+> (oran sınırı tek kovaya düşer). Lisans sunucusu `loopback,uniquelocal` kullanır (yalnızca iç ağdaki Caddy'ye güvenir).
+
+### 4.4 Yönetici hesabı (panel: parola + zorunlu TOTP ya da giriş anahtarı)
+
+**İlk kurulum panelden** (yalnızca hiç yönetici yokken): `https://<alan-adı>/` adresi `/setup` sayfasına yönlenir.
+
+```bash
+docker compose -f deploy/license/docker-compose.yml [-f deploy/license/docker-compose.tunnel.yml] --env-file deploy/license/.env exec license \
+  node dist/cli.js setup:token        # kurulum kodu: XXXX-XXXX-XXXX-XXXX-XXXX
+```
+
+1. **Hesap:** kurulum kodu, e-posta, ad soyad, parola ve parola tekrarı (≥ 12 karakter; Vaultwarden eklentisi kaydetmeyi önerir).
+2. **Doğrulama uygulaması:** QR kodu, anahtar ve `otpauth://` adresi gösterilir. Vaultwarden/Bitwarden'da kaydın **Kimlik doğrulayıcı anahtarı (TOTP)**
+   alanına adresi yapıştırın (ya da mobil uygulamayla QR'ı okutun). Kasadaki 6 haneli kod girilince hesap oluşur ve oturum açılır.
+3. **Giriş anahtarı (isteğe bağlı):** passkey eklenir; Vaultwarden eklentisi saklar. Sonraki girişlerde "Giriş anahtarıyla giriş" e-posta/parola/kod sormaz
+   (kasa kilidi/PIN/biyometri zorunludur). Anahtarlar sonradan **Güvenlik** sayfasından eklenir/silinir.
+
+Kurulum kodu `LICENSE_DATA_KEY`'den türetilir (yalnızca sunucuya erişen görebilir); ilk yönetici oluşunca kurulum kapanır, kod geçersizleşir. Panel internete
+açıkken hesabı ilk gelenin kapmasını bu kod önler (IP başına 10 hatalı denemede kilitlenir). Giriş anahtarları `LICENSE_ADMIN_ORIGIN` kökenine
+(compose: `https://${LICENSE_DOMAIN}`) bağlıdır: alan adı değişirse yeniden eklenmeleri gerekir.
+
+Ek yönetici (komut satırından):
 
 ```bash
 docker compose -f deploy/license/docker-compose.yml --env-file deploy/license/.env exec license \
   node dist/cli.js admin:create --email=siz@ornek.com --name="Ad Soyad"
 ```
 
-Çıktıdaki **parola** ve **TOTP sırrı** yalnızca bir kez görünür: sırrı Authenticator uygulamasına (Google/Microsoft Authenticator, Aegis…) elle ekleyin.
+Çıktıdaki **parola** ve **TOTP sırrı** yalnızca bir kez görünür: sırrı Vaultwarden'a ya da bir Authenticator uygulamasına (Aegis…) elle ekleyin.
 Giriş: e-posta + parola + 6 haneli kod. Kurallar: aynı kod iki kez kullanılamaz, 5 başarısız denemede (IP+e-posta) ve 15'te (yalnızca e-posta) kilitlenir,
-oturum 8 saattir, değiştiren isteklerde CSRF başlığı ve köken denetimi vardır. Parola/TOTP kaybolursa: `admin:reset --email=…`.
+oturum 8 saattir, değiştiren isteklerde CSRF başlığı ve köken denetimi vardır. Parola/TOTP kaybolursa: `admin:reset --email=…` (parola ve TOTP yenilenir,
+giriş anahtarları silinir).
 
 ### 4.5 Komut satırı (panelin eşi; SSH ile)
 
@@ -116,7 +159,8 @@ oturum 8 saattir, değiştiren isteklerde CSRF başlığı ve köken denetimi va
 | `license:extend --id=… --valid-until=YYYY-MM-DD` | Süreyi uzatır. |
 | `license:suspend / resume / revoke --id=…` | Askıya alır / devam ettirir / iptal eder (kurulumlar sonraki kalp atışında etkilenir, en geç ~12 saat). |
 | `license:code --id=…` | Yeni etkinleştirme kodu üretir (eskisi geçersiz olur). |
-| `admin:create / admin:reset` | Yönetici oluşturur / parola ve TOTP'yi yeniler. |
+| `setup:token` | İlk yönetici kurulum kodunu yazdırır (yalnızca hiç yönetici yokken; panel `/setup`). |
+| `admin:create / admin:reset` | Yönetici oluşturur / parola ve TOTP'yi yeniler (giriş anahtarlarını siler). |
 | `keygen --kid=… --out=…` | İmza anahtarı üretir (yalnızca anahtar töreninde). |
 
 ## 5. Uygulama imajını derleme ve müşteriye verme
@@ -262,7 +306,7 @@ Panel/CLI kullanıcı bilgileri de sızdıysa: `admin:reset`, `LICENSE_DATA_KEY`
 - Testler: `packages/license-core` (belirteç, durum makinesi, TOTP), `apps/license-server` (genel/yönetim uçları, panel sunumu; gerçek PostgreSQL), `apps/api/test/licensing*.test.ts`, `devices.test.ts` (sahte satıcıyla istemci sözleşmesi),
   e2e: `license-api`, `license-ui`, `license-admin` (gerçek lisans sunucusu + küçültülmüş üretim paketi). CI `scripts/ci-license-host.sh` / `scripts/ci-license-docker.sh` ile gerçek lisans sunucusu kurar.
 - Ortam değişkenleri — **uygulama:** `LICENSE_SERVER_URL`, `LICENSE_ALLOW_INSECURE_URL`, `LICENSE_HOST_ID_FILE`, `LICENSE_ENFORCEMENT_DEV`, `LICENSE_DEV_KEYRING`. **Lisans sunucusu:** `DATABASE_URL`, `LICENSE_SIGNING_KEY_FILE`,
-  `LICENSE_SIGNING_KEY_PASSPHRASE`, `LICENSE_DATA_KEY`, `TRUST_PROXY`, `ADMIN_COOKIE_SECURE`, `RATE_LIMIT_ENABLED`, `LOG_LEVEL`, `PANEL_DIST_DIR`, `SHUTDOWN_TIMEOUT_MS`, `APP_VERSION`.
+  `LICENSE_SIGNING_KEY_PASSPHRASE`, `LICENSE_DATA_KEY`, `LICENSE_ADMIN_ORIGIN`, `TRUST_PROXY`, `ADMIN_COOKIE_SECURE`, `RATE_LIMIT_ENABLED`, `LOG_LEVEL`, `PANEL_DIST_DIR`, `SHUTDOWN_TIMEOUT_MS`, `APP_VERSION`.
 
 ## 14. Kapsam dışı (şimdilik)
 

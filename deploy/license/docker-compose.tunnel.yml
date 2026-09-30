@@ -1,0 +1,27 @@
+# Cloudflare Tunnel varyantı: 80/443 YAYINLANMAZ, TLS Cloudflare kenarında biter; cloudflared ağ içinden Caddy'ye bağlanır.
+#   docker compose -f deploy/license/docker-compose.yml -f deploy/license/docker-compose.tunnel.yml \
+#     --env-file deploy/license/.env up -d --build
+# Gerekenler (.env): LICENSE_DOMAIN, CLOUDFLARED_DIR (içinde config.yml + <tünel-id>.json; 65532 okuyabilmeli).
+# Alan adının DNS kaydı tünele CNAME'dir (cloudflared tunnel route dns <tünel> <alan adı>).
+# Ayrıntı: docs/LICENSING.md
+services:
+  license:
+    environment:
+      # Caddy X-Forwarded-For'u Cf-Connecting-IP'den gelen tek istemci adresiyle yazar; license yalnızca iç ağdaki Caddy'ye güvenir.
+      TRUST_PROXY: 'loopback,uniquelocal'
+
+  caddy:
+    ports: !reset []
+    volumes: !override
+      - ./Caddyfile.tunnel:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ['tunnel', '--no-autoupdate', '--config', '/etc/cloudflared/config.yml', 'run']
+    volumes:
+      - ${CLOUDFLARED_DIR:?CLOUDFLARED_DIR gerekli}:/etc/cloudflared:ro
+    depends_on:
+      - caddy
