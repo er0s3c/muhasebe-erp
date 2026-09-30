@@ -35,12 +35,16 @@ export default defineConfig({
           url: 'http://localhost:3000/api/health/ready',
           reuseExistingServer: false,
           timeout: 60_000,
+          // Sunucu çıktısı (yalnızca uyarı/hata) test günlüğüne karışır: CI'da kırılan bir senaryonun nedeni okunabilsin.
+          stdout: 'pipe',
+          stderr: 'pipe',
           env: {
             NODE_ENV: 'production',
             JWT_SECRET: 'e2e-bundle-jwt-key-9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c',
             RATE_LIMIT_ENABLED: 'false',
             WEB_DIST_DIR: 'apps/web/dist',
             PORT: '3000',
+            LOG_LEVEL: 'warn',
           },
         },
       ]

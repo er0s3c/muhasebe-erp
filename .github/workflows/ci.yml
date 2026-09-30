@@ -122,6 +122,16 @@ jobs:
         env:
           E2E_TARGET: bundle
 
+      # Kırılan senaryonun sayfa durumu (erişilebilirlik ağacı) günlüğe yazılır; artifact'a erişemeyen araçlar da nedeni okuyabilsin.
+      - name: Başarısız senaryoların sayfa durumu
+        if: failure()
+        run: |
+          find test-results -name error-context.md 2>/dev/null | while read -r f; do
+            echo "::group::$f"
+            head -n 120 "$f"
+            echo "::endgroup::"
+          done
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
