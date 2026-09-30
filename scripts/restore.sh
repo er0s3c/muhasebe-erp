@@ -13,6 +13,7 @@
 # uygulamayı aynı sürümün imajıyla başlatın, sonra yükseltin.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+trap 'echo "$(basename "$0"): $LINENO. satırda beklenmedik hata" >&2' ERR
 
 MODE=direct
 TARGET=""
@@ -46,7 +47,8 @@ if [ -f "$DUMP.sha256" ]; then
   ( cd "$(dirname "$DUMP")" && sha256sum -c "$(basename "$DUMP").sha256" > /dev/null ) || { echo "sha256 özeti uyuşmuyor: yedek bozuk" >&2; exit 1; }
 fi
 
-envval() { grep -E "^$1=" "$ENV_FILE" | tail -n1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+# Anahtar dosyada yoksa boş değer döner (hata değil): `set -e` + `pipefail` altında eşleşmeyen grep betiği sessizce sonlandırırdı.
+envval() { { grep -E "^$1=" "$ENV_FILE" || true; } | tail -n1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 EMPTY_SQL="select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('public','drizzle') and c.relkind in ('r','v','m','S','f','p')"
 
 if [ "$MODE" = compose ]; then

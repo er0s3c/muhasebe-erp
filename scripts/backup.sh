@@ -10,6 +10,7 @@
 # Kısmi dosya bırakmaz: önce geçici dosyaya yazar, arşivi doğrular, sonra adını değiştirir.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+trap 'echo "$(basename "$0"): $LINENO. satırda beklenmedik hata" >&2' ERR
 
 MODE=direct
 DIR="${BACKUP_DIR:-./backups}"
@@ -29,7 +30,8 @@ while [ $# -gt 0 ]; do
 done
 case "$KEEP" in ''|*[!0-9]*) echo "--keep-days sayı olmalı" >&2; exit 2 ;; esac
 
-envval() { grep -E "^$1=" "$ENV_FILE" | tail -n1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+# Anahtar dosyada yoksa boş değer döner (hata değil): `set -e` + `pipefail` altında eşleşmeyen grep betiği sessizce sonlandırırdı.
+envval() { { grep -E "^$1=" "$ENV_FILE" || true; } | tail -n1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 
 if [ "$MODE" = compose ]; then
   [ -f "$ENV_FILE" ] || { echo "$ENV_FILE yok" >&2; exit 1; }
