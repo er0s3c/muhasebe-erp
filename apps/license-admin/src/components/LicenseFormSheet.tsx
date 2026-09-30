@@ -1,0 +1,225 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { Button } from '@ui/Button';
+import { Callout } from '@ui/Feedback';
+import { Field, Input, Select, Textarea } from '@ui/Field';
+import { Sheet } from '@ui/Sheet';
+import { useToast } from '@ui/Toast';
+import { api, errorText, type Customer, type License, type Sector } from '../api';
+import { KIND_LABELS, SECTOR_LABELS, toDateInput } from '../format';
+
+const SECTORS: Sector[] = ['CONSTRUCTION', 'RETAIL_MARKET', 'COMMERCE'];
+
+interface FormState {
+  customerId: string;
+  kind: License['kind'];
+  sectors: Sector[];
+  deviceLimit: string;
+  companyLimit: string;
+  validUntil: string;
+  leaseDays: string;
+  graceDays: string;
+  deviceIdleDays: string;
+  maxActivations: string;
+  offlineAllowed: boolean;
+  notes: string;
+}
+
+const inOneYear = () => new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10);
+
+const fromLicense = (l: License): FormState => ({
+  customerId: l.customerId,
+  kind: l.kind,
+  sectors: l.sectors,
+  deviceLimit: String(l.deviceLimit),
+  companyLimit: String(l.companyLimit),
+  validUntil: toDateInput(l.validUntil),
+  leaseDays: String(l.leaseDays),
+  graceDays: String(l.graceDays),
+  deviceIdleDays: String(l.deviceIdleDays),
+  maxActivations: String(l.maxActivations),
+  offlineAllowed: l.offlineAllowed,
+  notes: l.notes ?? '',
+});
+
+const empty = (customerId = ''): FormState => ({
+  customerId,
+  kind: 'commercial',
+  sectors: [],
+  deviceLimit: '3',
+  companyLimit: '1',
+  validUntil: inOneYear(),
+  leaseDays: '7',
+  graceDays: '14',
+  deviceIdleDays: '30',
+  maxActivations: '1',
+  offlineAllowed: false,
+  notes: '',
+});
+
+/** Lisans oluşturma/düzenleme formu. Oluşturunca sunucunun döndürdüğü etkinleştirme kodu `onCreated` ile iletilir. */
+export function LicenseFormSheet({
+  open,
+  onOpenChange,
+  license,
+  presetCustomerId,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  license?: License;
+  presetCustomerId?: string;
+  onCreated?: (code: string, license: License) => void;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const editing = license !== undefined;
+  const [form, setForm] = useState<FormState>(() => (license ? fromLicense(license) : empty(presetCustomerId)));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const customers = useQuery({ queryKey: ['customers', ''], queryFn: () => api<{ customers: Customer[] }>('/admin/api/customers'), enabled: open && !editing });
+
+  useEffect(() => {
+    if (open) {
+      setForm(license ? fromLicense(license) : empty(presetCustomerId));
+      setError(null);
+    }
+  }, [open, license, presetCustomerId]);
+
+  const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const toggleSector = (s: Sector) => set('sectors', form.sectors.includes(s) ? form.sectors.filter((x) => x !== s) : [...form.sectors, s]);
+  const num = (v: string) => Number(v);
+
+  const submit = async () => {
+    setError(null);
+    if (!editing && !form.customerId) return setError('Müşteri seçin.');
+    if (form.sectors.length === 0) return setError('En az bir sektör seçin.');
+    const body = {
+      ...(editing ? {} : { customerId: form.customerId }),
+      kind: form.kind,
+      sectors: form.sectors,
+      deviceLimit: num(form.deviceLimit),
+      companyLimit: num(form.companyLimit),
+      validUntil: form.validUntil,
+      leaseDays: num(form.leaseDays),
+      graceDays: num(form.graceDays),
+      deviceIdleDays: num(form.deviceIdleDays),
+      maxActivations: num(form.maxActivations),
+      offlineAllowed: form.offlineAllowed,
+      notes: form.notes.trim() || null,
+    };
+    setBusy(true);
+    try {
+      if (editing) {
+        await api(`/admin/api/licenses/${license.id}`, { method: 'PATCH', body });
+        toast.success('Lisans güncellendi.');
+      } else {
+        const res = await api<{ license: License; activationCode: string }>('/admin/api/licenses', { method: 'POST', body });
+        onCreated?.(res.activationCode, res.license);
+      }
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['licenses'] }), queryClient.invalidateQueries({ queryKey: ['license'] }), queryClient.invalidateQueries({ queryKey: ['dashboard'] })]);
+      onOpenChange(false);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={editing ? 'Lisansı düzenle' : 'Yeni lisans'}
+      description={editing ? 'Değişiklikler müşterinin bir sonraki kalp atışında (en geç ~12 saat) uygulanır.' : 'Sektörü, cihaz ve şirket kotasını ve süreyi siz belirlersiniz.'}
+      footer={
+        <>
+          <Button onClick={() => onOpenChange(false)}>Vazgeç</Button>
+          <Button variant="primary" loading={busy} onClick={() => void submit()}>
+            {editing ? 'Kaydet' : 'Lisansı ver'}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        {error && <Callout tone="danger">{error}</Callout>}
+        {!editing && (
+          <Field label="Müşteri" required>
+            {(id) => (
+              <Select id={id} value={form.customerId} onChange={(e) => set('customerId', e.target.value)}>
+                <option value="">Seçin…</option>
+                {customers.data?.customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        )}
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-[13px]">
+            Sektörler <span className="text-danger" aria-hidden>*</span>
+          </legend>
+          {SECTORS.map((s) => (
+            <label key={s} className="flex items-center gap-2.5 text-sm">
+              <input type="checkbox" checked={form.sectors.includes(s)} onChange={() => toggleSector(s)} />
+              {SECTOR_LABELS[s]}
+            </label>
+          ))}
+          <p className="text-xs text-muted">Müşteri yalnızca seçtiğiniz sektörlerde şirket açabilir.</p>
+        </fieldset>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Tür">
+            {(id) => (
+              <Select id={id} value={form.kind} onChange={(e) => set('kind', e.target.value as License['kind'])}>
+                {Object.entries(KIND_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Abonelik bitişi" hint="O günün sonuna kadar geçerli">
+            {(id) => <Input id={id} type="date" value={form.validUntil} onChange={(e) => set('validUntil', e.target.value)} />}
+          </Field>
+          <Field label="Cihaz kotası" hint="Kayıtlı tarayıcı/bilgisayar sayısı">
+            {(id) => <Input id={id} type="number" min={1} max={10000} value={form.deviceLimit} onChange={(e) => set('deviceLimit', e.target.value)} />}
+          </Field>
+          <Field label="Şirket sınırı">
+            {(id) => <Input id={id} type="number" min={1} max={10000} value={form.companyLimit} onChange={(e) => set('companyLimit', e.target.value)} />}
+          </Field>
+          <Field label="Sunucu (etkinleştirme) sayısı" hint="Aynı anda etkin kurulum">
+            {(id) => <Input id={id} type="number" min={1} max={20} value={form.maxActivations} onChange={(e) => set('maxActivations', e.target.value)} />}
+          </Field>
+          <Field label="Boşta cihaz süresi (gün)" hint="Bu kadar süre görülmeyen cihaz kotadan düşer">
+            {(id) => <Input id={id} type="number" min={1} max={365} value={form.deviceIdleDays} onChange={(e) => set('deviceIdleDays', e.target.value)} />}
+          </Field>
+          <Field label="Kira süresi (gün)" hint="Kalp atışı ile yenilenir">
+            {(id) => <Input id={id} type="number" min={1} max={60} value={form.leaseDays} onChange={(e) => set('leaseDays', e.target.value)} />}
+          </Field>
+          <Field label="Tolerans (gün)" hint="Kira yenilenemezse tam işlevli kalınan süre">
+            {(id) => <Input id={id} type="number" min={0} max={90} value={form.graceDays} onChange={(e) => set('graceDays', e.target.value)} />}
+          </Field>
+        </div>
+        <label className="flex items-start gap-2.5 text-sm">
+          <input type="checkbox" className="mt-1" checked={form.offlineAllowed} onChange={(e) => set('offlineAllowed', e.target.checked)} />
+          <span>
+            Çevrimdışı etkinleştirmeye izin ver
+            <span className="block text-xs text-muted">İnternet erişimi olmayan sunucular için istek koduyla uzun süreli lisans imzalanır.</span>
+          </span>
+        </label>
+        <Field label="Notlar (yalnızca siz görürsünüz)">
+          {(id) => <Textarea id={id} rows={3} maxLength={2000} value={form.notes} onChange={(e) => set('notes', e.target.value)} />}
+        </Field>
+      </form>
+    </Sheet>
+  );
+}

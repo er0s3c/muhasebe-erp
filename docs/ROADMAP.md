@@ -20,6 +20,7 @@
 | M9b | Güvenlik | Yetki yükseltme kapatıldı; atomik refresh; oran sınırları; `audit_log` sahibe karşı salt-eklenir; rota–izin ve RLS sözleşme testleri; parola sıfırlama, e-posta doğrulama, geçici parola, parola politikası, güvenlik olayları; yük ölçümü ve düzeltmeleri (kilitlenme, yevmiye listesi, dışa aktarma kapısı, dizinler) |
 | M9c | Modül istisnaları | Ayarlar > Modüller: bağımlılık korumalı kapatma/açma (`requires`/`locked`), panel ve bağlantı kapıları |
 | M9d | Demo, yedek, operasyon | Demo aracı + ayrı demo örneği, yedek/geri yükleme betikleri ve CI'da geri yükleme tatbikatı, operatör parola kurtarma, `OPERATIONS.md`, üçüncü taraf lisans bildirimi |
+| L1–L5 | Lisanslama | Ed25519 imzalı kiralı lisans (sektör, cihaz kotası, şirket sınırı, bitiş), satıcı **lisans sunucusu** (`apps/license-server`: etkinleştirme, kalp atışı, çevrimdışı etkinleştirme, klon şüphesi) ve **yönetim paneli** (`apps/license-admin`, parola + zorunlu TOTP) + CLI; uygulama tarafı durum makinesi (etkin/tolerans/salt-okunur), dağınık bağımsız kapılar, **cihaz koltukları**, etkinleştirme/lisans/cihaz ekranları; `LICENSING.md` |
 
 ## Mali müşavir/hukuki teyit bekleyenler (teyit gelmeden başlanmaz)
 
@@ -41,7 +42,8 @@ Her faz, ilgili yasal parametrelerin resmi kaynaktan doğrulanmasına bağlıdı
 ## Teknik borç ve iyileştirmeler
 
 - Ana JS paketini bölmek (Vite 8/Rolldown `advancedChunks`).
-- Oran sınırı için paylaşılan depo (çok örnekli barındırma), MFA/TOTP, akışlı xlsx yazımı.
+- Oran sınırı için paylaşılan depo (çok örnekli barındırma; lisans sunucusunun oran sınırı da bellek içidir), uygulama kullanıcıları için MFA/TOTP, akışlı xlsx yazımı.
+- Lisans: modül bazlı (eklenti) lisans alanı (`features`), ödeme/fatura entegrasyonu, lisans sunucusu yönetici çoklu-rol modeli, barındırmalı (kiracı başına lisans) kip.
 - İmajın kayıt defterine yayını ve sürüm/sürüm notu akışı; Caddy TLS profilinin otomatik sınanması.
 - Özel rol tablosu (gerçek ihtiyaç doğunca).
 - İngilizce çeviri dosyası.

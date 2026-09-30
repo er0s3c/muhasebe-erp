@@ -22,7 +22,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/web/**/*.{ts,tsx}'],
+    files: ['apps/web/**/*.{ts,tsx}', 'apps/license-admin/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     plugins: { 'react-hooks': reactHooks },
     rules: {
@@ -32,7 +32,7 @@ export default tseslint.config(
   },
   {
     // Derlemeye girmeden olduğu gibi sunulan, eski tarayıcıya uygun klasik betikler
-    files: ['apps/web/public/**/*.js'],
+    files: ['apps/web/public/**/*.js', 'apps/license-admin/public/**/*.js'],
     languageOptions: { globals: globals.browser, sourceType: 'script' },
     rules: { 'no-empty': ['error', { allowEmptyCatch: true }], '@typescript-eslint/no-unused-vars': ['error', { caughtErrors: 'none' }] },
   },

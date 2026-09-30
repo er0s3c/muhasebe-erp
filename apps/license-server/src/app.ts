@@ -8,6 +8,7 @@ import { errorHandler } from './errors';
 import { MemoryLimiter } from './limits';
 import { adminApiRoutes } from './modules/admin-api';
 import { adminAuthRoutes } from './modules/admin-auth';
+import { panelNotFoundHandler, registerPanel } from './panel';
 import { publicRoutes } from './modules/public';
 
 declare module 'fastify' {
@@ -50,14 +51,17 @@ export async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
   app.decorate('now', now);
 
   app.addHook('onSend', async (_req, reply) => {
-    void reply.header('cache-control', 'no-store');
+    if (!reply.hasHeader('cache-control')) void reply.header('cache-control', 'no-store');
   });
   await app.register(helmet);
   await app.register(cookie);
   app.setErrorHandler(errorHandler);
+  if (config.PANEL_DIST_DIR) app.setNotFoundHandler(panelNotFoundHandler);
 
   await app.register(publicRoutes);
   await app.register(adminAuthRoutes);
   await app.register(adminApiRoutes);
+  // Yönetim paneli (derlenmişse) rotalardan SONRA kaydedilir
+  if (config.PANEL_DIST_DIR) await registerPanel(app, config.PANEL_DIST_DIR);
   return app;
 }

@@ -70,6 +70,9 @@ jobs:
         env:
           LICENSE_ALLOW_EMPTY_KEYRING: 'true'
 
+      - name: Lisans sunucusu ve yönetim paneli derlemesi
+        run: npm run build:license
+
   e2e:
     name: Uçtan uca testler
     runs-on: ubuntu-latest

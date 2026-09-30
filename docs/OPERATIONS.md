@@ -1,6 +1,6 @@
 # İşletim kılavuzu
 
-Bu belge ürünü bir müşteriye kuran ya da barındıran kişi içindir: kurulum, yapılandırma, yükseltme, yedekleme ve geri yükleme, izleme, destek sorguları ve müşteri kurulum kontrol listesi. Hukuki/mali konular için [LEGAL-NOTES.md](LEGAL-NOTES.md), ölçüm sonuçları için [PERFORMANCE.md](PERFORMANCE.md).
+Bu belge ürünü bir müşteriye kuran ya da barındıran kişi içindir: kurulum, yapılandırma, yükseltme, yedekleme ve geri yükleme, izleme, destek sorguları ve müşteri kurulum kontrol listesi. Hukuki/mali konular için [LEGAL-NOTES.md](LEGAL-NOTES.md), ölçüm sonuçları için [PERFORMANCE.md](PERFORMANCE.md), **lisans sunucusunu işleten satıcı** için [LICENSING.md](LICENSING.md).
 
 ## 1. Ne dağıtılır
 
@@ -15,6 +15,8 @@ Tek artefakt bir **Docker imajıdır** (`Dockerfile`): derlenmiş API ve web ara
 | `scripts/backup.sh`, `restore.sh`, `restore-drill.sh` | Yedek, geri yükleme, geri yükleme tatbikatı |
 
 Uygulama kabı yalnızca **RLS'e tabi çalışma zamanı rolünü** (`erp_app`) bilir; şema sahibi rolün (`erp`) parolası yalnızca tek seferlik `migrate` kabındadır. Uygulama, süper kullanıcı/`BYPASSRLS`/tablo sahibi bir rolle ya da RLS'siz tablolarla açılmayı **reddeder** (üretimde `exit 1`).
+
+**Lisans:** imaj **lisanslıdır**: üretim paketi lisans denetimi açık derlenir ve satıcının açık anahtarını gömer; lisans etkinleştirilmeden uygulama yalnızca etkinleştirme ekranını sunar. Müşteri imajı, lisansı veren satıcının derlediği imajdır (açık anahtar pakete gömülüdür; bkz. [LICENSING.md §5](LICENSING.md)). Bu kılavuzdaki "müşteri kurulumu" bölümleri lisans etkinleştirme adımını içerir (§4).
 
 İmaj yayını (registry) henüz yoktur: imaj müşteri sunucusunda `docker build` ile ya da sizin derleyip `docker save/load` ile taşıdığınız imajla kurulur.
 
@@ -32,7 +34,7 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --
 curl -fsS http://127.0.0.1:3000/api/health/ready
 ```
 
-Sırayla: `db` sağlıklı olur → `migrate` şemayı kurar/yükseltir ve çıkar → `app` açılır. `deploy/.env` dosyasını yalnızca yetkili kişi okuyabilmeli (`chmod 600`) ve **yedeklenmelidir** (parolalar olmadan veritabanı geri yüklenemez).
+Sırayla: `db` sağlıklı olur → `migrate` şemayı kurar/yükseltir ve çıkar → `app` açılır. **Uygulama lisans sunucusuna giden HTTPS erişimi ister** (etkinleştirme ve ~12 saatte bir yenileme; varsayılan `LICENSE_SERVER_URL` imajda gömülüdür). Ana makinenin `/etc/machine-id` dosyası salt-okunur bağlanır (sunucu parmak izi; bkz. §4 ve [LICENSING.md](LICENSING.md)): dosya yoksa `sudo systemd-machine-id-setup` ile oluşturun. `deploy/.env` dosyasını yalnızca yetkili kişi okuyabilmeli (`chmod 600`) ve **yedeklenmelidir** (parolalar olmadan veritabanı geri yüklenemez).
 
 ### TLS (otomatik HTTPS)
 
@@ -81,6 +83,10 @@ Geçersiz/eksik değerde uygulama başlamaz ve nedenini yazar. Boş değer "tan�
 | `MAIL_TRANSPORT` | yok | `log` yalnızca geliştirme (bağlantıyı günlüğe yazar); **üretimde reddedilir** |
 | `WEB_DIST_DIR` | imajda `/app/web` | Derlenmiş arayüz klasörü |
 | `APP_VERSION` | `dev` | İmaj derlemesinde verilir; `/api/public-config` döndürür |
+| `LICENSE_SERVER_URL` | imaja gömülü | Lisans sunucusu adresi (yalnızca `https`); verilirse derlemede gömülü varsayılanın yerine geçer. Normalde boş bırakılır: satıcı imajı derlerken belirler |
+| `LICENSE_HOST_ID_FILE` | `/etc/host-machine-id` | Ana makine kimliği dosyası (compose bağlar); sunucu parmak izinin parçası |
+| `LICENSE_ALLOW_INSECURE_URL` | `false` | Yalnızca test düzenekleri (`http://` lisans sunucusu); **müşteri kurulumunda kullanılmaz** |
+| `LICENSE_ENFORCEMENT_DEV`, `LICENSE_DEV_KEYRING` | yok | Yalnızca `NODE_ENV≠production` (geliştirme/e2e); üretimde **reddedilir**. Üretim paketinde lisans denetimi **derleme zamanı sabitidir**, ortam değişkeniyle kapatılamaz |
 | `ALLOW_DEMO` | yok | Yalnızca demo örneğinde `true` (bkz. §8); müşteri kurulumunda **asla** |
 
 Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceliklidir**; kabukta eski bir `JWT_SECRET` tanımlıysa dosyadaki değer yok sayılır.
@@ -97,6 +103,14 @@ Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceli
   ```
 
   Komut çalışma zamanı rolüyle (`DATABASE_URL`) çalışır; şema sahibi parolası gerekmez. Geçici parola yalnızca komut çıktısında görünür; kullanıcıya güvenli bir kanaldan iletin. İşlem `security_events` tablosuna `via: operator-cli` imzasıyla yazılır.
+- **Lisans etkinleştirme:** lisanssız kurulumda tarayıcı yalnızca **Lisans etkinleştirme** sayfasını gösterir; satıcıdan aldığınız kodu (`XXXXX-XXXXX-XXXXX-XXXXX-XXXXX`) girin. Sunucu internete çıkamıyorsa aynı sayfada **çevrimdışı etkinleştirme** ile "istek kodu" üretip satıcıya gönderin, dönen lisans kodunu yapıştırın. Sonra ilk sahip kaydı yapılır. Durum ve kullanım **Ayarlar > Lisans**'tadır (yalnızca sahip); ayrıntı için [LICENSING.md §9](LICENSING.md).
+- **Cihaz koltukları:** her kayıtlı tarayıcı/bilgisayar lisansın cihaz kotasından bir koltuk tutar; kota dolunca yeni cihaz giremez. Sahip/yönetici **Ayarlar > Cihazlar**'dan listeler, adlandırır, kaldırır; 30 gün kullanılmayan cihaz koltuğunu bırakır. Kota dolduğu için **kimse giremiyorsa** operatör kurtarma komutu:
+
+  ```bash
+  docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env exec app node dist/admin.js devices
+  docker compose … exec app node dist/admin.js devices:revoke --id=<kimlik|ön ek>
+  docker compose … exec app node dist/admin.js devices:revoke-all --yes      # herkes yeniden giriş yapar
+  ```
 - Rol değişiklikleri: `owner` rolünü yalnızca sahip verir/alır; son sahip düşürülemez.
 
 ## 5. Yükseltme
@@ -109,6 +123,8 @@ curl -fsS http://127.0.0.1:3000/api/health/ready # 3) doğrula, bir oturum açma
 ```
 
 `up -d` önce `migrate` kabını çalıştırır (yalnızca bekleyen migration'lar uygulanır), ardından uygulamayı yeniden başlatır; uygulama kapanırken süren istekleri `SHUTDOWN_TIMEOUT_MS`'e kadar bitirir.
+
+**Lisanslama öncesi bir sürümden yükseltme:** ilk lisanslı imaja geçişte mevcut kurulum **lisanssız** (yalnızca etkinleştirme ekranı) açılır; veriler bozulmaz ve silinmez. Müşteri lisans kodunu girene kadar giriş/yazma kapalıdır: geçişi önceden planlayın, kodu hazır edin. Lisans süresi dolar ya da lisans sunucusuna ulaşılamazsa uygulama **salt-okunur** moda düşer (veri görüntülenir ve dışa aktarılır, yazma kilitlenir); ayrıntı [LICENSING.md §7](LICENSING.md).
 
 **Geri dönüş:** migration'lar ileri yönlüdür. Yükseltme başarısız olursa eski imaja dönüp (`ERP_IMAGE=<eski>`) **yedeği geri yükleyin** (§6, `--recreate`). Bu yüzden yükseltmeden önce yedek şarttır.
 
@@ -203,7 +219,7 @@ docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo up 
 # http://127.0.0.1:3001  (APP_PORT)
 ```
 
-Ayrı proje adı ve veritabanı hacmi kullanır; kayıt kapalıdır. `demo-seed` kabı demo veriyi **yalnızca yoksa** yükler (yeniden başlatmak veriyi sıfırlamaz). Demo veri "bugün"e göre üretilir ve eskir: **haftalık sıfırlayın**:
+Ayrı proje adı ve veritabanı hacmi kullanır; kayıt kapalıdır. Demo örneği de **lisanslıdır**: satıcıdan bir `demo` türü (kısa süreli) lisans alıp etkinleştirin; demo sıfırlama (`demo-reset`) **lisans durumunu korur** (yalnızca iş verisini sıfırlar), böylece her hafta yeniden etkinleştirmek gerekmez. `demo-seed` kabı demo veriyi **yalnızca yoksa** yükler (yeniden başlatmak veriyi sıfırlamaz). Demo veri "bugün"e göre üretilir ve eskir: **haftalık sıfırlayın**:
 
 ```bash
 D="docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo"
@@ -232,10 +248,13 @@ $D stop app && $D run --rm demo-reset && $D up -d app
 - [ ] Yedek hedefi (ofis dışı, şifreli) ve yedekten sorumlu kişi belirlendi
 - [ ] Mali müşavirle teyit: hesap eşlemesi varsayılanları, KDV oranları, açılış bakiyesi karşı hesabı, stok değerleme yöntemi, yıl sonu kapanış/devir (henüz yok; LEGAL-NOTES)
 - [ ] İç belgelerin (fatura, irsaliye, defter çıktısı) **yasal belge yerine geçmediği** müşteriye yazılı bildirildi
+- [ ] Lisans sözleşmesi/EULA müşteriyle imzalandı (hukuki metin avukata yazdırılır; LEGAL-NOTES §11) ve lisans kodu müşteriye güvenli kanaldan iletildi (kod yalnızca bir kez gösterilir)
+- [ ] Sunucu giden HTTPS ile lisans sunucusuna ulaşabiliyor (güvenlik duvarı/vekil); `/etc/machine-id` mevcut ve kalıcı
 
 **Kurulum**
 - [ ] `deploy/.env` dolduruldu, `chmod 600`, ayrı bir yerde yedeklendi; parolalar rastgele ve benzersiz
 - [ ] `up -d` başarılı; `/api/health/ready` 200; sürüm `/api/public-config` ile doğrulandı
+- [ ] Lisans etkinleştirildi (Ayarlar > Lisans: durum **Etkin**, sektör/cihaz/şirket sınırı sözleşmeyle uyumlu)
 - [ ] İlk sahip kaydı yapıldı; `REGISTRATION_ENABLED=false` (özel kurulum) ve uygulama yeniden oluşturuldu
 - [ ] TLS/`TRUST_PROXY`/`COOKIE_SECURE` ortamla uyumlu; oturum açıp yenileme (15 dk sonra) sınandı
 - [ ] SMTP (isteğe bağlı) ve SPF/DKIM; parola sıfırlama uçtan uca denendi
@@ -243,11 +262,11 @@ $D stop app && $D run --rm demo-reset && $D up -d app
 **Devreye almadan önce**
 - [ ] Şirket kuruldu; mali dönemler, kurlar, KDV oranları (doğrulanmış işaretli), hesap eşlemesi gözden geçirildi; kullanılmayan modüller Ayarlar > Modüller'den kapatıldı
 - [ ] Açılış bakiyeleri (cari, stok, mizan) içe aktarıldı ve mizan dengeli
-- [ ] Rol/kullanıcılar eklendi (en az iki sahip/yönetici önerilir)
+- [ ] Rol/kullanıcılar eklendi (en az iki sahip/yönetici önerilir); cihaz kotası kullanıcıların gerçek cihaz sayısına yeter (kurtarma: `admin devices`)
 - [ ] **Bir yedek alındı ve bir geri yükleme denemesi yapıldı** (§6); cron yedeği kuruldu
 - [ ] İzleme (`/api/health/ready`) ve disk uyarısı kuruldu
-- [ ] Müşteriye: yedekten sorumlu kişi, parola kurtarma yolu (§4) ve destek kanalı bildirildi
+- [ ] Müşteriye: yedekten sorumlu kişi, parola kurtarma yolu (§4), lisans bitiş tarihi/yenileme süreci (salt-okunura düşme davranışı) ve destek kanalı bildirildi
 
 ## 12. Bilinen sınırlar
 
-Tek uygulama örneği varsayımı (bellek içi oran sınırı); MFA/TOTP yok; `users` tablosu çalışma zamanı rolüne tüm kiracılar için açıktır (giriş bunu gerektirir; kolon yetkisi/ayrı giriş rolü sonraya); dışa aktarma bellek içi üretilir (eşzamanlılık kapısı ve satır tavanı ile sınırlı); yıl sonu kapanış/devir ve kur değerlemesi (M7b) mali müşavir teyidine bağlıdır ve henüz yoktur; yedekleme/saklama/kişisel veri politikası hukuken **doğrulanmamıştır** (LEGAL-NOTES §5); imaj kayıt defterine yayınlanmaz ve Caddy TLS profili otomatik sınanmaz.
+Tek uygulama örneği varsayımı (bellek içi oran sınırı; lisans durumu ve cihaz koltukları tek kurulum içindir); uygulama kullanıcıları için MFA/TOTP yok (lisans yönetim paneli için zorunlu TOTP vardır: LICENSING.md); lisanslama müşteri sunucusunda çalıştığından **%100 kırılamaz değildir** (LICENSING.md §1, §10); çevrimdışı lisans yıllık yenilenir; `users` tablosu çalışma zamanı rolüne tüm kiracılar için açıktır (giriş bunu gerektirir; kolon yetkisi/ayrı giriş rolü sonraya); dışa aktarma bellek içi üretilir (eşzamanlılık kapısı ve satır tavanı ile sınırlı); yıl sonu kapanış/devir ve kur değerlemesi (M7b) mali müşavir teyidine bağlıdır ve henüz yoktur; yedekleme/saklama/kişisel veri politikası hukuken **doğrulanmamıştır** (LEGAL-NOTES §5); imaj kayıt defterine yayınlanmaz ve Caddy TLS profili otomatik sınanmaz.

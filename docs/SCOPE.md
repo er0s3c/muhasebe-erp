@@ -136,5 +136,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Parola sıfırlama, e-posta doğrulama (SMTP ile), geçici parola, operatör parola kurtarma | ✅ |
 | Güvenlik olayı kaydı (giriş, sıfırlama, yetki değişikliği) | ✅ |
 | Docker imajı, compose dağıtımı, ayrı demo örneği, üçüncü taraf lisans bildirimi | ✅ |
-| İki adımlı doğrulama (TOTP/MFA) | ⏳ |
+| Lisanslama: sektör/cihaz/şirket sınırlı, imzalı kiralı lisans; satıcı lisans sunucusu ve web paneli (parola + zorunlu TOTP); salt-okunur mod | ✅ ⚠️ EULA/sözleşme ve veri işleme doğrulanmadı |
+| Cihaz koltukları (kayıtlı tarayıcı/bilgisayar, yönetici kaldırır, boşta cihaz düşer) | ✅ |
+| Uygulama kullanıcıları için iki adımlı doğrulama (TOTP/MFA) | ⏳ |
 | Kişisel veri silme/dışa aktarma talebi süreci | ⏳ ⚠️ |

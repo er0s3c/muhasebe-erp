@@ -15,5 +15,4 @@ deploy
 apps/api/src
 apps/api/test
 apps/api/drizzle
-apps/web/src
 apps/web/public

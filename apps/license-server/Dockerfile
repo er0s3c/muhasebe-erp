@@ -9,12 +9,17 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/license-server/package.json apps/license-server/
+COPY apps/license-admin/package.json apps/license-admin/
 COPY packages/shared/package.json packages/shared/
 COPY packages/license-core/package.json packages/license-core/
 RUN npm ci
 COPY packages packages
 COPY apps/license-server apps/license-server
-RUN npm run build -w @erp/license-server
+# Yönetim paneli: ortak arayüz bileşenleri web uygulamasından alınır (vite alias @ui)
+COPY apps/license-admin apps/license-admin
+COPY apps/web/src/components/ui apps/web/src/components/ui
+COPY apps/web/src/lib/cn.ts apps/web/src/lib/cn.ts
+RUN npm run build -w @erp/license-admin && npm run build -w @erp/license-server
 
 FROM node:${NODE_VERSION}-bookworm-slim AS deps
 WORKDIR /app
@@ -22,6 +27,7 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/license-server/package.json apps/license-server/
+COPY apps/license-admin/package.json apps/license-admin/
 COPY packages/shared/package.json packages/shared/
 COPY packages/license-core/package.json packages/license-core/
 RUN npm ci --omit=dev -w @erp/license-server
@@ -31,10 +37,12 @@ ARG APP_VERSION=dev
 ENV NODE_ENV=production \
     APP_VERSION=${APP_VERSION} \
     PORT=4000 \
-    MIGRATIONS_DIR=/app/dist/drizzle
+    MIGRATIONS_DIR=/app/dist/drizzle \
+    PANEL_DIST_DIR=/app/panel
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/apps/license-server/dist ./dist
+COPY --from=build /app/apps/license-admin/dist ./panel
 USER node
 EXPOSE 4000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \

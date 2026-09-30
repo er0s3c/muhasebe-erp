@@ -35,9 +35,10 @@ envval() { { grep -E "^$1=" "$ENV_FILE" || true; } | tail -n1 | cut -d= -f2- | s
 
 if [ "$MODE" = compose ]; then
   [ -f "$ENV_FILE" ] || { echo "$ENV_FILE yok" >&2; exit 1; }
-  DB="$(envval ERP_DB_NAME)"; DB="${DB:-erp}"
-  OWNER_PW="$(envval ERP_OWNER_PASSWORD)"
-  [ -n "$OWNER_PW" ] || { echo "ERP_OWNER_PASSWORD $ENV_FILE içinde yok" >&2; exit 1; }
+  # Lisans sunucusu compose'u için: ENV_FILE=deploy/license/.env COMPOSE_FILE=deploy/license/docker-compose.yml ERP_DB_NAME=erp_license (DB_OWNER_PASSWORD de kabul edilir)
+  DB="${ERP_DB_NAME:-$(envval ERP_DB_NAME)}"; DB="${DB:-erp}"
+  OWNER_PW="$(envval ERP_OWNER_PASSWORD)"; OWNER_PW="${OWNER_PW:-$(envval DB_OWNER_PASSWORD)}"
+  [ -n "$OWNER_PW" ] || { echo "ERP_OWNER_PASSWORD (ya da DB_OWNER_PASSWORD) $ENV_FILE içinde yok" >&2; exit 1; }
   DC=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
   dump() { "${DC[@]}" exec -T -e PGPASSWORD="$OWNER_PW" db pg_dump -h 127.0.0.1 -U erp -Fc "$DB"; }
   list() { "${DC[@]}" exec -T db pg_restore --list > /dev/null; }

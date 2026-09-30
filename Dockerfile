@@ -10,6 +10,7 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/license-server/package.json apps/license-server/
+COPY apps/license-admin/package.json apps/license-admin/
 COPY packages/shared/package.json packages/shared/
 COPY packages/license-core/package.json packages/license-core/
 RUN npm ci
@@ -30,6 +31,7 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/license-server/package.json apps/license-server/
+COPY apps/license-admin/package.json apps/license-admin/
 COPY packages/shared/package.json packages/shared/
 COPY packages/license-core/package.json packages/license-core/
 RUN npm ci --omit=dev -w @erp/api

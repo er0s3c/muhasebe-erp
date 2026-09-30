@@ -37,6 +37,15 @@ const SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
 const signingInput = (kind: string, kid: string, payloadB64: string) => Buffer.from(`erp-license-v1|${kind}|${kid}|${payloadB64}`, 'utf8');
 
+const SIGNATURE_BYTES = 64;
+
+/** İmza Ed25519 olduğundan tam 64 bayt olmalıdır; kırpılmış/uzatılmış imza, kodlaması kanonik olsa bile biçim hatasıdır. */
+function decodeSignature(value: string): Buffer {
+  const sig = decodeB64u(value);
+  if (sig.length !== SIGNATURE_BYTES) throw new LicenseTokenError('MALFORMED', 'İmza uzunluğu geçersiz');
+  return sig;
+}
+
 /** Sıkı base64url çözümü: kanonik olmayan (fazladan/geçersiz karakterli) girdiyi reddeder. */
 function decodeB64u(value: string): Buffer {
   const buf = Buffer.from(value, 'base64url');
@@ -98,7 +107,7 @@ export function verifyToken(kind: TokenKind, token: string, ring: PublicKeyring)
   if (ring.revoked?.includes(kid)) throw new LicenseTokenError('REVOKED_KID', 'Bu anahtar artık güvenilir değil');
   const raw = Object.hasOwn(ring.keys, kid) ? ring.keys[kid] : undefined;
   if (!raw) throw new LicenseTokenError('UNKNOWN_KID', 'Bilinmeyen anahtar kimliği');
-  const sig = decodeB64u(sigB64);
+  const sig = decodeSignature(sigB64);
   decodeB64u(payloadB64);
   if (!verify(null, signingInput(kind, kid, payloadB64), publicKeyFromRaw(raw), sig)) {
     throw new LicenseTokenError('BAD_SIGNATURE', 'İmza doğrulanamadı');
@@ -133,7 +142,7 @@ export function peekEnvelope(env: Envelope): unknown {
 }
 
 export function verifyEnvelope(kind: EnvelopeKind, env: Envelope, publicKeyRaw: string): unknown {
-  const sig = decodeB64u(env.s);
+  const sig = decodeSignature(env.s);
   decodeB64u(env.p);
   if (!verify(null, signingInput(kind, '-', env.p), publicKeyFromRaw(publicKeyRaw), sig)) {
     throw new LicenseTokenError('BAD_SIGNATURE', 'İmza doğrulanamadı');

@@ -119,3 +119,17 @@ Bugünkü teknik durum (hiçbiri hukuken doğrulanmış bir uyum iddiası değil
 - **Sözleşme ve sorumluluk:** hizmet seviyesi, yedekleme sorumluluğu, veri işleme (işleten/işlenen) rolleri, sorumluluk sınırı ve destek kapsamı bir avukata hazırlatılmalıdır; bu belge ve yazılım bunların yerine geçmez.
 - **Yedekleme sorumluluğu:** yedeğin alınması, ofis dışına taşınması, şifrelenmesi ve geri yükleme denemesinin yapılması işletenin işidir; yazılım yalnızca araçları ve bir doğrulama tatbikatı sağlar (docs/OPERATIONS.md).
 - **Üçüncü taraf bildirimi** dağıtımla birlikte verilmelidir (§2).
+
+## 11. Lisanslama (kurulum lisansı, cihaz koltuğu, lisans sunucusu)
+
+Teknik çalışma için [LICENSING.md](LICENSING.md). Aşağıdakilerin **hiçbiri hukuken doğrulanmamıştır**; ticari satıştan önce bir avukata gösterilmelidir.
+
+- **Lisans sözleşmesi / EULA:** lisansın kapsamı (sektör, cihaz kotası, şirket sınırı, süre), izinli kullanım, yenileme, iptal/askı koşulları, fesih ve sorumluluk sınırı bir **sözleşme metniyle** tanımlanmalıdır. Bu depo ve yazılım o metnin yerine geçmez; ilgili metni avukat hazırlar. Yazılımın "salt-okunur moda düşme" davranışı sözleşmede **açıkça** yazılı olmalıdır.
+- **Lisans sunucusuna giden veriler:** kurulum kimliği, kurulum açık anahtarı, sunucu parmak izi (makine kimliği ve veritabanı küme kimliğinin **özeti**), uygulama sürümü, etkinleştirme kodu ve kalp atışında etkin cihaz/şirket **sayısı**; sunucu ayrıca bağlantının **IP adresini** görür ve kaydeder (klon şüphesi için). Muhasebe verisi, kullanıcı ve müşteri bilgisi gönderilmez. IP adresi ve kurulum kimliğinin KKTC'de kişisel veri sayılıp sayılmadığı, dayanak ve saklama süresi **doğrulanmadı**; müşteriye bu veri akışı sözleşmede ve uygulama içinde (Ayarlar > Lisans) açıklanır.
+- **Cihaz tanımı ve çerez:** "cihaz", sunucunun verdiği imzalı kimlikle tanınan kayıtlı bir tarayıcı/bilgisayardır (`erp_device` çerezi: HttpOnly, SameSite=Strict, yalnızca oturum uçlarında, 1 yıl). Bu çerez lisans koltuğunu saymak için kesinlikle gereklidir; çerez bildirimi/rıza gereksinimi **doğrulanmadı**. Gerçek donanım kimliği toplanmaz.
+- **Salt-okunur mod ve verinin rehin tutulmaması:** lisans bitince ya da doğrulanamayınca yazma kapanır, görüntüleme ve **dışa aktarma açık kalır**; müşteri verisine erişimin kesilmemesi bilinçli bir tasarım kararıdır. Bu yaklaşımın sözleşme ve tüketici/ticaret mevzuatı açısından yeterliliği **doğrulanmadı**.
+- **Uzaktan askıya alma / iptal:** satıcı, kalp atışı yoluyla lisansı uzaktan askıya alabilir ya da iptal edebilir (salt-okunura geçiş). Hangi koşullarda bunun meşru olduğu (ödeme gecikmesi, kötüye kullanım) sözleşmede yazılı olmalıdır; tek taraflı kullanım hukuki risktir.
+- **Satıcı kayıtları:** lisans sunucusu yönetici işlemlerini ve etkinleştirmeleri (IP dahil) yalnız-ekleme denetim kaydında tutar; saklama süresi ve erişim politikası **doğrulanmadı**.
+- **Kırılamazlık iddiası yapılmaz:** müşteri sunucuyu kontrol ediyorsa lisans denetimi yamalanabilir; bunu engelleyen bir güvence verilmez, hukuki koruma sözleşmeye dayanır (yazılımın kopyalanması/değiştirilmesi yasağı dahil).
+- **Anahtar ve hesap güvenliği:** satıcı özel anahtarı ve yönetim paneli kritik varlıktır; ele geçirilmesi durumunda müşterilere duyuru ve anahtar değişikliği yükümlülüğü sözleşmede düzenlenmelidir.
+

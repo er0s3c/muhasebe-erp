@@ -2,7 +2,7 @@
 
 KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef sektör inşaat ve taahhüt; market ve ticaret modülleri aynı çekirdeğin üstüne eklenecek şekilde tasarlandı.
 
-**Durum:** Çekirdek ERP hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe, cari, stok, fatura, irsaliye, kasa ve banka, raporlar ve dışa aktarma, içe aktarma, banka mutabakatı) ve **dağıtıma hazırlandı** (Docker imajı, güvenlik sağlamlaştırması, yedekleme/geri yükleme tatbikatı, modül yönetimi). Yıl sonu kapanış/devir ve kur değerlemesi mali müşavir teyidini bekliyor. Sıradaki adımlar: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
+**Durum:** Çekirdek ERP hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe, cari, stok, fatura, irsaliye, kasa ve banka, raporlar ve dışa aktarma, içe aktarma, banka mutabakatı) ve **dağıtıma hazırlandı** (Docker imajı, güvenlik sağlamlaştırması, yedekleme/geri yükleme tatbikatı, modül yönetimi) ve **lisanslanabilir** (imzalı kiralı lisans: sektör, cihaz kotası, şirket sınırı, abonelik bitişi; satıcı lisans sunucusu ve yönetim paneli). Yıl sonu kapanış/devir ve kur değerlemesi mali müşavir teyidini bekliyor. Sıradaki adımlar: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Neler var?
 
@@ -19,6 +19,7 @@ KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef 
 - **Banka mutabakatı:** banka ekstresi (Excel/CSV) içe aktarılır ve defter kayıtlarıyla eşleştirilir (tutar birebir, ±3 gün; kesin/olası öneri, elle ve otomatik); eşleşmeyen ekstre satırından tek tıkla hareket oluşturulur; ekstre kapanış bakiyesi ile defter bakiyesi farkı ekranda açıklanır. Eşleşmiş hareket/fiş iptal edilemez. Bankaya özgü ekstre biçimleri doğrulanmamıştır.
 - **Kur:** elle giriş ya da KKTC Merkez Bankası XML'inden içe aktarma (resmî adres veya dosya yükleme).
 - **Modül yönetimi ve hesap güvenliği:** kullanılmayan modüller Ayarlar > Modüller'den bağımlılık korumalı kapatılır; parola sıfırlama ve e-posta doğrulama (SMTP ile), geçici parola zorunlu değişimi, parola politikası, güvenlik olayı kaydı.
+- **Lisanslama:** yazılım müşterinin kendi sunucusunda çalışır; satıcı kendi VPS'indeki **lisans sunucusundan** (web paneli + komut satırı; parola ve zorunlu TOTP) istediği zaman lisans verir. Lisans sektörü (market / inşaat / ticaret), **cihaz kotasını** (cihaz = kayıtlı tarayıcı/bilgisayar; cihaz başına ücret), şirket sınırını ve bitişi belirler. Ed25519 imzalı kısa ömürlü kira; sahte lisans, veritabanında lisans düzenleme, sunucu klonlama, saat geri alma ve ağ kesme denemeleri engellenir ya da saptanır; süre bitince/doğrulanamayınca **salt-okunur mod** (veri görüntülenir ve dışa aktarılır). Muhasebe verisi lisans sunucusuna gitmez. Dürüst sınır: müşteri sunucuyu kontrol ettiği için %100 kırılamaz değildir ([docs/LICENSING.md](docs/LICENSING.md)); sözleşme/EULA avukata yazdırılmalıdır.
 - **Rol bazlı yetki, sektöre göre menü, denetim izi, Türkçe arayüz** (çoklu dil altyapılı), açık/koyu tema, `Ctrl+K` komut paleti.
 
 ## Hızlı başlangıç
@@ -59,6 +60,9 @@ npm run dev
 | `npm run admin -- reset-password --email=…` | Operatör parola kurtarma (geçici parola üretir) |
 | `npm run build` | Web + API üretim paketi (`apps/api/dist`, `apps/web/dist`) |
 | `npm run licenses:notices` | `THIRD-PARTY-NOTICES.md` üretir |
+| `npm run build:license` | Lisans sunucusunu ve yönetim panelini derler |
+| `node apps/license-server/dist/cli.js …` | Satıcı CLI: `keygen`, `admin:create`, `license:issue\|list\|extend\|suspend\|revoke` ([LICENSING.md](docs/LICENSING.md)) |
+| `npm run admin -- devices` | Operatör: kayıtlı cihazları (lisans koltukları) listeler; `devices:revoke`, `devices:revoke-all --yes` |
 | `scripts/backup.sh` / `restore.sh` / `restore-drill.sh` | Yedek, geri yükleme, geri yükleme tatbikatı ([işletim kılavuzu](docs/OPERATIONS.md)) |
 | `npm run load:gen` / `load:test` | Yük verisi üretir / yük ölçer ([PERFORMANCE.md](docs/PERFORMANCE.md)) |
 | `npm run tour` | Demo verisiyle tüm ekranların ekran görüntüsünü alır, mobilde yatay taşmayı denetler |
@@ -82,6 +86,9 @@ Müşteriye kurmadan/barındırmadan önce **[docs/OPERATIONS.md](docs/OPERATION
 ```
 apps/api        Fastify API, Drizzle şeması ve SQL migration'ları (RLS, tetikleyiciler)
 apps/web        React + Vite + Tailwind arayüzü
+apps/license-server  Satıcının lisans sunucusu (etkinleştirme, kalp atışı, yönetim API'si, CLI; kendi PostgreSQL'i)
+apps/license-admin   Satıcı yönetim paneli (lisans sunucusundan sunulur)
+packages/license-core  Lisans belirteci/kira/parmak izi/TOTP (Ed25519, yalnızca Node crypto)
 packages/shared Para hesabı, izinler, modül/sektör kaydı, doğrulama şemaları
 docs/           Mimari, kapsam, hukuki notlar, yol haritası, işletim kılavuzu
 deploy/         Docker Compose (üretim, demo), Caddyfile, ortam şablonu
@@ -94,6 +101,7 @@ e2e/            Playwright senaryoları
 
 - [Mimari](docs/ARCHITECTURE.md)
 - [İşletim kılavuzu](docs/OPERATIONS.md) — kurulum, yedekleme/geri yükleme, yükseltme, izleme
+- [Lisanslama kılavuzu](docs/LICENSING.md) — satıcı kurulumu, lisans verme, müşteri kılavuzu, güvenlik modeli ve dürüst sınırlar
 - [Performans ölçümleri](docs/PERFORMANCE.md)
 - [Tasarım sistemi](docs/DESIGN.md)
 - [Kapsam ve işlev kontrol listesi](docs/SCOPE.md)

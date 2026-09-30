@@ -13,6 +13,7 @@
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"npm:dev -w @erp/api\" \"npm:dev -w @erp/web\"",
     "build": "npm run build -w @erp/web && npm run build -w @erp/api",
+    "build:license": "npm run build -w @erp/license-admin && npm run build -w @erp/license-server",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present",
