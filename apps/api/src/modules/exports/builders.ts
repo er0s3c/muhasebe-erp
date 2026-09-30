@@ -21,7 +21,18 @@ export interface BuildCtx {
   company: { name: string; baseCurrency: string; reportingCurrency: string | null };
 }
 
-export const col = (key: string, label: string, kind: ColumnKind = 'text', width?: number): TableColumn => ({ key, label, kind, width });
+const CODE_IN_LABEL = /\(([A-Z]{3})\)$/;
+/**
+ * Sütun tanımı. `currency` verilmezse `money` sütununun başlığı "(TRY)" gibi bir para birimi koduyla bitiyorsa
+ * oradan alınır (başlık zaten tutarın para birimini söylüyor); XLSX'te hücre biçimi simgeli olur (CSV etkilenmez).
+ * Yüzde/oran gibi tutar olmayan `money` sütunlarına para birimi verilmez.
+ */
+export const col = (key: string, label: string, kind: ColumnKind = 'text', width?: number, currency?: string): TableColumn => {
+  const c: TableColumn = { key, label, kind, width };
+  const cur = currency ?? (kind === 'money' ? CODE_IN_LABEL.exec(label)?.[1] : undefined);
+  if (cur) c.currency = cur;
+  return c;
+};
 const period = (from: string, to: string) => `${formatDateTR(from)} – ${formatDateTR(to)}`;
 const sub = (ctx: BuildCtx, ...parts: string[]) => [ctx.company.name, ...parts].join(' · ');
 const unit = (u: string | null) => (u ? (ITEM_UNIT_LABELS[u as ItemUnit] ?? u) : null);
@@ -56,7 +67,7 @@ export async function trialBalanceTable(
       key: 'mizan',
       title: 'Mizan',
       subtitle: sub(ctx, period(q.from, q.to), `${cur} cinsinden`),
-      columns: [col('code', 'Kod', 'text', 12), col('name', 'Hesap', 'text', 44), col('opening', 'Açılış (B-A)', 'money'), col('debit', 'Dönem Borç', 'money'), col('credit', 'Dönem Alacak', 'money'), col('closing', 'Bakiye (B-A)', 'money')],
+      columns: [col('code', 'Kod', 'text', 12), col('name', 'Hesap', 'text', 44), col('opening', 'Açılış (B-A)', 'money', undefined, cur), col('debit', 'Dönem Borç', 'money', undefined, cur), col('credit', 'Dönem Alacak', 'money', undefined, cur), col('closing', 'Bakiye (B-A)', 'money', undefined, cur)],
       rows: data.rows.filter((r) => q.view === 'groups' || r.isPostable).map((r) => ({ code: r.code, name: r.name, opening: r.opening, debit: r.debit, credit: r.credit, closing: r.closing })),
       totals: { debit: data.totals.debit, credit: data.totals.credit },
     },
@@ -117,13 +128,13 @@ export async function partyAgingTable(ctx: BuildCtx, q: { type: 'receivable' | '
       subtitle: sub(ctx, `${formatDateTR(q.asOf)} itibarıyla`, `${ctx.company.baseCurrency} cinsinden`),
       columns: [
         col('party', 'Cari', 'text', 44),
-        col('notDue', 'Vadesi gelmemiş', 'money'),
-        col('d1_30', '1–30 gün', 'money'),
-        col('d31_60', '31–60 gün', 'money'),
-        col('d61_90', '61–90 gün', 'money'),
-        col('d90plus', '90+ gün', 'money'),
-        col('unapplied', 'Avans / fazla ödeme', 'money'),
-        col('total', 'Net bakiye', 'money'),
+        col('notDue', 'Vadesi gelmemiş', 'money', undefined, ctx.company.baseCurrency),
+        col('d1_30', '1–30 gün', 'money', undefined, ctx.company.baseCurrency),
+        col('d31_60', '31–60 gün', 'money', undefined, ctx.company.baseCurrency),
+        col('d61_90', '61–90 gün', 'money', undefined, ctx.company.baseCurrency),
+        col('d90plus', '90+ gün', 'money', undefined, ctx.company.baseCurrency),
+        col('unapplied', 'Avans / fazla ödeme', 'money', undefined, ctx.company.baseCurrency),
+        col('total', 'Net bakiye', 'money', undefined, ctx.company.baseCurrency),
       ],
       rows: d.rows.map((r) => ({ party: `${r.partyCode} ${r.partyName}`, notDue: r.notDue, d1_30: r.d1_30, d31_60: r.d31_60, d61_90: r.d61_90, d90plus: r.d90plus, unapplied: r.unapplied, total: r.total })),
       totals: { ...d.totals },
@@ -225,7 +236,7 @@ export async function stockStatusTable(
         col('unit', 'Birim', 'text', 8),
         col('onHand', 'Eldeki', 'qty'),
         col('minLevel', 'Kritik seviye', 'qty'),
-        col('avgCost', 'Ort. maliyet', 'money'),
+        col('avgCost', 'Ort. maliyet', 'money', undefined, b),
         col('value', `Değer (${b})`, 'money'),
       ],
       rows: d.rows.map((r) => ({ code: r.code, name: r.name, category: r.categoryName, unit: unit(r.unit), onHand: r.onHand, minLevel: r.minLevel, avgCost: r.avgCost, value: r.value })),
@@ -276,11 +287,11 @@ export async function vatSummaryTable(ctx: BuildCtx, q: { from: string; to: stri
       columns: [
         col('code', 'KDV kodu', 'text', 14),
         col('rate', 'Oran (%)', 'rate'),
-        col('salesNet', 'Satış net', 'money'),
-        col('salesVat', 'Hesaplanan KDV', 'money'),
-        col('purchaseNet', 'Alış net', 'money'),
-        col('purchaseVat', 'İndirilecek KDV', 'money'),
-        col('payable', 'Ödenecek KDV', 'money'),
+        col('salesNet', 'Satış net', 'money', undefined, b),
+        col('salesVat', 'Hesaplanan KDV', 'money', undefined, b),
+        col('purchaseNet', 'Alış net', 'money', undefined, b),
+        col('purchaseVat', 'İndirilecek KDV', 'money', undefined, b),
+        col('payable', 'Ödenecek KDV', 'money', undefined, b),
       ],
       rows: d.rows.map((r) => ({ code: r.code ?? 'KDV yok', rate: r.rate, salesNet: r.salesNet, salesVat: r.salesVat, purchaseNet: r.purchaseNet, purchaseVat: r.purchaseVat, payable: pay(r.salesVat, r.purchaseVat) })),
       totals: { salesNet: d.totals.salesNet, salesVat: d.totals.salesVat, purchaseNet: d.totals.purchaseNet, purchaseVat: d.totals.purchaseVat, payable: d.totals.payable },
@@ -596,15 +607,15 @@ export async function projectCostReportTable(ctx: BuildCtx, q: { projectId: stri
       columns: [
         col('code', 'İş kalemi', 'text', 16),
         col('name', 'Ad', 'text', 36),
-        col('budget', 'Bütçe', 'money'),
-        col('actual', 'Gerçekleşen', 'money'),
-        col('remaining', 'Kalan bütçe', 'money'),
+        col('budget', 'Bütçe', 'money', undefined, cur),
+        col('actual', 'Gerçekleşen', 'money', undefined, cur),
+        col('remaining', 'Kalan bütçe', 'money', undefined, cur),
         col('spentPct', 'Harcama %', 'money'),
         col('percent', 'Tamamlanma %', 'money'),
-        col('earnedValue', 'Kazanılmış değer', 'money'),
-        col('etc', 'Tamamlanmaya kalan (ETC)', 'money'),
-        col('eac', 'Tahmini toplam (EAC)', 'money'),
-        col('variance', 'Sapma (bütçe − EAC)', 'money'),
+        col('earnedValue', 'Kazanılmış değer', 'money', undefined, cur),
+        col('etc', 'Tamamlanmaya kalan (ETC)', 'money', undefined, cur),
+        col('eac', 'Tahmini toplam (EAC)', 'money', undefined, cur),
+        col('variance', 'Sapma (bütçe − EAC)', 'money', undefined, cur),
         col('cpi', 'CPI', 'rate'),
       ],
       rows: r.rows.map(row),
@@ -628,14 +639,14 @@ export async function projectsSummaryTable(ctx: BuildCtx, q: { asOf: string }): 
         col('name', 'Ad', 'text', 36),
         col('kind', 'Tür', 'text', 20),
         col('status', 'Durum', 'text', 12),
-        col('budget', 'Bütçe', 'money'),
-        col('actual', 'Gerçekleşen', 'money'),
+        col('budget', 'Bütçe', 'money', undefined, cur),
+        col('actual', 'Gerçekleşen', 'money', undefined, cur),
         col('percent', 'Tamamlanma %', 'money'),
-        col('etc', 'ETC', 'money'),
-        col('eac', 'EAC', 'money'),
-        col('variance', 'Sapma', 'money'),
+        col('etc', 'ETC', 'money', undefined, cur),
+        col('eac', 'EAC', 'money', undefined, cur),
+        col('variance', 'Sapma', 'money', undefined, cur),
         col('cpi', 'CPI', 'rate'),
-        col('revenue', 'Gelir (etiketli)', 'money'),
+        col('revenue', 'Gelir (etiketli)', 'money', undefined, cur),
       ],
       rows: d.projects.map((p) => ({
         code: p.code,

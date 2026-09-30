@@ -73,6 +73,46 @@ describe('xlsx yazıcı ve okuyucu', () => {
     expect(excelSerial('2026-02-30')).toBeNull();
   });
 
+  it('para birimli tutar sütunları simgeli hücre biçimi alır; hücre yine sayıdır, yüzde/para birimsiz sütun düz kalır', () => {
+    const table: ReportTable = {
+      key: 'para',
+      title: 'Para',
+      columns: [
+        { key: 'name', label: 'Ad', kind: 'text' },
+        { key: 'try', label: 'Tutar (TRY)', kind: 'money', currency: 'TRY' },
+        { key: 'gbp', label: 'Tutar (GBP)', kind: 'money', currency: 'GBP' },
+        { key: 'pct', label: 'Yüzde', kind: 'money' },
+        { key: 'chf', label: 'Tutar (CHF)', kind: 'money', currency: 'CHF' },
+        { key: 'qty', label: 'Adet', kind: 'qty', currency: 'TRY' },
+      ],
+      rows: [{ name: 'A', try: '1234.5000', gbp: '-10.2500', pct: '12.5000', chf: '7.0000', qty: '3.0000' }],
+      totals: { try: '1234.5000', gbp: '-10.2500' },
+    };
+    const bytes = writeXlsx([table]);
+    const files = unzipSync(bytes);
+    const styles = new TextDecoder().decode(files['xl/styles.xml']);
+    // Biçimler: tırnaklı simge; negatif kolu ayrı; bilinmeyen para birimi (CHF) ve para birimi olmayan sütunlar biçim almaz
+    expect(styles).toContain('formatCode="&quot;£&quot;#,##0.00;-&quot;£&quot;#,##0.00"');
+    expect(styles).toContain('formatCode="&quot;₺&quot;#,##0.00;-&quot;₺&quot;#,##0.00"');
+    expect(styles).not.toContain('CHF');
+    expect(styles).toContain('<numFmts count="5">'); // 3 sabit + GBP + TRY
+    expect(styles).toContain('<cellXfs count="21">'); // 17 sabit + 2 × 2
+    const sheet = new TextDecoder().decode(files['xl/worksheets/sheet1.xml']);
+    // Sıralama: GBP (gövde 17, toplam 18), TRY (gövde 19, toplam 20); yüzde ve CHF düz tutar stili (6)
+    expect(sheet).toMatch(/<c r="B\d+" s="19"><v>1234\.5000<\/v><\/c>/);
+    expect(sheet).toMatch(/<c r="C\d+" s="17"><v>-10\.2500<\/v><\/c>/);
+    expect(sheet).toMatch(/<c r="D\d+" s="6"><v>12\.5000<\/v><\/c>/);
+    expect(sheet).toMatch(/<c r="E\d+" s="6"><v>7\.0000<\/v><\/c>/);
+    expect(sheet).toMatch(/<c r="F\d+" s="8"><v>3\.0000<\/v><\/c>/); // miktar sütununda para birimi yok sayılır
+    expect(sheet).toMatch(/<c r="B6" s="20"><v>1234\.5000<\/v><\/c>/); // toplam satırı: kalın + üst çizgi + aynı biçim
+    // Okuyucu: para birimli hücreler tarih sanılmaz, sayı olarak okunur
+    const read = readXlsx(bytes)[0]!;
+    const row = read.rows.find((r) => r[0] === 'A')!;
+    expect(row.slice(1, 4)).toEqual(['1234.5', '-10.25', '12.5']);
+    expect(isDateFormatCode('"₺"#,##0.00;-"₺"#,##0.00')).toBe(false);
+    expect(isDateFormatCode('"£"#,##0.00;-"£"#,##0.00')).toBe(false);
+  });
+
   it('çok sayfalı kitap: sayfa adları temizlenir, kısaltılır ve tekilleşir', () => {
     expect(sheetNames(['Mizan: 2026/1', 'A'.repeat(40), 'a'.repeat(40), 'Mizan: 2026/1'])).toEqual(['Mizan- 2026-1', 'A'.repeat(31), `${'a'.repeat(27)} (2)`, 'Mizan- 2026-1 (2)']);
     const sheets = readXlsx(writeXlsx([{ ...sample, sheet: 'Cariler' }, { ...sample, sheet: 'Stok' }]));

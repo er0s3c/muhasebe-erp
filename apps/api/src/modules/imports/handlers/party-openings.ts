@@ -1,16 +1,4 @@
-import {
-  applyRate,
-  type CurrencyCode,
-  dec,
-  formatTR,
-  partyOpeningsOptionsSchema,
-  sum,
-  toDbRate,
-  type ImportMessage,
-  type ImportRow,
-  type MoneyValue,
-  type PartyKind,
-} from '@erp/shared';
+import { applyRate, type CurrencyCode, currencySymbol, dec, formatTR, type ImportMessage, type ImportRow, type MoneyValue, type PartyKind, partyOpeningsOptionsSchema, sum, toDbRate } from '@erp/shared';
 import { parties } from '../../../db/schema';
 import { createJournalEntry, type AutoJournalLine } from '../../ledger/journal';
 import { loadMappings } from '../../ledger/mappings';
@@ -191,8 +179,8 @@ export const partyOpeningsHandler: ImportHandler = {
       summary: [
         { label: 'Açılış tarihi', value: opts.openingDate.split('-').reverse().join('.') },
         { label: 'Yevmiye satırı (cari)', value: String(planned.length) },
-        { label: `Borç toplamı (${base})`, value: formatTR(debitTotal) },
-        { label: `Alacak toplamı (${base})`, value: formatTR(creditTotal) },
+        { label: `Borç toplamı (${currencySymbol(base)})`, value: formatTR(debitTotal) },
+        { label: `Alacak toplamı (${currencySymbol(base)})`, value: formatTR(creditTotal) },
         { label: 'Karşı hesap', value: net.isZero() ? 'gerekmiyor (dengeli)' : `${offsetText}: ${formatTR(net.abs())} ${net.gt(0) ? 'alacak' : 'borç'}` },
         { label: 'Atlanacak satır', value: String(skipped) },
       ],

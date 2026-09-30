@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { describe, expect, it } from 'vitest';
+import { todayIso } from '@erp/shared';
 import { PASSWORD, accountIds, asDb, client, createCompany, day, expectDbError, makeApp, orgOf, registerUser, thisYear } from './helpers';
 
 describe('fatura', async () => {
@@ -597,7 +598,8 @@ describe('fatura', async () => {
     const { c } = await setup('Liste');
     const ali = await mkParty(c, 'Çağlar Ticaret', 'customer');
     const sup = await mkParty(c, 'Tedarikçi', 'supplier');
-    const today = new Date().toISOString().slice(0, 10);
+    // API ayı Europe/Nicosia'ya göre hesaplar: UTC tarihi ay sonunda (UTC 21:00'den sonra) bir gün geride kalıp özeti kırardı
+    const today = todayIso();
     await posted(c, { type: 'sales', partyId: ali.id, invoiceDate: today, lines: [line(null, '1', '100')] });
     await posted(c, { type: 'expense', partyId: sup.id, invoiceDate: today, externalNo: 'X-9', lines: [line(null, '1', '40')] });
     await inv(c, { type: 'sales', partyId: ali.id, invoiceDate: today, lines: [line(null, '1', '10')] }); // taslak

@@ -1,5 +1,6 @@
 import { strToU8, zipSync } from 'fflate';
-import { DEFAULT_WIDTH, TOTAL_LABEL, type CellValue, type ColumnKind, type ReportTable } from './table';
+import { CURRENCY_SYMBOLS } from '@erp/shared';
+import { DEFAULT_WIDTH, TOTAL_LABEL, type CellValue, type ColumnKind, type ReportTable, type TableColumn } from './table';
 
 /**
  * Küçük, bağımlılıksız XLSX yazıcı (fflate + elle OOXML). Metinler satır içi dizge (`inlineStr`) olarak
@@ -58,10 +59,40 @@ const TOTAL_STYLE: Record<ColumnKind, number> = {
   int: STYLE.totalInt,
 };
 
-const STYLES_XML =
+/** Para birimi simgeli tutar hücre stilleri: indeks 17'den başlar, her para birimi için (gövde, toplam) çifti. */
+export interface CurrencyStyle {
+  body: number;
+  total: number;
+}
+const FIRST_CURRENCY_STYLE = 17;
+const FIRST_CURRENCY_FMT = 167;
+
+/** Çalışma kitabında kullanılan para birimleri (sütun `currency` alanı, yalnızca simgesi bilinenler), sıralı ve tekil. */
+export function workbookCurrencies(tables: readonly ReportTable[]): string[] {
+  const used = new Set<string>();
+  for (const t of tables) {
+    for (const c of t.columns) {
+      if (c.kind === 'money' && c.currency && Object.prototype.hasOwnProperty.call(CURRENCY_SYMBOLS, c.currency)) used.add(c.currency);
+    }
+  }
+  return [...used].sort();
+}
+
+const currencyStyleMap = (currencies: readonly string[]) =>
+  new Map<string, CurrencyStyle>(currencies.map((c, i) => [c, { body: FIRST_CURRENCY_STYLE + 2 * i, total: FIRST_CURRENCY_STYLE + 2 * i + 1 }]));
+
+/** `"₺"#,##0.00;-"₺"#,##0.00`: simge tırnaklı metindir (Excel'de sayı biçimi harfi sanılmaz); XML özniteliği için kaçırılmış. */
+const currencyFormat = (code: string) => {
+  const sym = CURRENCY_SYMBOLS[code]!;
+  return xmlEscape(`"${sym}"#,##0.00;-"${sym}"#,##0.00`);
+};
+
+const stylesXml = (currencies: readonly string[]) =>
   XML_HEAD +
   `<styleSheet xmlns="${NS_MAIN}">` +
-  '<numFmts count="3"><numFmt numFmtId="164" formatCode="dd\\.mm\\.yyyy"/><numFmt numFmtId="165" formatCode="#,##0.####"/><numFmt numFmtId="166" formatCode="#,##0.0000"/></numFmts>' +
+  `<numFmts count="${3 + currencies.length}"><numFmt numFmtId="164" formatCode="dd\\.mm\\.yyyy"/><numFmt numFmtId="165" formatCode="#,##0.####"/><numFmt numFmtId="166" formatCode="#,##0.0000"/>` +
+  currencies.map((c, i) => `<numFmt numFmtId="${FIRST_CURRENCY_FMT + i}" formatCode="${currencyFormat(c)}"/>`).join('') +
+  '</numFmts>' +
   '<fonts count="4">' +
   '<font><sz val="10"/><name val="Arial"/></font>' +
   '<font><b/><sz val="10"/><name val="Arial"/></font>' +
@@ -76,7 +107,7 @@ const STYLES_XML =
   '<border><left/><right/><top style="thin"><color rgb="FF0C0A08"/></top><bottom/><diagonal/></border>' +
   '</borders>' +
   '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-  '<cellXfs count="17">' +
+  `<cellXfs count="${17 + 2 * currencies.length}">` +
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' + // 0
   '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' + // 1 title
   '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>' + // 2 subtitle
@@ -94,6 +125,13 @@ const STYLES_XML =
   '<xf numFmtId="166" fontId="1" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>' + // 14
   '<xf numFmtId="3" fontId="1" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>' + // 15
   '<xf numFmtId="164" fontId="1" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>' + // 16
+  currencies
+    .map(
+      (_, i) =>
+        `<xf numFmtId="${FIRST_CURRENCY_FMT + i}" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` + // gövde
+        `<xf numFmtId="${FIRST_CURRENCY_FMT + i}" fontId="1" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>`, // toplam
+    )
+    .join('') +
   '</cellXfs>' +
   '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
   '</styleSheet>';
@@ -155,7 +193,11 @@ export function sheetNames(titles: readonly string[]): string[] {
 /** Başlık satırı: başlıklı raporlarda 4 (1: rapor adı, 2: dönem, 3: boş), düz tablolarda 1. */
 const headerRowOf = (table: ReportTable) => (table.plain ? 1 : 4);
 
-function sheetXml(table: ReportTable): string {
+function sheetXml(table: ReportTable, cs: ReadonlyMap<string, CurrencyStyle>): string {
+  const styleOf = (c: TableColumn, total: boolean) => {
+    const cur = c.kind === 'money' && c.currency ? cs.get(c.currency) : undefined;
+    return cur ? (total ? cur.total : cur.body) : (total ? TOTAL_STYLE : BODY_STYLE)[c.kind];
+  };
   const HEADER_ROW = headerRowOf(table);
   const cols = table.columns;
   const lastCol = columnName(Math.max(cols.length - 1, 0));
@@ -176,7 +218,7 @@ function sheetXml(table: ReportTable): string {
   for (const row of table.rows) {
     r++;
     const cells = cols
-      .map((c, i) => valueCell(`${columnName(i)}${r}`, c.kind, BODY_STYLE[c.kind], row[c.key] ?? null))
+      .map((c, i) => valueCell(`${columnName(i)}${r}`, c.kind, styleOf(c, false), row[c.key] ?? null))
       .filter((x): x is string => x !== null);
     rows.push(`<row r="${r}">${cells.join('')}</row>`);
   }
@@ -191,7 +233,7 @@ function sheetXml(table: ReportTable): string {
     const cells = cols.map((c, i) => {
       const ref = `${columnName(i)}${r}`;
       const v = table.totals![c.key];
-      const filled = valueCell(ref, c.kind, TOTAL_STYLE[c.kind], v ?? null);
+      const filled = valueCell(ref, c.kind, styleOf(c, true), v ?? null);
       if (filled) return filled;
       // Boş toplam hücresi de üst çizgiyi taşısın; ilk metin sütununa etiket yazılır
       return i === firstText ? textCell(ref, STYLE.totalText, TOTAL_LABEL) : `<c r="${ref}" s="${STYLE.totalText}"/>`;
@@ -224,6 +266,8 @@ function sheetXml(table: ReportTable): string {
 export function writeXlsx(tables: readonly ReportTable[]): Uint8Array {
   if (tables.length === 0) throw new Error('En az bir tablo gerekli');
   const names = sheetNames(tables.map((t) => t.sheet ?? t.title));
+  const currencies = workbookCurrencies(tables);
+  const cs = currencyStyleMap(currencies);
   const files: Record<string, Uint8Array> = {};
 
   files['[Content_Types].xml'] = strToU8(
@@ -268,9 +312,9 @@ export function writeXlsx(tables: readonly ReportTable[]): Uint8Array {
       `<Relationship Id="rId${tables.length + 1}" Type="${NS_REL}/styles" Target="styles.xml"/>` +
       '</Relationships>',
   );
-  files['xl/styles.xml'] = strToU8(STYLES_XML);
+  files['xl/styles.xml'] = strToU8(stylesXml(currencies));
   tables.forEach((t, i) => {
-    files[`xl/worksheets/sheet${i + 1}.xml`] = strToU8(sheetXml(t));
+    files[`xl/worksheets/sheet${i + 1}.xml`] = strToU8(sheetXml(t, cs));
   });
 
   return zipSync(files, { level: 6 });

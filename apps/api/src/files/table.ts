@@ -11,6 +11,12 @@ export interface TableColumn {
   kind: ColumnKind;
   /** Excel sütun genişliği (karakter); boşsa türe göre. */
   width?: number;
+  /**
+   * `money` sütununun para birimi (TRY, GBP …): XLSX hücre biçimi simgeli olur (`₺#.##0,00`). Hücre yine gerçek
+   * sayıdır; CSV etkilenmez. Yalnızca sütun TEK para biriminde ise verilir; satır başına para birimi değişen
+   * sütunlar ve yüzde/oran gibi `money` kipindeki tutar olmayanlar düz kalır.
+   */
+  currency?: string;
 }
 
 export type CellValue = string | number | null;

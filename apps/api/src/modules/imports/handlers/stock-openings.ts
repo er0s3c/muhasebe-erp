@@ -1,17 +1,5 @@
 import { inArray } from 'drizzle-orm';
-import {
-  dec,
-  type CurrencyCode,
-  formatTR,
-  roundMoney,
-  stockOpeningsOptionsSchema,
-  sum,
-  toDbRate,
-  type ImportMessage,
-  type ImportRow,
-  type MoneyValue,
-  type StockLineInput,
-} from '@erp/shared';
+import { type CurrencyCode, currencySymbol, dec, formatTR, type ImportMessage, type ImportRow, type MoneyValue, roundMoney, type StockLineInput, stockOpeningsOptionsSchema, sum, toDbRate } from '@erp/shared';
 import { items, stockMovements, warehouses } from '../../../db/schema';
 import { loadMappings } from '../../ledger/mappings';
 import { postStockDocument } from '../../inventory/documents';
@@ -194,7 +182,7 @@ export const stockOpeningsHandler: ImportHandler = {
         { label: 'Açılış tarihi', value: opts.openingDate.split('-').reverse().join('.') },
         { label: 'Stok satırı', value: String(planned.length) },
         { label: 'Stok belgesi', value: `${docCount} (depo başına)` },
-        { label: `Stok değeri (${base})`, value: formatTR(total) },
+        { label: `Stok değeri (${currencySymbol(base)})`, value: formatTR(total) },
         { label: 'Atlanacak satır', value: String(skipped) },
       ],
       apply: async () => {
@@ -218,7 +206,7 @@ export const stockOpeningsHandler: ImportHandler = {
           summary: [
             { label: 'Stok belgesi', value: String(entries.length) },
             { label: 'Stok satırı', value: String(planned.length) },
-            { label: `Stok değeri (${base})`, value: formatTR(total) },
+            { label: `Stok değeri (${currencySymbol(base)})`, value: formatTR(total) },
           ],
           entries,
         };
