@@ -18,6 +18,7 @@ import { useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { Account, OpenItem, OpenItemsData, TreasuryTxnDetail, TreasuryTxnType } from '../../lib/types';
 import { usePartyOptions } from '../invoices/common';
+import { PROJECT_COST_INVALIDATE, ProjectLineRow, isProjectTaggable, projectFields } from '../projects/common';
 import { TREASURY_INVALIDATE, TXN_TYPES, accountLabel, useMarketRates, useTreasuryAccounts } from './common';
 
 interface Props {
@@ -70,6 +71,8 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
   const [fxRate, setFxRate] = useState('');
   const [partyId, setPartyId] = useState('');
   const [glAccountId, setGlAccountId] = useState('');
+  const [projectId, setProjectId] = useState('');
+  const [wbsId, setWbsId] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<Record<string, ItemState>>({});
   const [error, setError] = useState<Error | null>(null);
@@ -92,6 +95,8 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
     setFxRate('');
     setPartyId(initialPartyId);
     setGlAccountId('');
+    setProjectId('');
+    setWbsId('');
     setDescription(line?.description ?? '');
     setItems({});
     setError(null);
@@ -122,6 +127,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
   const partyOptions = type === 'receipt' ? customerOptions : supplierOptions;
 
   const { data: glData } = useCQuery<{ accounts: Account[] }>(['accounts'], '/api/accounts', { enabled: open && other });
+  const glTaggable = other && isProjectTaggable(glData?.accounts.find((a) => a.id === glAccountId));
   const glOptions = useMemo<ComboOption[]>(() => {
     const linked = new Set((accData?.accounts ?? []).map((a) => a.accountId));
     return (glData?.accounts ?? [])
@@ -248,10 +254,12 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
           ...(pair ? { toAccountId } : {}),
           ...(type === 'exchange' ? { counterAmount } : {}),
           ...(other ? { glAccountId } : {}),
+          // Proje etiketi yalnızca gelir/gider/maliyet karşı hesabında anlamlıdır (sunucu kuralı)
+          ...(glTaggable ? projectFields(projectId, wbsId) : {}),
           ...(showRate && fxRate ? { fxRate } : {}),
         },
       }),
-    TREASURY_INVALIDATE,
+    [...TREASURY_INVALIDATE, ...PROJECT_COST_INVALIDATE],
   );
 
   const itemProblems = selected.some((it) => {
@@ -288,6 +296,8 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
     setType(k);
     setPartyId('');
     setGlAccountId('');
+    setProjectId('');
+    setWbsId('');
     setToAccountId('');
     setCounterAmount('');
     setAmountInput(null);
@@ -602,8 +612,31 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
 
         {other && (
           <Field label={t('treasury.sheet.glAccount')} required hint={t('treasury.sheet.glAccountHint')}>
-            {(id) => <Combobox id={id} options={glOptions} value={glAccountId || null} onChange={setGlAccountId} placeholder={t('treasury.sheet.pickGl')} aria-label={t('treasury.sheet.glAccount')} />}
+            {(id) => (
+              <Combobox
+                id={id}
+                options={glOptions}
+                value={glAccountId || null}
+                onChange={(v) => {
+                  setGlAccountId(v);
+                  setProjectId('');
+                  setWbsId('');
+                }}
+                placeholder={t('treasury.sheet.pickGl')}
+                aria-label={t('treasury.sheet.glAccount')}
+              />
+            )}
           </Field>
+        )}
+        {glTaggable && (
+          <ProjectLineRow
+            projectId={projectId}
+            wbsId={wbsId}
+            onChange={(n) => {
+              setProjectId(n.projectId);
+              setWbsId(n.wbsId);
+            }}
+          />
         )}
 
         <Field label={t('treasury.sheet.description')}>

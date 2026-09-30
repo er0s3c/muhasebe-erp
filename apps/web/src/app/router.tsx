@@ -110,6 +110,13 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="construction.projects" />,
+                children: [
+                  { path: 'projects', ...page(() => import('../features/projects/ProjectsPage'), 'ProjectsPage') },
+                  { path: 'projects/:id', ...page(() => import('../features/projects/ProjectDetailPage'), 'ProjectDetailPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="core.settings" />,
                 children: [
                   { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage') },

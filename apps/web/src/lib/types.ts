@@ -93,6 +93,12 @@ export interface JournalLine {
   partyCode: string | null;
   partyName: string | null;
   dueDate: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  wbsId: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
 }
 
 export interface JournalEntry extends Omit<JournalListItem, 'totalBase'> {
@@ -408,6 +414,10 @@ export interface StockDocDetail {
     unitCost: string | null;
     fxRate: string | null;
     adjustment: string | null;
+    projectId?: string | null;
+    projectCode?: string | null;
+    wbsId?: string | null;
+    wbsCode?: string | null;
   }[];
   totalValue: string;
 }
@@ -537,6 +547,12 @@ export interface InvoiceLineRow {
   deliveryNoteId: string | null;
   deliveryNoteNo: string | null;
   deliveryLineNo: number | null;
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  wbsId: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
 }
 
 export interface InvoiceDetail {
@@ -932,6 +948,146 @@ export interface FxDifferenceData {
     net: string;
   }[];
   totals: { gain: string; loss: string; net: string };
+}
+
+// --- Şantiye / proje (Faz B1) ------------------------------------------------
+
+export type { ProjectKind, ProjectStatus } from '@erp/shared';
+
+export interface ProjectListRow {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'own' | 'contract';
+  status: 'planned' | 'active' | 'on_hold' | 'completed' | 'cancelled';
+  clientPartyId: string | null;
+  clientName: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  location: string | null;
+  wbsCount: number;
+}
+
+export interface ProjectDetail extends Omit<ProjectListRow, 'wbsCount'> {
+  description: string | null;
+  clientCode: string | null;
+  wbsCount: number;
+  budgetCount: number;
+  /** Projeye etiketli maliyet/gelir satırı var (silinemez/iptal edilemez). */
+  hasPostings: boolean;
+}
+
+export interface ProjectWbsRow {
+  id: string;
+  parentId: string | null;
+  code: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+  depth: number;
+  isLeaf: boolean;
+  /** Maliyet, bütçe veya ilerleme kaydı var (alt iş eklenemez, silinemez). */
+  hasPostings: boolean;
+}
+
+export interface ProjectMetrics {
+  budget: string;
+  actual: string;
+  remaining: string;
+  spentPct: string | null;
+  percent: string | null;
+  earnedValue: string;
+  hasProgress: boolean;
+  etc: string;
+  eac: string;
+  variance: string;
+  cpi: string | null;
+}
+
+export interface ProjectCostRow extends ProjectMetrics {
+  wbsId: string | null;
+  parentId: string | null;
+  code: string;
+  name: string;
+  depth: number;
+  isLeaf: boolean;
+  isActive: boolean;
+  unassigned: boolean;
+  progress: { percent: string; etcOverride: string | null; asOfDate: string; note: string | null } | null;
+  revenue: string;
+}
+
+export interface ProjectCostReport {
+  project: { id: string; code: string; name: string; kind: 'own' | 'contract'; status: string };
+  asOf: string;
+  budget: { id: string; revisionNo: number; approvedAt: string } | null;
+  rows: ProjectCostRow[];
+  totals: ProjectMetrics & { revenue: string };
+}
+
+export interface ProjectBudgetRow {
+  id: string;
+  revisionNo: number;
+  status: 'draft' | 'approved' | 'superseded';
+  title: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  lineCount: number;
+  total: string;
+  isCurrent: boolean;
+}
+
+export interface ProjectBudgetDetail {
+  budget: { id: string; projectId: string; revisionNo: number; status: 'draft' | 'approved' | 'superseded'; title: string | null; approvedAt: string | null; total: string };
+  lines: { id: string; wbsId: string; wbsCode: string; wbsName: string; amount: string }[];
+}
+
+export interface ProjectProgressOverview {
+  asOf: string;
+  latest: { wbsId: string; percent: string; etcOverride: string | null; asOfDate: string; note: string | null }[];
+  history: { id: string; wbsId: string; wbsCode: string; wbsName: string; asOfDate: string; percent: string; etcOverride: string | null; note: string | null; createdAt: string }[];
+}
+
+export interface ProjectTransactionsData {
+  transactions: {
+    lineId: string;
+    entryId: string;
+    entryNo: string | null;
+    date: string;
+    description: string | null;
+    accountCode: string;
+    accountName: string;
+    debitBase: string;
+    creditBase: string;
+    side: 'cost' | 'revenue';
+    wbsId: string | null;
+    wbsCode: string | null;
+    wbsName: string | null;
+    sourceType: string | null;
+    reversalOfId: string | null;
+  }[];
+  total: number;
+  costNet: string;
+  revenueNet: string;
+}
+
+export interface ProjectsSummary {
+  asOf: string;
+  projects: (Pick<ProjectCostReport['project'], 'id' | 'code' | 'name' | 'kind' | 'status'> &
+    Pick<ProjectMetrics, 'budget' | 'actual' | 'remaining' | 'percent' | 'etc' | 'eac' | 'variance' | 'cpi'> & { budgetRevision: number | null; revenue: string })[];
+  totals: Pick<ProjectMetrics, 'budget' | 'actual' | 'remaining' | 'percent' | 'etc' | 'eac' | 'variance' | 'cpi'>;
+  allocatedCost: string;
+  unallocatedCost: string;
+  ledgerCost: string;
+}
+
+export interface ProjectOption {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'own' | 'contract';
+  status: string;
+  wbs: { id: string; code: string; name: string }[];
 }
 
 /** Modül anahtarı -> çeviri anahtarı */

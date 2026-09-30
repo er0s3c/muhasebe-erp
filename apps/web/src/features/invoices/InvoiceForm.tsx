@@ -17,6 +17,7 @@ import { money } from '../../lib/format';
 import { useCan, useCMutation, useCompanyApi, useCQuery } from '../../lib/queries';
 import type { AccountMapping, DeliveryNoteDetail, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
 import { useUnitLabel, useWarehouses } from '../inventory/common';
+import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../projects/common';
 import { INVOICE_INVALIDATE, useLineAccountOptions, usePartyOptions, useTaxRates, vatRateFor } from './common';
 import { DeliveryPicker } from './DeliveryPicker';
 
@@ -39,6 +40,9 @@ interface LineState {
   deliveryNoteNo: string;
   deliveryLineNo: number | null;
   deliveryRemaining: string | null;
+  /** Proje boyutu (inşaat): yalnızca alış/gider/alış iadesi faturasının stoksuz satırında */
+  projectId: string;
+  wbsId: string;
 }
 
 let lineKey = 1;
@@ -59,6 +63,8 @@ const emptyLine = (vatCode = ''): LineState => ({
   deliveryNoteNo: '',
   deliveryLineNo: null,
   deliveryRemaining: null,
+  projectId: '',
+  wbsId: '',
 });
 
 interface DeliverySource {
@@ -93,6 +99,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const base = company.baseCurrency;
   const meta = INVOICE_TYPE_META[type];
   const salesSide = meta.side === 'sales';
+  // Proje etiketi yalnızca alış tarafında (alış, gider, alış iadesi); satış tarafı sonraki aşamada
+  const projectAllowed = !salesSide;
   const can = useCan();
   const canPost = can('invoices.post');
   const canDelivery = can('deliveries.read');
@@ -142,6 +150,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         deliveryNoteNo: l.deliveryNoteNo ?? '',
         deliveryLineNo: l.deliveryLineNo,
         deliveryRemaining: null,
+        projectId: l.projectId ?? '',
+        wbsId: l.wbsId ?? '',
       }));
     }
     if (original) {
@@ -165,6 +175,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           deliveryNoteNo: '',
           deliveryLineNo: null,
           deliveryRemaining: null,
+          projectId: '',
+          wbsId: '',
         }));
     }
     return [emptyLine()];
@@ -284,6 +296,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       unitPrice: price.v && price.c === currency ? trim(price.v) : '',
       vatCode: it.vatCode ?? '',
       accountId: '',
+      // Stoklu kalem projeye doğrudan yazılmaz (malzeme stoktan projeye sarf edilir)
+      ...(it.kind === 'goods' ? { projectId: '', wbsId: '' } : {}),
     });
   };
 
@@ -311,6 +325,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       accountId: l.itemId && itemById.get(l.itemId)?.kind === 'goods' && !salesSide ? null : l.accountId || null,
       sourceLineId: l.sourceLineId || null,
       deliveryLineId: l.deliveryLineId || null,
+      // Proje yalnızca stoksuz (serbest/hizmet) satırda ve alış tarafında gönderilir
+      ...(projectAllowed && (!l.itemId || itemById.get(l.itemId)?.kind === 'service') ? projectFields(l.projectId, l.wbsId) : {}),
     })),
   });
 
@@ -319,7 +335,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       initial
         ? c<InvoiceDetail>(`/api/invoices/${initial.invoice.id}`, { method: 'PUT', body: bodyOf(post) })
         : c<InvoiceDetail>('/api/invoices', { method: 'POST', body: bodyOf(post) }),
-    INVOICE_INVALIDATE,
+    [...INVOICE_INVALIDATE, ...PROJECT_COST_INVALIDATE],
   );
   const remove = useCMutation((_: void, c) => c(`/api/invoices/${initial!.invoice.id}`, { method: 'DELETE' }), INVOICE_INVALIDATE);
 
@@ -504,6 +520,15 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         <X className="size-4" />
                       </button>
                     </div>
+                    {free && projectAllowed && (
+                      <ProjectLineRow
+                        className="mt-1.5"
+                        label={String(i + 1)}
+                        projectId={l.projectId}
+                        wbsId={l.wbsId}
+                        onChange={(v) => patch(l.key, v)}
+                      />
+                    )}
                     {free || l.returnable || l.deliveryLineId ? (
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 pl-1 text-[13px] text-muted">
                         {free && (

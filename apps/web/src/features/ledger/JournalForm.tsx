@@ -15,6 +15,7 @@ import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
 import { useCMutation, useCQuery, useCan, useCompanyApi } from '../../lib/queries';
 import type { Account, JournalEntry, PartyListRow } from '../../lib/types';
+import { PROJECT_COST_INVALIDATE, ProjectLineRow, isProjectTaggable, projectFields } from '../projects/common';
 
 interface LineState {
   key: number;
@@ -27,10 +28,13 @@ interface LineState {
   /** Cari kontrol hesabı (120, 320…) satırlarında zorunlu */
   partyId: string;
   dueDate: string;
+  /** Proje boyutu (inşaat): gelir/gider/maliyet hesaplarında isteğe bağlı */
+  projectId: string;
+  wbsId: string;
 }
 
 let lineKey = 1;
-const emptyLine = (currency: string): LineState => ({ key: lineKey++, accountId: '', description: '', currency, debit: '', credit: '', fxRate: '', partyId: '', dueDate: '' });
+const emptyLine = (currency: string): LineState => ({ key: lineKey++, accountId: '', description: '', currency, debit: '', credit: '', fxRate: '', partyId: '', dueDate: '', projectId: '', wbsId: '' });
 
 interface Props {
   open: boolean;
@@ -82,6 +86,8 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
           fxRate: l.currencyCode !== base ? trimZeros(l.fxRate) : '',
           partyId: l.partyId ?? '',
           dueDate: l.dueDate ?? '',
+          projectId: l.projectId ?? '',
+          wbsId: l.wbsId ?? '',
         })),
       );
     } else {
@@ -161,6 +167,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
             ...(l.currency !== base && l.fxRate ? { fxRate: l.fxRate } : {}),
             ...(l.partyId ? { partyId: l.partyId } : {}),
             ...(l.partyId && l.dueDate ? { dueDate: l.dueDate } : {}),
+            ...(isProjectTaggable(accountById.get(l.accountId)) ? projectFields(l.projectId, l.wbsId) : {}),
           })),
       };
       const res = initial
@@ -169,7 +176,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
       return res.entry;
     },
     // Cari bakiye/ekstre/yaşlandırma da defterden hesaplandığı için birlikte yenilenir
-    [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger'], ['parties'], ['party'], ['party-aging']],
+    [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger'], ['parties'], ['party'], ['party-aging'], ...PROJECT_COST_INVALIDATE],
   );
 
   const submit = (post: boolean) => {
@@ -282,6 +289,8 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                         accountId: v,
                         ...(a?.currencyCode ? { currency: a.currencyCode } : {}),
                         ...(resetParty ? { partyId: '', dueDate: '' } : {}),
+                        // Proje yalnızca gelir/gider/maliyet hesaplarında anlamlıdır
+                        ...(isProjectTaggable(a) ? {} : { projectId: '', wbsId: '' }),
                       });
                     }}
                   />
@@ -358,6 +367,15 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                         aria-label={`${t('ledger.journal.dueDate')} ${i + 1}`}
                       />
                     </div>
+                  )}
+                  {isProjectTaggable(acc) && (
+                    <ProjectLineRow
+                      className="col-span-full lg:mt-1"
+                      label={String(i + 1)}
+                      projectId={l.projectId}
+                      wbsId={l.wbsId}
+                      onChange={(v) => patch(l.key, v)}
+                    />
                   )}
                 </div>
               );

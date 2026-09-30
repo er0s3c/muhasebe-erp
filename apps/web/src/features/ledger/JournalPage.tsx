@@ -230,6 +230,7 @@ function JournalDetail({
   const company = useCompany();
   const canPost = useCan()('ledger.post');
   const partiesOn = useModuleEnabled('core.parties');
+  const projectsOn = useModuleEnabled('construction.projects');
   const { data, isPending } = useCQuery<{ entry: JournalEntry }>(['journal-entry', id], id ? `/api/journal-entries/${id}` : null);
   const entry = data?.entry;
   const [reversing, setReversing] = useState(false);
@@ -347,6 +348,19 @@ function JournalDetail({
                               <span>{l.partyName}</span>
                             )}
                             {l.dueDate && <span className="ml-2 text-muted">{t('parties.detail.dueDate')}: {formatDateTR(l.dueDate)}</span>}
+                          </span>
+                        )}
+                        {l.projectId && (
+                          <span className="mt-0.5 block text-xs text-muted">
+                            {t('projects.picker.label')}:{' '}
+                            {projectsOn ? (
+                              <Link to={`/projects/${l.projectId}`} className="link">
+                                {l.projectCode}
+                              </Link>
+                            ) : (
+                              l.projectCode
+                            )}
+                            {l.wbsCode ? ` · ${l.wbsCode} ${l.wbsName ?? ''}` : ''}
                           </span>
                         )}
                       </Td>

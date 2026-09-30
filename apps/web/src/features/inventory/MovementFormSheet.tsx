@@ -17,6 +17,7 @@ import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { useCMutation, useCompanyApi, useNavigation } from '../../lib/queries';
 import type { StockDocDetail, StockDocType } from '../../lib/types';
+import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../projects/common';
 import { STOCK_INVALIDATE, qtyText, useItemOptions, useUnitLabel, useWarehouses } from './common';
 
 export type MovementType = Exclude<StockDocType, 'count'>;
@@ -30,10 +31,13 @@ interface LineState {
   unitCost: string;
   currency: string;
   fxRate: string;
+  /** Proje boyutu (inşaat): yalnızca çıkış (sarf) ve fire satırlarında */
+  projectId: string;
+  wbsId: string;
 }
 
 let lineKey = 1;
-const emptyLine = (currency: string, itemId = ''): LineState => ({ key: lineKey++, itemId, qty: '', unitCost: '', currency, fxRate: '' });
+const emptyLine = (currency: string, itemId = ''): LineState => ({ key: lineKey++, itemId, qty: '', unitCost: '', currency, fxRate: '', projectId: '', wbsId: '' });
 
 interface Props {
   open: boolean;
@@ -66,6 +70,8 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
   const [fieldError, setFieldError] = useState<string | null>(null);
 
   const inbound = INBOUND.includes(type);
+  // Malzeme sarfı ve fire maliyeti projeye yazılabilir
+  const projectAllowed = type === 'issue' || type === 'waste';
   const { byId, options } = useItemOptions(open, warehouseId || undefined);
 
   useEffect(() => {
@@ -142,10 +148,11 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
             itemId: l.itemId,
             quantity: l.qty,
             ...(inbound ? { unitCost: l.unitCost, currency: l.currency, ...(l.currency !== base && l.fxRate ? { fxRate: l.fxRate } : {}) } : {}),
+            ...(projectAllowed ? projectFields(l.projectId, l.wbsId) : {}),
           })),
         },
       }),
-    [...STOCK_INVALIDATE, ['dashboard']],
+    [...STOCK_INVALIDATE, ['dashboard'], ...PROJECT_COST_INVALIDATE],
   );
 
   const submit = () => {
@@ -217,7 +224,7 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
             value={type}
             onChange={(k) => {
               setType(k);
-              setLines((cur) => cur.map((l) => ({ ...l, unitCost: '', fxRate: '' })));
+              setLines((cur) => cur.map((l) => ({ ...l, unitCost: '', fxRate: '', projectId: '', wbsId: '' })));
             }}
             items={TYPES.map((k) => ({ key: k, label: t(`inventory.docTypes.${k}`) }))}
           />
@@ -283,7 +290,8 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
               const value = inbound && l.qty && l.unitCost !== '' && rate ? applyRate(dec(l.qty).times(l.unitCost), rate) : null;
               const over = !inbound && it && l.qty && !allowNegative && dec(l.qty).gt(it.onHand);
               return (
-                <div key={l.key} className={cn('grid grid-cols-2 items-center gap-2 rounded-lg border border-border p-2 lg:border-0 lg:p-0', inbound ? gridIn : gridOut)}>
+                <div key={l.key} className="flex flex-col gap-1.5 rounded-lg border border-border p-2 lg:border-0 lg:p-0">
+                <div className={cn('grid grid-cols-2 items-center gap-2', inbound ? gridIn : gridOut)}>
                   <Combobox
                     className="col-span-2 lg:col-span-1"
                     options={options}
@@ -338,6 +346,10 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
                   >
                     <X className="size-4" />
                   </button>
+                </div>
+                {projectAllowed && (
+                  <ProjectLineRow label={String(i + 1)} projectId={l.projectId} wbsId={l.wbsId} onChange={(v) => patch(l.key, v)} />
+                )}
                 </div>
               );
             })}

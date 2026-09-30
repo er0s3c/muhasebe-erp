@@ -12,7 +12,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, money } from '../../lib/format';
-import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { DeliveryNoteDetail, InvoiceDetail, InvoiceType } from '../../lib/types';
 import { qtyText, useUnitLabel } from '../inventory/common';
@@ -62,6 +62,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
   const company = useCompany();
   const unitLabel = useUnitLabel();
   const can = useCan();
+  const projectsOn = useModuleEnabled('construction.projects');
   const { invoice: inv, lines } = data;
   const meta = INVOICE_TYPE_META[inv.type];
   const base = company.baseCurrency;
@@ -216,6 +217,19 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                     <span>{l.description}</span>
                     {l.itemCode && <span className="ml-2 font-mono text-xs text-muted">{l.itemCode}</span>}
                     {l.accountCode && <span className="block text-xs text-muted">{t('invoices.form.account')}: {l.accountCode}</span>}
+                    {l.projectId && (
+                      <span className="block text-xs text-muted">
+                        {t('projects.picker.label')}:{' '}
+                        {projectsOn ? (
+                          <Link to={`/projects/${l.projectId}`} className="link">
+                            {l.projectCode}
+                          </Link>
+                        ) : (
+                          l.projectCode
+                        )}
+                        {l.wbsCode ? ` · ${l.wbsCode} ${l.wbsName ?? ''}` : ''}
+                      </span>
+                    )}
                     {l.deliveryNoteId && (
                       <span className="block text-xs text-muted">
                         <Link to={`/delivery-notes/${l.deliveryNoteId}`} className="link">

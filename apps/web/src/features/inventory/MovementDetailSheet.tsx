@@ -33,6 +33,7 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
   const unitLabel = useUnitLabel();
   const canMove = useCan()('inventory.move');
   const invoicesOn = useModuleEnabled('core.invoices');
+  const projectsOn = useModuleEnabled('construction.projects');
   const { data, isPending, error } = useCQuery<StockDocDetail>(['stock-doc', id], id ? `/api/stock-documents/${id}` : null);
   const [reversing, setReversing] = useState(false);
   const [revDate, setRevDate] = useState(todayIso());
@@ -163,6 +164,19 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
                         {l.currencyCode && l.currencyCode !== company.baseCurrency && l.unitCost && l.fxRate && (
                           <span className="block text-xs text-muted">
                             {t('inventory.mdetail.fx', { cost: money(l.unitCost, 4), currency: l.currencyCode, rate: money(l.fxRate, 4) })}
+                          </span>
+                        )}
+                        {l.projectId && (
+                          <span className="block text-xs text-muted">
+                            {t('projects.picker.label')}:{' '}
+                            {projectsOn ? (
+                              <Link to={`/projects/${l.projectId}`} className="link" onClick={onClose}>
+                                {l.projectCode}
+                              </Link>
+                            ) : (
+                              l.projectCode
+                            )}
+                            {l.wbsCode ? ` · ${l.wbsCode}` : ''}
                           </span>
                         )}
                         {l.adjustment && (

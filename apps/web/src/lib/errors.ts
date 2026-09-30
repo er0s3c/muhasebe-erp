@@ -2,7 +2,7 @@ import i18n from '../i18n';
 import { ApiError } from './api';
 
 /** Ayrıntılı (Türkçe) sunucu mesajının genel çeviriden daha yararlı olduğu kodlar. */
-const SERVER_MESSAGE_CODES = new Set(['LEDGER_RULE_VIOLATION', 'TREASURY_RULE_VIOLATION', 'MODULE_REQUIRED_BY', 'MODULE_MISSING_REQUIREMENT']);
+const SERVER_MESSAGE_CODES = new Set(['LEDGER_RULE_VIOLATION', 'TREASURY_RULE_VIOLATION', 'PROJECT_RULE_VIOLATION', 'MODULE_REQUIRED_BY', 'MODULE_MISSING_REQUIREMENT']);
 /**
  * Lisans ve cihaz hataları: sunucu mesajı (Türkçe) sayıyı, nedeni ve yönlendirmeyi içerir ("en fazla 3 cihaz", "süreniz doldu" …);
  * satıcı sunucusundan iletilen hatalar da (INVALID_CODE, ACTIVATION_LIMIT …) satıcının kendi açıklamasıyla gösterilir.

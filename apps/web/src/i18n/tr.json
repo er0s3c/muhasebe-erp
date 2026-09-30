@@ -170,7 +170,8 @@
     "newSalesDelivery": "Yeni satış irsaliyesi",
     "newPurchaseDelivery": "Yeni alış irsaliyesi",
     "newReceipt": "Tahsilat al",
-    "newPayment": "Ödeme yap"
+    "newPayment": "Ödeme yap",
+    "newProject": "Yeni proje"
   },
   "auth": {
     "loginTitle": "Hesabınıza giriş yapın",
@@ -419,7 +420,7 @@
         "core.invoices": "Satış, alış ve gider faturaları, iadeler ve irsaliyeler.",
         "core.treasury": "Kasa ve banka hesapları, tahsilat, ödeme, virman, döviz ve banka mutabakatı.",
         "core.settings": "Şirket, kullanıcılar, kurlar, dönemler ve bu ekran.",
-        "construction.projects": "Şantiye, proje ve hakediş takibi.",
+        "construction.projects": "Proje, iş kırılımı, bütçe revizyonları ve maliyet takibi (şantiye).",
         "retail.pos": "Market için hızlı satış ekranı."
       }
     }
@@ -590,7 +591,10 @@
     "MODULE_MISSING_REQUIREMENT": "Bu modülün çalışması için gereken modüller kapalı; önce onları açın.",
     "MODULE_LOCKED": "Bu modül kapatılamaz.",
     "MODULE_PLANNED": "Bu modül henüz kullanıma açılmadı.",
-    "MODULE_SECTOR_MISMATCH": "Bu modül şirketinizin faaliyet alanında bulunmuyor."
+    "MODULE_SECTOR_MISMATCH": "Bu modül şirketinizin faaliyet alanında bulunmuyor.",
+    "PROJECT_CLOSED": "Bu proje tamamlanmış ya da iptal edilmiş; yeni kayıt yazılamaz. Projeyi yeniden açın.",
+    "PROJECT_MODULE_DISABLED": "Proje etiketi için Ayarlar > Modüller bölümünden \"Şantiye ve projeler\" modülünü açın.",
+    "PROJECT_HAS_POSTINGS": "Bu projede maliyet kaydı var; silinemez ya da iptal edilemez. Tamamlandı olarak işaretleyin."
   },
   "parties": {
     "title": "Cari hesaplar",
@@ -1924,5 +1928,231 @@
     "unknownUser": "—",
     "statusCol": "Durum",
     "actions": "İşlemler"
+  },
+  "projects": {
+    "title": "Projeler",
+    "subtitle": "Şantiye ve projelerinizin bütçesini, gerçekleşen maliyetini ve tamamlanma tahminini izleyin.",
+    "add": "Yeni proje",
+    "empty": "Henüz proje yok",
+    "emptyDesc": "Bir proje açın, iş kalemlerini ve bütçeyi tanımlayın; yevmiye, fatura, stok sarfı ve ödemelerde projeyi seçtikçe gerçekleşen maliyet kendiliğinden görünür.",
+    "searchPlaceholder": "Proje kodu, ad veya işveren ara",
+    "notFound": "Proje bulunamadı",
+    "back": "Projeler",
+    "client": "İşveren",
+    "delete": "Projeyi sil",
+    "overrun": "Bütçe aşımı",
+    "saving": "Bütçenin altında",
+    "statusChanged": "Proje durumu: {{status}}",
+    "completedNote": "Proje tamamlandı: yeni maliyet kaydı yazılamaz (önceki kayıtların ters kaydı yapılabilir). Gerekirse projeyi yeniden açın.",
+    "cancelledNote": "Proje iptal edildi: maliyet, bütçe ve ilerleme girişi kapalı. Gerekirse planlananlara geri alın.",
+    "status": {
+      "planned": "Planlanan",
+      "active": "Aktif",
+      "on_hold": "Beklemede",
+      "completed": "Tamamlandı",
+      "cancelled": "İptal"
+    },
+    "kinds": {
+      "own": "Kendi projesi",
+      "contract": "İşverene yapılan iş"
+    },
+    "transitions": {
+      "start": "Başlat",
+      "reopen": "Yeniden aç",
+      "restore": "Planlananlara al",
+      "hold": "Beklemeye al",
+      "complete": "Tamamla",
+      "cancel": "İptal et"
+    },
+    "confirm": {
+      "cancelTitle": "Proje iptal edilsin mi?",
+      "cancelBody": "İptal edilen projeye maliyet, bütçe ve ilerleme girilemez. Maliyet kaydı olan proje iptal edilemez (tamamlandı olarak işaretleyin).",
+      "completeTitle": "Proje tamamlandı olarak işaretlensin mi?",
+      "completeBody": "Tamamlanan projeye yeni maliyet kaydı yazılamaz. Önceki kayıtların ters kaydı ve raporlar çalışmaya devam eder; dilerseniz projeyi yeniden açabilirsiniz.",
+      "deleteTitle": "Proje silinsin mi?",
+      "deleteBody": "Yalnızca iş kalemi, bütçe ve maliyet kaydı olmayan proje silinebilir. Bu işlem geri alınamaz."
+    },
+    "kpi": {
+      "budget": "Toplam bütçe",
+      "budgetSub": "Yürürlükteki onaylı bütçeler",
+      "actual": "Gerçekleşen maliyet",
+      "actualSub": "Projelere etiketli, kaydedilmiş satırlar",
+      "eac": "Tahmini toplam maliyet",
+      "eacSub": "Gerçekleşen + tamamlanmaya kalan",
+      "variance": "Sapma",
+      "varianceSub": "Bütçe − tahmini toplam (eksi: aşım)"
+    },
+    "unallocated": {
+      "title": "Projelere dağıtılmamış maliyet var",
+      "body": "Defterde projeye etiketlenmemiş {{amount}} maliyet hareketi var (projeli: {{allocated}}, toplam: {{total}}). Bu tutar bir projeye ait değilse (genel yönetim gibi) sorun değildir; aksi halde ilgili kaydı düzeltip projeyi seçin."
+    },
+    "filters": {
+      "status": "Durum",
+      "kind": "Tür",
+      "allStatuses": "Tüm durumlar",
+      "allKinds": "Tüm türler"
+    },
+    "cols": {
+      "code": "Kod",
+      "name": "Proje",
+      "status": "Durum",
+      "budget": "Bütçe",
+      "actual": "Gerçekleşen",
+      "percent": "Tamamlanma",
+      "eac": "Tahmini toplam",
+      "variance": "Sapma",
+      "wbs": "İş kalemi",
+      "spent": "Harcama",
+      "etc": "Kalan (ETC)"
+    },
+    "tabs": {
+      "overview": "Özet",
+      "wbs": "İş kırılımı",
+      "budget": "Bütçe",
+      "transactions": "Hareketler"
+    },
+    "form": {
+      "newTitle": "Yeni proje",
+      "newDesc": "Proje açtıktan sonra iş kalemlerini ve bütçeyi tanımlayın.",
+      "editTitle": "Projeyi düzenle",
+      "saved": "Proje kaydedildi",
+      "name": "Proje adı",
+      "namePlaceholder": "Örn. Güneş Sitesi A Blok",
+      "kind": "Proje türü",
+      "kindLocked": "tür sonradan değişmez",
+      "kindHint": {
+        "own": "Kendi arsanızda/adınıza yaptığınız iş (daire satışı sonraki aşamada bağlanır).",
+        "contract": "Bir işverene yaptığınız iş (alınan hakediş sonraki aşamada bağlanır)."
+      },
+      "client": "İşveren",
+      "clientHint": "Müşteri olarak tanımlı cari",
+      "clientPlaceholder": "İşveren cari seç",
+      "startDate": "Başlangıç tarihi",
+      "endDate": "Planlanan bitiş",
+      "endBeforeStart": "Bitiş başlangıçtan önce olamaz",
+      "location": "Konum",
+      "locationHint": "Ada/parsel, adres ya da bölge",
+      "description": "Açıklama"
+    },
+    "overview": {
+      "asOf": "Tarih itibarıyla",
+      "budgetRev": "Bütçe rev. {{rev}} · {{date}}",
+      "noBudget": "Onaylı bütçe yok",
+      "noBudgetTitle": "Bu projenin onaylı bütçesi yok",
+      "noBudgetBody": "Bütçe olmadan sapma hesaplanamaz: kalan bütçe 0 görünür. Bütçe sekmesinden bir revizyon açıp onaylayın.",
+      "goBudget": "Bütçeye git",
+      "budgetSub": "Yürürlükteki revizyon",
+      "actualSub": "Bütçenin %{{pct}}'i harcandı",
+      "eacSub": "Tamamlanmaya kalan: {{etc}}",
+      "varianceSub": "Bütçe − tahmini toplam (eksi: aşım)",
+      "progress": "Tamamlanma",
+      "progressSub": "Bütçe ağırlıklı; girilmeyen iş kalemi %0 sayılır",
+      "remaining": "Kalan bütçe",
+      "remainingSub": "Bütçe − gerçekleşen",
+      "cpi": "Maliyet performansı (CPI)",
+      "cpiSub": "Kazanılan değer ÷ gerçekleşen; 1'in üstü iyi",
+      "revenue": "Etiketli gelir",
+      "revenueSub": "60/61/64 hesaplarındaki proje gelirleri",
+      "tableTitle": "İş kırılımı maliyet tablosu",
+      "tableDesc": "Üst iş kalemleri altındakilerin toplamıdır. Sapma = bütçe − tahmini toplam.",
+      "hideEmpty": "Boş pasif kalemleri gizle",
+      "noWbs": "Henüz iş kalemi yok",
+      "noWbsDesc": "Maliyeti iş kalemine göre izlemek için İş kırılımı sekmesinden iş kalemlerini tanımlayın.",
+      "goWbs": "İş kırılımına git"
+    },
+    "wbs": {
+      "title": "İş kırılımı",
+      "desc": "Projeyi iş kalemlerine bölün (en çok 6 seviye). Maliyet ve bütçe yalnızca alt işi olmayan (yaprak) iş kalemlerine yazılır.",
+      "addRoot": "İş kalemi ekle",
+      "addChild": "Alt iş ekle",
+      "deactivate": "Pasifleştir",
+      "activate": "Etkinleştir",
+      "enterProgress": "İlerleme gir",
+      "hasRecords": "Kayıtlı",
+      "empty": "İş kalemi tanımlanmamış",
+      "emptyDesc": "Örn. 1 Hazırlık, 2 Kaba inşaat (2.1 Kazı, 2.2 Temel), 3 İnce işler.",
+      "leafNote": "Maliyet, bütçe ya da ilerleme kaydı olan iş kalemine alt iş eklenemez ve silinemez; bunun yerine yeni bir iş kalemi açın veya pasifleştirin.",
+      "addRootTitle": "İş kalemi ekle",
+      "addChildTitle": "Alt iş ekle",
+      "editTitle": "İş kalemini düzenle",
+      "parentLabel": "Üst iş kalemi: {{parent}}",
+      "code": "Kod",
+      "codeHint": "Örn. 2.1 (projede benzersiz)",
+      "name": "Ad",
+      "parent": "Üst iş kalemi",
+      "parentHint": "Taşımak için seçin; kendi altına taşınamaz, derinlik en çok 6.",
+      "rootOption": "Kök (üst iş kalemi yok)",
+      "deleteTitle": "İş kalemi silinsin mi?",
+      "deleteBody": "{{code}} — {{name}} silinecek. Yalnızca hiç kaydı olmayan yaprak iş kalemi silinebilir."
+    },
+    "progress": {
+      "title": "İlerleme girişi",
+      "desc": "İş kalemi başına tamamlanma yüzdesini girin. Boş bıraktığınız kalemler değişmez; kayıtlar silinmez, en son tarihli kayıt geçerlidir.",
+      "date": "Tarih",
+      "current": "Mevcut",
+      "newPercent": "Yeni %",
+      "etc": "Kalan maliyet (isteğe bağlı)",
+      "over100": "Tamamlanma yüzdesi 100'ü aşamaz.",
+      "saved": "İlerleme kaydedildi",
+      "history": "Son girişler"
+    },
+    "budget": {
+      "title": "Bütçe revizyonları",
+      "desc": "Onaylanan bütçe değiştirilemez; değişiklik için yeni revizyon açılır. Sapma her zaman yürürlükteki (en son onaylı) revizyonla hesaplanır.",
+      "create": "Bütçe oluştur",
+      "newRevision": "Yeni revizyon",
+      "created": "Rev. {{rev}} taslağı açıldı",
+      "empty": "Henüz bütçe yok",
+      "emptyDesc": "Bütçe oluşturup iş kalemi başına tutar girin, sonra onaylayın.",
+      "rev": "Revizyon",
+      "titleCol": "Başlık",
+      "approvedAt": "Onay tarihi",
+      "total": "Toplam ({{currency}})",
+      "current": "Yürürlükte",
+      "status": {
+        "draft": "Taslak",
+        "approved": "Onaylı",
+        "superseded": "Devre dışı"
+      },
+      "detailTitle": "Rev. {{rev}} — iş kalemi bütçeleri",
+      "draftDesc": "Taslak: tutarları girip kaydedin, sonra onaylayın.",
+      "currentDesc": "Yürürlükteki revizyon (değiştirilemez).",
+      "pastDesc": "Geçmiş revizyon (değiştirilemez).",
+      "approve": "Onayla",
+      "approveTitle": "Bütçe revizyonu onaylansın mı?",
+      "approveBody": "Onaylanan revizyon yürürlüğe girer ve öncekinin yerini alır. Onaylanan bütçe değiştirilemez.",
+      "approved": "Bütçe onaylandı",
+      "deleteDraft": "Taslağı sil",
+      "deleteTitle": "Taslak silinsin mi?",
+      "deleteBody": "Taslak revizyon ve satırları silinir.",
+      "saveDraft": "Taslağı kaydet",
+      "saved": "Taslak kaydedildi",
+      "noLeaves": "Bütçe girilecek iş kalemi yok",
+      "noLeavesDesc": "Önce İş kırılımı sekmesinden yaprak iş kalemleri tanımlayın.",
+      "editorHint": "Yalnızca yaprak iş kalemlerine tutar girilir; boş ya da 0 bırakılan satırlar kaydedilmez. Tutarlar defter para biriminde.",
+      "noLines": "Bu revizyonda satır yok",
+      "diffAgainst": "Rev. {{rev}}'e göre fark"
+    },
+    "tx": {
+      "wbs": "İş kalemi",
+      "allWbs": "Tüm iş kalemleri",
+      "unassigned": "İş kalemine atanmamış",
+      "empty": "Bu süzgeçte hareket yok",
+      "emptyDesc": "Yevmiye, fatura, stok sarfı ya da ödeme girerken projeyi seçtiğinizde hareketler burada listelenir.",
+      "count": "Satır sayısı",
+      "cost": "Maliyet (net borç)",
+      "revenue": "Gelir (net alacak)",
+      "entry": "Yevmiye",
+      "account": "Hesap",
+      "reversal": "Ters kayıt"
+    },
+    "picker": {
+      "project": "Proje",
+      "wbs": "İş kalemi",
+      "none": "Proje yok",
+      "noWbs": "İş kalemi seçilmedi",
+      "label": "Proje",
+      "hint": "Bu satırın maliyeti/geliri hangi projeye ve iş kalemine yazılsın? Boş bırakabilirsiniz."
+    }
   }
 }
