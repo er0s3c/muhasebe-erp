@@ -1,4 +1,14 @@
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } from 'node:crypto';
+import { base32Encode } from '@erp/license-core';
+
+/**
+ * İlk yönetici kurulum kodu: `LICENSE_DATA_KEY`'den türetilir (durumsuz; sunucu ve `cli setup:token` aynı kodu üretir).
+ * Yalnızca hiç yönetici yokken geçerlidir; panel internete açıkken hesabı ilk gelen kişinin kapmasını önler.
+ */
+export function setupToken(dataKey: string): string {
+  const raw = base32Encode(createHmac('sha256', dataKey).update('erp-license-admin/setup-v1').digest()).slice(0, 20);
+  return raw.match(/.{4}/g)!.join('-');
+}
 
 /** Yönetici TOTP sırlarını diskte şifreler (AES-256-GCM; anahtar `LICENSE_DATA_KEY`'den HKDF ile türetilir). */
 const keyOf = (secret: string): Buffer => Buffer.from(hkdfSync('sha256', secret, 'erp-license-admin', 'totp-secret-v1', 32));

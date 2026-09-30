@@ -26,6 +26,29 @@ export const admins = pgTable(
   (t) => [uniqueIndex('admins_email_uq').on(t.email)],
 );
 
+/** Yönetici giriş anahtarları (WebAuthn/passkey): açık anahtar ve imza sayacı; özel anahtar kullanıcının cihazında/kasasındadır. */
+export const adminPasskeys = pgTable(
+  'admin_passkeys',
+  {
+    id: id(),
+    adminId: uuid()
+      .notNull()
+      .references(() => admins.id),
+    /** base64url kimlik bilgisi kimliği. */
+    credentialId: text().notNull(),
+    /** base64url COSE açık anahtarı. */
+    publicKey: text().notNull(),
+    counter: bigint({ mode: 'number' }).notNull().default(0),
+    transports: text().array().notNull().default(sql`'{}'::text[]`),
+    name: text().notNull(),
+    /** Anahtar eşitlenen bir kasada mı (ör. Vaultwarden, iCloud) yoksa tek cihazda mı. */
+    backedUp: boolean().notNull().default(false),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [uniqueIndex('admin_passkeys_credential_uq').on(t.credentialId), index('admin_passkeys_admin_idx').on(t.adminId)],
+);
+
 /** Oturum kimliği = çerezdeki rastgele değerin sha256 özeti. */
 export const adminSessions = pgTable(
   'admin_sessions',

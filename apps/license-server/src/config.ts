@@ -35,6 +35,14 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => (v === undefined ? undefined : v === 'true')),
+  /**
+   * Yönetim panelinin tarayıcıdaki kökeni (ör. https://lisans.ornek.com): giriş anahtarları (WebAuthn) bu köken ve alan adına
+   * bağlanır. Verilmezse istekteki protokol + Host kullanılır (yalnızca geliştirme için).
+   */
+  LICENSE_ADMIN_ORIGIN: z
+    .url({ protocol: /^https?$/ })
+    .optional()
+    .transform((v) => (v === undefined ? undefined : new URL(v).origin)),
   RATE_LIMIT_ENABLED: flag(true),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Derlenmiş yönetim paneli (apps/license-admin/dist); verilirse aynı kökenden sunulur. */

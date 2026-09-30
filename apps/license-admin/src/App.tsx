@@ -12,6 +12,8 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LicenseDetailPage } from './pages/LicenseDetailPage';
 import { LicensesPage } from './pages/LicensesPage';
 import { LoginPage } from './pages/LoginPage';
+import { SecurityPage } from './pages/SecurityPage';
+import { SetupPage } from './pages/SetupPage';
 
 interface Me {
   admin: { id: string; email: string; fullName: string };
@@ -22,6 +24,7 @@ const links = [
   { to: '/customers', label: 'Müşteriler' },
   { to: '/licenses', label: 'Lisanslar' },
   { to: '/audit', label: 'Denetim kaydı' },
+  { to: '/security', label: 'Güvenlik' },
 ];
 
 function useTheme() {
@@ -97,12 +100,14 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/setup" element={<SetupPage />} />
       <Route element={<Shell />}>
         <Route index element={<DashboardPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="licenses" element={<LicensesPage />} />
         <Route path="licenses/:id" element={<LicenseDetailPage />} />
         <Route path="audit" element={<AuditPage />} />
+        <Route path="security" element={<SecurityPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

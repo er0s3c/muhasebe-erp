@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { openSigningKey, signToken, type SealedKeyFile } from '@erp/license-core';
-import { DATA_KEY, activate, loginAdmin, makeInstallation, makeServer, totpNow } from './helpers';
+import { setupToken } from '../src/crypto';
+import { DATA_KEY, activate, createAdmin, loginAdmin, makeInstallation, makeServer, totpNow } from './helpers';
 
 const s = await makeServer();
 const cwd = new URL('..', import.meta.url).pathname;
@@ -99,5 +100,13 @@ describe('komut satırı', () => {
     expect((await loginAdmin(s, { email, password, secret })).statusCode).toBe(401);
     s.clock.t += 61_000;
     expect((await s.app.inject({ method: 'POST', url: '/admin/api/login', payload: { email, password: newPassword, totp: totpNow(newSecret, s.clock.t) } })).statusCode).toBe(200);
+  });
+
+  it('setup:token: yönetici varken kurulum kodunu yazdırmaz (kurulum kapalı)', async () => {
+    await createAdmin(s);
+    const r = cli(['setup:token']);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('Kurulum tamamlanmış');
+    expect(r.out).not.toContain(setupToken(DATA_KEY));
   });
 });

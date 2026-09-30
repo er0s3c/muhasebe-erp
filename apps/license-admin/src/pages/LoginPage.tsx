@@ -1,12 +1,17 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@ui/Button';
 import { Callout } from '@ui/Feedback';
 import { Field, Input } from '@ui/Field';
 import { api, errorText } from '../api';
+import { loginWithPasskey, passkeyErrorText, passkeysSupported } from '../passkey';
 
-/** Parola + zorunlu TOTP (kimlik doğrulama uygulaması). İlk kurulumda kodlar `cli admin:create` çıktısındadır. */
+/**
+ * Parola + zorunlu TOTP ya da giriş anahtarı (passkey; kullanıcı doğrulamalı, e-posta sorulmaz).
+ * Hiç yönetici yoksa ilk kurulum sayfasına (/setup) yönlendirir.
+ */
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -15,6 +20,24 @@ export function LoginPage() {
   const [totp, setTotp] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const setup = useQuery({ queryKey: ['setup'], queryFn: () => api<{ needed: boolean }>('/admin/api/setup'), retry: false });
+
+  const passkey = async () => {
+    setPasskeyBusy(true);
+    setError(null);
+    try {
+      await loginWithPasskey();
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+      navigate('/', { replace: true });
+    } catch (e) {
+      setError(passkeyErrorText(e));
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
+
+  if (setup.data?.needed) return <Navigate to="/setup" replace />;
 
   const submit = async () => {
     setBusy(true);
@@ -62,6 +85,18 @@ export function LoginPage() {
             Giriş yap
           </Button>
         </form>
+        {passkeysSupported() && (
+          <>
+            <div className="my-5 flex items-center gap-3 text-xs text-muted" aria-hidden>
+              <span className="h-px flex-1 bg-border" />
+              ya da
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <Button className="w-full" loading={passkeyBusy} onClick={() => void passkey()}>
+              <KeyRound className="size-4" aria-hidden /> Giriş anahtarıyla giriş
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

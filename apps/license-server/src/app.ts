@@ -8,6 +8,8 @@ import { errorHandler } from './errors';
 import { MemoryLimiter } from './limits';
 import { adminApiRoutes } from './modules/admin-api';
 import { adminAuthRoutes } from './modules/admin-auth';
+import { adminPasskeyRoutes } from './modules/admin-passkeys';
+import { adminSetupRoutes } from './modules/admin-setup';
 import { panelNotFoundHandler, registerPanel } from './panel';
 import { publicRoutes } from './modules/public';
 
@@ -36,7 +38,7 @@ export async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
   const { config } = opts;
   const serverOptions: FastifyServerOptions = {
     logger: opts.logger === false ? false : { level: config.LOG_LEVEL, redact: ['req.headers.authorization', 'req.headers.cookie'] },
-    // Fastify çalışma zamanında atlama sayısını (number) destekler; tip tanımı eksiktir.
+    // Sayısal atlama değeri Fastify ≥ 5.12'de yok sayılır (güvenlik gereği); CIDR/ad listesi verin (ör. loopback,uniquelocal).
     trustProxy: config.TRUST_PROXY as FastifyServerOptions['trustProxy'],
     bodyLimit: 64 * 1024,
     requestTimeout: 30_000,
@@ -60,6 +62,8 @@ export async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
 
   await app.register(publicRoutes);
   await app.register(adminAuthRoutes);
+  await app.register(adminSetupRoutes);
+  await app.register(adminPasskeyRoutes);
   await app.register(adminApiRoutes);
   // Yönetim paneli (derlenmişse) rotalardan SONRA kaydedilir
   if (config.PANEL_DIST_DIR) await registerPanel(app, config.PANEL_DIST_DIR);

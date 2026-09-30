@@ -86,13 +86,14 @@ describe('yönetici kimlik doğrulama', () => {
 });
 
 describe('yönetim uçlarının korunması', () => {
-  it('rota envanteri: /admin/api altındaki (giriş hariç) her rota yönetici kapısından geçer; genel uçlar bilinen listede', () => {
+  it('rota envanteri: /admin/api altındaki (giriş/kurulum hariç) her rota yönetici kapısından geçer; genel uçlar bilinen listede', () => {
     const adminRoutes = s.routes.filter((r) => r.url.startsWith('/admin/api'));
     expect(adminRoutes.length).toBeGreaterThan(15);
-    for (const r of adminRoutes) {
-      if (r.url === '/admin/api/login') continue;
-      expect((r.handler as Record<symbol, unknown>)[ADMIN_GUARD], `${String(r.method)} ${r.url} korumasız`).toBe(true);
-    }
+    const unguarded = adminRoutes.filter((r) => (r.handler as Record<symbol, unknown>)[ADMIN_GUARD] !== true).map((r) => `${String(r.method)} ${r.url}`);
+    // Kimlik doğrulamadan önce gereken uçlar: parola+TOTP girişi, ilk kurulum (kurulum koduyla), giriş anahtarıyla giriş
+    expect(unguarded.sort()).toEqual(
+      ['GET /admin/api/setup', 'HEAD /admin/api/setup', 'POST /admin/api/login', 'POST /admin/api/passkey/login', 'POST /admin/api/passkey/options', 'POST /admin/api/setup', 'POST /admin/api/setup/totp'].sort(),
+    );
     const others = s.routes.filter((r) => !r.url.startsWith('/admin/api')).map((r) => r.url).sort();
     expect([...new Set(others)]).toEqual(['/healthz', '/v1/activate', '/v1/deactivate', '/v1/heartbeat']);
   });
