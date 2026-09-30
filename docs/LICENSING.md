@@ -40,14 +40,29 @@ TCP bağlantısı gereği görür (klon şüphesi tespitinde kullanılır; `docs
 
 ### 4.1 Gereksinimler
 
-Docker + Compose, bir alan adı (DNS bu sunucuya, 80/443 açık), ~1 GB bellek. Lisans sunucusu ayrı bir PostgreSQL kullanır (aynı compose içinde).
+Docker Engine + Compose v2, bir alan adı (DNS bu sunucuya, 80/443 açık), çalışma için ~1 GB bellek; **imajı VPS'te derleyecekseniz ≥ 2 GB** (1 GB'ta 2 GB swap ekleyin ya da imajı kendi makinenizde derleyip `docker save | ssh … docker load` ile taşıyın). Lisans sunucusu ayrı bir PostgreSQL kullanır (aynı compose içinde). Güvenlik duvarı: yalnızca 22, 80, 443.
+
+**Alan adı Cloudflare'daysa kaydı "DNS only" (gri bulut) yapın.** Turuncu bulut (proxy) açıkken Caddy müşterinin değil Cloudflare'in IP'sini görür: `LICENSE_ADMIN_ALLOW` denetimi ve oran sınırı doğru çalışmaz.
+
+**VPS'e taşınacak dosyalar.** En kolayı tüm depoyu, izlenmeyen/gizli dosyalar (`.env`, `node_modules`, `dist`, anahtar dosyaları) girmeden paketlemektir:
+
+```bash
+git archive --format=tar.gz -o muhasebe-erp.tar.gz HEAD          # kendi makinenizde
+scp muhasebe-erp.tar.gz kullanici@VPS:/opt/                      # sonra VPS'te: mkdir -p /opt/muhasebe-erp && tar xzf /opt/muhasebe-erp.tar.gz -C /opt/muhasebe-erp
+```
+
+Yalnızca lisans sunucusu için gereken alt küme: `package.json`, `package-lock.json`, `tsconfig.base.json`, `apps/api/package.json`, `apps/web/package.json`,
+`apps/web/src/components/ui/`, `apps/web/src/lib/cn.ts`, `apps/license-server/`, `apps/license-admin/`, `packages/`, `deploy/license/`, `infra/postgres/init-prod.sh`
+(yedek için ayrıca `scripts/backup.sh`, `scripts/restore.sh`). Müşteri uygulama imajını da VPS'te derleyecekseniz tüm depo gerekir. İmza özel anahtarı ve `deploy/license/.env`
+**hiçbir zaman** depoya, pakete ya da başka makineye girmez.
 
 ### 4.2 Anahtar töreni (bir kez; en önemli adım)
 
 ```bash
-git clone … && cd muhasebe-erp
+cd /opt/muhasebe-erp                                   # (git clone yerine yukarıdaki paketten açılan klasör de olur)
 docker build -f apps/license-server/Dockerfile -t muhasebe-lisans .
-mkdir -p /etc/muhasebe-lisans && chmod 700 /etc/muhasebe-lisans
+# Kap 'node' kullanıcısıyla (uid 1000) çalışır: dizin ona ait olmalı (root'a chmod 700 yazmayı ve okumayı engeller)
+mkdir -p /etc/muhasebe-lisans && chown 1000:1000 /etc/muhasebe-lisans && chmod 700 /etc/muhasebe-lisans
 # parola ≥ 12 karakter; güçlü, rastgele ve ayrı bir yerde saklanır
 export LICENSE_SIGNING_KEY_PASSPHRASE="$(openssl rand -base64 24)"; echo "$LICENSE_SIGNING_KEY_PASSPHRASE"   # KAYDEDİN
 docker run --rm -v /etc/muhasebe-lisans:/out -e LICENSE_SIGNING_KEY_PASSPHRASE muhasebe-lisans \
@@ -63,7 +78,8 @@ Komut **mühürlü** anahtar dosyasını (scrypt + AES-256-GCM) yazar ve **açı
 1. **Açık anahtarı** depoda `apps/api/src/licensing/public-keys.json` içindeki `"keys"` nesnesine ekleyin ve commit'leyin.
 2. **Anahtar dosyasını ve parolasını AYRI yerlerde çevrimdışı yedekleyin** (parola yöneticisi + şifreli USB gibi). Kaybolursa yeni lisans imzalayamazsınız;
    sızarsa herkes sahte lisans üretebilir (§11).
-3. Dosya izinleri: yalnızca root okur (`chmod 600`); kapta `node` kullanıcısı `LICENSE_KEY_DIR` bağlamasından okur.
+3. Dosya izinleri: `keygen` dosyayı `0600` ve sahibi uid 1000 (kapta `node`) olarak yazar; dizin `700` ve aynı sahiptir. Ana makinede yalnızca root ve bu kullanıcı okuyabilir;
+   lisans sunucusu kabı dosyayı `LICENSE_KEY_DIR` bağlamasından (salt-okunur) okur. Dizini root'a `chmod 600/700` yaparsanız kap yazamaz/okuyamaz ve sunucu açılmaz.
 
 ### 4.3 Sunucuyu ayağa kaldırma
 

@@ -18,6 +18,8 @@ Uygulama kabı yalnızca **RLS'e tabi çalışma zamanı rolünü** (`erp_app`) 
 
 **Lisans:** imaj **lisanslıdır**: üretim paketi lisans denetimi açık derlenir ve satıcının açık anahtarını gömer; lisans etkinleştirilmeden uygulama yalnızca etkinleştirme ekranını sunar. Müşteri imajı, lisansı veren satıcının derlediği imajdır (açık anahtar pakete gömülüdür; bkz. [LICENSING.md §5](LICENSING.md)). Bu kılavuzdaki "müşteri kurulumu" bölümleri lisans etkinleştirme adımını içerir (§4).
 
+**Müşteriye yalnızca imajla teslim (kaynak kodu verilmez).** Satıcı imajı derler (`docs/LICENSING.md §5`) ve `docker save muhasebe-erp:1.0.0 | gzip > muhasebe-erp-1.0.0.tar.gz` ile dosyalar. Müşteri kiti, **aynı klasör düzeniyle**: imaj dosyası + `deploy/docker-compose.prod.yml`, `deploy/.env.production.example`, `deploy/Caddyfile`, `infra/postgres/init-prod.sh`, `scripts/backup.sh`, `scripts/restore.sh`, `docs/OPERATIONS.md`. Müşteri tarafında: `docker load < muhasebe-erp-1.0.0.tar.gz`, `deploy/.env` içinde `ERP_IMAGE=muhasebe-erp:1.0.0`, sonra `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d` (**`--build` kullanılmaz**: kaynak kod yoktur; aşağıdaki `git clone` ve `--build` adımları yalnızca kaynağı olan satıcı/geliştirici içindir).
+
 İmaj yayını (registry) henüz yoktur: imaj müşteri sunucusunda `docker build` ile ya da sizin derleyip `docker save/load` ile taşıdığınız imajla kurulur.
 
 ## 2. Kurulum (Docker Compose)
