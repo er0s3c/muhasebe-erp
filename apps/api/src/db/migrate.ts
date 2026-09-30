@@ -1,10 +1,16 @@
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createDb } from './client';
 
-/** Paketlenmiş çalışma zamanında `MIGRATIONS_DIR` ile gösterilir (dist/drizzle); aksi halde kaynak ağacındaki klasör. */
+/**
+ * Migration klasörü: `MIGRATIONS_DIR` ile açıkça verilebilir; verilmezse paketin yanındaki `drizzle/`
+ * (dist/migrate.js → dist/drizzle), o da yoksa kaynak ağacındaki `apps/api/drizzle`.
+ */
 export function migrationsFolder(): string {
-  return process.env.MIGRATIONS_DIR ?? fileURLToPath(new URL('../../drizzle', import.meta.url));
+  if (process.env.MIGRATIONS_DIR) return process.env.MIGRATIONS_DIR;
+  const beside = fileURLToPath(new URL('./drizzle', import.meta.url));
+  return existsSync(beside) ? beside : fileURLToPath(new URL('../../drizzle', import.meta.url));
 }
 
 /**

@@ -94,11 +94,16 @@ jobs:
       - name: Veritabanı migration'ları
         run: npm run db:migrate
 
+      - name: Üretim paketi (web + API)
+        run: npm run build
+
       - name: Playwright tarayıcısı
         run: npx playwright install --with-deps chromium
 
-      - name: Uçtan uca testler
+      - name: Uçtan uca testler (üretim paketine karşı)
         run: npm run e2e
+        env:
+          E2E_TARGET: bundle
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -106,3 +111,62 @@ jobs:
           name: e2e-sonuclari
           path: test-results/
           if-no-files-found: ignore
+
+  docker:
+    name: Docker imajı ve compose duman testi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: İmajı derle
+        run: docker build -t muhasebe-erp:ci --build-arg APP_VERSION=ci .
+
+      - name: İmaj root olmayan kullanıcıyla çalışır ve kaynak haritası içermez
+        run: |
+          test "$(docker run --rm --entrypoint id muhasebe-erp:ci -u)" != "0"
+          test -z "$(docker run --rm --entrypoint find muhasebe-erp:ci /app/web -name '*.map')"
+
+      - name: Compose ortamı
+        run: |
+          cat > deploy/.env <<EOF
+          POSTGRES_PASSWORD=$(openssl rand -hex 16)
+          ERP_OWNER_PASSWORD=$(openssl rand -hex 16)
+          ERP_APP_PASSWORD=$(openssl rand -hex 16)
+          JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
+          ERP_IMAGE=muhasebe-erp:ci
+          COOKIE_SECURE=false
+          APP_PORT=3000
+          EOF
+
+      - name: Compose'u ayağa kaldır (db, tek seferlik migrate, app)
+        run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d app
+
+      - name: Uygulama hazır olana dek bekle
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health/ready > /dev/null; then echo "hazır"; exit 0; fi
+            sleep 2
+          done
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs
+          exit 1
+
+      - name: Duman testi (arayüz, başlıklar, kayıt, giriş)
+        run: |
+          set -e
+          curl -fsS -H 'accept: text/html' http://127.0.0.1:3000/ | grep -q '<div id="root">'
+          curl -fsSI http://127.0.0.1:3000/ | grep -i "content-security-policy" | grep -q "script-src 'self'"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/me)" = "401"
+          curl -fsS http://127.0.0.1:3000/api/public-config | grep -q '"version":"ci"'
+          curl -fsS -X POST http://127.0.0.1:3000/api/auth/register -H 'content-type: application/json' \
+            -d '{"email":"ci@example.com","password":"Sifre-12345-xyz","fullName":"CI Kullanıcı","organizationName":"CI Ltd"}' | grep -q accessToken
+          curl -fsS -X POST http://127.0.0.1:3000/api/auth/login -H 'content-type: application/json' \
+            -d '{"email":"ci@example.com","password":"Sifre-12345-xyz"}' | grep -q accessToken
+          test "$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env ps -q app | xargs docker inspect --format '{{.State.Health.Status}}')" = "healthy" || (sleep 20; test "$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env ps -q app | xargs docker inspect --format '{{.State.Health.Status}}')" = "healthy")
+
+      - name: Günlükler (başarısızlıkta)
+        if: failure()
+        run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs --no-color
+
+      - name: Temizlik
+        if: always()
+        run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env down -v

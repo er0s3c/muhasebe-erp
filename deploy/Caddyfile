@@ -1,0 +1,5 @@
+# Otomatik HTTPS (Let's Encrypt): ERP_DOMAIN alan adı bu sunucuya yönlenmiş olmalı, 80/443 açık olmalı.
+{$ERP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}

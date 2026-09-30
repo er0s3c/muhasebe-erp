@@ -57,6 +57,8 @@ const envSchema = z
     /** 0 = kapalı. Yavaş bir sorgunun bağlantı havuzunu tıkamasını önler; değer yük ölçümünden sonra ayarlanır. */
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(0),
     SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(20_000),
+    /** Derlenmiş web arayüzü klasörü (apps/web/dist); verilirse API aynı kökenden arayüzü de sunar. */
+    WEB_DIST_DIR: z.string().optional(),
     /** Sürüm etiketi (imaj derlemesinde verilir); destek için `/api/public-config` döndürür. */
     APP_VERSION: z.string().default('dev'),
   })

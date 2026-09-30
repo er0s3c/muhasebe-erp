@@ -31,6 +31,12 @@ export default tseslint.config(
     },
   },
   {
+    // Derlemeye girmeden olduğu gibi sunulan, eski tarayıcıya uygun klasik betikler
+    files: ['apps/web/public/**/*.js'],
+    languageOptions: { globals: globals.browser, sourceType: 'script' },
+    rules: { 'no-empty': ['error', { allowEmptyCatch: true }], '@typescript-eslint/no-unused-vars': ['error', { caughtErrors: 'none' }] },
+  },
+  {
     files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'e2e/**/*.ts', '*.ts', '*.js'],
     languageOptions: { globals: globals.node },
   },

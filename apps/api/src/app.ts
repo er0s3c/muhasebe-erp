@@ -8,8 +8,10 @@ import { sql } from 'drizzle-orm';
 import Fastify, { type FastifyInstance, type FastifyServerOptions, type RouteOptions } from 'fastify';
 import type { Config } from './config';
 import type { Db } from './db/client';
+import { existsSync } from 'node:fs';
 import { errorHandler } from './http/errors';
 import { MemoryLimiter } from './http/limits';
+import { registerWebApp, webNotFoundHandler } from './http/static';
 import { authRoutes } from './modules/auth/routes';
 import { inventoryRoutes } from './modules/inventory/routes';
 import { deliveryRoutes } from './modules/deliveries/routes';
@@ -100,9 +102,13 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   }
 
   app.setErrorHandler(errorHandler);
-  app.setNotFoundHandler((_req, reply) => {
-    void reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Uç nokta bulunamadı' } });
-  });
+  app.setNotFoundHandler(
+    config.WEB_DIST_DIR
+      ? webNotFoundHandler
+      : (_req, reply) => {
+          void reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Uç nokta bulunamadı' } });
+        },
+  );
 
   /** Canlılık: süreç ayakta mı (veritabanına dokunmaz). */
   app.get('/api/health', async () => ({ status: 'ok' }));
@@ -136,6 +142,12 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(exportRoutes);
   await app.register(importRoutes);
   await app.register(bankStatementRoutes);
+
+  // Derlenmiş web arayüzü (üretim): rotalardan SONRA kaydedilir; SPA yedeği yukarıdaki 404 işleyicisindedir.
+  if (config.WEB_DIST_DIR) {
+    if (!existsSync(config.WEB_DIST_DIR)) throw new Error(`WEB_DIST_DIR bulunamadı: ${config.WEB_DIST_DIR}`);
+    await registerWebApp(app, config.WEB_DIST_DIR);
+  }
 
   return app;
 }

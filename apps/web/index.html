@@ -6,14 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Muhasebe ERP</title>
-    <script>
-      // Tema titremesini önlemek için ilk boyamadan önce uygula
-      try {
-        var t = localStorage.getItem('theme');
-        var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (dark) document.documentElement.classList.add('dark');
-      } catch (e) {}
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

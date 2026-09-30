@@ -1,0 +1,86 @@
+# Üretim kurulumu: db + tek seferlik migrate + app (+ isteğe bağlı Caddy ile otomatik HTTPS).
+#   cp deploy/.env.production.example deploy/.env   # sonra değerleri doldurun
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d
+#   TLS ile:  ... --profile tls up -d
+# Ayrıntı: docs/OPERATIONS.md
+name: muhasebe-erp
+
+services:
+  db:
+    image: postgres:16 # Debian tabanlı: Türkçe sıralama için ICU (tr-TR-x-icu) gerekir
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
+      ERP_DB_NAME: ${ERP_DB_NAME:-erp}
+      ERP_OWNER_PASSWORD: ${ERP_OWNER_PASSWORD:?ERP_OWNER_PASSWORD gerekli}
+      ERP_APP_PASSWORD: ${ERP_APP_PASSWORD:?ERP_APP_PASSWORD gerekli}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../infra/postgres/init-prod.sh:/docker-entrypoint-initdb.d/10-init-prod.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U erp -d $${ERP_DB_NAME:-erp}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Veritabanı portu YAYINLANMAZ; yalnızca uygulama kabı ağ içinden bağlanır.
+
+  migrate:
+    image: ${ERP_IMAGE:-muhasebe-erp:local}
+    build:
+      context: ..
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    command: ['node', 'dist/migrate.js']
+    environment:
+      MIGRATION_DATABASE_URL: postgres://erp:${ERP_OWNER_PASSWORD}@db:5432/${ERP_DB_NAME:-erp}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  app:
+    image: ${ERP_IMAGE:-muhasebe-erp:local}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    environment:
+      # Uygulama kabı yalnızca RLS'e tabi çalışma zamanı rolünü bilir (sahip parolası yok)
+      DATABASE_URL: postgres://erp_app:${ERP_APP_PASSWORD}@db:5432/${ERP_DB_NAME:-erp}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET gerekli (openssl rand -base64 48)}
+      # Ters vekil (Caddy/nginx) arkasında 1; vekil yoksa false
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      # Düz http (TLS'siz LAN) kurulumunda false verin; aksi halde tarayıcı yenileme çerezini atar
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-0}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      # Varsayılan yalnızca yerel makine; TLS'siz LAN erişimi için APP_BIND=0.0.0.0
+      - '${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000'
+
+  caddy:
+    profiles: ['tls']
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      ERP_DOMAIN: ${ERP_DOMAIN:?TLS için ERP_DOMAIN gerekli}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

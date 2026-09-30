@@ -8,6 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: { '/api': { target: 'http://localhost:3000', changeOrigin: false } },
   },
-  build: { sourcemap: true },
+  // 'hidden': .map dosyaları üretilir ama pakete işaret eklenmez; imajda silinir (kaynak kodu sızmasın).
+  build: { sourcemap: 'hidden' },
   test: { environment: 'jsdom', include: ['src/**/*.test.{ts,tsx}'] },
 });
