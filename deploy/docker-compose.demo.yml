@@ -43,6 +43,9 @@ services:
       context: ..
       args:
         APP_VERSION: ${APP_VERSION:-dev}
+        LICENSE_PUBLIC_KEYS_JSON: ${LICENSE_PUBLIC_KEYS_JSON:-}
+        LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+        LICENSE_ALLOW_INSECURE_URL: ${LICENSE_ALLOW_INSECURE_URL:-}
     command: ['node', 'dist/migrate.js']
     environment:
       MIGRATION_DATABASE_URL: postgres://erp:${ERP_OWNER_PASSWORD}@db:5432/${ERP_DB_NAME:-erp_demo}
@@ -88,6 +91,19 @@ services:
       # Demoda yabancıların yeni kiracı açmasına izin verilmez
       REGISTRATION_ENABLED: 'false'
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Demo örneği de lisans ister (bir 'demo' türü lisans verin); sıfırlama lisans durumunu korur
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+      LICENSE_ALLOW_INSECURE_URL: ${LICENSE_ALLOW_INSECURE_URL:-false}
+    extra_hosts:
+      # Ana makinedeki hizmetlere (örn. yerel lisans sunucusu, SMTP geçidi) host.docker.internal adıyla erişim
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - type: bind
+        source: /etc/machine-id
+        target: /etc/host-machine-id
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       db:
         condition: service_healthy

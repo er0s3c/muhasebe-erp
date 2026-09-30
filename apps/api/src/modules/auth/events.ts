@@ -12,7 +12,11 @@ export type SecurityEventName =
   | 'refresh_reuse_detected'
   | 'member_added'
   | 'member_role_changed'
-  | 'member_removed';
+  | 'member_removed'
+  | 'license_activated'
+  | 'license_offline_activated'
+  | 'license_refreshed'
+  | 'license_deactivated';
 
 /**
  * Güvenlik olayını kaydeder; kayıt hatası asıl işlemi bozmaz (yalnızca günlüğe düşer). Parola, jeton ve

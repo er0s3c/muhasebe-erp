@@ -14,6 +14,11 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/license-core/package.json packages/license-core/
 RUN npm ci
 COPY . .
+# Satıcıya ait derleme bağımsız değişkenleri (açık bilgidir, gizli değil): güvenilir satıcı açık anahtarı halkası (JSON) ve varsayılan lisans
+# sunucusu adresi pakete GÖMÜLÜR. Anahtar halkası boşsa apps/api/src/licensing/public-keys.json kullanılır; ikisi de boşsa derleme başarısız olur.
+ARG LICENSE_PUBLIC_KEYS_JSON=""
+ARG LICENSE_SERVER_URL=""
+ARG LICENSE_ALLOW_INSECURE_URL=""
 RUN npm run build
 # Üçüncü taraf lisans bildirimi (MIT/BSD/Apache dağıtımda bildirim şartı): üretim bağımlılıklarından üretilir
 RUN npm run licenses:notices
@@ -36,7 +41,8 @@ ENV NODE_ENV=production \
     APP_VERSION=${APP_VERSION} \
     PORT=3000 \
     WEB_DIST_DIR=/app/web \
-    MIGRATIONS_DIR=/app/dist/drizzle
+    MIGRATIONS_DIR=/app/dist/drizzle \
+    LICENSE_HOST_ID_FILE=/etc/host-machine-id
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./dist
@@ -50,4 +56,4 @@ USER node
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "--enable-source-maps", "dist/server.js"]
+CMD ["node", "dist/server.js"]

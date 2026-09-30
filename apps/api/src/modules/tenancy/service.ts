@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { isoYear, todayIso, type CreateCompanyInput } from '@erp/shared';
 import { setContext, type Tx } from '../../db/client';
 import { companies, memberships, warehouses } from '../../db/schema';
@@ -7,6 +7,7 @@ import { seedMappings } from '../ledger/mappings';
 import { seedTaxRates } from '../settings/defaults';
 import { generatePeriods } from '../settings/periods';
 import type { AuthUser } from '../../http/context';
+import { forbidden } from '../../http/errors';
 
 /**
  * Şirketi ve varsayılanlarını (sahip üyeliği, cari yıl dönemleri, hesap planı,
@@ -17,7 +18,20 @@ export async function createCompany(
   user: AuthUser,
   input: CreateCompanyInput,
   ip?: string,
+  /** Lisans kuralları (denetim açıksa): sektör lisans kapsamında olmalı ve kuruluma toplam şirket sayısı sınırı aşılmamalı. */
+  license?: { sectors: readonly string[]; companyLimit: number } | null,
 ) {
+  if (license) {
+    if (!license.sectors.includes(input.sector)) {
+      throw forbidden('Lisansınız bu sektörü kapsamıyor', 'LICENSE_SECTOR_MISMATCH');
+    }
+    // Sayım ve ekleme arasında iki eşzamanlı istek sınırı birlikte aşmasın: kurulum genelinde tek kilit (işlem bitince kalkar).
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('erp-license-company-limit'))`);
+    const res = await tx.execute<{ n: number }>(sql`select license_company_count() as n`);
+    if (Number(res.rows[0]?.n ?? 0) >= license.companyLimit) {
+      throw forbidden(`Lisansınız en fazla ${license.companyLimit} şirkete izin veriyor`, 'LICENSE_COMPANY_LIMIT');
+    }
+  }
   const [company] = await tx
     .insert(companies)
     .values({

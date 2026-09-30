@@ -134,6 +134,20 @@
       "when": 1790749129212,
       "tag": "0018_perf_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790763431537,
+      "tag": "0019_licensing",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790763443785,
+      "tag": "0020_licensing_rules",
+      "breakpoints": true
     }
   ]
 }

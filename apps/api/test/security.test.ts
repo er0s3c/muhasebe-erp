@@ -306,6 +306,10 @@ describe('sözleşme testleri', async () => {
     'POST /api/auth/forgot-password',
     'POST /api/auth/reset-password',
     'POST /api/auth/verify-email',
+    // Yalnızca kurulum lisanssızken kimliksiz açıktır (etkinleştirme akışı); bir kira varsa şirket sahibi gerekir.
+    'POST /api/license/activate',
+    'POST /api/license/offline-activate',
+    'POST /api/license/offline-request',
   ].sort();
 
   it('her /api rotası kamuya açık listede ya da tenantRoute/authedRoute kapısındadır (liste birebir)', () => {
@@ -360,17 +364,18 @@ describe('sözleşme testleri', async () => {
            and not exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'company_id' and not a.attisdropped)
          order by 1`);
       expect(global.rows.map((r) => r.relname)).toEqual([
-        'companies', 'currencies', 'organizations', 'refresh_tokens', 'security_events', 'user_tokens', 'users',
+        'companies', 'currencies', 'license_state', 'organizations', 'refresh_tokens', 'security_events', 'user_tokens', 'users',
       ]);
     });
   });
 
-  it('SECURITY DEFINER yalnızca audit_row_change; çalışma zamanı rolü süper kullanıcı/BYPASSRLS/tablo sahibi değil', async () => {
+  it('SECURITY DEFINER yalnızca bilinen işlevler; çalışma zamanı rolü süper kullanıcı/BYPASSRLS/tablo sahibi değil', async () => {
     await asOwner(async (q) => {
       const definers = await q(
         `select proname from pg_proc where pronamespace = 'public'::regnamespace and prosecdef order by 1`,
       );
-      expect(definers.rows.map((r) => r.proname)).toEqual(['audit_row_change']);
+      // audit_row_change: denetim izi; license_company_count: RLS'i aşan, yalnızca sayı döndüren şirket sayımı (lisans sınırı)
+      expect(definers.rows.map((r) => r.proname)).toEqual(['audit_row_change', 'license_company_count']);
       const role = await q(`select rolsuper, rolbypassrls from pg_roles where rolname = 'erp_app'`);
       expect(role.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
       const owned = await q(

@@ -110,6 +110,13 @@ export function errorHandler(
       .send({ error: { code: 'AUDIT_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP08') {
+    // Lisans durumu kuralları (silinemez, kurulum kimliği sabit, saat işareti geri gitmez)
+    void reply
+      .status(422)
+      .send({ error: { code: 'LICENSE_STATE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

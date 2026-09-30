@@ -25,3 +25,6 @@ SELECT 'CREATE DATABASE erp_license_dev OWNER erp'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'erp_license_dev')\gexec
 SELECT 'CREATE DATABASE erp_license_test OWNER erp'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'erp_license_test')\gexec
+-- Uygulamanın (apps/api) lisans entegrasyon testleri: lisans durumu kuruluma özgü tek satırdır, ortak test veritabanını kirletmesin
+SELECT 'CREATE DATABASE erp_license_apitest OWNER erp'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'erp_license_apitest')\gexec

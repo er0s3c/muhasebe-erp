@@ -2,13 +2,13 @@ import { loadConfig } from '../config';
 import { createDb } from './client';
 import { seedDemo } from './demo';
 import { runMigrations } from './migrate';
-import { databaseNameOf, resetSchema } from './reset';
+import { databaseNameOf, resetSchema, restoreLicenseState, saveLicenseState } from './reset';
 
 /**
  * Operatör aracı (geliştirme `npm run db:seed` / `npm run demo:reset`; paketlenmiş `node dist/demo.js <komut>`).
  *
  *   seed                      demo verisini yükler (demo kullanıcı varsa dokunmaz)
- *   reset --confirm=<dbadı>   şemayı SİLER, migration'ları uygular, demo verisini yükler (yıkıcı)
+ *   reset --confirm=<dbadı>   şemayı SİLER, migration'ları uygular, demo verisini yükler (yıkıcı); lisans durumu (kurulum kimliği + kira) korunur
  *
  * Güvenlik: üretim modunda (NODE_ENV=production) yalnızca ALLOW_DEMO=true ile çalışır; böylece bir müşteri
  * kurulumunda yanlışlıkla demo verisi yüklenemez ve veritabanı silinemez. `reset`, sahip rolünün bağlantısını
@@ -43,8 +43,11 @@ try {
     if (databaseNameOf(config.DATABASE_URL) !== dbName) fail('DATABASE_URL ile MIGRATION_DATABASE_URL farklı veritabanlarını gösteriyor.');
     if (flag('confirm') !== dbName) fail(`Yıkıcı işlem: "${dbName}" veritabanındaki TÜM veri silinecek. Onaylamak için --confirm=${dbName} verin.`);
     console.log(`"${dbName}" sıfırlanıyor…`);
+    // Lisans durumu (kurulum kimliği + kira) korunur: demo örneği her sıfırlamada satıcıdan yeni etkinleştirme istemesin.
+    const license = await saveLicenseState(ownerUrl);
     await resetSchema(ownerUrl);
     await runMigrations(ownerUrl);
+    if (license) await restoreLicenseState(ownerUrl, license);
     const handle = createDb(config.DATABASE_URL);
     try {
       await seedDemo(handle.db);

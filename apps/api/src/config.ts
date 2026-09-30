@@ -71,6 +71,19 @@ const envSchema = z
     APP_BASE_URL: z.string().url().optional(),
     /** Derlenmiş web arayüzü klasörü (apps/web/dist); verilirse API aynı kökenden arayüzü de sunar. */
     WEB_DIST_DIR: z.string().optional(),
+    /**
+     * Lisans sunucusu (satıcı) adresi; verilmezse derlemede gömülen adres kullanılır. Sahte bir sunucu kira üretemez
+     * (kiralar derlemeye gömülü satıcı anahtarıyla doğrulanır); yine de üretimde https zorunludur.
+     */
+    LICENSE_SERVER_URL: z.string().url().optional(),
+    /** Yalnızca test düzenekleri için: üretimde düz http lisans sunucusu adresine izin verir. */
+    LICENSE_ALLOW_INSECURE_URL: flag(false),
+    /** Ana makine kimliği dosyası (compose, ana makinenin /etc/machine-id dosyasını salt-okunur bağlar). */
+    LICENSE_HOST_ID_FILE: z.string().optional(),
+    /** YALNIZCA geliştirme/test: üretim dışı ortamda lisans denetimini açar (üretim paketinde zaten her zaman açıktır). */
+    LICENSE_ENFORCEMENT_DEV: flag(false),
+    /** YALNIZCA geliştirme/test: pakete gömülü halka yokken kullanılacak açık anahtar halkası (JSON). Üretimde yok sayılır/reddedilir. */
+    LICENSE_DEV_KEYRING: z.string().optional(),
     /** Sürüm etiketi (imaj derlemesinde verilir); destek için `/api/public-config` döndürür. */
     APP_VERSION: z.string().default('dev'),
   })
@@ -84,6 +97,12 @@ const envSchema = z
     const mailOn = Boolean(env.SMTP_URL) || env.MAIL_TRANSPORT === 'log';
     if (env.NODE_ENV === 'production' && mailOn && !env.APP_BASE_URL) {
       ctx.addIssue({ code: 'custom', path: ['APP_BASE_URL'], message: 'Posta açıkken APP_BASE_URL (bağlantı kökü) gerekli' });
+    }
+    if (env.NODE_ENV === 'production' && env.LICENSE_DEV_KEYRING) {
+      ctx.addIssue({ code: 'custom', path: ['LICENSE_DEV_KEYRING'], message: 'LICENSE_DEV_KEYRING yalnızca geliştirme içindir; üretimde kullanılamaz' });
+    }
+    if (env.NODE_ENV === 'production' && env.LICENSE_SERVER_URL?.startsWith('http://') && !env.LICENSE_ALLOW_INSECURE_URL) {
+      ctx.addIssue({ code: 'custom', path: ['LICENSE_SERVER_URL'], message: 'Üretimde lisans sunucusu adresi https olmalı' });
     }
     if (env.NODE_ENV === 'production' && WEAK_SECRET.test(env.JWT_SECRET)) {
       ctx.addIssue({

@@ -65,8 +65,10 @@ jobs:
       - name: Bağımlılık güvenlik denetimi (üretim bağımlılıkları)
         run: npm audit --omit=dev --audit-level=high
 
-      - name: Web derlemesi
+      - name: Web ve API derlemesi (boş anahtar halkasıyla yalnızca derlenebilirlik doğrulanır; gerçek anahtarla derleme e2e ve docker işlerindedir)
         run: npm run build
+        env:
+          LICENSE_ALLOW_EMPTY_KEYRING: 'true'
 
   e2e:
     name: Uçtan uca testler
@@ -103,7 +105,10 @@ jobs:
       - name: Veritabanı migration'ları
         run: npm run db:migrate
 
-      - name: Üretim paketi (web + API)
+      - name: Gerçek lisans sunucusu (anahtar üret, migrate, başlat, lisans ver)
+        run: scripts/ci-license-host.sh
+
+      - name: Üretim paketi (web + API; satıcı açık anahtarı ve sunucu adresi pakete gömülür)
         run: npm run build
 
       - name: Playwright tarayıcısı
@@ -118,7 +123,9 @@ jobs:
         if: always()
         with:
           name: e2e-sonuclari
-          path: test-results/
+          path: |
+            test-results/
+            ${{ runner.temp }}/license-ci/server.log
           if-no-files-found: ignore
 
   docker:
@@ -128,13 +135,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: İmajı derle
-        run: docker build -t muhasebe-erp:ci --build-arg APP_VERSION=ci .
+      - name: Lisans sunucusu (satıcı imajı ve compose'u; anahtar töreni, migrate, sunucu, iki lisans)
+        run: scripts/ci-license-docker.sh
+
+      - name: İmajı derle (satıcı açık anahtarı ve lisans sunucusu adresi pakete gömülür)
+        run: |
+          docker build -t muhasebe-erp:ci --build-arg APP_VERSION=ci \
+            --build-arg LICENSE_PUBLIC_KEYS_JSON --build-arg LICENSE_SERVER_URL --build-arg LICENSE_ALLOW_INSECURE_URL .
 
       - name: İmaj root olmayan kullanıcıyla çalışır ve kaynak haritası içermez
         run: |
           test "$(docker run --rm --entrypoint id muhasebe-erp:ci -u)" != "0"
-          test -z "$(docker run --rm --entrypoint find muhasebe-erp:ci /app/web -name '*.map')"
+          test -z "$(docker run --rm --entrypoint find muhasebe-erp:ci /app/web /app/dist -name '*.map')"
 
       - name: Compose ortamı
         run: |
@@ -165,8 +177,15 @@ jobs:
           set -e
           curl -fsS -H 'accept: text/html' http://127.0.0.1:3000/ | grep -q '<div id="root">'
           curl -fsSI http://127.0.0.1:3000/ | grep -i "content-security-policy" | grep -q "script-src 'self'"
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/me)" = "401"
           curl -fsS http://127.0.0.1:3000/api/public-config | grep -q '"version":"ci"'
+          # Lisanssız kurulum: iş uçları kapalı (402), etkinleştirme akışı açık
+          curl -fsS http://127.0.0.1:3000/api/public-config | grep -q '"state":"unlicensed"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/me)" = "402"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3000/api/auth/register -H 'content-type: application/json' -d '{}')" = "402"
+          curl -fsS -X POST http://127.0.0.1:3000/api/license/activate -H 'content-type: application/json' \
+            -d "{\"code\":\"$LICENSE_CODE\"}" | grep -q '"state":"active"'
+          curl -fsS http://127.0.0.1:3000/api/public-config | grep -q '"state":"active"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/me)" = "401"
           curl -fsS http://127.0.0.1:3000/THIRD-PARTY-NOTICES.md | grep -q 'Üçüncü taraf bildirimleri'
           docker run --rm --entrypoint test muhasebe-erp:ci -s /app/THIRD-PARTY-NOTICES.md
           curl -fsS -X POST http://127.0.0.1:3000/api/auth/register -H 'content-type: application/json' \
@@ -210,6 +229,9 @@ jobs:
           login() { curl -fsS -X POST http://127.0.0.1:3001/api/auth/login -H 'content-type: application/json' -d '{"email":"demo@ornek.local","password":"Demo-Sifre-123"}' | grep -q accessToken; }
           $DEMO up -d app
           ready
+          # Demo örneği de lisans ister (demo türü lisans)
+          curl -fsS -X POST http://127.0.0.1:3001/api/license/activate -H 'content-type: application/json' \
+            -d "{\"code\":\"$LICENSE_DEMO_CODE\"}" | grep -q '"state":"active"'
           login
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3001/api/auth/register -H 'content-type: application/json' -d '{"email":"x@example.com","password":"Sifre-12345-xyz","fullName":"X","organizationName":"X"}')" = "403"
           # Sıfırla ve yeniden giriş yap
@@ -217,6 +239,8 @@ jobs:
           $DEMO run --rm demo-reset
           $DEMO up -d app
           ready
+          # Sıfırlama lisans durumunu korur: yeniden etkinleştirme gerekmez
+          curl -fsS http://127.0.0.1:3001/api/public-config | grep -q '"state":"active"'
           login
 
       - name: Günlükler (başarısızlıkta)
@@ -224,9 +248,11 @@ jobs:
         run: |
           docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs --no-color
           if [ -f deploy/.env.demo ]; then docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo logs --no-color; fi
+          if [ -f deploy/license/.env ]; then docker compose -f deploy/license/docker-compose.yml -f deploy/license/docker-compose.ci.yml --env-file deploy/license/.env logs --no-color; fi
 
       - name: Temizlik
         if: always()
         run: |
           docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env down -v
           if [ -f deploy/.env.demo ]; then docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo down -v; fi
+          if [ -f deploy/license/.env ]; then docker compose -f deploy/license/docker-compose.yml -f deploy/license/docker-compose.ci.yml --env-file deploy/license/.env down -v; fi

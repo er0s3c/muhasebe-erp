@@ -89,7 +89,12 @@ describe('sağlık uçları ve genel ayarlar', () => {
   it('public-config kayıt durumunu ve sürümü gösterir', async () => {
     const { app } = await makeApp({ configOverrides: { APP_VERSION: '1.2.3' } });
     const res = await app.inject({ method: 'GET', url: '/api/public-config' });
-    expect(res.json()).toEqual({ registrationEnabled: true, mailEnabled: false, version: '1.2.3' });
+    expect(res.json()).toEqual({
+      registrationEnabled: true,
+      mailEnabled: false,
+      version: '1.2.3',
+      license: { enforced: false, state: null, reason: null },
+    });
   });
 
   it('istek kimliği yanıt başlığında döner; geçerli gelen kimlik korunur, geçersiz olan değiştirilir', async () => {

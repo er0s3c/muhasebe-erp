@@ -149,7 +149,11 @@ try {
     case 'license:revoke': {
       const status = command === 'license:suspend' ? 'suspended' : command === 'license:resume' ? 'active' : 'revoked';
       await handle.db.transaction((tx) => setLicenseStatus(tx, need('id'), status, cliActor));
-      console.log(`Lisans durumu: ${status}. Etkinleştirilmiş kurulumlar bir sonraki kalp atışında (en geç ~12 saat) salt-okunura geçer.`);
+      console.log(
+        status === 'active'
+          ? 'Lisans durumu: active. Etkinleştirilmiş kurulumlar bir sonraki kalp atışında (en geç ~12 saat) yeniden tam işlevli olur.'
+          : `Lisans durumu: ${status}. Etkinleştirilmiş kurulumlar bir sonraki kalp atışında (en geç ~12 saat) salt-okunura geçer.`,
+      );
       break;
     }
     case 'license:code': {

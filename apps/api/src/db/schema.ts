@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   bigserial,
   boolean,
   check,
@@ -97,6 +98,35 @@ export const securityEvents = pgTable(
     meta: jsonb(),
   },
   (t) => [index('security_events_org_idx').on(t.organizationId, t.at), index('security_events_user_idx').on(t.userId, t.at)],
+);
+
+/**
+ * Lisans durumu: kuruluma özgü TEK satır (kiracı tablosu değildir). Kurulum kimliği ve anahtar çifti ilk çalışmada
+ * üretilir; satıcı imzalı kira (`lease_token`) her okunuşta imzası yeniden doğrulanır, bu yüzden buradaki bir düzenleme
+ * yetki kazandırmaz. Kurallar (silinemez, kimlik sabit, saat işareti geri gitmez) 0020 migration'ındaki tetikleyicidedir.
+ */
+export const licenseState = pgTable(
+  'license_state',
+  {
+    id: integer().primaryKey().default(1),
+    installationId: uuid().notNull(),
+    /** Kurulum açık anahtarı (ham, base64url); etkinleştirmede satıcıya bildirilir ve sabitlenir. */
+    publicKey: text().notNull(),
+    privateKeyPem: text().notNull(),
+    /** Satıcı imzalı kira belirteci (erp1.…); yoksa kurulum lisanssızdır. */
+    leaseToken: text(),
+    /** Bu kurulumda görülen en yüksek zaman (ms, epoch): saat geri alma tespiti. */
+    highWater: bigint({ mode: 'number' }).notNull().default(0),
+    lastCheckAt: timestamp({ withTimezone: true }),
+    lastSuccessAt: timestamp({ withTimezone: true }),
+    lastErrorCode: text(),
+    lastError: text(),
+    /** Çevrimdışı etkinleştirme isteğinin kimliği; dönen kira bu kimlikle eşleşmelidir. */
+    pendingRequestId: text(),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('license_state_single_ck', sql`${t.id} = 1`)],
 );
 
 export const refreshTokens = pgTable(

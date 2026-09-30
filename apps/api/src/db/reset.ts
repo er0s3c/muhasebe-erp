@@ -24,3 +24,43 @@ export function databaseNameOf(url: string): string {
   if (!name) throw new Error('Bağlantı adresinde veritabanı adı yok');
   return name;
 }
+
+/** Sıfırlamadan önce korunan lisans durumu satırı (kurulum kimliği, anahtar çifti, kira). */
+export type SavedLicenseState = Record<string, unknown>;
+
+/**
+ * Demo örneği sıfırlanırken lisans durumunu korumak için okur: aksi halde her sıfırlama yeni bir kurulum kimliği üretir ve
+ * satıcıda yeni bir etkinleştirme yuvası tüketirdi. Tablo ya da satır yoksa null.
+ */
+export async function saveLicenseState(ownerUrl: string): Promise<SavedLicenseState | null> {
+  const client = new pg.Client({ connectionString: ownerUrl });
+  await client.connect();
+  try {
+    const res = await client.query('SELECT * FROM license_state WHERE id = 1');
+    return (res.rows[0] as SavedLicenseState | undefined) ?? null;
+  } catch (err) {
+    if ((err as { code?: string }).code === '42P01') return null; // tablo henüz yok
+    throw err;
+  } finally {
+    await client.end();
+  }
+}
+
+/** `saveLicenseState` çıktısını, sıfırlanıp migrate edilmiş şemaya geri yazar. */
+export async function restoreLicenseState(ownerUrl: string, row: SavedLicenseState): Promise<void> {
+  const client = new pg.Client({ connectionString: ownerUrl });
+  await client.connect();
+  try {
+    await client.query(
+      `INSERT INTO license_state (id, installation_id, public_key, private_key_pem, lease_token, high_water, last_check_at, last_success_at,
+         last_error_code, last_error, pending_request_id, created_at, updated_at)
+       VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [
+        row.installation_id, row.public_key, row.private_key_pem, row.lease_token, row.high_water, row.last_check_at, row.last_success_at,
+        row.last_error_code, row.last_error, row.pending_request_id, row.created_at, row.updated_at,
+      ],
+    );
+  } finally {
+    await client.end();
+  }
+}

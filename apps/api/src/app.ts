@@ -12,6 +12,8 @@ import { existsSync } from 'node:fs';
 import { errorHandler } from './http/errors';
 import { MemoryLimiter, Semaphore } from './http/limits';
 import { createMailer, type Mailer } from './modules/mail/mailer';
+import { assertLicensed, createLicenseService, type LicenseSetup } from './licensing';
+import { licenseRoutes } from './licensing/routes';
 import { accountRoutes } from './modules/auth/account';
 import { registerWebApp, webNotFoundHandler } from './http/static';
 import { authRoutes } from './modules/auth/routes';
@@ -39,6 +41,8 @@ export interface BuildAppOptions {
   onRoute?: (route: RouteOptions) => void;
   /** Giden posta; verilmezse yapılandırmadan (SMTP_URL / günlük modu / kapalı) kurulur. Testler bellek içi bir posta kutusu verir. */
   mailer?: Mailer;
+  /** Lisanslama. Verilmezse yapılandırmadan kurulur: üretim paketinde denetim her zaman açık, geliştirmede LICENSE_ENFORCEMENT_DEV ile. Testler hizmeti/taşımayı enjekte eder. */
+  license?: LicenseSetup;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -72,9 +76,15 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.decorate('limiter', new MemoryLimiter(config.RATE_LIMIT_ENABLED));
   app.decorate('exportGate', new Semaphore(config.EXPORT_CONCURRENCY));
   app.decorate('mailer', opts.mailer ?? createMailer(config, app.log));
+  app.decorate('license', createLicenseService({ db: opts.db, config, log: app.log, setup: opts.license }));
 
   app.addHook('onRequest', async (req, reply) => {
     void reply.header('x-request-id', req.id);
+  });
+  // Lisans kapısı (genel): lisanssız kurulumda yalnızca etkinleştirme akışı, salt-okunur modda yalnızca okuma açık.
+  // Aynı denetim authedRoute/tenantRoute içinde de yapılır (bağımsız ikinci kapı).
+  app.addHook('onRequest', async (req) => {
+    await assertLicensed(app.license, req);
   });
   // API yanıtları (oturum, mali veri) tarayıcı ve ara önbelleklerde saklanmasın; dışa aktarmalar kendi başlığını koyar.
   app.addHook('onSend', async (req, reply) => {
@@ -129,12 +139,18 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     }
   });
   /** Oturum açmadan önce arayüzün ihtiyaç duyduğu, gizli olmayan ayarlar. */
-  app.get('/api/public-config', async () => ({
-    registrationEnabled: config.REGISTRATION_ENABLED,
-    mailEnabled: app.mailer.enabled,
-    version: config.APP_VERSION,
-  }));
+  app.get('/api/public-config', async () => {
+    const snap = app.license.enforced ? await app.license.current() : null;
+    return {
+      registrationEnabled: config.REGISTRATION_ENABLED,
+      mailEnabled: app.mailer.enabled,
+      version: config.APP_VERSION,
+      // Arayüz lisanssız kurulumda etkinleştirme sayfasına yönlensin diye (yalnızca durum; ayrıntı /api/license'ta)
+      license: { enforced: app.license.enforced, state: snap?.state ?? null, reason: snap?.reason ?? null },
+    };
+  });
 
+  await app.register(licenseRoutes);
   await app.register(authRoutes);
   await app.register(accountRoutes);
   await app.register(tenancyRoutes);

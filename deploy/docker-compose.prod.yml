@@ -30,6 +30,10 @@ services:
       context: ..
       args:
         APP_VERSION: ${APP_VERSION:-dev}
+        # Yalnızca kaynaktan derleyen satıcı/CI için: müşteriler hazır imajı kullanır (docs/LICENSING.md)
+        LICENSE_PUBLIC_KEYS_JSON: ${LICENSE_PUBLIC_KEYS_JSON:-}
+        LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+        LICENSE_ALLOW_INSECURE_URL: ${LICENSE_ALLOW_INSECURE_URL:-}
     command: ['node', 'dist/migrate.js']
     environment:
       MIGRATION_DATABASE_URL: postgres://erp:${ERP_OWNER_PASSWORD}@db:5432/${ERP_DB_NAME:-erp}
@@ -60,6 +64,21 @@ services:
       SESSION_MAX_DAYS: ${SESSION_MAX_DAYS:-90}
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
       DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-60000}
+      # Lisans sunucusu (satıcı); imajda varsayılan adres gömülüyse boş bırakılabilir. Çıkış HTTPS (443) izni gerekir.
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
+      LICENSE_ALLOW_INSECURE_URL: ${LICENSE_ALLOW_INSECURE_URL:-false}
+    extra_hosts:
+      # Ana makinedeki hizmetlere (örn. yerel lisans sunucusu, SMTP geçidi) host.docker.internal adıyla erişim
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      # Lisans parmak izi: ana makinenin kimliği (yalnızca okuma). Dosya yoksa compose başlamayı reddeder (ana makinede oluşturun:
+      # systemd-machine-id-setup). Bu kimlik olmadan lisans yalnızca veritabanı kümesine bağlanır (klon koruması zayıf).
+      - type: bind
+        source: /etc/machine-id
+        target: /etc/host-machine-id
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       db:
         condition: service_healthy

@@ -11,6 +11,7 @@ const bundle = process.env.E2E_TARGET === 'bundle';
 
 export default defineConfig({
   testDir: 'e2e',
+  globalSetup: './e2e/global-setup.ts',
   outputDir: 'test-results',
   // CI çalıştırıcıları yerel makineden yavaştır; en uzun senaryo (kasa/banka) orada 60 sn'yi aşıyordu.
   timeout: process.env.CI ? 150_000 : 60_000,

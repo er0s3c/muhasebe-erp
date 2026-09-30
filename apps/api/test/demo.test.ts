@@ -135,6 +135,30 @@ describe('demo aracı', () => {
     } finally {
       await c2.end();
     }
+    // Lisans durumu sıfırlamadan sağ çıkar: aynı kurulum kimliği ve kira (demo örneği yeniden etkinleştirme istemez)
+    const c4 = new pg.Client({ connectionString: ownerUrl });
+    await c4.connect();
+    let saved: { installation_id: string; lease_token: string };
+    try {
+      await c4.query(
+        `insert into license_state (id, installation_id, public_key, private_key_pem, lease_token, high_water) values (1, gen_random_uuid(), 'pub', 'pem', 'erp1.k.p.s', 12345)`,
+      );
+      saved = (await c4.query(`select installation_id, lease_token from license_state`)).rows[0];
+    } finally {
+      await c4.end();
+    }
+    const again = cli(['reset', `--confirm=${dbName}`]);
+    expect(again.code, again.out).toBe(0);
+    const c5 = new pg.Client({ connectionString: ownerUrl });
+    await c5.connect();
+    try {
+      const row = (await c5.query(`select installation_id, lease_token, high_water from license_state`)).rows[0];
+      expect(row.installation_id).toBe(saved.installation_id);
+      expect(row.lease_token).toBe('erp1.k.p.s');
+      expect(Number(row.high_water)).toBe(12345);
+    } finally {
+      await c5.end();
+    }
     // resetSchema yeniden çağrılabilir (idempotent) ve boş şema bırakır
     await resetSchema(ownerUrl);
     const c3 = new pg.Client({ connectionString: ownerUrl });

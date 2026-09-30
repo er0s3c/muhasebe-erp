@@ -2,8 +2,15 @@ import { loadConfig } from './config';
 import { createDb } from './db/client';
 import { checkRuntimeRole } from './db/preflight';
 import { buildApp } from './app';
+import { BUILD_ENFORCED } from './licensing';
 
 const config = loadConfig();
+
+// Üretimde yalnızca lisans denetimiyle derlenmiş paket çalışır (kaynak kodu/tsx ile ya da denetimsiz derlemeyle üretim kipi reddedilir).
+if (config.NODE_ENV === 'production' && !BUILD_ENFORCED) {
+  console.error('Üretim kipi yalnızca lisans denetimiyle derlenmiş paketle çalışır (npm run build -w @erp/api).');
+  process.exit(1);
+}
 
 // Uygulama kurulana dek günlükler konsola gider; sonra Fastify'ın pino günlüğüne geçilir.
 let log: { error: (obj: unknown, msg?: string) => void } = { error: (obj, msg) => console.error(msg ?? '', obj) };
@@ -31,6 +38,15 @@ if (config.NODE_ENV === 'production' && !config.COOKIE_SECURE) {
   app.log.warn('COOKIE_SECURE=false: yenileme çerezi düz http üzerinden gider; üretimde TLS kullanın');
 }
 
+// Lisans: durumu yükle (kurulum kimliğini ilk çalışmada oluşturur) ve düzenli kalp atışını başlat.
+let stopLicenseScheduler = () => {};
+if (app.license.enforced) {
+  await app.license.init();
+  const snap = await app.license.current();
+  app.log.info({ state: snap.state, reason: snap.reason, installationId: snap.installationId }, 'lisans durumu');
+  stopLicenseScheduler = app.license.startScheduler();
+}
+
 let closing = false;
 const shutdown = async (signal: string) => {
   if (closing) return;
@@ -42,6 +58,7 @@ const shutdown = async (signal: string) => {
   }, config.SHUTDOWN_TIMEOUT_MS);
   timer.unref();
   try {
+    stopLicenseScheduler();
     await app.close();
     await handle.close();
     process.exit(0);

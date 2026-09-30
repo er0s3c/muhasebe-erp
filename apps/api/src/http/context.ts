@@ -13,6 +13,8 @@ import { companies, companyModules, memberships, users } from '../db/schema';
 import { AppError, forbidden, unauthorized, badRequest } from './errors';
 import type { MemoryLimiter, Semaphore } from './limits';
 import type { Mailer } from '../modules/mail/mailer';
+import { assertLicensed } from '../licensing/gate';
+import type { LicenseService } from '../licensing/service';
 
 /**
  * Kayıtlı bir işleyicinin hangi kapıdan geçtiğini gösterir; rota–izin sözleşme testi (test/security.test.ts)
@@ -42,6 +44,8 @@ declare module 'fastify' {
     exportGate: Semaphore;
     /** Giden posta (SMTP, günlük modu ya da kapalı). */
     mailer: Mailer;
+    /** Kuruluma ait lisans durumu ve satıcıyla iletişim. */
+    license: LicenseService;
   }
 }
 declare module '@fastify/jwt' {
@@ -98,6 +102,7 @@ export function authedRoute<T>(
   opts: { allowMustChange?: boolean } = {},
 ): RouteHandlerMethod {
   const route: RouteHandlerMethod = async (req, reply) => {
+    await assertLicensed(app.license, req);
     const user = await authenticate(req);
     return withContext(app.db, { userId: user.id, orgId: user.orgId, ip: req.ip }, async (tx) => {
       // Token geçerli olsa da kullanıcı pasifleştirilmiş olabilir.
@@ -132,6 +137,7 @@ export function tenantRoute<T>(
   handler: (ctx: TenantCtx) => Promise<T>,
 ): RouteHandlerMethod {
   const route: RouteHandlerMethod = async (req, reply) => {
+    const license = await assertLicensed(app.license, req);
     const user = await authenticate(req);
     if (options.limit) {
       const r = app.limiter.consume(`${options.limit.name}:${user.id}`, options.limit.max, options.limit.windowMs);
@@ -172,6 +178,10 @@ export function tenantRoute<T>(
         .from(companies)
         .where(eq(companies.id, companyId));
       if (!company) throw forbidden('Bu şirkete erişiminiz yok', 'NOT_A_MEMBER');
+      // Şirketin sektörü lisansın kapsamında olmalı (veritabanında sektörü elle değiştirmek yetki kazandırmaz).
+      if (license && !app.license.sectorAllowed(license, company.sector)) {
+        throw forbidden('Lisansınız bu şirketin sektörünü kapsamıyor', 'LICENSE_SECTOR_MISMATCH');
+      }
 
       const overrides = await tx
         .select({ module: companyModules.module, enabled: companyModules.enabled })
