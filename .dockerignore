@@ -13,6 +13,7 @@ reference-materials
 docs
 e2e
 scripts
+!scripts/licenses-notices.ts
 deploy
 Dockerfile
 .dockerignore

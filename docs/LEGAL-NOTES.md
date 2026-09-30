@@ -25,6 +25,8 @@ Yalnızca izinli lisanslar kullanılır (MIT, ISC, BSD, Apache-2.0, 0BSD, BlueOa
 
 **xlsx yazma/okuma:** `exceljs` kurulumda `npm audit --omit=dev` (uuid) ve lisans denetimini (`buffers@0.1.1`, lisansı belirsiz) geçemediği için kullanılmadı. Bunun yerine MIT lisanslı `fflate` (zip) ve `fast-xml-parser` üstüne kendi küçük yazıcı/okuyucumuz yazıldı (`apps/api/src/files/`); izin listesi genişletilmedi.
 
+**Dağıtımda bildirim yükümlülüğü:** MIT, BSD, ISC ve Apache-2.0 lisansları, yazılımı (imaj olarak) dağıtırken telif bildiriminin ve lisans metninin birlikte verilmesini şart koşar. `npm run licenses:notices` üretim bağımlılık kümesinden (yaklaşık 190 paket; geliştirme araçları hariç) `THIRD-PARTY-NOTICES.md` üretir; dosya Docker imajı derlenirken oluşturulur, imajda `/app/THIRD-PARTY-NOTICES.md` olarak bulunur ve arayüz kökünden `/THIRD-PARTY-NOTICES.md` adresiyle sunulur. **Sekiz paket lisans dosyasını yayımlamaz** (`@nodable/entities`, `@node-rs/argon2-linux-x64-gnu`/`-musl`, `abstract-logging`, `drizzle-orm`, `pg-types`, `pgpass`, `react-remove-scroll-bar`); bu paketler için bildirimde lisans türü ve kaynak adresi yazılıdır, lisans metni yoktur. Apache-2.0 (örn. `drizzle-orm`) lisans metninin bir kopyasının verilmesini ayrıca ister: **ticari dağıtımdan önce** bu eksik metinleri kaynak depolardan tamamlamak ve bildirimi bir avukata göstermek gerekir.
+
 İzin listesine bilinçli olarak eklenen iki istisna (ikisi de yalnızca derleme/geliştirme aracıdır, ürün paketine girmez):
 
 - **MPL-2.0:** `lightningcss` (Tailwind/Vite'ın CSS derleyicisi). Dosya düzeyinde zayıf copyleft; değiştirilmemiş ikili olarak derleme sırasında kullanıldığı için kendi kodumuza yükümlülük getirmez. Bu paket değiştirilirse veya dağıtılan ürüne dahil edilirse yeniden değerlendirin.
@@ -69,6 +71,14 @@ Yeni şirkete yüklenen hesap planı genel Tekdüzen Hesap Planı yapısına day
 
 Sistem kişi adı, e-posta, ileride kimlik/pasaport ve bordro verisi işleyecektir. Üretime almadan önce KKTC'nin kişisel verilerin korunmasına ilişkin mevzuatı için hukuki değerlendirme yapılmalı; yedekleme, saklama süresi ve veri dışa aktarma politikaları yazılı hâle getirilmelidir.
 
+Bugünkü teknik durum (hiçbiri hukuken doğrulanmış bir uyum iddiası değildir):
+
+- **Yedek dosyaları** (`scripts/backup.sh`) tüm şirketlerin verisini ve kişisel verileri içerir; şifreli ve ofis dışı saklama, erişim sınırı ve **saklama/imha süresi işletenin sorumluluğudur** (docs/OPERATIONS.md §6). Geri yükleme tatbikatı yedeğin okunabilir olduğunu gösterir; hukuken yeterli bir saklama politikası yerine geçmez.
+- **`security_events`** e-posta adresi, IP ve tarayıcı bilgisi; **`audit_log`** kullanıcı ve IP bilgisi tutar. Her ikisi yalnız-ekleme türündedir ve uygulama içinden silinemez; kaç yıl saklanacağı ve silinme/unutulma taleplerinin nasıl karşılanacağı **doğrulanmamıştır**. Mali kayıtların yasal saklama süreleri de doğrulanmamıştır; mali müşavirle teyit etmeden denetim kaydını budamayın (budama tetikleyicinin geçici kapatılmasını gerektirir).
+- Kullanıcı ve şirket **silme** özelliği yoktur (yalnızca pasifleştirme); kişisel veri silme/dışa aktarma talebi için tanımlı bir süreç yoktur.
+- **Demo verisi** tamamen kurguseldir (örnek şirket, kişi adları ve telefonlar uydurmadır); gerçek kişi verisi içermez ve ayrı bir örnekte çalıştırılır.
+- Parola sıfırlama ve e-posta doğrulama e-postaları işletenin SMTP sağlayıcısı üzerinden gider; e-posta içeriği ve sağlayıcının veri işleme koşulları işletenin sorumluluğundadır.
+
 ## 6. Merkez Bankası kur verisi
 
 `apps/api/src/modules/settings/kktcmb.ts`, kurumun XML biçimini **gerçek bir örnek dosyaya** (29/09/2026, duyuru 2026/182; `apps/api/test/fixtures/kktcmb-gunluk.xml`) göre ayrıştırır.
@@ -91,7 +101,7 @@ Sistem kişi adı, e-posta, ileride kimlik/pasaport ve bordro verisi işleyecekt
 
 - **Açılış yevmiyesinin karşı hesabı** varsayılan olarak `opening_offset` eşlemesidir (varsayılan 500 Sermaye); KKTC uygulamasında açılış farkının hangi hesaba yazılacağı ve açılışın yıl sonu kapanış/devir kaydıyla nasıl ilişkilendirileceği **doğrulanmamıştır**. Mali müşavirle teyit edilmeden gerçek şirket açılışı yapmayın; karşı hesap içe aktarma sırasında değiştirilebilir.
 - **Cari açılışı** müşteri bakiyesini 120, tedarikçi bakiyesini 320 hesabına yazar (“her ikisi” türünde borç → 120, alacak → 320); bu eşleme ve avans yönü mali müşavirce doğrulanmamıştır.
-- **Mizan açılışı** cari kontrol (120/320…) ve stok (150–157) hesaplarını bilerek reddeder; bu hesapların bakiyesi cari ve stok açılışından girilmelidir (alt defter ↔ hesap ayrışmasın). Yıl sonu kapanış/devir akışı henüz yoktur (M9).
+- **Mizan açılışı** cari kontrol (120/320…) ve stok (150–157) hesaplarını bilerek reddeder; bu hesapların bakiyesi cari ve stok açılışından girilmelidir (alt defter ↔ hesap ayrışmasın). Yıl sonu kapanış/devir akışı henüz yoktur; **M9 kapsamına alınmadı**, KKTC uygulaması mali müşavirle teyit edilmeden yazılmayacaktır (aşağıdaki §10).
 - Açılış yevmiyeleri kaynaksızdır ve normal ters kayıtla geri alınabilir; aynı dosyanın iki kez yüklenmesi engellenmez.
 - **Dosya biçimi:** eski Windows CSV'leri (windows-1254) okunur; bankaya/muhasebe programına özgü biçimler doğrulanmamıştır, sütunlar kullanıcı tarafından eşlenir.
 
@@ -100,3 +110,12 @@ Sistem kişi adı, e-posta, ileride kimlik/pasaport ve bordro verisi işleyecekt
 - Banka ekstresi biçimleri (sütun adları, borç/alacak yönü, bakiye sütunu) bankadan bankaya değişir ve **bankaya özgü olarak doğrulanmamıştır**; sütunlar kullanıcı tarafından eşlenir. Ekstrede Borç = çıkan, Alacak = giren varsayılır (banka defteri görünümü); bankanız tersini kullanıyorsa Tutar + Yön ya da işaretli tutar sütununu kullanın.
 - Eşleştirme önerileri (tutar birebir, tarih ±3 gün) yalnızca yardımcıdır; “kesin” öneriler dahil hiçbir eşleşme yasal mutabakat belgesi yerine geçmez. Mali müşavirinizle banka mutabakat sürecini ve saklama biçimini teyit edin.
 - Ekstre dosyası sunucuda saklanmaz; yalnızca satırları (tarih, tutar, açıklama, referans) veritabanına yazılır ve eşleşmiş satırlar denetim izinde tutulur.
+
+## 10. Ticari dağıtım ve işletim
+
+- **Yıl sonu kapanış ve devir** (gelir/gider hesaplarının kapanışı, bilanço hesaplarının devri, açılış kaydı) ile **dönem sonu kur değerlemesi ve sonradan avans mahsubu** (M7b) bu sürümde yoktur. İkisi de KKTC'deki kabul edilen yöntem ve hesap akışı doğrulanmadan yazılmayacaktır; müşteriye bu sürümün yıl sonu işlemini yapmadığı, bu işlemlerin elle yevmiye ve mali müşavir kontrolüyle yürütülmesi gerektiği açıkça söylenmelidir.
+- **İç belgeler:** fatura, irsaliye ve defter çıktıları iç belgedir; yasal fatura/irsaliye/defter yerine geçmez (§3, §7). Bu, ticari sözleşmede ve müşteri kurulum kontrol listesinde yazılı olmalıdır.
+- **Ürün adı ve marka:** ticari lansmandan önce marka/alan adı taraması ve mevcut yazılım adlarına benzerlik kontrolü yapılmalıdır (§1). Bu depo adı bir çalışma adıdır.
+- **Sözleşme ve sorumluluk:** hizmet seviyesi, yedekleme sorumluluğu, veri işleme (işleten/işlenen) rolleri, sorumluluk sınırı ve destek kapsamı bir avukata hazırlatılmalıdır; bu belge ve yazılım bunların yerine geçmez.
+- **Yedekleme sorumluluğu:** yedeğin alınması, ofis dışına taşınması, şifrelenmesi ve geri yükleme denemesinin yapılması işletenin işidir; yazılım yalnızca araçları ve bir doğrulama tatbikatı sağlar (docs/OPERATIONS.md).
+- **Üçüncü taraf bildirimi** dağıtımla birlikte verilmelidir (§2).

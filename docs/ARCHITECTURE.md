@@ -16,9 +16,9 @@ Tek veritabanı, tek API. Sektöre özgü davranış ayrı dağıtımlarla deği
 - `organizations` (lisans) → `companies` (tüzel kişi). Kullanıcı bir kuruluşa aittir; `memberships` ile şirket başına rol alır.
 - Her istek **tek işlemde** çalışır. İşlemin başında `set_config('app.user_id' | 'app.org_id' | 'app.company_id', …, true)` çağrılır (işlem-yerel; havuza sızmaz).
 - Tüm iş tablolarında `company_id` vardır ve RLS politikası `company_id = app_company_id()` şartını uygular. Bağlam yoksa hiçbir satır görünmez.
-- Çalışma zamanı rolü `erp_app` **şema sahibi değildir** ve `BYPASSRLS` yoktur. Migration ve seed sahip rol (`erp`) ile çalışır.
+- Çalışma zamanı rolü `erp_app` **şema sahibi değildir** ve `BYPASSRLS` yoktur. Migration sahip rol (`erp`) ile çalışır; demo verisi (`seedDemo`) ve operatör komutları uygulama gibi `erp_app` ile yazar (sahip rolü gerekmez). Üretimde uygulama başlarken `db/preflight.ts` rolü denetler: süper kullanıcı, `BYPASSRLS`, tablo sahibi ya da RLS'i kapalı `company_id` tablosu varsa süreç `exit(1)` ile açılmaz.
 - Kompozit yabancı anahtarlar (`(entry_id, company_id)`, `(account_id, company_id)`) başka şirketin kaydına bağlanmayı imkânsız kılar.
-- Kimlik: argon2id, 15 dk'lık JWT (yalnızca bellekte), httpOnly refresh çerezi. Refresh her kullanımda döner; kullanılmış bir token'ın tekrar sunulması tüm oturumları kapatır. Giriş/kayıt hız sınırlıdır.
+- Kimlik: argon2id, 15 dk'lık JWT (yalnızca bellekte), httpOnly + `SameSite=Strict` refresh çerezi (yol `/api/auth`); auth uçlarında `Origin` denetimi, API yanıtlarında `Cache-Control: no-store`. Refresh rotasyonu **atomiktir** (tek `UPDATE … WHERE revoked_at IS NULL`); iki sekmenin çakışması için 10 sn tolerans vardır (`409 REFRESH_CONFLICT`, istemci bir kez yeniden dener), tolerans dışı yeniden kullanım tüm oturum ailesini kapatır; oturumun mutlak ömrü `SESSION_MAX_DAYS`. Giriş, kayıt, yenileme, parola değişimi, şirket açma, dışa/içe aktarma uçları oran sınırlıdır (bellekte, tek örnek varsayımı; `TRUST_PROXY=false` iken `X-Forwarded-For` güvenilmez).
 - Rol/izin eşlemesi `packages/shared/src/permissions.ts` içindedir (kod içi şablonlar). Özel rol tablosu gerçek ihtiyaç doğunca eklenecek.
 
 ## Defter kuralları (veritabanında)
@@ -125,6 +125,30 @@ Tek veritabanı, tek API. Sektöre özgü davranış ayrı dağıtımlarla deği
 - **Mutabakat özeti:** ekstre kapanış bakiyesi − bağlı muhasebe hesabının aynı tarihteki bakiyesi = **fark**; fark, açık ekstre satırları toplamı − eşleşmemiş defter kayıtları toplamıyla açıklanır (ikisi de ekranda). Dışa aktarma `bank-reconciliation` (ekstre satırları + eşleşmemiş defter kayıtları, Excel/CSV).
 - **Kapsam dışı / bilinen sınırlar:** banka-özel ekstre biçimleri; tolerans ayarı (sabit 3 gün); bir defter satırı ↔ bir ekstre satırı (bir-çok eşleştirme yok); otomatik sınıflandırma/kural motoru; POS/kredi kartı mutabakatı; dönem sonu kur değerlemesi (M7b).
 
+## Üretim derlemesi ve dağıtım (M9a)
+
+- **Derleme:** `apps/api/scripts/build.ts` (esbuild) `server`, `migrate`, `demo` ve `admin` girişlerini `dist/` altına üretir. `@erp/shared` (ham TS) pakete gömülür; `apps/api` `dependencies` içindekiler dışarıda kalır. Derleme sonrası metafile denetlenir (node_modules'tan gömülen ya da `dependencies` dışı içe aktarma varsa derleme başarısız).
+- **Sunum:** `WEB_DIST_DIR` verilirse API aynı kökenden arayüzü de sunar (`http/static.ts`): `/assets/*` bir yıl `immutable`, `index.html` önbelleksiz; SPA yedeği yalnızca `GET`, `/api/` dışı, uzantısız ve `Accept: text/html` isteklerde; olmayan `/assets/x.js` gerçek 404. Tema betiği harici dosyadır (CSP `script-src 'self'`).
+- **İmaj:** çok aşamalı `Dockerfile` (derleme → yalnız üretim bağımlılıkları → `node:22-bookworm-slim`, root olmayan kullanıcı, `HEALTHCHECK` → `/api/health/ready`, kaynak haritası yok, `THIRD-PARTY-NOTICES.md` dahil). Compose: `db` + tek seferlik `migrate` (sahip rolü) + `app` (yalnız `erp_app`) + isteğe bağlı `caddy`; roller `infra/postgres/init-prod.sh` ile (parolalar ortamdan).
+- **Başlangıç korumaları:** üretimde örnek/zayıf `JWT_SECRET` reddedilir; `MAIL_TRANSPORT=log` yasak; yanlış rol/RLS'siz tablo ile açılış reddedilir; kapanış tek seferliktir (sert zaman aşımı, sıfır olmayan çıkış kodu); `pg.Pool` hata dinleyicisi vardır (veritabanı yeniden başlasa süreç çökmez); `40001/40P01` → `409 RETRY`.
+- CI (`.github/workflows/ci.yml`): `check` (lint, tip, testler, lisans, `npm audit`, **geri yükleme tatbikatı**), `e2e` (**üretim paketine** karşı), `docker` (imaj, compose duman testi, yedek → felaket kurtarma → giriş, demo örneği). İşletim: [OPERATIONS.md](OPERATIONS.md).
+
+## Hesap güvenliği (M9b)
+
+- **Parola sıfırlama ve e-posta doğrulama** (SMTP açıksa; `modules/auth/account.ts`, `modules/mail/`): bağlantı jetonları 32 bayt rastgele, yalnız `sha256` özetiyle saklanır (`user_tokens`), tek kullanımlık (atomik tüketim), sıfırlama 60 dk; `forgot-password` her zaman aynı `202` yanıtını verir ve posta işlem sonrası arka planda gönderilir (kullanıcı var/yok sızmaz, posta hatası isteği bozmaz). Sıfırlama tüm oturumları kapatır.
+- **Geçici parola:** yöneticinin belirlediği ilk parola `must_change_password` bayrağıyla gelir; değişene dek şirket uçları `403 PASSWORD_CHANGE_REQUIRED`. Parola politikası: 10+ karakter, yaygın/tahmin edilebilir ve e-postayı içeren parolalar reddedilir (harici hizmet yok).
+- **Yetki yükseltme kapatıldı:** `owner` rolünü yalnız sahip verir/alır; son sahip kilit altında korunur (`LAST_OWNER`).
+- **`security_events`** (salt-eklenir; giriş başarılı/başarısız, sıfırlama, yenileme jetonu yeniden kullanımı, üyelik değişiklikleri; gizli değer yok) ve **`audit_log` sahip rolüne karşı bile** salt-eklenir (ERRCODE `ERP07`). Destek sorguları: OPERATIONS.md §7.
+- **Operatör kurtarma yolu:** `node dist/admin.js reset-password --email=…` (SMTP kapalı kurulumlar için): geçici parola üretir, oturumları kapatır, operatör imzalı olay yazar.
+- **Sözleşme testleri:** her `/api/*` rotası izin matrisinde kayıtlı olmak zorundadır (`tenantRoute`/`authedRoute` işleyiciyi işaretler; kayıtsız rota testi kırar); şema güdümlü RLS testi `company_id` taşıyan her tabloda RLS ve politika arar, `audit_row_change` dışında `SECURITY DEFINER` yasaktır.
+
+## Yedekleme, geri yükleme ve demo (M9d)
+
+- **Yedek:** `scripts/backup.sh` sahip rolüyle `pg_dump -Fc` alır (RLS sahibi etkilemediğinden tüm şirketler; izinler ve migration geçmişi dökümde), kısmi dosya bırakmaz, arşivi doğrular, `sha256` yazar, eski yedekleri temizler. **Geri yükleme:** `scripts/restore.sh` yalnızca **boş** hedefe, `--single-transaction --no-owner --role=erp` ile (ACL korunur; roller küme genelidir ve önceden var olmalıdır); `--compose --recreate --yes` felaket kurtarma yoludur.
+- **Tatbikat:** `scripts/restore-drill.sh` demo veriyle kaynak kurar, yedekler, taze veritabanına geri yükler ve tablo sayıları, veri/yapı parmak izleri, `erp_app` ile RLS davranışı ve ERP01/ERP07 tetikleyicilerini karşılaştırır; **kendi negatif kontrolünü** yapar (silinen satır ve kapatılan RLS yakalanmazsa `exit 2`). Yerelde ve CI'da koşar.
+- **Demo:** `db/demo.ts` `seedDemo(db)` bir kitaplık işlevidir (modül yüklenirken çalışmaz); `db/reset.ts` `resetSchema` hem testlerin `global-setup`'ında hem `demo:reset`'te kullanılır (aynı kod). `demo-cli` üretimde yalnızca `ALLOW_DEMO=true` ile, `reset` ayrıca `--confirm=<veritabanı adı>` ile çalışır. Demo, müşteri kurulumundan **ayrı bir compose örneğidir** (`deploy/docker-compose.demo.yml`); uygulama içinde demo düğmesi yoktur.
+- **Lisans bildirimi:** `npm run licenses:notices` (`scripts/licenses-notices.ts`) üretim bağımlılık kümesinden `THIRD-PARTY-NOTICES.md` üretir; imaj derlenirken oluşur ve `/THIRD-PARTY-NOTICES.md` olarak sunulur.
+
 ## Kur içe aktarma
 
 `POST /api/exchange-rates/import`: `{ source: 'kktcmb', date? }` resmî adresten indirir, `{ source: 'xml', xml }` yüklenen dosyayı kullanır. İndirme fonksiyonu (`app.rateFetcher`) test için değiştirilebilir. Ayrıntı ve güvenlik notları: [LEGAL-NOTES.md](LEGAL-NOTES.md) §6.
@@ -137,6 +161,15 @@ Tek veritabanı, tek API. Sektöre özgü davranış ayrı dağıtımlarla deği
 - `tenantRoute(app, { module, permission }, handler)` uç noktayı korur: modül etkin değilse `403 MODULE_DISABLED`.
 - Web'de her sayfa `React.lazy` ile ayrı parçadır; `RequireModule` etkin olmayan modülün sayfasını hiç yüklemez.
 - `status: 'planned'` modüller henüz hiçbir şirkete açılmaz.
+
+### Modül istisnaları (M9c)
+
+Şirket, sektör varsayılanından **kapatma** istisnası yazabilir (`company_modules`, `enabled=false`); açmak istisna satırını siler. Ekran: Ayarlar > Modüller (`GET /api/company/modules`, `PUT /api/company/modules/:key`; yalnız `settings.manage` = sahip/yönetici; diğer roller okur).
+
+- Kayıt kuralları (`module-registry.ts`): **`locked`** modüller (panel, ayarlar) kapatılamaz; **`requires`** ile bağımlılık bildirilir (cari→muhasebe; stok→muhasebe; fatura→muhasebe+cari+stok; kasa-banka→muhasebe+cari). Bağımlısı açık modül kapatılamaz (`422 MODULE_REQUIRED_BY`), gereksinimi kapalı modül açılamaz (`MODULE_MISSING_REQUIREMENT`); `MODULE_LOCKED`, `MODULE_PLANNED`, `MODULE_SECTOR_MISMATCH` diğer ret nedenleridir. Kurallar paylaşılan saf işlevlerde (`checkModuleToggle`, `describeModules`) olduğundan API ve arayüz aynı kararı verir.
+- `resolveEnabledModules` savunmacıdır: kilitli modüldeki istisnayı yok sayar ve gereksinimi eksik modülü **geçişli** olarak düşürür (ham SQL ile yazılmış tutarsız satır sistemi bozamaz).
+- **Eşzamanlılık:** geçiş, `companies` satırı `FOR UPDATE` ile kilitlenerek yapılır; aksi halde iki yöneticinin birbirine bağımlı geçişleri kuralı aşabilirdi (negatif kontrolle kanıtlı).
+- Web: kapalı modülün menü grubu, panel sayaçları ve kontrol listesi adımları kalkar; kapalı modüle giden bağlantılar (yevmiye kaynak bağlantısı, stok durumu → irsaliye vb.) düz metne döner; sayfaya doğrudan gidilirse `RequireModule` "bu bölüm kapalı" gösterir. Kapatma veriyi silmez. **Tam veri dışa aktarma** (`core.settings` altında) kapalı modüllerin verisini de içerir (veri taşınabilirliği); modüle özel rapor uçları kapalıyken `403`'tür.
 
 ### Yeni modül eklemek
 
@@ -153,10 +186,14 @@ React 19 + Vite + Tailwind v4. Renk/yüzey belirteçleri CSS değişkenidir (aç
 
 - `packages/shared`: saf birim testleri (para, modül kaydı, izinler, şemalar).
 - `apps/api`: `app.inject` ile **gerçek PostgreSQL** üzerinde entegrasyon testleri; her çalıştırmada test şeması sıfırlanır. RLS, değiştirilemezlik, dönem kilidi, eş zamanlı numaralama, rol izinleri ve modül yalıtımı doğrudan ham SQL ile de sınanır.
-- `e2e/`: Playwright ile kayıt → kurulum → kur → dövizli yevmiye → mizan; cari akışı; stok akışı (kart → giriş → çıkış → kritik seviye → sayım); fatura akışı (alış → satış → iade → iptal); irsaliye akışı (mal kabul → fiyat farklı fatura → sevk → kısmi fatura); kasa/banka akışı (dövizli fatura → farklı kurlu tahsilat + kur kârı → ekstre → iptal → kalem geri gelir); rapor akışı (yevmiye defteri, mizan xlsx/csv indirme, yazdırma başlığı, tam veri dosyası); içe aktarma akışı (hatalı cari dosyası engellenir → düzeltilmiş dosya, xlsx stok kartı, stok ve cari açılışı, dengeli mizan); banka mutabakatı (ekstre içe aktar → kesin eşleşmeleri uygula → eşleşmeyen satırdan hareket oluştur → fark kapanır → eşleşmeyi kaldır).
+- Sağlamlaştırma testleri (M9): yapılandırma/başlangıç korumaları, `preflight`, sağlık uçları, statik sunum, oran sınırı ve sahte `X-Forwarded-For`, yetki yükseltme, atomik refresh yarışı, hesap güvenliği akışları, eşzamanlı fatura kaydı (kilitlenme regresyonu), dışa aktarma kapısı/tavanları, modül istisnaları, demo/operatör araçları (CLI'lar gerçek süreç olarak), rota–izin ve RLS sözleşme testleri. Her koruma için **negatif kontrol** yapılır (korumayı geçici kaldır → test kırılır → geri al).
+- `e2e/`: Playwright ile kayıt → kurulum → kur → dövizli yevmiye → mizan; cari akışı; stok akışı (kart → giriş → çıkış → kritik seviye → sayım); fatura akışı (alış → satış → iade → iptal); irsaliye akışı (mal kabul → fiyat farklı fatura → sevk → kısmi fatura); kasa/banka akışı (dövizli fatura → farklı kurlu tahsilat + kur kârı → ekstre → iptal → kalem geri gelir); rapor akışı (yevmiye defteri, mizan xlsx/csv indirme, yazdırma başlığı, tam veri dosyası); içe aktarma akışı (hatalı cari dosyası engellenir → düzeltilmiş dosya, xlsx stok kartı, stok ve cari açılışı, dengeli mizan); banka mutabakatı (ekstre içe aktar → kesin eşleşmeleri uygula → eşleşmeyen satırdan hareket oluştur → fark kapanır → eşleşmeyi kaldır); hesap güvenliği (geçici parola zorunlu değişim, genel sayfalar); modüller (bağımlılık korumalı kapatma, menü/panel/sayfa kapıları, yeniden açma). CI'da e2e **üretim paketine** karşı (`E2E_TARGET=bundle`), ayrıca duman testi bir ayrı testte (`bundle-smoke`: CSP ihlali yok, tema betiği ilk boyamadan önce çalışır).
 
 ## Bilinen sınırlar
 
-- Ana JS paketi ~715 kB (gzip ~227 kB); `manualChunks` ile bölünebilir.
-- `company_modules` istisnalarını yönetecek arayüz henüz yok (kod ve testler var).
-- Sunucu tsx ile çalışır; üretim derlemesi (bundle) ve dağıtım hattı yol haritasındadır.
+- Ana JS paketi ~715 kB (gzip ~227 kB); `manualChunks` ile bölünebilir (Vite 8/Rolldown'da `advancedChunks` gerekir).
+- **Yıl sonu kapanış/devir ve dönem sonu kur değerlemesi (M7b) yoktur**; ikisi de mali müşavir teyidine bağlıdır (LEGAL-NOTES).
+- Oran sınırı deposu bellektedir: uygulama **tek örnek** çalışır; çok örnekli barındırma için paylaşılan depo gerekir. MFA/TOTP yoktur.
+- `users` tablosu çalışma zamanı rolüne tüm kiracılar için açıktır (giriş e-postayla yapıldığı için); kolon yetkisi ya da ayrı giriş rolü sonraya.
+- Dışa aktarma (xlsx/CSV) ve tam veri dışa aktarma bellek içi üretilir (eşzamanlılık kapısı ve satır tavanlarıyla sınırlı); cari yaşlandırma maliyeti toplam satır sayısıyla doğrusaldır (PERFORMANCE.md).
+- İmaj kayıt defterine (registry) yayınlanmaz; Caddy TLS profili otomatik sınanmaz; yedekleme/saklama/kişisel veri politikası hukuken doğrulanmamıştır.

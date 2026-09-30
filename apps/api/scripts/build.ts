@@ -1,5 +1,5 @@
 /**
- * API üretim derlemesi: `node dist/server.js` ve `node dist/migrate.js` girişlerini üretir.
+ * API üretim derlemesi: `node dist/server.js`, `node dist/migrate.js`, `node dist/demo.js` ve `node dist/admin.js` girişlerini üretir.
  *
  * - `@erp/shared` çalışma alanı paketi ham TypeScript olduğundan pakete GÖMÜLÜR.
  * - `apps/api` `dependencies` içindeki her şey DIŞARIDA kalır (yerel modül `@node-rs/argon2` gömülemez;
@@ -23,7 +23,7 @@ mkdirSync(outdir, { recursive: true });
 
 const result = await build({
   absWorkingDir: root,
-  entryPoints: { server: 'src/server.ts', migrate: 'src/db/migrate-cli.ts' },
+  entryPoints: { server: 'src/server.ts', migrate: 'src/db/migrate-cli.ts', demo: 'src/db/demo-cli.ts', admin: 'src/db/admin-cli.ts' },
   outdir,
   bundle: true,
   platform: 'node',
@@ -56,4 +56,4 @@ for (const out of Object.values(result.metafile.outputs)) {
 if (missing.size > 0) throw new Error(`Dış içe aktarma dependencies içinde yok: ${[...missing].join(', ')}`);
 
 cpSync(join(root, 'drizzle'), join(outdir, 'drizzle'), { recursive: true });
-console.log(`API derlemesi tamam: ${outdir} (server.js, migrate.js, drizzle/)`);
+console.log(`API derlemesi tamam: ${outdir} (server.js, migrate.js, demo.js, admin.js, drizzle/)`);

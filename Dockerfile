@@ -13,6 +13,8 @@ COPY packages/shared/package.json packages/shared/
 RUN npm ci
 COPY . .
 RUN npm run build
+# Üçüncü taraf lisans bildirimi (MIT/BSD/Apache dağıtımda bildirim şartı): üretim bağımlılıklarından üretilir
+RUN npm run licenses:notices
 
 # ---- 2) Yalnızca API'nin üretim bağımlılıkları (yerel modül @node-rs/argon2 dahil) --------------------------
 FROM node:${NODE_VERSION}-bookworm-slim AS deps
@@ -35,6 +37,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/web/dist ./web
+# Bildirim hem imajın kökünde hem de web kökünde (arayüz /THIRD-PARTY-NOTICES.md olarak sunar)
+COPY --from=build /app/THIRD-PARTY-NOTICES.md ./THIRD-PARTY-NOTICES.md
+COPY --from=build /app/THIRD-PARTY-NOTICES.md ./web/THIRD-PARTY-NOTICES.md
 # Kaynak haritaları imajda bulunmasın (kaynak kodu sızmasın)
 RUN find /app/web -name '*.map' -delete
 USER node

@@ -1,10 +1,10 @@
 /**
- * Geliştirme/demo verisi: örnek bir inşaat şirketi, kurlar, bir yıllık yevmiye kaydı.
- * Yalnızca geliştirme içindir; üretimde çalışmayı reddeder. Tekrar çalıştırılırsa
- * demo kullanıcı varsa hiçbir şey yapmaz.
+ * Demo verisi: örnek bir inşaat şirketi, kurlar, bir yıllık yevmiye/fatura/stok/kasa-banka hareketi.
+ * `seedDemo(db)` bir kitaplık işlevidir (testler ve operatör aracı `demo-cli.ts` çağırır); modül yüklenirken
+ * hiçbir şey çalıştırmaz. Uygulama gibi ÇALIŞMA ZAMANI rolüyle (erp_app, RLS'e tabi) yazar; şema sahibi gerekmez.
+ * Demo kullanıcı zaten varsa hiçbir şey yapmaz.
  *
- *   npm run db:seed
- *   Giriş: demo@ornek.local / Demo-Sifre-123
+ *   npm run db:seed      giriş: demo@ornek.local / Demo-Sifre-123
  */
 import { hash } from '@node-rs/argon2';
 import { eq } from 'drizzle-orm';
@@ -25,9 +25,8 @@ import {
   type CreateStockDocumentInput,
   type Sector,
 } from '@erp/shared';
-import { loadConfig } from '../config';
 import type { CompanyInfo } from '../http/context';
-import { createDb, withContext, type Tx } from './client';
+import { withContext, type Db, type Tx } from './client';
 import { customCodes, exchangeRates, memberships, organizations, users, warehouses } from './schema';
 import { createParty } from '../modules/parties/service';
 import { createAccount, listAccounts } from '../modules/ledger/accounts';
@@ -53,16 +52,8 @@ import { createWarehouse } from '../modules/inventory/warehouses';
 import { closePeriod, findPeriodForDate } from '../modules/settings/periods';
 import { createCompany } from '../modules/tenancy/service';
 
-const DEMO_EMAIL = 'demo@ornek.local';
-const DEMO_PASSWORD = 'Demo-Sifre-123';
-
-const config = loadConfig();
-if (config.NODE_ENV === 'production') {
-  throw new Error('Demo verisi üretimde yüklenemez.');
-}
-
-const handle = createDb(config.DATABASE_URL);
-const { db } = handle;
+export const DEMO_EMAIL = 'demo@ornek.local';
+export const DEMO_PASSWORD = 'Demo-Sifre-123';
 
 const today = todayIso();
 const year = isoYear(today);
@@ -359,11 +350,15 @@ async function seedBankStatement(tx: Tx, ctx: LedgerCtx, company: CompanyInfo, b
   return `banka ekstresi: ${rows.length} satır, ${auto.matched} kesin eşleşme`;
 }
 
-async function main() {
+/**
+ * Demo verisini yükler. Demo kullanıcı zaten varsa hiçbir şey yapmaz ve `false` döner.
+ * Tarih duyarlıdır: "bugün"e göre bir yıllık hareket üretir (modül yüklenme anı esas alınır).
+ */
+export async function seedDemo(db: Db, log: (message: string) => void = console.log): Promise<boolean> {
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, DEMO_EMAIL));
   if (existing) {
-    console.log(`Demo verisi zaten var (${DEMO_EMAIL}). Sıfırdan yüklemek için veritabanını sıfırlayın.`);
-    return;
+    log(`Demo verisi zaten var (${DEMO_EMAIL}). Sıfırdan yüklemek için veritabanını sıfırlayın (demo:reset).`);
+    return false;
   }
 
   const passwordHash = await hash(DEMO_PASSWORD);
@@ -371,7 +366,7 @@ async function main() {
     const [org] = await tx.insert(organizations).values({ name: 'Örnek Holding' }).returning({ id: organizations.id });
     const [u] = await tx
       .insert(users)
-      .values({ organizationId: org!.id, email: DEMO_EMAIL, passwordHash, fullName: 'Ayşe Demir' })
+      .values({ organizationId: org!.id, email: DEMO_EMAIL, passwordHash, fullName: 'Ayşe Demir', emailVerifiedAt: new Date() })
       .returning({ id: users.id });
     return { orgId: org!.id, userId: u!.id };
   });
@@ -403,7 +398,7 @@ async function main() {
     ] as const) {
       const [m] = await tx
         .insert(users)
-        .values({ organizationId: orgId, email, passwordHash, fullName })
+        .values({ organizationId: orgId, email, passwordHash, fullName, emailVerifiedAt: new Date() })
         .returning({ id: users.id });
       await tx.insert(memberships).values({ companyId: company.id, userId: m!.id, role });
     }
@@ -527,15 +522,10 @@ async function main() {
       if (p && date(m, last) < today) await closePeriod(tx, p.id, userId);
     }
 
-    console.log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary}, ${treasurySummary})`);
-    console.log(`  Giriş:  ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
-    console.log('  Ekip:   muhasebe@ornek.local (muhasebeci), izleyici@ornek.local (izleyici) — aynı şifre');
+    log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary}, ${treasurySummary})`);
+    log(`  Giriş:  ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
+    log('  Ekip:   muhasebe@ornek.local (muhasebeci), izleyici@ornek.local (izleyici) — aynı şifre');
   });
-}
-
-try {
-  await main();
-} finally {
-  await handle.close();
+  return true;
 }
 

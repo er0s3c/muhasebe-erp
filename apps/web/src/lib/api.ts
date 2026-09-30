@@ -67,10 +67,14 @@ export function refreshSession(): Promise<boolean> {
       for (let attempt = 0; attempt < 2; attempt++) {
         const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' });
         if (res.status === 409 && attempt === 0) {
+          void res.body?.cancel(); // okunmayan gövde bağlantıyı (ve `no-store` yanıtlarda isteği) açık tutar
           await new Promise((r) => setTimeout(r, 250));
           continue;
         }
-        if (!res.ok) return false;
+        if (!res.ok) {
+          void res.body?.cancel();
+          return false;
+        }
         const data = (await res.json()) as { accessToken: string };
         accessToken = data.accessToken;
         return true;

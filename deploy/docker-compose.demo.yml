@@ -1,0 +1,100 @@
+# Demo örneği: müşteri kurulumundan AYRI bir örnek (ayrı proje adı, ayrı veritabanı hacmi, ayrı port).
+# Demo verisi (demo@ornek.local / Demo-Sifre-123) HERKESÇE BİLİNİR; bu örneğe asla gerçek müşteri verisi girmeyin
+# ve müşterinin üretim sunucusunda çalıştırmayın. Veri "bugün"e göre üretilir; eskimesin diye haftalık sıfırlayın.
+#
+#   cp deploy/.env.production.example deploy/.env.demo     # değerleri doldurun (ERP_DB_NAME=erp_demo önerilir)
+#   docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo up -d app
+#   # Sıfırla (TÜM demo verisi silinir, yeniden yüklenir; uygulamayı kısa süre durdurur):
+#   docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo stop app
+#   docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo run --rm demo-reset
+#   docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo up -d app
+# Ayrıntı: docs/OPERATIONS.md
+name: muhasebe-erp-demo
+
+x-image: &image
+  image: ${ERP_IMAGE:-muhasebe-erp:local}
+
+x-demo-env: &demo-env
+  ALLOW_DEMO: 'true'
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET gerekli (openssl rand -base64 48)}
+  DATABASE_URL: postgres://erp_app:${ERP_APP_PASSWORD}@db:5432/${ERP_DB_NAME:-erp_demo}
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
+      ERP_DB_NAME: ${ERP_DB_NAME:-erp_demo}
+      ERP_OWNER_PASSWORD: ${ERP_OWNER_PASSWORD:?ERP_OWNER_PASSWORD gerekli}
+      ERP_APP_PASSWORD: ${ERP_APP_PASSWORD:?ERP_APP_PASSWORD gerekli}
+    volumes:
+      - demo_pgdata:/var/lib/postgresql/data
+      - ../infra/postgres/init-prod.sh:/docker-entrypoint-initdb.d/10-init-prod.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U erp -d $${ERP_DB_NAME:-erp_demo}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    <<: *image
+    build:
+      context: ..
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    command: ['node', 'dist/migrate.js']
+    environment:
+      MIGRATION_DATABASE_URL: postgres://erp:${ERP_OWNER_PASSWORD}@db:5432/${ERP_DB_NAME:-erp_demo}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  # İlk açılışta demo verisini yükler; demo kullanıcı varsa dokunmaz (yeniden başlatmak veriyi SIFIRLAMAZ).
+  demo-seed:
+    <<: *image
+    command: ['node', 'dist/demo.js', 'seed']
+    environment:
+      <<: *demo-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: 'no'
+
+  # Yıkıcı sıfırlama: yalnızca elle çalıştırılır (profil). Şemayı siler, migration + demo verisini yeniden yükler.
+  demo-reset:
+    <<: *image
+    profiles: ['reset']
+    command: ['node', 'dist/demo.js', 'reset', '--confirm=${ERP_DB_NAME:-erp_demo}']
+    environment:
+      <<: *demo-env
+      MIGRATION_DATABASE_URL: postgres://erp:${ERP_OWNER_PASSWORD}@db:5432/${ERP_DB_NAME:-erp_demo}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  app:
+    <<: *image
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    environment:
+      DATABASE_URL: postgres://erp_app:${ERP_APP_PASSWORD}@db:5432/${ERP_DB_NAME:-erp_demo}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET gerekli (openssl rand -base64 48)}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # Demoda yabancıların yeni kiracı açmasına izin verilmez
+      REGISTRATION_ENABLED: 'false'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      db:
+        condition: service_healthy
+      demo-seed:
+        condition: service_completed_successfully
+    ports:
+      - '${APP_BIND:-127.0.0.1}:${APP_PORT:-3001}:3000'
+
+volumes:
+  demo_pgdata:

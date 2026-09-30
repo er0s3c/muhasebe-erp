@@ -9,3 +9,7 @@ test-results
 .DS_Store
 # Ekran görüntüleri ve üçüncü taraf referans materyali depoya girmez (bkz. docs/LEGAL-NOTES.md)
 /reference-materials/
+
+# Üretilen dosyalar
+THIRD-PARTY-NOTICES.md
+backups/

@@ -13,16 +13,20 @@
 | M6 | Fatura | Satış/alış/gider/satış iadesi/alış iadesi faturası → stok + cari + yevmiye tek işlemde; boşluksuz numara, iptal (ters kayıt), KDV hariç/dahil, iskonto, dövizli fatura, KDV özeti; **hesap eşlemesi** ve elle girilen stok belgelerinin/sayımın otomatik yevmiyesi; `cost_adjust` → 621; yazdırılabilir iç belge görünümü |
 | M6b | İrsaliye | Satış (sevk) ve alış (mal kabul) irsaliyesi → stok defteri (yevmiye fatura kesilince); faturanın irsaliyeye bağlanması (tekrar stok hareketi yok, kısmi ve çoklu faturalama, kilit altında kalan miktar), alışta fiyat farkı (elde kalan → stok maliyeti, satılan → 621), **faturalanmamış irsaliye** listesi/özeti ve stok mutabakatında açıklanan fark; iade irsaliyesi ve sipariş/teklif sonraya |
 | M7 | Kasa ve banka | Kasa/banka hesapları (muhasebe hesabına bağlı, çoklu para birimi), tahsilat/ödeme (kalem eşleştirmeli: kısmi, çoklu kalem, farklı para birimi, avans), **gerçekleşen kur farkı** (646/656), virman, döviz alım-satım (ortalama maliyet), diğer tahsilat/ödeme, iptal (ters kayıt), kasa eksi bakiye denetimi; açık kalem motoru eşleştirme ve ters çift nötrlüğü kazandı |
+| M8a | Raporlar ve dışa aktarma | Tüm raporlarda Excel/CSV/baskı (PDF olarak kaydet); yevmiye defteri, kebir, satış/alış raporu, stok kârlılığı, kambiyo raporu, tam veri dışa aktarma (`data.export`); kendi xlsx yazıcı/okuyucumuz (`fflate`) |
+| M8b | İçe aktarma | Excel/CSV sihirbazı (sütun eşleme, ön izleme, atomik yazma): cari kartları, stok kartları, cari açılış bakiyeleri, stok açılışı, genel mizan açılışı; Açılış bakiyeleri sayfası |
+| M8c | Banka ekstresi | Ekstre içe aktarma (genel sütun eşleme, tekrar dosya/satır koruması), defter satırlarıyla eşleştirme (kesin/olası öneri, ±3 gün), eşleşmeyen satırdan hareket oluşturma, mutabakat farkı, ERP06 koruma tetikleyicileri |
+| M9a | Çalışma zamanı ve dağıtım | CI onarıldı (e2e üretim paketine karşı); yapılandırma/başlangıç korumaları, sağlık uçları, üretim derlemesi (esbuild), statik sunum, Docker imajı, compose (+Caddy TLS), dependabot |
+| M9b | Güvenlik | Yetki yükseltme kapatıldı; atomik refresh; oran sınırları; `audit_log` sahibe karşı salt-eklenir; rota–izin ve RLS sözleşme testleri; parola sıfırlama, e-posta doğrulama, geçici parola, parola politikası, güvenlik olayları; yük ölçümü ve düzeltmeleri (kilitlenme, yevmiye listesi, dışa aktarma kapısı, dizinler) |
+| M9c | Modül istisnaları | Ayarlar > Modüller: bağımlılık korumalı kapatma/açma (`requires`/`locked`), panel ve bağlantı kapıları |
+| M9d | Demo, yedek, operasyon | Demo aracı + ayrı demo örneği, yedek/geri yükleme betikleri ve CI'da geri yükleme tatbikatı, operatör parola kurtarma, `OPERATIONS.md`, üçüncü taraf lisans bildirimi |
 
-## MVP'ye kalan (Çekirdek ERP)
+## Mali müşavir/hukuki teyit bekleyenler (teyit gelmeden başlanmaz)
 
 | # | Kilometre taşı | İçerik |
 |---|---|---|
 | M7b | Kur değerlemesi ve avans mahsubu | Dönem sonu dövizli hesap/cari değerlemesi (gerçekleşmemiş kur farkı) ve sonradan avans mahsubu: yalnızca-defter-tutarı düzeltme satırı gerektirir; yasal kural doğrulanmadan yazılmaz |
-| M8a ✅ | Raporlar ve dışa aktarma | Tüm raporlarda Excel/CSV/baskı (PDF olarak kaydet); yevmiye defteri, kebir, satış/alış raporu, stok kârlılığı, kambiyo raporu, tam veri dışa aktarma (`data.export`); kendi xlsx yazıcı/okuyucumuz (`fflate`) |
-| M8b ✅ | İçe aktarma | Excel/CSV sihirbazı (sütun eşleme, ön izleme, atomik yazma): cari kartları, stok kartları, cari açılış bakiyeleri, stok açılışı, genel mizan açılışı; Açılış bakiyeleri sayfası |
-| M8c ✅ | Banka ekstresi | Ekstre içe aktarma (genel sütun eşleme, tekrar dosya/satır koruması), defter satırlarıyla eşleştirme (kesin/olası öneri, ±3 gün), eşleşmeyen satırdan hareket oluşturma, mutabakat farkı, ERP06 koruma tetikleyicileri; modül istisnaları ekranı M9'a taşındı |
-| M9 | Sağlamlaştırma | Modül istisnaları yönetim ekranı, demo şirket, yedekleme ve geri yükleme notları, üretim derlemesi ve dağıtım hattı, yük ve güvenlik gözden geçirmesi |
+| — | Yıl sonu kapanış ve devir | Gelir/gider hesaplarının kapanışı, bilanço hesaplarının devri, açılış kaydı; KKTC uygulaması doğrulanmadan yazılmaz |
 
 ## MVP sonrası
 
@@ -36,7 +40,8 @@ Her faz, ilgili yasal parametrelerin resmi kaynaktan doğrulanmasına bağlıdı
 
 ## Teknik borç ve iyileştirmeler
 
-- Ana JS paketini `manualChunks` ile bölmek.
-- Sunucu için üretim derlemesi.
+- Ana JS paketini bölmek (Vite 8/Rolldown `advancedChunks`).
+- Oran sınırı için paylaşılan depo (çok örnekli barındırma), MFA/TOTP, akışlı xlsx yazımı.
+- İmajın kayıt defterine yayını ve sürüm/sürüm notu akışı; Caddy TLS profilinin otomatik sınanması.
 - Özel rol tablosu (gerçek ihtiyaç doğunca).
 - İngilizce çeviri dosyası.

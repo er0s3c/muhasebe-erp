@@ -10,7 +10,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 |---|---|
 | Çok şirketli çalışma, şirketler arası veri yalıtımı | ✅ |
 | Kullanıcılar, roller, yetki; denetim izi | ✅ |
-| Sektöre göre menü ve modül açma/kapama | ✅ |
+| Sektöre göre menü ve modül açma/kapama (Ayarlar > Modüller: bağımlılık korumalı, veri silinmez) | ✅ |
 | Genel bakış: kurulum kontrol listesi, özetler | ✅ |
 | Rehber: kişi/kurum defteri, ajanda, görüşme ve toplantı notları | ⏳ |
 | Özel kodlar (kayıtları kendi ölçütünle grupla) | ✅ |
@@ -26,7 +26,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Hesap ekstresi (yürüyen bakiye, alt hesaplar dahil) | ✅ |
 | Mali dönemler, dönem kapatma/açma | ✅ |
 | Kebir ve yevmiye defteri (ekran, Excel/CSV, baskı) | ✅ ⚠️ iç belge, yasal onaylı defter yerine geçmez |
-| Yıl sonu kapanış ve devir | 🔜 M8/M9 |
+| Yıl sonu kapanış ve devir | ⏳ ⚠️ mali müşavir teyidine bağlı (M9 kapsamında değil) |
 | Gerçekleşen kur farkı kâr/zarar kayıtları (tahsilat, ödeme, döviz satışı) | ✅ |
 | Dönem sonu kur değerlemesi (gerçekleşmemiş kur farkı) | 🔜 M7b ⚠️ |
 
@@ -40,7 +40,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Tahsilat/ödeme fatura kalemiyle **elle eşleştirilerek** girilir (kısmi, çoklu kalem, farklı para birimi, avans); kur farkı otomatik | ✅ |
 | Sonradan avans mahsubu (avansı sonraki faturaya elle bağlama) | 🔜 M7b |
 | Fazla ödeme/avans yaşlandırmada ayrı gösterilir | ✅ |
-| Borç/alacak dekontu (mahsup) yevmiye ile; devir işlemleri | 🔜 M8/M9 |
+| Borç/alacak dekontu (mahsup) elle yevmiye ile | ✅ |
+| Devir işlemleri (yıl sonu ile birlikte) | ⏳ ⚠️ |
 | Cari özel fiyat/iskonto | ⏳ |
 | Personel cari ve avans takibi | ⏳ (bordro ile) |
 
@@ -131,3 +132,9 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Excel/CSV ile cari ve stok kartı aktarımı (sütun eşleme, ön izleme, atomik) | ✅ |
 | Excel/CSV ile cari açılış bakiyesi, stok açılışı ve mizan açılışı aktarımı | ✅ ⚠️ açılış karşı hesabı doğrulanmadı |
 | Müşterinin verisini eksiksiz dışa aktarabilmesi (tüm tablolar tek Excel dosyasında) | ✅ |
+| Yedekleme ve geri yükleme betikleri, geri yükleme tatbikatı (CI'da) | ✅ ⚠️ saklama süresi doğrulanmadı |
+| Parola sıfırlama, e-posta doğrulama (SMTP ile), geçici parola, operatör parola kurtarma | ✅ |
+| Güvenlik olayı kaydı (giriş, sıfırlama, yetki değişikliği) | ✅ |
+| Docker imajı, compose dağıtımı, ayrı demo örneği, üçüncü taraf lisans bildirimi | ✅ |
+| İki adımlı doğrulama (TOTP/MFA) | ⏳ |
+| Kişisel veri silme/dışa aktarma talebi süreci | ⏳ ⚠️ |

@@ -54,6 +54,11 @@ jobs:
       - name: Birim ve entegrasyon testleri (gerçek PostgreSQL, RLS dahil)
         run: npm test
 
+      - name: Geri yükleme tatbikatı (yedek al, taze veritabanına geri yükle, veri/yapı/RLS karşılaştır)
+        run: |
+          pg_dump --version
+          bash scripts/restore-drill.sh
+
       - name: Lisans denetimi (yalnızca izinli lisanslar)
         run: npm run licenses
 
@@ -162,16 +167,66 @@ jobs:
           curl -fsSI http://127.0.0.1:3000/ | grep -i "content-security-policy" | grep -q "script-src 'self'"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/me)" = "401"
           curl -fsS http://127.0.0.1:3000/api/public-config | grep -q '"version":"ci"'
+          curl -fsS http://127.0.0.1:3000/THIRD-PARTY-NOTICES.md | grep -q 'Üçüncü taraf bildirimleri'
+          docker run --rm --entrypoint test muhasebe-erp:ci -s /app/THIRD-PARTY-NOTICES.md
           curl -fsS -X POST http://127.0.0.1:3000/api/auth/register -H 'content-type: application/json' \
             -d '{"email":"ci@example.com","password":"Sifre-12345-xyz","fullName":"CI Kullanıcı","organizationName":"CI Ltd"}' | grep -q accessToken
           curl -fsS -X POST http://127.0.0.1:3000/api/auth/login -H 'content-type: application/json' \
             -d '{"email":"ci@example.com","password":"Sifre-12345-xyz"}' | grep -q accessToken
           test "$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env ps -q app | xargs docker inspect --format '{{.State.Health.Status}}')" = "healthy" || (sleep 20; test "$(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env ps -q app | xargs docker inspect --format '{{.State.Health.Status}}')" = "healthy")
 
+      - name: Yedek → felaket kurtarma (compose kipi) → giriş
+        run: |
+          set -e
+          DC="docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env"
+          scripts/backup.sh --compose --dir "$RUNNER_TEMP/yedek"
+          DUMP="$(ls "$RUNNER_TEMP"/yedek/erp-erp-*.dump)"
+          # Boş olmayan hedefe geri yükleme reddedilir
+          if scripts/restore.sh --compose "$DUMP"; then echo "dolu veritabanına geri yükleme reddedilmeliydi" >&2; exit 1; fi
+          # Felaket kurtarma: uygulamayı durdur, veritabanını sil/yeniden yarat, geri yükle
+          scripts/restore.sh --compose --recreate --yes "$DUMP"
+          $DC up -d app
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health/ready > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS -X POST http://127.0.0.1:3000/api/auth/login -H 'content-type: application/json' \
+            -d '{"email":"ci@example.com","password":"Sifre-12345-xyz"}' | grep -q accessToken
+
+      - name: Demo örneği (demo-seed, giriş, kayıt kapalı, sıfırlama)
+        run: |
+          set -e
+          cat > deploy/.env.demo <<EOF
+          POSTGRES_PASSWORD=$(openssl rand -hex 16)
+          ERP_OWNER_PASSWORD=$(openssl rand -hex 16)
+          ERP_APP_PASSWORD=$(openssl rand -hex 16)
+          JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
+          ERP_IMAGE=muhasebe-erp:ci
+          COOKIE_SECURE=false
+          APP_PORT=3001
+          EOF
+          DEMO="docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo"
+          ready() { for i in $(seq 1 60); do if curl -fsS http://127.0.0.1:3001/api/health/ready > /dev/null; then return 0; fi; sleep 2; done; $DEMO logs --no-color; return 1; }
+          login() { curl -fsS -X POST http://127.0.0.1:3001/api/auth/login -H 'content-type: application/json' -d '{"email":"demo@ornek.local","password":"Demo-Sifre-123"}' | grep -q accessToken; }
+          $DEMO up -d app
+          ready
+          login
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3001/api/auth/register -H 'content-type: application/json' -d '{"email":"x@example.com","password":"Sifre-12345-xyz","fullName":"X","organizationName":"X"}')" = "403"
+          # Sıfırla ve yeniden giriş yap
+          $DEMO stop app
+          $DEMO run --rm demo-reset
+          $DEMO up -d app
+          ready
+          login
+
       - name: Günlükler (başarısızlıkta)
         if: failure()
-        run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs --no-color
+        run: |
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs --no-color
+          docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo logs --no-color || true
 
       - name: Temizlik
         if: always()
-        run: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env down -v
+        run: |
+          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env down -v
+          if [ -f deploy/.env.demo ]; then docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo down -v; fi

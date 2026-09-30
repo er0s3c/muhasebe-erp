@@ -10,7 +10,9 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=../../.env src/db/migrate-cli.ts",
-    "db:seed": "tsx --env-file-if-exists=../../.env src/db/seed.ts",
+    "db:seed": "tsx --env-file-if-exists=../../.env src/db/demo-cli.ts seed",
+    "admin": "tsx --env-file-if-exists=../../.env src/db/admin-cli.ts",
+    "demo:reset": "tsx --env-file-if-exists=../../.env src/db/demo-cli.ts reset",
     "build": "tsx scripts/build.ts"
   },
   "dependencies": {
