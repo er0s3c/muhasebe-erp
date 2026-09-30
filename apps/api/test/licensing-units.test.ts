@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -49,14 +49,17 @@ describe('lisans yapılandırması ve derleme zamanı zorlaması', () => {
     expect(() => parseKeyring(JSON.stringify({ keys: { a1: 'B'.repeat(43) } }))).toThrow(); // 43 karakter ama kanonik base64url değil
   });
 
-  it('denetim açıkken güvenilir anahtar yoksa hizmet kurulamaz; dev halkası yalnızca üretim dışında okunur', () => {
-    const cfg = loadConfig({ ...baseEnv, NODE_ENV: 'test' });
+  it('dev halkası LICENSE_DEV_KEYRING ile verilir ve denetimli hizmet onunla kurulur', () => {
     const db = {} as never;
-    expect(() => createLicenseService({ db, config: cfg, setup: { enforced: true } })).toThrow(/açık anahtar/);
     const k = generateKeyPair().publicKey;
     const withKeys = loadConfig({ ...baseEnv, NODE_ENV: 'test', LICENSE_DEV_KEYRING: JSON.stringify({ keys: { dev1: k } }) });
     expect(Object.keys(resolveKeyring(withKeys).keys)).toEqual(['dev1']);
     expect(createLicenseService({ db, config: withKeys, setup: { enforced: true } }).enforced).toBe(true);
+  });
+
+  it('depoda pakete gömülecek satıcı anahtar halkası geçerli ve kullanılabilir (boş ya da tümü iptal edilmiş halka müşteri paketini kurulamaz kılar)', () => {
+    const file = readFileSync(new URL('../src/licensing/public-keys.json', import.meta.url), 'utf8');
+    expect(keyringUsable(parseKeyring(file))).toBe(true);
   });
 });
 
