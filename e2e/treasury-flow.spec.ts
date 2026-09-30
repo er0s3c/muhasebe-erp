@@ -81,7 +81,11 @@ test('kasa ve banka: dövizli fatura → farklı kurlu tahsilat (kur kârı) →
 
   // 6) Cari açık kalemi kapandı
   await nav.getByRole('link', { name: 'Cari hesaplar' }).click();
-  await page.getByRole('cell', { name: /Sarah Thompson/ }).click();
+  // Liste yeniden çizilirken satıra tıklama nadiren kaybolabiliyor; tıklama + sonuç birlikte yeniden denenir.
+  await expect(async () => {
+    await page.getByRole('cell', { name: /Sarah Thompson/ }).click({ timeout: 3_000 });
+    await expect(page.getByRole('tab', { name: 'Açık kalemler' })).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 25_000 });
   await page.getByRole('tab', { name: 'Açık kalemler' }).click();
   await expect(page.getByText('Açık kalem yok')).toBeVisible();
 
@@ -98,7 +102,11 @@ test('kasa ve banka: dövizli fatura → farklı kurlu tahsilat (kur kârı) →
   await expect(page.getByRole('row', { name: /TAH-\d{4}-000001/ })).toContainText('İptal');
 
   await nav.getByRole('link', { name: 'Cari hesaplar' }).click();
-  await page.getByRole('cell', { name: /Sarah Thompson/ }).click();
+  // Liste yeniden çizilirken satıra tıklama nadiren kaybolabiliyor; tıklama + sonuç birlikte yeniden denenir.
+  await expect(async () => {
+    await page.getByRole('cell', { name: /Sarah Thompson/ }).click({ timeout: 3_000 });
+    await expect(page.getByRole('tab', { name: 'Açık kalemler' })).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 25_000 });
   await page.getByRole('tab', { name: 'Açık kalemler' }).click();
   await expect(page.getByText('100,00 GBP').first()).toBeVisible();
 

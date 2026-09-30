@@ -75,7 +75,11 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
 
   // 3) İade: orijinal satır hazır gelir, 1 adete indirilir → 116 ₺
   await nav.getByRole('link', { name: 'Satış faturaları' }).click();
-  await page.getByRole('row', { name: /SF-\d{4}-000001/ }).click();
+  // Liste yeniden çizilirken satıra tıklama nadiren kaybolabiliyor (hem yerelde hem CI'da görüldü); tıklama + sonuç birlikte yeniden denenir.
+  await expect(async () => {
+    await page.getByRole('row', { name: /SF-\d{4}-000001/ }).click({ timeout: 3_000 });
+    await expect(page.getByRole('button', { name: 'İade oluştur' })).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 25_000 });
   await page.getByRole('button', { name: 'İade oluştur' }).click();
   await expect(page.getByLabel('Miktar 1')).toHaveValue('4');
   await page.getByLabel('Miktar 1').fill('1');

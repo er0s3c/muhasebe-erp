@@ -8,7 +8,8 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: 'e2e',
   outputDir: 'test-results',
-  timeout: 60_000,
+  // CI çalıştırıcıları yerel makineden yavaştır; en uzun senaryo (kasa/banka) orada 60 sn'yi aşıyordu.
+  timeout: process.env.CI ? 150_000 : 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: 1,
