@@ -61,7 +61,7 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
         </Callout>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label={t('projects.kpi.budget')} sub={t('projects.overview.budgetSub')}>
           {money(totals.budget)} {suffix}
         </Stat>

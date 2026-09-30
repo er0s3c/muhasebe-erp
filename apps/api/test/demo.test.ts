@@ -2,10 +2,11 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createDb } from '../src/db/client';
+import { createDb, withContext } from '../src/db/client';
 import { DEMO_EMAIL, seedDemo } from '../src/db/demo';
 import { runMigrations } from '../src/db/migrate';
 import { databaseNameOf, resetSchema } from '../src/db/reset';
+import { projectsSummary } from '../src/modules/projects/reports';
 
 const ownerTestUrl = process.env.TEST_MIGRATION_DATABASE_URL ?? 'postgres://erp:erp@localhost:5432/erp_test';
 const appTestUrl = process.env.DATABASE_URL!;
@@ -74,6 +75,54 @@ describe('demo aracı', () => {
       expect((await q(`select count(*)::int as n from users where email like '%@ornek.local' and email_verified_at is null`)).n).toBe(0);
     } finally {
       await c.end();
+    }
+  });
+
+  it('seedDemo: şantiye projeleri (WBS, bütçe revizyonları, ilerleme, etiketli maliyet) ve defter mutabakatı', async () => {
+    const c = new pg.Client({ connectionString: ownerUrl });
+    await c.connect();
+    let ids: { uid: string; oid: string; cid: string };
+    try {
+      const q = async (sql: string, params: unknown[] = []) => (await c.query(sql, params)).rows;
+      expect(await q(`select kind, status, code from projects order by code`)).toEqual([
+        { kind: 'own', status: 'active', code: 'PRJ-0001' },
+        { kind: 'contract', status: 'active', code: 'PRJ-0002' },
+      ]);
+      // İşveren cari yalnızca sözleşmeli projede; ağaç derinliği (en derin düğüm 2. düzey) ve düğüm sayısı
+      expect((await q(`select count(*)::int as n from projects where kind = 'contract' and client_party_id is not null`))[0].n).toBe(1);
+      expect((await q(`select count(*)::int as n from project_wbs`))[0].n).toBe(12);
+      // Güneş Sitesi: rev. 1 yerine geçildi, rev. 2 yürürlükte; Kuzey Villa: rev. 1 yürürlükte
+      expect(await q(`select p.code, b.revision_no as rev, b.status from project_budgets b join projects p on p.id = b.project_id order by p.code, b.revision_no`)).toEqual([
+        { code: 'PRJ-0001', rev: 1, status: 'superseded' },
+        { code: 'PRJ-0001', rev: 2, status: 'approved' },
+        { code: 'PRJ-0002', rev: 1, status: 'approved' },
+      ]);
+      // İlerleme geçmişi: aynı iş kalemi için birden çok tarihli kayıt (en son kayıt geçerli)
+      expect((await q(`select count(*)::int as n from (select wbs_id from project_progress group by wbs_id having count(*) > 1) x`))[0].n).toBeGreaterThan(0);
+      // Etiket dört kaynaktan da gelir: elle yevmiye, fatura, stok sarfı ve kasa/banka
+      const sources = (await q(`select distinct coalesce(je.source_type, 'manual') as src from journal_lines jl join journal_entries je on je.id = jl.entry_id where jl.project_id is not null`)).map((r) => r.src as string);
+      expect(sources).toEqual(expect.arrayContaining(['manual', 'invoice', 'treasury']));
+      expect((await q(`select count(*)::int as n from stock_movements where project_id is not null`))[0].n).toBeGreaterThanOrEqual(4);
+      // Kalem etiketsiz proje satırı (iş kalemine atanmamış) ve projesiz maliyet demo'da bilerek bulunur
+      expect((await q(`select count(*)::int as n from journal_lines where project_id is not null and wbs_id is null and debit_base > 0`))[0].n).toBeGreaterThan(0);
+      ids = (await q(`select u.id as uid, u.organization_id as oid, c.id as cid from users u join companies c on c.organization_id = u.organization_id where u.email = $1`, [DEMO_EMAIL]))[0];
+    } finally {
+      await c.end();
+    }
+    const handle = createDb(appUrl);
+    try {
+      const s = await withContext(handle.db, { userId: ids.uid, orgId: ids.oid, companyId: ids.cid }, (tx) => projectsSummary(tx, '2099-12-31'));
+      expect(s.projects).toHaveLength(2);
+      // Proje raporlarının toplamı (iş kalemi satırları) = defterde projeye etiketli maliyet; projeli + projesiz = defter maliyet tarafı
+      expect(s.totals.actual).toBe(s.allocatedCost);
+      expect(Number(s.allocatedCost)).toBeGreaterThan(0);
+      expect(Number(s.unallocatedCost)).toBeGreaterThan(0);
+      expect(Number(s.allocatedCost) + Number(s.unallocatedCost)).toBeCloseTo(Number(s.ledgerCost), 2);
+      // En az bir iş kalemi/proje bütçeyi aşıyor (sapma eksi) ve en az birinde gelir etiketi var
+      expect(s.projects.some((p) => Number(p.variance) < 0)).toBe(true);
+      expect(s.projects.some((p) => Number(p.revenue) > 0)).toBe(true);
+    } finally {
+      await handle.close();
     }
   });
 

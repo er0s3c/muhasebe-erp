@@ -128,6 +128,8 @@ curl -fsS http://127.0.0.1:3000/api/health/ready # 3) doğrula, bir oturum açma
 
 **Lisanslama öncesi bir sürümden yükseltme:** ilk lisanslı imaja geçişte mevcut kurulum **lisanssız** (yalnızca etkinleştirme ekranı) açılır; veriler bozulmaz ve silinmez. Müşteri lisans kodunu girene kadar giriş/yazma kapalıdır: geçişi önceden planlayın, kodu hazır edin. Lisans süresi dolar ya da lisans sunucusuna ulaşılamazsa uygulama **salt-okunur** moda düşer (veri görüntülenir ve dışa aktarılır, yazma kilitlenir); ayrıntı [LICENSING.md §7](LICENSING.md).
 
+**Faz B1 (şantiye projeleri) yükseltmesi:** `0023_projects` / `0024_projects_rls_rules` migration'ları beş yeni tablo ve `journal_lines`, `stock_movements`, `invoice_lines` üzerinde **boş (nullable) proje/iş kalemi sütunları** ekler; mevcut veriler değişmez, hiçbir kayıtta proje zorunlu olmaz. `construction.projects` modülü inşaat şirketlerinde kendiliğinden açılır (Ayarlar > Modüller'den kapatılabilir; kullanılmayan şirkette menüde "Şantiye" grubu görünmez). Yeni ortam değişkeni ya da bağımlılık yoktur. Yedekten geri yükleme ve yük özellikleri değişmez; `restore-drill` yeni tabloları da kapsar.
+
 **Geri dönüş:** migration'lar ileri yönlüdür. Yükseltme başarısız olursa eski imaja dönüp (`ERP_IMAGE=<eski>`) **yedeği geri yükleyin** (§6, `--recreate`). Bu yüzden yükseltmeden önce yedek şarttır.
 
 ## 6. Yedekleme ve geri yükleme

@@ -104,11 +104,13 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 
 | İşlev | Durum |
 |---|---|
-| **İnşaat:** şantiye/proje maliyeti, bütçe ve gerçekleşen | ⏳ Faz B |
-| **İnşaat:** gayrimenkul envanteri, dövizli taksit planı, tahsilat mahsubu | ⏳ Faz B |
-| **İnşaat:** taşeron sözleşmesi, kümülatif hakediş, teminat kesintisi | ⏳ Faz B |
+| **İnşaat:** proje, iş kırılımı (WBS, en çok 6 seviye), bütçe revizyonları (değişmez, yürürlükteki revizyon) | ✅ (B1) |
+| **İnşaat:** gerçekleşen maliyet (yevmiye, fatura kalemi, stok sarfı, kasa/banka ödemesi proje + iş kalemine etiketli), tamamlanma %, tahmini toplam maliyet (EAC), sapma ve CPI, projesiz maliyet mutabakatı | ✅ (B1) ⚠️ hesap sınıflandırması doğrulanmadı |
+| **İnşaat:** işverene yapılan iş (`contract` proje, işveren cari) | ✅ (B1; hakediş B2) |
+| **İnşaat:** gayrimenkul envanteri, dövizli taksit planı, tahsilat mahsubu, gelir tanıma | ⏳ Faz B3 ⚠️ |
+| **İnşaat:** taşeron sözleşmesi, kümülatif hakediş (verilen), işveren hakedişi (alınan), stopaj/teminat/avans mahsubu | ⏳ Faz B2 ⚠️ |
 | **İnşaat:** yabancılara satış kotaları ve yasal süre takibi | ⏳ Faz C ⚠️ |
-| **İnşaat:** altyapı fonları (elektrik/belediye) | ⏳ Faz B ⚠️ |
+| **İnşaat:** altyapı fonları (elektrik/belediye) | ⏳ Faz B4 ⚠️ |
 | **İnşaat:** yabancı işçi belge/teminat takibi, bordro | ⏳ Faz D ⚠️ |
 | **İnşaat:** müteahhitlik sınıf karnesi ve kapasite kontrolü | ⏳ Faz C ⚠️ |
 | **Market:** hızlı satış (POS), barkod, gün sonu | ⏳ Faz E |
@@ -121,7 +123,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 |---|---|
 | 13 haftalık nakit projeksiyonu | ⏳ |
 | Döviz pozisyon raporu | ⏳ |
-| Proje kârlılığı, sapma analizi | ⏳ Faz B |
+| Proje bütçe / gerçekleşen / tahmini toplam sapma analizi (EAC, CPI), Excel | ✅ (B1) |
+| Proje kârlılığı (gelir − maliyet, GBP raporlama), nakit projeksiyonu | ⏳ Faz B4 |
 | Yönetici özet raporu | ⏳ |
 
 ## Veri güvencesi

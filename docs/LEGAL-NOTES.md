@@ -133,3 +133,11 @@ Teknik çalışma için [LICENSING.md](LICENSING.md). Aşağıdakilerin **hiçbi
 - **Kırılamazlık iddiası yapılmaz:** müşteri sunucuyu kontrol ediyorsa lisans denetimi yamalanabilir; bunu engelleyen bir güvence verilmez, hukuki koruma sözleşmeye dayanır (yazılımın kopyalanması/değiştirilmesi yasağı dahil).
 - **Anahtar ve hesap güvenliği:** satıcı özel anahtarı ve yönetim paneli kritik varlıktır; ele geçirilmesi durumunda müşterilere duyuru ve anahtar değişikliği yükümlülüğü sözleşmede düzenlenmelidir.
 
+## 12. Şantiye projeleri ve inşaat modülü (Faz B)
+
+Teknik çalışma için [ARCHITECTURE.md](ARCHITECTURE.md) "Şantiye projeleri". Aşağıdakilerin **hiçbiri doğrulanmamıştır**; ticari kullanımdan önce mali müşavir/avukatla teyit edilmelidir.
+
+- **Proje maliyet/gelir sınıflandırması:** proje raporunda 60, 61 ve 64 ile başlayan hesaplar **gelir**, projeye etiketlenen diğer gelir/gider/maliyet hesapları **maliyet** sayılır (Tekdüzen sınıf 6 hem gelir hem gider hesabı içerdiği için kod önekiyle ayrılır). Bu yalnızca yönetim raporu varsayılanıdır; KKTC'de inşaat maliyetinin hangi hesaplarda izlendiği (ör. 7xx üretim maliyeti, yarım kalmış inşaat hesapları) ve gelir tanıma yöntemi **doğrulanmamıştır**. Proje raporu yasal maliyet/kâr hesabı değildir.
+- **Yalnızca defter para birimi:** proje bütçesi ve gerçekleşen maliyet defter para biriminde (TL) gösterilir; raporlama para birimi (GBP) karşılığı sonraki aşamadadır.
+- **Faz B2–B4 parametreleri (henüz kodda yok, girilirken tarihli ve kaynak notlu veri olarak girilecek):** taşeron hakedişinde stopaj oranı, teminat kesintisi, KDV tevkifatı, damga/pul harcı; avans ve malzeme mahsubu kuralları; gayrimenkul satışında gelir tanıma yöntemi (tesliminde / tamamlanma oranına göre), 39/2024 yabancı alıcı kotası ve süreleri, altyapı fonları ve tapu harçları. Bunların hiçbiri resmî kaynaktan doğrulanmadı; §3 tablosundaki ilgili satırlarla birlikte değerlendirilmelidir.
+- **Yetki:** proje bazında kullanıcı kısıtı yoktur (rol yeterlidir). Şantiye sorumlusu rolü bütün projelerin bütçe ve maliyetini görür; proje bazlı gizlilik gerekiyorsa sözleşmede ve kurulum kontrol listesinde belirtilmelidir.

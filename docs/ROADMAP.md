@@ -21,6 +21,7 @@
 | M9c | Modül istisnaları | Ayarlar > Modüller: bağımlılık korumalı kapatma/açma (`requires`/`locked`), panel ve bağlantı kapıları |
 | M9d | Demo, yedek, operasyon | Demo aracı + ayrı demo örneği, yedek/geri yükleme betikleri ve CI'da geri yükleme tatbikatı, operatör parola kurtarma, `OPERATIONS.md`, üçüncü taraf lisans bildirimi |
 | L1–L5 | Lisanslama | Ed25519 imzalı kiralı lisans (sektör, cihaz kotası, şirket sınırı, bitiş), satıcı **lisans sunucusu** (`apps/license-server`: etkinleştirme, kalp atışı, çevrimdışı etkinleştirme, klon şüphesi) ve **yönetim paneli** (`apps/license-admin`, parola + zorunlu TOTP) + CLI; uygulama tarafı durum makinesi (etkin/tolerans/salt-okunur), dağınık bağımsız kapılar, **cihaz koltukları**, etkinleştirme/lisans/cihaz ekranları; `LICENSING.md` |
+| B1 | Şantiye projeleri | Proje (kendi / işverene yapılan iş), iş kırılımı (WBS), revizyonlu değişmez bütçe, tarihli ilerleme; gerçekleşen maliyet defterden türer (yevmiye, fatura kalemi, stok sarfı, kasa/banka ödemesi → proje + iş kalemi etiketi); tamamlanma %, tahmini toplam maliyet (EAC), sapma, CPI; projesiz maliyet mutabakatı; Excel/CSV/baskı; ERP09 koruma tetikleyicileri |
 
 ## Mali müşavir/hukuki teyit bekleyenler (teyit gelmeden başlanmaz)
 
@@ -33,7 +34,10 @@
 
 Her faz, ilgili yasal parametrelerin resmi kaynaktan doğrulanmasına bağlıdır (bkz. [LEGAL-NOTES.md](LEGAL-NOTES.md)).
 
-- **Faz B: İnşaat.** Şantiye/proje maliyeti (iş kırılımı, bütçe ve gerçekleşen, tamamlanma maliyeti tahmini), gayrimenkul envanteri ve dövizli taksit planı, taşeron sözleşmeleri ve kümülatif hakediş (stopaj, teminat, malzeme mahsubu), altyapı fonları.
+- **Faz B: İnşaat.** **B1 (şantiye projesi, bütçe, gerçekleşen, tahmin) tamamlandı.** Kalan alt fazlar (her biri ayrı plan ve onayla):
+  - **B2 — Taşeron sözleşmesi ve hakediş:** verilen (taşeron) ve alınan (işveren) kümülatif hakediş; stopaj, teminat, avans ve malzeme mahsubu tarihli doğrulamalı parametre olarak; maliyet raporuna "taahhüt edilen" sütunu.
+  - **B3 — Gayrimenkul envanteri ve taksit:** bağımsız bölüm, satış sözleşmesi, dövizli (GBP) taksit planı ve tahsilat mahsubu, gelir tanıma yöntemi (parametre).
+  - **B4 — Fonlar, kârlılık, nakit:** altyapı fonları/harçlar (tarihli parametre), proje kârlılığı (GBP raporlama), nakit projeksiyonu.
 - **Faz C: Resmî uyum.** Yabancılara satış kotası ve süre motoru, e-Fatura entegrasyonu, KDV/stopaj/BSİV beyannameleri, kur otomatik çekme.
 - **Faz D: İnsan kaynakları.** Personel, puantaj, bordro ve sosyal güvenlik çıktıları, yabancı işçi belge ve teminat takibi.
 - **Faz E: Market ve perakende.** Hızlı satış (POS), barkod ve terazi, reyon/raf envanteri, gün sonu raporu.

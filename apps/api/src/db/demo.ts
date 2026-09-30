@@ -12,6 +12,8 @@ import {
   applyRate,
   createDeliveryNoteSchema,
   createInvoiceSchema,
+  createProgressSchema,
+  createProjectSchema,
   createTreasuryAccountSchema,
   createTreasuryTransactionSchema,
   isoYear,
@@ -27,7 +29,7 @@ import {
 } from '@erp/shared';
 import type { CompanyInfo } from '../http/context';
 import { withContext, type Db, type Tx } from './client';
-import { customCodes, exchangeRates, memberships, organizations, users, warehouses } from './schema';
+import { customCodes, exchangeRates, items as itemsTable, memberships, organizations, users, warehouses } from './schema';
 import { createParty } from '../modules/parties/service';
 import { createAccount, listAccounts } from '../modules/ledger/accounts';
 import {
@@ -51,6 +53,10 @@ import { createInvoiceDraft, getInvoice, type InvoiceCtx } from '../modules/invo
 import { createWarehouse } from '../modules/inventory/warehouses';
 import { closePeriod, findPeriodForDate } from '../modules/settings/periods';
 import { createCompany } from '../modules/tenancy/service';
+import { approveBudget, createBudget, putBudgetLines } from '../modules/projects/budgets';
+import { recordProgress } from '../modules/projects/progress';
+import { createProject, setProjectStatus } from '../modules/projects/service';
+import { createWbs } from '../modules/projects/wbs';
 
 export const DEMO_EMAIL = 'demo@ornek.local';
 export const DEMO_PASSWORD = 'Demo-Sifre-123';
@@ -250,7 +256,7 @@ async function seedInventory(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string
  * yüksek kurlu tahsilatı (kur kârı), tedarikçi ödemesi, EUR faturasının ödemesi (kur zararı), virman,
  * döviz alım-satım, banka masrafı, faiz geliri ve iptal edilmiş bir hareket. Hepsi otomatik yevmiye üretir.
  */
-async function seedTreasury(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string): Promise<{ summary: string; bankTlId: string }> {
+async function seedTreasury(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string): Promise<{ summary: string; bankTlId: string; cashId: string }> {
   const account = (input: Record<string, unknown>) => createTreasuryAccount(tx, ctx, createTreasuryAccountSchema.parse(input));
   const bankTl = await account({ kind: 'bank', name: 'KTB TL Vadesiz', currency: 'TRY', bankName: 'Örnek Banka', branch: 'Lefkoşa', linkAccountId: acc('102.001') });
   const bankGbp = await account({ kind: 'bank', name: 'KTB GBP Hesabı', currency: 'GBP', bankName: 'Örnek Banka', branch: 'Lefkoşa', linkAccountId: acc('102.002') });
@@ -308,7 +314,144 @@ async function seedTreasury(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
   await txn({ type: 'other_payment', date: date(9, 1), accountId: bankTl.id, amount: '125', glAccountId: acc('770'), description: 'Havale masrafı' });
   await txn({ type: 'other_receipt', date: date(9, 26), accountId: bankTl.id, amount: '2150', glAccountId: acc('642'), description: 'Vadesiz hesap faiz geliri' });
 
-  return { summary: 'kasa/banka: 4 hesap, 11 hareket', bankTlId: bankTl.id };
+  return { summary: 'kasa/banka: 4 hesap, 11 hareket', bankTlId: bankTl.id, cashId: cash.id };
+}
+
+/**
+ * Şantiye projeleri demo verisi (Faz B1): "Güneş Sitesi" (kendi projemiz; iş kırılımı ağacı, iki bütçe revizyonu,
+ * tarihli ilerleme kayıtları) ve "Kuzey Villa" (işverene yapılan iş). Maliyetler gerçek akışlarla girilir ve
+ * proje/iş kalemi etiketi taşır: elle yevmiye (taşeron işçiliği), gider faturası, stoktan proje sarfı (çıkış belgesi),
+ * kasadan küçük gider; bir iş kalemi bütçeyi aşar, biri "iş kalemine atanmamış" düşer. Önceki demo hareketleri
+ * (etiketsiz sarf, kira, personel) bilerek etiketsiz kalır: proje raporu "projesiz maliyet" ve defter mutabakatını gösterir.
+ */
+async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string, cashId: string): Promise<string> {
+  const pctx = { companyId: ctx.companyId, userId: ctx.userId };
+  const stockCtx: StockCtx = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: 'TRY', reportingCurrency: ctx.reportingCurrency, allowNegativeStock: false };
+  const invCtx: InvoiceCtx = { ...stockCtx };
+  const [main] = await tx.select().from(warehouses).where(eq(warehouses.isDefault, true));
+  if (!main) throw new Error('Varsayılan depo yok');
+  const itemId = async (name: string) => {
+    const [row] = await tx.select({ id: itemsTable.id }).from(itemsTable).where(eq(itemsTable.name, name));
+    if (!row) throw new Error(`Stok kartı yok: ${name}`);
+    return row.id;
+  };
+
+  const employer = await createParty(tx, ctx.companyId, {
+    name: 'Deniz Yatırım Ltd. (işveren)', kind: 'customer', currencyCode: 'TRY', paymentTermDays: 30, taxNumber: '1234890', taxOffice: 'Girne', notes: 'Kuzey Villa işvereni',
+  });
+
+  const wbs = async (projectId: string, code: string, name: string, parentId?: string) =>
+    (await createWbs(tx, ctx.companyId, projectId, { code, name, ...(parentId ? { parentId } : {}) })).id;
+  const budget = async (projectId: string, lines: [wbsId: string, amount: string][], copyFromCurrent = false) => {
+    const b = await createBudget(tx, pctx, projectId, { copyFromCurrent });
+    await putBudgetLines(tx, ctx.companyId, b.id, { lines: lines.map(([wbsId, amount]) => ({ wbsId, amount })) });
+    await approveBudget(tx, pctx, b.id);
+  };
+  const progress = (projectId: string, asOfDate: string, rows: [wbsId: string, percent: string, etcOverride?: string][]) =>
+    recordProgress(tx, pctx, projectId, createProgressSchema.parse({ asOfDate, items: rows.map(([wbsId, percent, etcOverride]) => ({ wbsId, percent, ...(etcOverride ? { etcOverride } : {}) })) }));
+  const tag = (projectId: string, wbsId?: string) => ({ projectId, ...(wbsId ? { wbsId } : {}) });
+
+  const entry = (on: string, text: string, lines: { code: string; side: Side; amount: string; party?: string; project?: string; wbs?: string }[]) =>
+    createJournalEntry(tx, ctx, {
+      entryDate: on,
+      description: text,
+      post: true,
+      lines: lines.map((l) => ({
+        accountId: acc(l.code),
+        currency: 'TRY',
+        debit: l.side === 'debit' ? l.amount : '0',
+        credit: l.side === 'credit' ? l.amount : '0',
+        ...(l.party ? { partyId: partyId.get(l.party)!, dueDate: addDays(on, 30) } : {}),
+        ...(l.project ? tag(l.project, l.wbs) : {}),
+      })) as CreateJournalInput['lines'],
+    });
+  const expense = async (on: string, party: string, externalNo: string, description: string, unitPrice: string, code: string, project: string, wbsId?: string) => {
+    const input = createInvoiceSchema.parse({
+      type: 'expense', partyId: partyId.get(party)!, invoiceDate: on, externalNo,
+      lines: [{ description, quantity: '1', unitPrice, vatCode: 'KDV-16', accountId: acc(code), ...tag(project, wbsId) }],
+    });
+    return postInvoice(tx, invCtx, await createInvoiceDraft(tx, invCtx, input));
+  };
+  const issue = (on: string, name: string, quantity: string, text: string, project: string, wbsId: string) =>
+    itemId(name).then((id) =>
+      postStockDocument(tx, stockCtx, { type: 'issue', docDate: on, warehouseId: main.id, description: text, lines: [{ itemId: id, quantity, ...tag(project, wbsId) }] }),
+    );
+
+  // ---- Güneş Sitesi (kendi projemiz) -----------------------------------
+  const gunes = (
+    await createProject(tx, pctx, createProjectSchema.parse({ name: 'Güneş Sitesi', kind: 'own', startDate: date(7, 1), endDate: date(12, 31), location: 'Girne, 2 dönüm arsa', description: 'A ve B blok, toplam 24 daire; kendi arsamızda konut satışı.' }))
+  ).id;
+  const w = {
+    hazirlik: await wbs(gunes, '01', 'Hazırlık ve şantiye kurulumu'),
+    kaba: await wbs(gunes, '02', 'Kaba inşaat'),
+    ince: await wbs(gunes, '03', 'İnce işler'),
+    cevre: await wbs(gunes, '04', 'Çevre düzenleme'),
+    kazi: '', temel: '', betonarme: '', siva: '', boya: '', elektrik: '',
+  };
+  w.kazi = await wbs(gunes, '02.01', 'Kazı ve hafriyat', w.kaba);
+  w.temel = await wbs(gunes, '02.02', 'Temel', w.kaba);
+  w.betonarme = await wbs(gunes, '02.03', 'Betonarme karkas', w.kaba);
+  w.siva = await wbs(gunes, '03.01', 'Sıva', w.ince);
+  w.boya = await wbs(gunes, '03.02', 'Boya', w.ince);
+  w.elektrik = await wbs(gunes, '03.03', 'Elektrik tesisat', w.ince);
+
+  // Bütçe rev. 1; sonra temel ve boya artırılarak rev. 2 (rev. 1 "yerine geçildi" olur)
+  const rev1: [string, string][] = [
+    [w.hazirlik, '150000'], [w.kazi, '120000'], [w.temel, '600000'], [w.betonarme, '1400000'],
+    [w.siva, '350000'], [w.boya, '250000'], [w.elektrik, '180000'], [w.cevre, '300000'],
+  ];
+  await budget(gunes, rev1);
+  await budget(gunes, rev1.map(([id, amount]) => [id, id === w.temel ? '650000' : id === w.boya ? '280000' : amount] as [string, string]), true);
+  await setProjectStatus(tx, gunes, 'active');
+
+  // Maliyetler: taşeron işçiliği (elle yevmiye, Mehmet Usta carisine), gider faturaları, malzeme sarfı, kasa gideri
+  await entry(date(7, 8), 'Hazırlık işçiliği ve kazı taşeron hakedişi (Güneş Sitesi)', [
+    { code: '720', side: 'debit', amount: '30000', project: gunes, wbs: w.hazirlik },
+    { code: '740', side: 'debit', amount: '95000', project: gunes, wbs: w.kazi },
+    { code: '320', side: 'credit', amount: '125000', party: 'usta' },
+  ]);
+  await entry(date(8, 6), 'Temel kalıp-demir işçiliği taşeron hakedişi', [
+    { code: '740', side: 'debit', amount: '380000', project: gunes, wbs: w.temel },
+    { code: '320', side: 'credit', amount: '380000', party: 'usta' },
+  ]);
+  await entry(date(8, 24), 'Betonarme karkas işçiliği taşeron hakedişi', [
+    { code: '740', side: 'debit', amount: '520000', project: gunes, wbs: w.betonarme },
+    { code: '320', side: 'credit', amount: '520000', party: 'usta' },
+  ]);
+  await expense(date(8, 12), 'oto', 'LO-431', 'İş makinesi kiralama (kazı)', '40000', '740', gunes, w.kazi); // kazı bütçeyi aşar
+  await expense(date(9, 14), 'oto', 'LO-447', 'Şantiye çit ve güvenlik hizmeti', '18000', '730', gunes); // iş kalemi seçilmedi: "atanmamış"
+  await issue(date(9, 24), 'Nervürlü inşaat demiri 12 mm', '12', 'Temel demiri (Güneş Sitesi)', gunes, w.temel);
+  await issue(date(9, 25), 'Çimento 50 kg', '250', 'Karkas betonu çimentosu (Güneş Sitesi)', gunes, w.betonarme);
+  await issue(date(9, 26), 'NYY kablo 3x2,5 mm²', '600', 'Kat elektrik tesisatı kablosu (Güneş Sitesi)', gunes, w.elektrik);
+  await issue(date(9, 27), 'Dış cephe boyası 15 lt', '25', 'A Blok cephe boyası (Güneş Sitesi)', gunes, w.boya);
+  await postTreasuryTransaction(tx, ctx, createTreasuryTransactionSchema.parse({
+    type: 'other_payment', date: date(9, 27), accountId: cashId, amount: '2750', glAccountId: acc('770'), ...tag(gunes, w.hazirlik), description: 'Şantiye işçi yemek ve küçük giderler (nakit)',
+  }));
+  // Gelir tarafı: proje düzeyinde etiketli daire satışı (iş kalemine bağlanmaz)
+  await entry(date(9, 16), 'Daire satışı — Güneş Sitesi C Blok', [
+    { code: '120', side: 'debit', amount: '580000', party: 'ali' },
+    { code: '600', side: 'credit', amount: '500000', project: gunes },
+    { code: '391', side: 'credit', amount: '80000' },
+  ]);
+
+  // İlerleme: önce bir ara kayıt, sonra güncel durum (geçmiş durur, en son kayıt geçerli)
+  await progress(gunes, date(8, 31), [[w.hazirlik, '100'], [w.kazi, '100'], [w.temel, '40'], [w.betonarme, '10']]);
+  await progress(gunes, date(9, 28), [[w.temel, '70'], [w.betonarme, '35', '1000000'], [w.elektrik, '5'], [w.boya, '10']]);
+
+  // ---- Kuzey Villa (işverene yapılan iş) --------------------------------
+  const kuzey = (
+    await createProject(tx, pctx, createProjectSchema.parse({ name: 'Kuzey Villa', kind: 'contract', clientPartyId: employer.id, startDate: date(8, 15), endDate: date(12, 15), location: 'Alsancak', description: 'İşveren arsasında anahtar teslim villa.' }))
+  ).id;
+  const k = { kaba: await wbs(kuzey, '01', 'Temel ve kaba inşaat'), ince: await wbs(kuzey, '02', 'İnce işler ve teslim') };
+  await budget(kuzey, [[k.kaba, '900000'], [k.ince, '400000']]);
+  await setProjectStatus(tx, kuzey, 'active');
+  await entry(date(9, 9), 'Villa temel ve kaba inşaat işçiliği (Kuzey Villa)', [
+    { code: '720', side: 'debit', amount: '210000', project: kuzey, wbs: k.kaba },
+    { code: '320', side: 'credit', amount: '210000', party: 'usta' },
+  ]);
+  await progress(kuzey, date(9, 28), [[k.kaba, '20']]);
+
+  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa)';
 }
 
 /**
@@ -514,6 +657,7 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
     const stockSummary = await seedInventory(tx, ctx, partyId, acc);
     const treasury = await seedTreasury(tx, ctx, partyId, acc);
     const treasurySummary = `${treasury.summary}; ${await seedBankStatement(tx, ctx, { ...company, sector: company.sector as Sector }, treasury.bankTlId)}`;
+    const projectSummary = await seedProjects(tx, ctx, partyId, acc, treasury.cashId);
 
     // Geçmiş aylar kapansın (yılın ilk yarısı)
     for (let m = 1; m <= 6; m++) {
@@ -522,7 +666,7 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
       if (p && date(m, last) < today) await closePeriod(tx, p.id, userId);
     }
 
-    log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary}, ${treasurySummary})`);
+    log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary}, ${treasurySummary}, ${projectSummary})`);
     log(`  Giriş:  ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
     log('  Ekip:   muhasebe@ornek.local (muhasebeci), izleyici@ornek.local (izleyici) — aynı şifre');
   });

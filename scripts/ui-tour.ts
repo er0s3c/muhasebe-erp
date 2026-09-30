@@ -320,6 +320,50 @@ async function main() {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
 
+  // Şantiye projeleri: liste, özet (iş kırılımı maliyet tablosu), iş kırılımı, bütçe revizyonları, hareketler, form ve seçiciler
+  await go('/projects', '90-projeler', 'Projeler');
+  await page.getByRole('button', { name: 'Yeni proje' }).first().click();
+  await page.getByRole('dialog').getByLabel('Proje adı').waitFor();
+  await settle(page, 500);
+  await shot(page, '91-yeni-proje-formu');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await page.getByRole('row', { name: /Güneş Sitesi/ }).click();
+  await page.getByRole('heading', { name: 'Güneş Sitesi', level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '92-proje-ozet');
+  for (const [tab, name] of [['İş kırılımı', '93-proje-is-kirilimi'], ['Bütçe', '94-proje-butce'], ['Hareketler', '95-proje-hareketler']] as const) {
+    await page.getByRole('tab', { name: tab }).click();
+    await settle(page, 600);
+    await shot(page, name);
+  }
+  await page.getByRole('tab', { name: 'İş kırılımı' }).click();
+  await page.getByRole('button', { name: 'İlerleme gir' }).click();
+  await page.getByRole('dialog').getByText('İlerleme girişi').waitFor();
+  await settle(page, 500);
+  await shot(page, '96-proje-ilerleme-girisi');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await go('/projects', '97-projeler-liste', 'Projeler');
+  await page.getByRole('row', { name: /Kuzey Villa/ }).click();
+  await page.getByRole('heading', { name: 'Kuzey Villa', level: 1 }).waitFor();
+  await settle(page, 600);
+  await shot(page, '98-proje-isverene-yapilan-is');
+  // Yevmiye formunda gider satırı: proje + iş kalemi seçicisi
+  await go('/accounting/journal', '99a-yevmiye-listesi', 'Yevmiye kayıtları');
+  await page.getByRole('button', { name: 'Yeni yevmiye' }).first().click();
+  const jbox = page.getByRole('combobox', { name: 'Hesap 1' });
+  await jbox.click();
+  await jbox.fill('770');
+  await page.getByRole('listbox').getByRole('option').first().click();
+  await page.getByRole('combobox', { name: 'Proje 1' }).click();
+  await page.getByRole('combobox', { name: 'Proje 1' }).fill('Güneş');
+  await page.getByRole('listbox').getByRole('option').first().click();
+  await settle(page, 500);
+  await shot(page, '99-yevmiye-proje-secici');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
   // Raporlar: defterler, satış/alış, kârlılık, kambiyo, veri dışa aktarma ve baskı görünümü
   await go('/reports/journal-book', '70-yevmiye-defteri', 'Yevmiye defteri');
   await go('/reports/general-ledger', '71-kebir', 'Kebir (büyük defter)');
@@ -443,7 +487,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/reports/journal-book', '/reports/general-ledger', '/reports/sales', '/reports/purchases', '/reports/item-profit', '/reports/fx-differences', '/reports/data-export', '/accounting/openings', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members', '/settings/modules', '/settings/license', '/settings/devices']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/reports/journal-book', '/reports/general-ledger', '/reports/sales', '/reports/purchases', '/reports/item-profit', '/reports/fx-differences', '/reports/data-export', '/accounting/openings', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members', '/settings/modules', '/settings/license', '/settings/devices', '/projects']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);
@@ -454,6 +498,23 @@ async function main() {
     if (over > 1) overflowing.push(`${path} (+${over}px)`);
   }
   console.log(overflowing.length ? `  ✗ Yatay taşma: ${overflowing.join(', ')}` : '  ✓ mobilde yatay taşma yok');
+
+  // Mobilde proje detayı (iş kırılımı maliyet tablosu ve sekmeler) da yatay taşmamalı
+  await m.goto(`${BASE}/projects`);
+  await m.getByRole('heading', { level: 1 }).first().waitFor();
+  await m.getByText('Güneş Sitesi').first().click();
+  await m.getByRole('heading', { name: 'Güneş Sitesi', level: 1 }).waitFor();
+  for (const tab of ['Özet', 'İş kırılımı', 'Bütçe', 'Hareketler']) {
+    await m.getByRole('tab', { name: tab }).click();
+    await settle(m, 500);
+    const over = await m.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    if (over > 1) overflowing.push(`proje detayı/${tab} (+${over}px)`);
+  }
+  await m.screenshot({ path: `${OUT}/100-mobil-proje-detay.png` });
+  console.log('  ✓ 100-mobil-proje-detay');
 
   // Mobilde tahsilat formu (açık kalem ızgarası) da yatay taşmamalı
   await m.goto(`${BASE}/parties`);
