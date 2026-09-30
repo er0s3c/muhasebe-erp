@@ -63,7 +63,7 @@ test('banka ekstresi: içe aktar → kesin eşleşmeleri uygula → eşleşmeyen
   await dialog.locator('input[type=file]').setInputFiles({ name: 'ekstre.csv', mimeType: 'text/csv', buffer: Buffer.from(csv, 'utf8') });
   await expect(dialog.getByText('Sütunları eşleyin')).toBeVisible();
   await dialog.getByRole('button', { name: 'Ön izleme' }).click();
-  await expect(dialog.getByText('Kapanış bakiyesi')).toBeVisible();
+  await expect(dialog.getByText('Kapanış bakiyesi', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'İçe aktar', exact: true }).click();
   await expect(dialog.getByRole('heading', { name: 'İçe aktarma tamamlandı' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Tamam' }).click();

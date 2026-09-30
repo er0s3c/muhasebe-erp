@@ -69,7 +69,8 @@ services:
     image: caddy:2
     restart: unless-stopped
     environment:
-      ERP_DOMAIN: ${ERP_DOMAIN:?TLS için ERP_DOMAIN gerekli}
+      # Yalnızca 'tls' profilinde kullanılır; profil kapalıyken boş olması sorun değildir (compose tüm servisleri yorumlar)
+      ERP_DOMAIN: ${ERP_DOMAIN:-}
     ports:
       - '80:80'
       - '443:443'
