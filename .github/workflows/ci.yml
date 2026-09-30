@@ -249,13 +249,13 @@ jobs:
       - name: Günlükler (başarısızlıkta)
         if: failure()
         run: |
-          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs --no-color
+          if [ -f deploy/.env ]; then docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs --no-color; fi
           if [ -f deploy/.env.demo ]; then docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo logs --no-color; fi
           if [ -f deploy/license/.env ]; then docker compose -f deploy/license/docker-compose.yml -f deploy/license/docker-compose.ci.yml --env-file deploy/license/.env logs --no-color; fi
 
       - name: Temizlik
         if: always()
         run: |
-          docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env down -v
+          if [ -f deploy/.env ]; then docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env down -v; fi
           if [ -f deploy/.env.demo ]; then docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env.demo down -v; fi
           if [ -f deploy/license/.env ]; then docker compose -f deploy/license/docker-compose.yml -f deploy/license/docker-compose.ci.yml --env-file deploy/license/.env down -v; fi

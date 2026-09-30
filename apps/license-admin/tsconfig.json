@@ -6,5 +6,5 @@
     "types": ["vite/client"],
     "paths": { "@ui/*": ["../web/src/components/ui/*"] }
   },
-  "include": ["src", "vite.config.ts", "../web/src/components/ui", "../web/src/lib/cn.ts"]
+  "include": ["src", "vite.config.ts"]
 }

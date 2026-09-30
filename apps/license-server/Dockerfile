@@ -5,7 +5,7 @@ ARG NODE_VERSION=22
 
 FROM node:${NODE_VERSION}-bookworm-slim AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/license-server/package.json apps/license-server/
