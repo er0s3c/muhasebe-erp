@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { asOwner, client, createCompany, makeApp, registerUser, PASSWORD } from './helpers';
+import { randomUUID } from 'node:crypto';
+import { asOwner, client, createCompany, execAsOwner, makeApp, registerUser, PASSWORD } from './helpers';
 
 const { app } = await makeApp();
 
@@ -52,5 +53,59 @@ describe('operatör parola kurtarma (admin reset-password)', () => {
     expect(admin(['reset-password', '--email=yok-boyle-biri@example.com']).code).toBe(1);
     expect(admin(['reset-password']).code).toBe(1);
     expect(admin(['baska']).code).toBe(1);
+  });
+});
+
+describe('operatör cihaz kurtarma (admin devices)', () => {
+  async function seedDevice(label: string, userId?: string) {
+    const id = randomUUID();
+    await execAsOwner(
+      `insert into devices (id, secret_hash, name, last_user_id, last_seen_at) values ($1, $2, $3, $4, now())`,
+      [id, `hash-${id}`, label, userId ?? null],
+    );
+    return id;
+  }
+
+  it('listeler, ön ekle kaldırır (oturumları kapanır, olay yazılır), toplu kaldırma onay ister', async () => {
+    const owner = await registerUser(app, 'Cihaz');
+    const a = await seedDevice('Chrome · Windows (CLI testi)', owner.userId);
+    const b = await seedDevice('Safari · macOS (CLI testi)');
+    // b cihazının oturumu var; kaldırınca kapanmalı
+    await execAsOwner(`insert into refresh_tokens (id, user_id, token_hash, expires_at, device_id) values (gen_random_uuid(), $1, $2, now() + interval '1 day', $3)`, [owner.userId, `t-${b}`, b]);
+
+    const list = admin(['devices']);
+    expect(list.code, list.out).toBe(0);
+    expect(list.out).toContain(a);
+    expect(list.out).toContain('Chrome · Windows (CLI testi)');
+    expect(list.out).toContain(owner.email);
+    expect(list.out).toMatch(/Koltuk: \d+/);
+
+    // çok kısa ön ek ve bilinmeyen ön ek reddedilir
+    expect(admin(['devices:revoke', '--id=abc']).code).toBe(1);
+    expect(admin(['devices:revoke', '--id=ffffffff']).code).toBe(1);
+    expect(admin(['devices:revoke']).code).toBe(1);
+
+    const rev = admin(['devices:revoke', `--id=${b.slice(0, 13)}`]);
+    expect(rev.code, rev.out).toBe(0);
+    const row = await execAsOwner(`select revoked_at, revoked_by from devices where id = $1`, [b]);
+    expect(row.rows[0].revoked_at).toBeTruthy();
+    expect(row.rows[0].revoked_by).toBe('operator-cli');
+    const tok = await execAsOwner(`select revoked_at from refresh_tokens where device_id = $1`, [b]);
+    expect(tok.rows[0].revoked_at).toBeTruthy();
+    const ev = await execAsOwner(`select meta::text as meta from security_events where event = 'device_revoked'`);
+    expect(ev.rows.some((r) => r.meta.includes(b) && r.meta.includes('operator-cli'))).toBe(true);
+    // aynı cihazı yeniden kaldırmak bulunamaz
+    expect(admin(['devices:revoke', `--id=${b}`]).code).toBe(1);
+    // a etkilenmedi
+    expect((await execAsOwner(`select revoked_at from devices where id = $1`, [a])).rows[0].revoked_at).toBeNull();
+
+    // toplu kaldırma onay ister
+    const refuse = admin(['devices:revoke-all']);
+    expect(refuse.code).toBe(1);
+    expect(refuse.out).toContain('--yes');
+    expect((await execAsOwner(`select revoked_at from devices where id = $1`, [a])).rows[0].revoked_at).toBeNull();
+    const all = admin(['devices:revoke-all', '--yes']);
+    expect(all.code, all.out).toBe(0);
+    expect((await execAsOwner(`select count(*)::int as n from devices where revoked_at is null`)).rows[0].n).toBe(0);
   });
 });

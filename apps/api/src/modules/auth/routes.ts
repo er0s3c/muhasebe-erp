@@ -60,11 +60,11 @@ async function issueSession(
   req: FastifyRequest,
   reply: FastifyReply,
   user: { id: string; organizationId: string },
-  opts: { db?: Queryable; family?: SessionFamily } = {},
+  opts: { db?: Queryable; family?: SessionFamily; deviceId?: string } = {},
 ) {
   const db = opts.db ?? app.db;
   const accessToken = app.jwt.sign(
-    { sub: user.id, org: user.organizationId },
+    { sub: user.id, org: user.organizationId, ...(opts.deviceId ? { did: opts.deviceId } : {}) },
     { expiresIn: app.config.ACCESS_TOKEN_TTL_SECONDS },
   );
   const refreshToken = randomBytes(32).toString('base64url');
@@ -81,6 +81,7 @@ async function issueSession(
     expiresAt: new Date(expiresAt),
     userAgent: req.headers['user-agent']?.slice(0, 300) ?? null,
     ip: req.ip,
+    deviceId: opts.deviceId ?? null,
     ...(opts.family ? { familyId: opts.family.id, familyStartedAt: opts.family.startedAt } : {}),
   });
   void reply.setCookie(REFRESH_COOKIE, refreshToken, {
@@ -125,6 +126,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       .from(users)
       .where(eq(users.email, input.email));
     if (existing) throw new AppError(409, 'EMAIL_TAKEN', 'Bu e-posta adresi zaten kayıtlı');
+    // Cihaz koltuğu hesap açılmadan ÖNCE denetlenir (koltuk yoksa yetim hesap oluşmasın).
+    const device = await app.devices.ensureForRequest(req, reply);
 
     const user = await app.db.transaction(async (tx) => {
       const [org] = await tx
@@ -149,7 +152,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       const token = await issueUserToken(app.db, user.id, 'verify_email', req.ip);
       queueMail(app, verifyEmailMail(user.email, user.fullName, `${app.config.APP_BASE_URL}/verify-email?token=${encodeURIComponent(token)}`));
     }
-    const accessToken = await issueSession(app, req, reply, user);
+    if (device) await app.devices.setLastUser(device.id, user.id);
+    const accessToken = await issueSession(app, req, reply, user, { deviceId: device?.id });
     void reply.code(201);
     return { accessToken, user: publicUser(user) };
   });
@@ -181,8 +185,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
     app.limiter.reset(ipEmailKey);
 
+    // Kayıtlı cihaz (lisans koltuğu): bilinmeyen tarayıcı boş koltuk ister (DEVICE_LIMIT_REACHED).
+    const device = await app.devices.ensureForRequest(req, reply, user.id);
     await app.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
-    const accessToken = await issueSession(app, req, reply, user);
+    const accessToken = await issueSession(app, req, reply, user, { deviceId: device?.id });
     await purgeOldTokens(app, user.id);
     await recordSecurityEvent(app.db, app.log, req, { event: 'login_succeeded', organizationId: user.organizationId, userId: user.id, email: user.email });
     return { accessToken, user: publicUser(user) };
@@ -200,6 +206,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!row) throw unauthorized();
 
     if (row.revokedAt) {
+      // Cihaz kaldırılınca oturumları kapanır; bu çalınma değil, yönetici işlemidir (toplu çıkış yapılmaz).
+      if (row.deviceId && !(await app.devices.isActive(row.deviceId))) {
+        void reply.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+        throw new AppError(401, 'DEVICE_REVOKED', 'Bu cihazın erişimi kaldırıldı; yeniden giriş yapın');
+      }
       if (row.rotatedAt && Date.now() - row.rotatedAt.getTime() <= ROTATION_GRACE_MS) {
         throw new AppError(409, 'REFRESH_CONFLICT', 'Oturum aynı anda başka bir istekle yenilendi; tekrar deneyin');
       }
@@ -221,6 +232,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     const [user] = await app.db.select().from(users).where(eq(users.id, row.userId));
     if (!user?.isActive) throw unauthorized();
+    // Yenileme de kayıtlı cihaz ister (lisans denetimi açılmadan önce açılmış oturumlar ilk yenilemede cihaz kazanır).
+    const device = await app.devices.ensureForRequest(req, reply, user.id);
 
     // İptal + yeni token tek işlemde ve tek kazananlı: aynı token'la eşzamanlı ikinci istek 0 satır günceller.
     const accessToken = await app.db.transaction(async (tx) => {
@@ -235,6 +248,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return issueSession(app, req, reply, user, {
         db: tx,
         family: { id: row.familyId, startedAt: row.familyStartedAt },
+        deviceId: device?.id,
       });
     });
     return { accessToken, user: publicUser(user) };

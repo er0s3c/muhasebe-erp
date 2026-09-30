@@ -148,6 +148,20 @@
       "when": 1790763443785,
       "tag": "0020_licensing_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790765093617,
+      "tag": "0021_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790765105528,
+      "tag": "0022_devices_rules",
+      "breakpoints": true
     }
   ]
 }

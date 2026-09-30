@@ -1,7 +1,7 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import { generateKeyPair } from '@erp/license-core';
 import type { Db } from '../db/client';
-import { licenseState } from '../db/schema';
+import { devices, licenseState } from '../db/schema';
 import { uuidv7 } from 'uuidv7';
 
 export type LicenseRow = typeof licenseState.$inferSelect;
@@ -75,5 +75,14 @@ export class LicenseStore {
   async companyCount(): Promise<number> {
     const res = await this.db.execute<{ n: number }>(sql`select license_company_count() as n`);
     return Number(res.rows[0]?.n ?? 0);
+  }
+
+  /** Koltuk sayan cihazlar: iptal edilmemiş ve `cutoff` ms'den sonra görülmüş (boşta kalanlar sayılmaz). */
+  async activeDeviceCount(cutoffMs: number): Promise<number> {
+    const [row] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(devices)
+      .where(and(isNull(devices.revokedAt), gte(devices.lastSeenAt, new Date(cutoffMs))));
+    return Number(row?.n ?? 0);
   }
 }

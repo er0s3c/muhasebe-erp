@@ -16,7 +16,11 @@ export type SecurityEventName =
   | 'license_activated'
   | 'license_offline_activated'
   | 'license_refreshed'
-  | 'license_deactivated';
+  | 'license_deactivated'
+  | 'device_registered'
+  | 'device_revoked'
+  | 'device_renamed'
+  | 'device_limit_reached';
 
 /**
  * Güvenlik olayını kaydeder; kayıt hatası asıl işlemi bozmaz (yalnızca günlüğe düşer). Parola, jeton ve

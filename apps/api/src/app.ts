@@ -14,6 +14,8 @@ import { MemoryLimiter, Semaphore } from './http/limits';
 import { createMailer, type Mailer } from './modules/mail/mailer';
 import { assertLicensed, createLicenseService, type LicenseSetup } from './licensing';
 import { licenseRoutes } from './licensing/routes';
+import { DeviceService } from './licensing/devices';
+import { deviceRoutes } from './licensing/device-routes';
 import { accountRoutes } from './modules/auth/account';
 import { registerWebApp, webNotFoundHandler } from './http/static';
 import { authRoutes } from './modules/auth/routes';
@@ -77,6 +79,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.decorate('exportGate', new Semaphore(config.EXPORT_CONCURRENCY));
   app.decorate('mailer', opts.mailer ?? createMailer(config, app.log));
   app.decorate('license', createLicenseService({ db: opts.db, config, log: app.log, setup: opts.license }));
+  app.decorate('devices', new DeviceService({ db: opts.db, license: app.license, log: app.log, cookieSecure: config.COOKIE_SECURE, cacheMs: opts.license?.deviceCacheMs }));
 
   app.addHook('onRequest', async (req, reply) => {
     void reply.header('x-request-id', req.id);
@@ -151,6 +154,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   });
 
   await app.register(licenseRoutes);
+  await app.register(deviceRoutes);
   await app.register(authRoutes);
   await app.register(accountRoutes);
   await app.register(tenancyRoutes);

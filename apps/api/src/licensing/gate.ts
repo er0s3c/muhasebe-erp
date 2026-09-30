@@ -21,6 +21,8 @@ const WRITES_WHEN_RESTRICTED = new Set([
 ]);
 
 const isLicenseRoute = (route: string) => route === '/api/license' || route.startsWith('/api/license/');
+/** Cihaz yönetimi salt-okunurken de açıktır: yönetici koltuk boşaltıp girişi yeniden açabilmeli. */
+const isDeviceRoute = (route: string) => route === '/api/devices' || route.startsWith('/api/devices/');
 
 const REASON_MESSAGES: Record<LicenseReason, string> = {
   expired: 'Lisans süreniz doldu; yalnızca görüntüleme ve dışa aktarma yapılabilir. Yenilemek için satıcınızla iletişime geçin.',
@@ -55,7 +57,7 @@ export function checkRequest(snap: LicenseSnapshot, method: string, route: strin
   }
   // Salt-okunur (restricted): okuma serbest, yazma yalnızca kimlik doğrulama ve lisans uçlarında.
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return null;
-  if (WRITES_WHEN_RESTRICTED.has(key) || isLicenseRoute(route)) return null;
+  if (WRITES_WHEN_RESTRICTED.has(key) || isLicenseRoute(route) || isDeviceRoute(route)) return null;
   return new AppError(402, 'LICENSE_RESTRICTED', restrictionMessage(snap.reason), { state: snap.state, reason: snap.reason });
 }
 

@@ -364,7 +364,7 @@ describe('sözleşme testleri', async () => {
            and not exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'company_id' and not a.attisdropped)
          order by 1`);
       expect(global.rows.map((r) => r.relname)).toEqual([
-        'companies', 'currencies', 'license_state', 'organizations', 'refresh_tokens', 'security_events', 'user_tokens', 'users',
+        'companies', 'currencies', 'devices', 'license_state', 'organizations', 'refresh_tokens', 'security_events', 'user_tokens', 'users',
       ]);
     });
   });

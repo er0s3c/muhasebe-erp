@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach } from 'vitest';
+import type { LightMyRequestResponse } from 'fastify';
 import {
   DAY_MS,
   activateRequestSchema,
@@ -93,6 +94,8 @@ interface VendorActivation {
   fingerprint: string;
   lastTs: number;
   active: boolean;
+  /** Son kalp atışında bildirilen kullanım sayıları. */
+  stats?: { devices: number; companies: number };
 }
 
 /**
@@ -121,7 +124,8 @@ export class FakeVendor {
       kind: 'commercial',
       status: 'active',
       sectors: ['CONSTRUCTION', 'RETAIL_MARKET', 'COMMERCE'],
-      deviceLimit: 3,
+      // Genel testler her girişte yeni bir "tarayıcı" (cihaz) açar; cihaz koltuğu testleri sınırı açıkça verir.
+      deviceLimit: 100,
       companyLimit: 5,
       deviceIdleDays: 30,
       validUntil: this.clock.t + 365 * DAY_MS,
@@ -210,6 +214,7 @@ export class FakeVendor {
       if (payload.fingerprint !== act.fingerprint) throw new LicenseServerError(409, 'FINGERPRINT_CHANGED', 'Sunucu parmak izi değişti');
       if (payload.ts <= act.lastTs) throw new LicenseServerError(409, 'REPLAY', 'İstek yeniden oynatılmış ya da eski');
       act.lastTs = payload.ts;
+      act.stats = payload.stats;
       const license = [...this.licenses.values()].find((l) => l.licenseId === act.licenseId)!;
       return { lease: this.sign('lease', license, payload, payload.nonce) };
     },
@@ -333,4 +338,64 @@ export function useLicensedApp(opts: LicensedAppOptions & { each?: boolean } = {
     afterAll(teardown);
   }
   return holder;
+}
+
+/**
+ * Bir tarayıcı: kendi çerez kavanozu (yenileme + cihaz çerezi) ve kullanıcı aracısı vardır. Her yeni `Browser` yeni bir
+ * cihazdır; aynı nesneyle yapılan girişler aynı cihazdır.
+ */
+export class Browser {
+  readonly jar = new Map<string, string>();
+
+  constructor(
+    readonly app: FastifyInstance,
+    readonly ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+  ) {}
+
+  private cookieHeader(): string {
+    return [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ');
+  }
+
+  private absorb(res: LightMyRequestResponse): void {
+    for (const c of res.cookies) {
+      if (!c.value) this.jar.delete(c.name);
+      else this.jar.set(c.name, c.value);
+    }
+  }
+
+  async post(url: string, payload?: unknown, headers: Record<string, string> = {}): Promise<LightMyRequestResponse> {
+    const res = await this.app.inject({
+      method: 'POST',
+      url,
+      payload: payload as object | undefined,
+      headers: { 'user-agent': this.ua, ...(this.jar.size ? { cookie: this.cookieHeader() } : {}), ...headers },
+    });
+    this.absorb(res);
+    return res;
+  }
+
+  login(email: string, password = 'Sifre-12345-xyz') {
+    return this.post('/api/auth/login', { email, password });
+  }
+
+  register(name: string) {
+    return this.post('/api/auth/register', {
+      email: `${name.toLowerCase()}-${randomUUID().slice(0, 8)}@example.com`,
+      password: 'Sifre-12345-xyz',
+      fullName: `${name} Kullanıcı`,
+      organizationName: `${name} Holding`,
+    });
+  }
+
+  refresh() {
+    return this.post('/api/auth/refresh');
+  }
+
+  get deviceCookie(): string | undefined {
+    return this.jar.get('erp_device');
+  }
+
+  get deviceId(): string | undefined {
+    return this.deviceCookie?.split('.')[0];
+  }
 }

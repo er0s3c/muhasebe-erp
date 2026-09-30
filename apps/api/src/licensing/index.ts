@@ -19,6 +19,8 @@ export interface LicenseSetup {
   transport?: LicenseTransport | null;
   now?: () => number;
   reloadMs?: number;
+  /** İptal edilmiş cihaz denetimi önbelleği (ms); testlerde 0. */
+  deviceCacheMs?: number;
 }
 
 /** Bu süreçte lisans denetimi açık mı? Üretim paketinde ortam değişkeniyle kapatılamaz. */

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import {
   CLOCK_SKEW_MS,
+  DAY_MS,
   LicenseTokenError,
   encodeRequestCode,
   evaluateLease,
@@ -121,10 +122,20 @@ export class LicenseService {
     this.heartbeatIntervalMs = opts.heartbeatIntervalMs ?? Math.round(HEARTBEAT_INTERVAL_MS * (0.9 + Math.random() * 0.2));
     this.appVersion = opts.appVersion.slice(0, 40);
     this.fingerprintProvider = opts.fingerprint ?? (() => serverFingerprint(opts.db, opts.hostIdFile));
-    this.statsProvider = opts.stats ?? (async () => ({ devices: 0, companies: await this.store.companyCount() }));
+    this.statsProvider =
+      opts.stats ??
+      (async () => ({
+        devices: await this.store.activeDeviceCount(this.now() - (this.lease?.deviceIdleDays ?? 30) * DAY_MS),
+        companies: await this.store.companyCount(),
+      }));
   }
 
   // ---- Durum ----------------------------------------------------------------------------------------------
+
+  /** Hizmetin saati (testlerde enjekte edilir); cihaz koltuğu boşta hesabı da bunu kullanır. */
+  clock(): number {
+    return this.now();
+  }
 
   /** Başlangıçta bir kez çağrılır (idempotent): kurulum kimliğini oluşturur, kirayı yükler. */
   init(): Promise<void> {
@@ -210,7 +221,7 @@ export class LicenseService {
     };
   }
 
-  /** Kurulumun kullanım sayıları (şirket sayısı; cihaz sayısı L3'te eklenir). */
+  /** Satıcıya raporlanan ve yönetici ekranında gösterilen kullanım sayıları (yalnızca sayı). */
   async usage(): Promise<{ companies: number; devices: number }> {
     return this.statsProvider();
   }

@@ -101,6 +101,28 @@ export const securityEvents = pgTable(
 );
 
 /**
+ * Kayıtlı cihazlar (lisans cihaz koltukları; kiracı tablosu değildir, kuruluma özgüdür). Bir "cihaz" bir tarayıcı/bilgisayardır:
+ * ilk girişte sunucu bir kimlik ve gizli değer üretir, gizli değerin özeti burada, değerin kendisi `erp_device` çerezindedir.
+ * Koltuk sayılır: iptal edilmemiş ve son `deviceIdleDays` içinde görülmüş cihazlar. Silinmez; iptal edilir.
+ */
+export const devices = pgTable(
+  'devices',
+  {
+    id: id(),
+    secretHash: text().notNull(),
+    name: text().notNull(),
+    userAgent: text(),
+    ip: text(),
+    firstSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    lastUserId: uuid().references(() => users.id),
+    revokedAt: timestamp({ withTimezone: true }),
+    revokedBy: text(),
+  },
+  (t) => [index('devices_last_seen_idx').on(t.lastSeenAt), index('devices_last_user_idx').on(t.lastUserId)],
+);
+
+/**
  * Lisans durumu: kuruluma özgü TEK satır (kiracı tablosu değildir). Kurulum kimliği ve anahtar çifti ilk çalışmada
  * üretilir; satıcı imzalı kira (`lease_token`) her okunuşta imzası yeniden doğrulanır, bu yüzden buradaki bir düzenleme
  * yetki kazandırmaz. Kurallar (silinemez, kimlik sabit, saat işareti geri gitmez) 0020 migration'ındaki tetikleyicidedir.
@@ -141,6 +163,8 @@ export const refreshTokens = pgTable(
     revokedAt: timestamp({ withTimezone: true }),
     /** Döndürme (rotasyon) ile iptal edildiyse zamanı; kısa tolerans penceresinde çakışan istekleri ayırt eder. */
     rotatedAt: timestamp({ withTimezone: true }),
+    /** Oturumun açıldığı cihaz (lisans cihaz koltuğu); cihaz kaldırılınca bu oturumlar da kapanır. Denetim kapalıyken boştur. */
+    deviceId: uuid(),
     /** Aynı oturumun art arda döndürülen token'ları; oturumun mutlak ömrü ilk girişten sayılır. */
     familyId: uuid().notNull().default(sql`gen_random_uuid()`),
     familyStartedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -152,6 +176,7 @@ export const refreshTokens = pgTable(
     uniqueIndex('refresh_tokens_hash_uq').on(t.tokenHash),
     index('refresh_tokens_user_idx').on(t.userId),
     index('refresh_tokens_expires_idx').on(t.expiresAt),
+    index('refresh_tokens_device_idx').on(t.deviceId),
   ],
 );
 

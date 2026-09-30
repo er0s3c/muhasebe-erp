@@ -28,3 +28,34 @@ test('lisans: etkin kurulum, sahip ayrıntıları ve gerçek lisans sunucusuyla 
   expect(after.state).toBe('active');
   expect(Date.parse(after.lastSuccessAt)).toBeGreaterThanOrEqual(Date.parse(info.lastSuccessAt));
 });
+
+test('cihaz koltukları: kayıtlı tarayıcı, yönetici listesi, yeniden adlandırma ve kaldırınca oturumun kapanması', async ({ request }) => {
+  const email = `cihaz-${Date.now()}@example.com`;
+  const reg = await request.post('/api/auth/register', {
+    data: { email, password: 'Sifre-12345-xyz', fullName: 'Cihaz Sahibi', organizationName: 'Cihaz Ltd.' },
+  });
+  expect(reg.status()).toBe(201);
+  const token = (await reg.json()).accessToken as string;
+  const auth = { authorization: `Bearer ${token}` };
+  expect((await request.post('/api/companies', { headers: auth, data: { name: 'Cihaz Market', sector: 'RETAIL_MARKET' } })).status()).toBe(201);
+
+  const list = await (await request.get('/api/devices', { headers: auth })).json();
+  expect(list.enforced).toBe(true);
+  const mine = list.devices.find((d: { current: boolean }) => d.current);
+  expect(mine).toMatchObject({ status: 'active', lastUser: { email } });
+
+  expect((await request.patch(`/api/devices/${mine.id}`, { headers: auth, data: { name: 'E2E tarayıcısı' } })).status()).toBe(200);
+  const renamed = await (await request.get('/api/devices', { headers: auth })).json();
+  expect(renamed.devices.find((d: { id: string }) => d.id === mine.id).name).toBe('E2E tarayıcısı');
+
+  // kendi cihazını kaldıran oturum kapanır (belirteç ve yenileme); yeniden giriş yeni bir cihaz olarak kaydolur
+  expect((await request.delete(`/api/devices/${mine.id}`, { headers: auth })).status()).toBe(200);
+  const dead = await request.get('/api/me', { headers: auth });
+  expect(dead.status()).toBe(401);
+  expect((await dead.json()).error.code).toBe('DEVICE_REVOKED');
+  const login = await request.post('/api/auth/login', { data: { email, password: 'Sifre-12345-xyz' } });
+  expect(login.status()).toBe(200);
+  const again = await (await request.get('/api/devices', { headers: { authorization: `Bearer ${(await login.json()).accessToken}` } })).json();
+  const current = again.devices.find((d: { current: boolean }) => d.current);
+  expect(current.id).not.toBe(mine.id);
+});

@@ -14,6 +14,7 @@ import { AppError, forbidden, unauthorized, badRequest } from './errors';
 import type { MemoryLimiter, Semaphore } from './limits';
 import type { Mailer } from '../modules/mail/mailer';
 import { assertLicensed } from '../licensing/gate';
+import type { DeviceService } from '../licensing/devices';
 import type { LicenseService } from '../licensing/service';
 
 /**
@@ -30,6 +31,8 @@ export interface GuardMeta {
 export interface AccessTokenPayload {
   sub: string;
   org: string;
+  /** Oturumun açıldığı kayıtlı cihaz (lisans denetimi açıkken her erişim belirtecinde bulunur). */
+  did?: string;
 }
 
 declare module 'fastify' {
@@ -46,6 +49,8 @@ declare module 'fastify' {
     mailer: Mailer;
     /** Kuruluma ait lisans durumu ve satıcıyla iletişim. */
     license: LicenseService;
+    /** Lisans cihaz koltukları (kayıtlı tarayıcılar). */
+    devices: DeviceService;
   }
 }
 declare module '@fastify/jwt' {
@@ -58,6 +63,7 @@ declare module '@fastify/jwt' {
 export interface AuthUser {
   id: string;
   orgId: string;
+  deviceId?: string;
 }
 
 export interface AuthCtx {
@@ -85,13 +91,20 @@ export interface TenantCtx extends AuthCtx {
 const passwordChangeRequired = () =>
   forbidden('Devam etmeden önce şifrenizi değiştirmelisiniz', 'PASSWORD_CHANGE_REQUIRED');
 
-async function authenticate(req: FastifyRequest): Promise<AuthUser> {
+async function authenticate(app: FastifyInstance, req: FastifyRequest): Promise<AuthUser> {
   try {
     await req.jwtVerify();
   } catch {
     throw unauthorized();
   }
-  return { id: req.user.sub, orgId: req.user.org };
+  if (app.license.enforced) {
+    // Lisans denetimi açıkken her erişim belirteci kayıtlı bir cihaza aittir; cihaz kaldırıldıysa belirteç geçersizdir.
+    // (Cihaz bilgisi olmayan eski belirteç yeniden girişle/yenilemeyle cihaz kazanır.)
+    const did = req.user.did;
+    if (!did) throw unauthorized();
+    if (!(await app.devices.isActive(did))) throw new AppError(401, 'DEVICE_REVOKED', 'Bu cihazın erişimi kaldırıldı; yeniden giriş yapın');
+  }
+  return { id: req.user.sub, orgId: req.user.org, deviceId: req.user.did };
 }
 
 /** Yalnızca giriş yapmış kullanıcı gerektiren rota (şirket seçimi gerekmez). */
@@ -103,7 +116,7 @@ export function authedRoute<T>(
 ): RouteHandlerMethod {
   const route: RouteHandlerMethod = async (req, reply) => {
     await assertLicensed(app.license, req);
-    const user = await authenticate(req);
+    const user = await authenticate(app, req);
     return withContext(app.db, { userId: user.id, orgId: user.orgId, ip: req.ip }, async (tx) => {
       // Token geçerli olsa da kullanıcı pasifleştirilmiş olabilir.
       const [row] = await tx
@@ -138,7 +151,7 @@ export function tenantRoute<T>(
 ): RouteHandlerMethod {
   const route: RouteHandlerMethod = async (req, reply) => {
     const license = await assertLicensed(app.license, req);
-    const user = await authenticate(req);
+    const user = await authenticate(app, req);
     if (options.limit) {
       const r = app.limiter.consume(`${options.limit.name}:${user.id}`, options.limit.max, options.limit.windowMs);
       if (!r.ok) {
