@@ -115,6 +115,19 @@ export function errorHandler(
       .send({ error: { code: 'CONSTRAINT_VIOLATION', message: 'Değer izin verilen aralığın dışında', details: pg.constraint } });
     return;
   }
+  if (pg?.code === '40001' || pg?.code === '40P01') {
+    // Serileştirme hatası / kilitlenme: işlem geri alındı, aynı istek yeniden denenebilir.
+    void reply
+      .status(409)
+      .send({ error: { code: 'RETRY', message: 'Eşzamanlı işlem çakışması; lütfen tekrar deneyin' } });
+    return;
+  }
+  if (pg?.code === '22P02') {
+    void reply
+      .status(400)
+      .send({ error: { code: 'INVALID_INPUT', message: 'Geçersiz değer biçimi' } });
+    return;
+  }
   if (pg?.code === '23503') {
     void reply
       .status(409)
@@ -123,6 +136,12 @@ export function errorHandler(
   }
 
   const fastifyStatus = (err as FastifyError).statusCode;
+  if (fastifyStatus === 429) {
+    void reply
+      .status(429)
+      .send({ error: { code: 'RATE_LIMITED', message: 'Çok fazla istek; lütfen biraz sonra tekrar deneyin' } });
+    return;
+  }
   if (fastifyStatus && fastifyStatus >= 400 && fastifyStatus < 500) {
     void reply
       .status(fastifyStatus)

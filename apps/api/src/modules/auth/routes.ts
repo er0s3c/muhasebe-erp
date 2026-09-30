@@ -37,7 +37,7 @@ async function issueSession(
   void reply.setCookie(REFRESH_COOKIE, refreshToken, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: app.config.NODE_ENV === 'production',
+    secure: app.config.COOKIE_SECURE,
     path: '/api/auth',
     maxAge: Math.floor(ttlMs / 1000),
   });
@@ -49,6 +49,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   const limit = { rateLimit: { max: 10, timeWindow: '1 minute' } };
 
   app.post('/api/auth/register', { config: limit }, async (req, reply) => {
+    if (!app.config.REGISTRATION_ENABLED) {
+      throw new AppError(403, 'REGISTRATION_DISABLED', 'Yeni kayıt bu kurulumda kapalı');
+    }
     const input = registerSchema.parse(req.body);
     const passwordHash = await hash(input.password);
 

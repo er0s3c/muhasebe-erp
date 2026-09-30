@@ -3,7 +3,7 @@ import pg from 'pg';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterAll } from 'vitest';
 import { buildApp } from '../src/app';
-import { loadConfig } from '../src/config';
+import { loadConfig, type Config } from '../src/config';
 import { createDb, type DbHandle } from '../src/db/client';
 
 export const PASSWORD = 'Sifre-12345-xyz';
@@ -14,10 +14,12 @@ export interface TestApp {
 }
 
 /** Test dosyası başına bir uygulama örneği; dosya bitince kapanır. */
-export async function makeApp(opts: { rateFetcher?: (isoDate?: string) => Promise<string> } = {}): Promise<TestApp> {
-  const config = loadConfig();
+export async function makeApp(
+  opts: { rateFetcher?: (isoDate?: string) => Promise<string>; configOverrides?: Partial<Config> } = {},
+): Promise<TestApp> {
+  const config = { ...loadConfig(), ...opts.configOverrides };
   const handle = createDb(config.DATABASE_URL);
-  const app = await buildApp({ db: handle.db, config, logger: false, ...opts });
+  const app = await buildApp({ db: handle.db, config, logger: false, rateFetcher: opts.rateFetcher });
   await app.ready();
   afterAll(async () => {
     await app.close();

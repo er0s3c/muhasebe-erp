@@ -181,6 +181,9 @@
     "register": "Hesap oluştur",
     "noAccount": "Hesabınız yok mu?",
     "haveAccount": "Zaten hesabınız var mı?",
+    "registrationClosedTitle": "Yeni kayıt kapalı",
+    "registrationClosedSubtitle": "Bu kurulumda kendi kendine hesap oluşturma kapatılmıştır.",
+    "registrationClosedHint": "Hesabınız yoksa şirket yöneticinizden sizi kullanıcı olarak eklemesini isteyin.",
     "invalid": "E-posta veya şifre hatalı",
     "features": [
       "Çoklu para birimi: TL, GBP, EUR, USD",

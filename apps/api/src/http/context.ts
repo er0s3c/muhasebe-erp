@@ -106,7 +106,7 @@ export function tenantRoute<T>(
   return async (req, reply) => {
     const user = await authenticate(req);
     const companyId = req.headers['x-company-id'];
-    if (typeof companyId !== 'string' || !/^[0-9a-f-]{36}$/i.test(companyId)) {
+    if (typeof companyId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(companyId)) {
       throw badRequest('X-Company-Id başlığı gerekli', 'COMPANY_REQUIRED');
     }
 

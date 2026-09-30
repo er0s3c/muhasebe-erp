@@ -14,8 +14,27 @@ export interface DbHandle {
   close(): Promise<void>;
 }
 
-export function createDb(connectionString: string): DbHandle {
-  const pool = new pg.Pool({ connectionString, max: 10 });
+export interface CreateDbOptions {
+  /** Havuzdaki en çok bağlantı. */
+  max?: number;
+  /** 0 ya da yok = kapalı. */
+  statementTimeoutMs?: number;
+  /** Boşta (idle) bağlantıda oluşan hata; verilmezse stderr'e yazılır. Dinleyici hiç olmazsa süreç çöker. */
+  onError?: (err: Error) => void;
+}
+
+export function createDb(connectionString: string, opts: CreateDbOptions = {}): DbHandle {
+  const pool = new pg.Pool({
+    connectionString,
+    max: opts.max ?? 10,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 30_000,
+    ...(opts.statementTimeoutMs ? { statement_timeout: opts.statementTimeoutMs } : {}),
+    // İşlem açık kalıp bekleyen bağlantılar (istemci çökmesi vb.) havuzu tüketmesin.
+    idle_in_transaction_session_timeout: 120_000,
+  });
+  // Veritabanı yeniden başlarsa boştaki bağlantılar 'error' olayı verir; dinleyici yoksa süreç çöker.
+  pool.on('error', opts.onError ?? ((err) => console.error('Veritabanı bağlantı hatası:', err.message)));
   const db = drizzle(pool, { schema, casing: 'snake_case' });
   return { db, pool, close: () => pool.end() };
 }

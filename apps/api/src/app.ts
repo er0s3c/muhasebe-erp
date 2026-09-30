@@ -3,7 +3,9 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
-import Fastify, { type FastifyInstance } from 'fastify';
+import { randomUUID } from 'node:crypto';
+import { sql } from 'drizzle-orm';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { Config } from './config';
 import type { Db } from './db/client';
 import { errorHandler } from './http/errors';
@@ -31,28 +33,58 @@ export interface BuildAppOptions {
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
-  const app = Fastify({
-    logger: opts.logger ?? opts.config.NODE_ENV !== 'test',
-    trustProxy: true,
+  const { config } = opts;
+  const logging = opts.logger ?? config.NODE_ENV !== 'test';
+  const serverOptions: FastifyServerOptions = {
+    logger: logging
+      ? {
+          level: config.LOG_LEVEL,
+          // Fastify istek başlıklarını varsayılan olarak yazmaz; olası bir serileştirici değişikliğine karşı güvence.
+          redact: { paths: ['req.headers.authorization', 'req.headers.cookie'], censor: '[gizli]' },
+        }
+      : false,
+    // Fastify çalışma zamanında atlama sayısını (number) destekler; tip tanımı eksiktir.
+    trustProxy: config.TRUST_PROXY as FastifyServerOptions['trustProxy'],
     bodyLimit: 1024 * 1024,
-  });
+    // Dışa aktarma gibi uzun işler için geniş, ama sonsuz olmayan sınırlar; vekilin boşta bekleme süresinden (60 sn) uzun.
+    requestTimeout: 120_000,
+    keepAliveTimeout: 65_000,
+    genReqId: (req) => {
+      const incoming = req.headers['x-request-id'];
+      return typeof incoming === 'string' && /^[\w.-]{1,64}$/.test(incoming) ? incoming : randomUUID();
+    },
+  };
+  const app = Fastify(serverOptions);
 
   app.decorate('db', opts.db);
-  app.decorate('config', opts.config);
+  app.decorate('config', config);
   app.decorate('rateFetcher', opts.rateFetcher ?? fetchKktcmbXml);
 
-  await app.register(helmet);
-  await app.register(cors, {
-    origin: opts.config.CORS_ORIGIN.split(','),
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Id'],
-    // Dosya indirmede tarayıcı betiğinin dosya adını okuyabilmesi için
-    exposedHeaders: ['Content-Disposition'],
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  app.addHook('onRequest', async (req, reply) => {
+    void reply.header('x-request-id', req.id);
   });
+
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      useDefaults: true,
+      // Düz http (Secure çerez kapalı) kurulumlarda varlık isteklerini https'ye yükseltmeye çalışıp kırmasın.
+      directives: config.COOKIE_SECURE ? {} : { 'upgrade-insecure-requests': null },
+    },
+  });
+  if (config.CORS_ORIGIN.length > 0) {
+    await app.register(cors, {
+      origin: config.CORS_ORIGIN,
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Id'],
+      // Dosya indirmede tarayıcı betiğinin dosya adını okuyabilmesi için
+      exposedHeaders: ['Content-Disposition'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      maxAge: 600,
+    });
+  }
   await app.register(cookie);
-  await app.register(jwt, { secret: opts.config.JWT_SECRET });
-  if (opts.config.RATE_LIMIT_ENABLED) {
+  await app.register(jwt, { secret: config.JWT_SECRET });
+  if (config.RATE_LIMIT_ENABLED) {
     await app.register(rateLimit, { global: false });
   }
 
@@ -61,7 +93,24 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     void reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Uç nokta bulunamadı' } });
   });
 
+  /** Canlılık: süreç ayakta mı (veritabanına dokunmaz). */
   app.get('/api/health', async () => ({ status: 'ok' }));
+  /** Hazırlık: veritabanı bağlantısı çalışıyor mu (orkestratör/HEALTHCHECK bunu yoklar). */
+  app.get('/api/health/ready', async (req, reply) => {
+    try {
+      await app.db.execute(sql`select 1`);
+      return { status: 'ok' };
+    } catch (err) {
+      req.log.error({ err }, 'hazırlık denetimi başarısız');
+      return reply.code(503).send({ status: 'unavailable' });
+    }
+  });
+  /** Oturum açmadan önce arayüzün ihtiyaç duyduğu, gizli olmayan ayarlar. */
+  app.get('/api/public-config', async () => ({
+    registrationEnabled: config.REGISTRATION_ENABLED,
+    mailEnabled: false,
+    version: config.APP_VERSION,
+  }));
 
   await app.register(authRoutes);
   await app.register(tenancyRoutes);

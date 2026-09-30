@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { errorMessage, fieldErrors } from '../../lib/errors';
+import { usePublicConfig } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { AuthLayout } from './AuthLayout';
 
@@ -18,6 +19,7 @@ export function RegisterPage() {
   const { t } = useTranslation();
   const { register: signUp } = useSession();
   const navigate = useNavigate();
+  const publicConfig = usePublicConfig();
   const [error, setError] = useState<string | null>(null);
   const {
     register,
@@ -39,6 +41,22 @@ export function RegisterPage() {
       setError(errorMessage(e));
     }
   });
+
+  if (publicConfig.data?.registrationEnabled === false) {
+    return (
+      <AuthLayout
+        title={t('auth.registrationClosedTitle')}
+        subtitle={t('auth.registrationClosedSubtitle')}
+        footer={
+          <Link to="/login" className="link">
+            {t('auth.login')}
+          </Link>
+        }
+      >
+        <Callout tone="info">{t('auth.registrationClosedHint')}</Callout>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout

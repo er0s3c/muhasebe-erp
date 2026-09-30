@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { errorMessage } from '../../lib/errors';
+import { usePublicConfig } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { AuthLayout } from './AuthLayout';
 
@@ -19,6 +20,7 @@ export function LoginPage() {
   const { login } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
+  const publicConfig = usePublicConfig();
   const [error, setError] = useState<string | null>(null);
   const {
     register,
@@ -41,12 +43,14 @@ export function LoginPage() {
       title={t('auth.loginTitle')}
       subtitle={t('auth.loginSubtitle')}
       footer={
-        <>
-          {t('auth.noAccount')}{' '}
-          <Link to="/register" className="link">
-            {t('auth.register')}
-          </Link>
-        </>
+        publicConfig.data?.registrationEnabled === false ? undefined : (
+          <>
+            {t('auth.noAccount')}{' '}
+            <Link to="/register" className="link">
+              {t('auth.register')}
+            </Link>
+          </>
+        )
       }
     >
       <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>

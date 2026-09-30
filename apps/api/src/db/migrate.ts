@@ -1,23 +1,27 @@
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { fileURLToPath } from 'node:url';
-import { loadConfig } from '../config';
 import { createDb } from './client';
 
-export const migrationsFolder = fileURLToPath(new URL('../../drizzle', import.meta.url));
+/** Paketlenmiş çalışma zamanında `MIGRATIONS_DIR` ile gösterilir (dist/drizzle); aksi halde kaynak ağacındaki klasör. */
+export function migrationsFolder(): string {
+  return process.env.MIGRATIONS_DIR ?? fileURLToPath(new URL('../../drizzle', import.meta.url));
+}
 
+/**
+ * Migration'ları sahip rolüyle uygular. Uygulama rolü (`erp_app`) yoksa migration'lardaki GRANT blokları
+ * sessizce atlanır ve uygulama çalışma zamanında "permission denied" verir; bu yüzden önce rol aranır.
+ */
 export async function runMigrations(connectionString: string): Promise<void> {
-  const handle = createDb(connectionString);
+  const handle = createDb(connectionString, { max: 1 });
   try {
-    await migrate(handle.db, { migrationsFolder });
+    const roles = await handle.pool.query("select 1 from pg_roles where rolname = 'erp_app'");
+    if (roles.rowCount === 0) {
+      throw new Error(
+        "'erp_app' rolü yok. Önce roller ve veritabanı oluşturulmalı (infra/postgres/init.sql ya da init-prod.sh).",
+      );
+    }
+    await migrate(handle.db, { migrationsFolder: migrationsFolder() });
   } finally {
     await handle.close();
   }
-}
-
-// Doğrudan çalıştırıldığında (npm run db:migrate)
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const config = loadConfig();
-  const url = config.MIGRATION_DATABASE_URL ?? config.DATABASE_URL;
-  await runMigrations(url);
-  console.log('Migration tamamlandı.');
 }

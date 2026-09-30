@@ -38,6 +38,21 @@ export function useCMutation<TData, TVars>(
   });
 }
 
+export interface PublicConfig {
+  registrationEnabled: boolean;
+  mailEnabled: boolean;
+  version: string;
+}
+
+/** Oturum açmadan önce gereken, gizli olmayan sunucu ayarları (kayıt açık mı vb.). */
+export function usePublicConfig() {
+  return useQuery<PublicConfig>({
+    queryKey: ['public-config'],
+    queryFn: () => api<PublicConfig>('/api/public-config'),
+    staleTime: 5 * 60_000,
+  });
+}
+
 export interface NavigationData {
   company: { id: string; name: string; sector: string; baseCurrency: string; reportingCurrency: string | null; allowNegativeStock: boolean };
   role: string;
