@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-/** Fastify `trustProxy` değeri (bkz. apps/api/src/config.ts): varsayılan false; Caddy arkasında 1. */
+/**
+ * Fastify `trustProxy` değeri (bkz. apps/api/src/config.ts): varsayılan false; vekil (Caddy/cloudflared) arkasında vekilin adresini
+ * kapsayan liste (`loopback,uniquelocal`). Sayısal atlama değeri (`1`) `loadConfig` tarafından reddedilir: Fastify ≥ 5.12 onu
+ * hiçbir adrese güvenmeyen bir işleve çevirir (tüm istekler vekil adresinden görünür, oran sınırı tek kovaya düşer).
+ */
 export function parseTrustProxy(value: string): boolean | number | string[] {
   const v = value.trim();
   if (v === '' || v === 'false') return false;
@@ -58,6 +62,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = envSchema.safeParse(present);
   if (!parsed.success) throw new Error(`Geçersiz ortam değişkenleri:\n${z.prettifyError(parsed.error)}`);
   const c = parsed.data;
+  if (typeof c.TRUST_PROXY === 'number') {
+    throw new Error(
+      "Sayısal TRUST_PROXY (atlama sayısı) Fastify 5'te yok sayılır; vekilin adresini kapsayan bir liste verin (ör. loopback,uniquelocal) ya da vekil yoksa false",
+    );
+  }
+  if (c.NODE_ENV === 'production') {
+    // WebAuthn (giriş anahtarları) köken ve alan adına bağlanır; istekteki Host başlığına güvenilmez.
+    if (!c.LICENSE_ADMIN_ORIGIN) throw new Error('Üretimde LICENSE_ADMIN_ORIGIN (panelin https kökeni, ör. https://lisans.ornek.com) gerekli: giriş anahtarları bu köke bağlanır');
+    if (!c.LICENSE_ADMIN_ORIGIN.startsWith('https://')) throw new Error('Üretimde LICENSE_ADMIN_ORIGIN https olmalı (WebAuthn güvenli bağlam ister)');
+  }
   if (c.NODE_ENV === 'production' && !c.LICENSE_SIGNING_KEY_FILE) {
     throw new Error('Üretimde LICENSE_SIGNING_KEY_FILE ve LICENSE_SIGNING_KEY_PASSPHRASE gerekli');
   }

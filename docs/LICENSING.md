@@ -115,7 +115,12 @@ docker compose -f deploy/license/docker-compose.yml -f deploy/license/docker-com
 ```
 
 > `TRUST_PROXY` sayısal atlama değeri (`1`) almaz: Fastify ≥ 5.12 sayıyı güvenlik gereği yok sayar ve tüm istekler vekilin adresinden gelmiş görünür
-> (oran sınırı tek kovaya düşer). Lisans sunucusu `loopback,uniquelocal` kullanır (yalnızca iç ağdaki Caddy'ye güvenir).
+> (oran sınırı tek kovaya düşer). Lisans sunucusu `loopback,uniquelocal` kullanır (yalnızca iç ağdaki Caddy'ye güvenir); **sayısal değerle açılmayı reddeder**.
+> Üretimde **`LICENSE_ADMIN_ORIGIN` zorunludur** (https) ve compose `https://${LICENSE_DOMAIN}` verir: giriş anahtarlarının bağlandığı köken istekteki `Host`
+> başlığından türetilmez.
+>
+> Tünel varyantı için gereken Compose sürümü ≥ 2.24'tür (`!reset`/`!override`). `cloudflare/cloudflared` imajını ilk kurulumdan sonra belirli bir sürüm
+> etiketine sabitlemeniz önerilir (`latest` her `pull`'da değişir).
 
 ### 4.4 Yönetici hesabı (panel: parola + zorunlu TOTP ya da giriş anahtarı)
 
@@ -135,6 +140,10 @@ docker compose -f deploy/license/docker-compose.yml [-f deploy/license/docker-co
 Kurulum kodu `LICENSE_DATA_KEY`'den türetilir (yalnızca sunucuya erişen görebilir); ilk yönetici oluşunca kurulum kapanır, kod geçersizleşir. Panel internete
 açıkken hesabı ilk gelenin kapmasını bu kod önler (IP başına 10 hatalı denemede kilitlenir). Giriş anahtarları `LICENSE_ADMIN_ORIGIN` kökenine
 (compose: `https://${LICENSE_DOMAIN}`) bağlıdır: alan adı değişirse yeniden eklenmeleri gerekir.
+
+Bilinen sınırlar: giriş anahtarı **eklemek yeniden doğrulama istemez** (çalınmış bir oturum kalıcı bir anahtar ekleyebilir; oturum `httpOnly` + `SameSite=Strict` ve 8 saatlik,
+ama hesap ele geçirildiğinde `admin:reset` tüm giriş anahtarlarını da siler); giriş anahtarı meydan okumaları bellekte tutulur (tek örnek varsayımı);
+kurulum sihirbazının tarayıcı senaryosu depoda otomatik sınanmaz (sunucu tarafı kurulum ve WebAuthn akışları `test/setup-passkey.test.ts` ile sınanır).
 
 Ek yönetici (komut satırından):
 
