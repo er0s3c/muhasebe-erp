@@ -12,12 +12,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  DATABASE_URL: postgres://erp_app:erp_app@localhost:5432/erp_dev
-  MIGRATION_DATABASE_URL: postgres://erp:erp@localhost:5432/erp_dev
-  JWT_SECRET: ci-only-secret-ci-only-secret-32chars
-  CORS_ORIGIN: http://localhost:5173
-
 jobs:
   check:
     name: Denetim ve testler
@@ -34,6 +28,11 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+    env:
+      DATABASE_URL: postgres://erp_app:erp_app@localhost:5432/erp_dev
+      MIGRATION_DATABASE_URL: postgres://erp:erp@localhost:5432/erp_dev
+      JWT_SECRET: ci-only-secret-ci-only-secret-32chars
+      CORS_ORIGIN: http://localhost:5173
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -79,6 +78,11 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+    env:
+      DATABASE_URL: postgres://erp_app:erp_app@localhost:5432/erp_dev
+      MIGRATION_DATABASE_URL: postgres://erp:erp@localhost:5432/erp_dev
+      JWT_SECRET: ci-only-secret-ci-only-secret-32chars
+      CORS_ORIGIN: http://localhost:5173
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -115,6 +119,7 @@ jobs:
   docker:
     name: Docker imajı ve compose duman testi
     runs-on: ubuntu-latest
+    # Not: compose değişken önceliği kabuk ortamı > --env-file'dır; bu işe iş düzeyi JWT_SECRET/DATABASE_URL verilmez.
     steps:
       - uses: actions/checkout@v4
 
