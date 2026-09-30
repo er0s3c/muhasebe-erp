@@ -4,7 +4,7 @@ import type { RouteOptions } from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { PERMISSIONS } from '@erp/shared';
 import { buildApp } from '../src/app';
-import { loadConfig } from '../src/config';
+import { loadConfig, parseTrustProxy } from '../src/config';
 import { createDb } from '../src/db/client';
 import { GUARD, type GuardMeta } from '../src/http/context';
 import {
@@ -194,6 +194,32 @@ describe('oran sınırları', () => {
     }
     expect(codes.slice(0, 10).every((c) => c === 401)).toBe(true);
     expect(codes.slice(10).every((c) => c === 429)).toBe(true);
+  });
+
+  // Vekil arkasında (Caddy/cloudflared) istemci adresi X-Forwarded-For'dan okunmalı; yoksa tüm kullanıcılar tek kovaya düşer.
+  // Her istek başka e-posta kullanır: yalnızca IP başına sınır (10/dk) ölçülür, e-posta+IP sınırı (5 başarısız) devreye girmez.
+  let seq = 0;
+  const loginAs = (app: Awaited<ReturnType<typeof makeApp>>['app'], ip: string) =>
+    app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { 'x-forwarded-for': ip },
+      payload: { email: `kimse-${++seq}@example.com`, password: 'yanlis-sifre-123' },
+    });
+
+  it('vekil listesi (loopback,uniquelocal) verildiğinde X-Forwarded-For istemci adresini belirler: istemciler ayrı kovalara düşer', async () => {
+    const { app } = await makeApp({ configOverrides: { RATE_LIMIT_ENABLED: true, TRUST_PROXY: parseTrustProxy('loopback,uniquelocal') } });
+    for (let i = 0; i < 10; i++) expect((await loginAs(app, '203.0.113.10')).statusCode).toBe(401);
+    expect((await loginAs(app, '203.0.113.10')).statusCode).toBe(429);
+    // Başka bir istemci (başka IP) etkilenmez
+    expect((await loginAs(app, '203.0.113.11')).statusCode).toBe(401);
+  });
+
+  it('sayısal atlama değeri Fastify 5.12\'de etkisizdir (tüm istemciler vekil adresi altında tek kovaya düşer); bu yüzden loadConfig sayıyı reddeder', async () => {
+    // configOverrides doğrulamayı atlar: yalnızca Fastify'ın davranışını sabitler (bağımlılık değişirse bu test uyarır).
+    const { app } = await makeApp({ configOverrides: { RATE_LIMIT_ENABLED: true, TRUST_PROXY: 1 } });
+    for (let i = 0; i < 10; i++) expect((await loginAs(app, '203.0.113.20')).statusCode).toBe(401);
+    expect((await loginAs(app, '203.0.113.21')).statusCode).toBe(429);
   });
 
   it('aynı e-posta+IP için 5 başarısız denemeden sonra doğru şifre bile 429 alır; başka IP etkilenmez', async () => {

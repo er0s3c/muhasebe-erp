@@ -86,7 +86,7 @@ services:
     environment:
       DATABASE_URL: postgres://erp_app:${ERP_APP_PASSWORD}@db:5432/${ERP_DB_NAME:-erp_demo}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET gerekli (openssl rand -base64 48)}
-      TRUST_PROXY: ${TRUST_PROXY:-1}
+      TRUST_PROXY: ${TRUST_PROXY:-loopback,uniquelocal}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       # Demoda yabancıların yeni kiracı açmasına izin verilmez
       REGISTRATION_ENABLED: 'false'

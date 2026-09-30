@@ -47,12 +47,14 @@ describe('yapılandırma', () => {
     expect(loadConfig({ ...base, NODE_ENV: 'development', COOKIE_SECURE: 'true' }).COOKIE_SECURE).toBe(true);
   });
 
-  it('TRUST_PROXY ayrıştırılır ve varsayılan false', () => {
+  it('TRUST_PROXY ayrıştırılır ve varsayılan false; sayısal atlama değeri reddedilir (Fastify 5.12 onu yok sayar)', () => {
     expect(loadConfig(base).TRUST_PROXY).toBe(false);
     expect(parseTrustProxy('true')).toBe(true);
     expect(parseTrustProxy('false')).toBe(false);
-    expect(parseTrustProxy('1')).toBe(1);
+    expect(parseTrustProxy('loopback, uniquelocal')).toEqual(['loopback', 'uniquelocal']);
     expect(parseTrustProxy('10.0.0.0/8, 172.16.0.0/12')).toEqual(['10.0.0.0/8', '172.16.0.0/12']);
+    expect(loadConfig({ ...base, TRUST_PROXY: 'loopback,uniquelocal' }).TRUST_PROXY).toEqual(['loopback', 'uniquelocal']);
+    expect(() => loadConfig({ ...base, TRUST_PROXY: '1' })).toThrow(/Sayısal TRUST_PROXY/);
   });
 
   it('yeni kayıt varsayılan açık; DB_POOL_MAX ve zaman aşımları sayı olur', () => {

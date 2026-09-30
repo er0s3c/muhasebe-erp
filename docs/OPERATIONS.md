@@ -52,7 +52,7 @@ Caddy sertifikayı (Let's Encrypt) kendisi alır ve yeniler; `Caddyfile` arka uc
 Önemli kurallar:
 
 - **Kök yol ve aynı köken:** arayüz ve API aynı alan adında, **kök yolda** (`/`) sunulmalıdır. Alt yol (`/erp/`) desteklenmez (oturum çerezi yolu `/api/auth`, arayüz `/` tabanlıdır).
-- **`TRUST_PROXY=1`** (varsayılan) yalnızca **tam bir ters vekil** (Caddy, nginx) arkasında doğrudur; uygulama doğrudan internete açıksa `TRUST_PROXY=false` verin, aksi halde `X-Forwarded-For` başlığı sahte IP üretebilir (oran sınırı ve denetim kaydı IP'ye dayanır).
+- **`TRUST_PROXY=loopback,uniquelocal`** (compose varsayılanı) yalnızca **tam bir ters vekil** (Caddy, nginx, cloudflared) arkasında doğrudur: vekilin adresi bu aralıklardadır, gerçek istemci adresi `X-Forwarded-For`'dan okunur. Uygulama **vekilsiz** çalışıyorsa (doğrudan internete ya da LAN'a açık, ör. `APP_BIND=0.0.0.0` ile düz http) `TRUST_PROXY=false` verin; aksi halde `uniquelocal` yerel ağ istemcilerinin `X-Forwarded-For` başlığıyla sahte IP üretmesine izin verir (oran sınırı ve denetim kaydı IP'ye dayanır). **Sayısal atlama değeri (`1`) kabul edilmez**: Fastify ≥ 5.12 onu yok sayar, tüm istekler vekilin adresinden gelmiş görünür ve oran sınırı tek kovaya düşer; uygulama bu değerle açılmayı reddeder.
 - **Düz http (TLS'siz LAN) kurulumu:** `COOKIE_SECURE=false` ve istenirse `APP_BIND=0.0.0.0` verin; aksi halde tarayıcı yenileme çerezini atar ve oturum kendiliğinden düşer. İnternete açık kurulumda TLS şarttır.
 - Veritabanı portu **yayınlanmaz**; yalnızca uygulama kabı ağ içinden bağlanır.
 
@@ -67,7 +67,7 @@ Geçersiz/eksik değerde uygulama başlamaz ve nedenini yazar. Boş değer "tan�
 | `JWT_SECRET` | — (zorunlu) | ≥ 32 karakter. Üretimde `example`, `change-me`, `secret-secret`, `password` gibi örnek kalıplar **reddedilir** |
 | `NODE_ENV` | `development` | İmajda `production` |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | |
-| `TRUST_PROXY` | `false` (compose: `1`) | `false`, `true`, atlama sayısı (`1`) ya da CIDR listesi |
+| `TRUST_PROXY` | `false` (compose: `loopback,uniquelocal`) | `false`, `true` ya da vekil adresi listesi (CIDR ya da `loopback`, `linklocal`, `uniquelocal`). Sayı (`1`) **reddedilir** |
 | `COOKIE_SECURE` | production'da `true` | Yenileme çerezi `Secure`; düz http'de `false` |
 | `REGISTRATION_ENABLED` | `true` | `false`: `POST /api/auth/register` → 403 (özel kurulumda ilk kayıttan sonra kapatın) |
 | `CORS_ORIGIN` | üretimde boş | Aynı kökende gerekmez; yalnızca ayrı kökenli arayüz için |

@@ -51,8 +51,8 @@ services:
       # Uygulama kabı yalnızca RLS'e tabi çalışma zamanı rolünü bilir (sahip parolası yok)
       DATABASE_URL: postgres://erp_app:${ERP_APP_PASSWORD}@db:5432/${ERP_DB_NAME:-erp}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET gerekli (openssl rand -base64 48)}
-      # Ters vekil (Caddy/nginx) arkasında 1; vekil yoksa false
-      TRUST_PROXY: ${TRUST_PROXY:-1}
+      # Ters vekil (Caddy/nginx) arkasında loopback,uniquelocal (vekilin adresini kapsayan liste; sayı KABUL EDİLMEZ); vekil yoksa false
+      TRUST_PROXY: ${TRUST_PROXY:-loopback,uniquelocal}
       # Düz http (TLS'siz LAN) kurulumunda false verin; aksi halde tarayıcı yenileme çerezini atar
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}

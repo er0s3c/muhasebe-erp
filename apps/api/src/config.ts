@@ -7,9 +7,15 @@ const flag = (fallback: boolean) =>
     .transform((v) => v === 'true');
 
 /**
- * Fastify `trustProxy` değeri: `false` | `true` | atlama sayısı (`1`) | IP/CIDR listesi (`10.0.0.0/8,172.16.0.0/12`).
+ * Fastify `trustProxy` değeri: `false` | `true` | IP/CIDR listesi (`10.0.0.0/8,172.16.0.0/12`) ya da `proxy-addr` anahtar
+ * sözcükleri (`loopback`, `linklocal`, `uniquelocal`).
  * Varsayılan `false`: uygulama doğrudan internete açıkken `X-Forwarded-For` başlığı sahte IP üretemesin
- * (IP; oran sınırını ve denetim kaydını besler). Ters vekilin (Caddy, nginx) arkasında `1` verin.
+ * (IP; oran sınırını ve denetim kaydını besler). Ters vekilin (Caddy, nginx, cloudflared) arkasında vekilin adresini
+ * kapsayan bir liste verin; Docker Compose kurulumunda `loopback,uniquelocal`.
+ *
+ * Atlama SAYISI (`1`) kabul edilmez: Fastify ≥ 5.12 sayısal değeri güvenlik gereği hiçbir adrese güvenmeyen bir işleve çevirir
+ * (`fastify/lib/request.js`, getTrustProxyFn), yani `X-Forwarded-For` tamamen yok sayılır ve tüm istekler vekilin adresinden
+ * gelmiş görünür (oran sınırı tek kovaya düşer, denetim kaydına yanlış IP yazılır). `loadConfig` bunu açık bir hatayla reddeder.
  */
 export function parseTrustProxy(value: string): boolean | number | string[] {
   const v = value.trim();
@@ -88,6 +94,14 @@ const envSchema = z
     APP_VERSION: z.string().default('dev'),
   })
   .superRefine((env, ctx) => {
+    if (typeof env.TRUST_PROXY === 'number') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TRUST_PROXY'],
+        message:
+          'Sayısal TRUST_PROXY (atlama sayısı) Fastify 5\'te yok sayılır; vekilin adresini kapsayan bir liste verin (Docker Compose için: loopback,uniquelocal) ya da vekil yoksa false',
+      });
+    }
     if (env.SMTP_URL && !env.MAIL_FROM) {
       ctx.addIssue({ code: 'custom', path: ['MAIL_FROM'], message: 'SMTP_URL verildiğinde MAIL_FROM (gönderen adresi) gerekli' });
     }
