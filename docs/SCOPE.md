@@ -118,7 +118,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | **İnşaat:** yabancılara satış sınırları ve yasal süre takibi (89/2026 YGK ve sonrası) | ⏳ Faz C ⚠️ |
 | **İnşaat:** altyapı fonları ve harçlar (elektrik/su/belediye): tarihli, doğrulama alanlı tarifeler; alıcıdan tahsil edilen fon (satış sözleşmesine ek satır, 329 yükümlülük, fesihte iade); projenin ödediği fon tahmini | ✅ (B4) ⚠️ tutar/oranlar, 329 hesabı ve fonların vergi/hukuki niteliği doğrulanmadı |
 | **İK:** personel kartı, şifreli hassas alanlar (maskeli gösterim, gerekçeli açma, erişim günlüğü), kişisel veri envanteri/talepler/dışa aktarma | ✅ (D1) ⚠️ envanterdeki dayanak ve saklama süreleri doğrulanmadı |
-| **İnşaat:** puantaj, bordro, SGK çıktıları, yabancı işçi belge/teminat takibi | ⏳ Faz D (D2–D5) ⚠️ |
+| **İK:** puantaj: günlük devam/izin/mesai (gün türü + normal/fazla mesai saati), proje + iş kalemi + maliyet kodu etiketi, aylık çizelge ve günlük giriş, aylık kapanış (kapalı ay kilitli, gerekçeyle açılır), aylık özet, proje/iş kalemi başına işçilik saatleri | ✅ (D2) ⚠️ yasal çalışma süresi, fazla mesai, izin hakları ve resmî tatil takvimi **kodda yok / doğrulanmadı** (kullanıcı girer) |
+| **İnşaat:** bordro, SGK çıktıları, yabancı işçi belge/teminat takibi | ⏳ Faz D (D3–D5) ⚠️ |
 | **İnşaat:** müteahhitlik sınıf karnesi ve kapasite kontrolü | ⏳ Faz C ⚠️ |
 | **Market:** hızlı satış (POS), barkod, gün sonu | ⏳ Faz E |
 | **Market:** terazi entegrasyonu, reyon/raf envanteri | ⏳ Faz E |

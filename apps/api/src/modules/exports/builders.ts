@@ -17,6 +17,7 @@ import { getContract, listContracts, listInstallments } from '../realestate/cont
 import { listUnits } from '../realestate/units';
 import { listProgress } from '../subcontracts/progress';
 import { listSubcontracts } from '../subcontracts/service';
+import { laborByProject, monthlySummary } from '../hr/attendance';
 import { listEmployees } from '../hr/employees';
 import { getVariation, listVariations } from '../subcontracts/variations';
 import { fxDifferences } from '../treasury/fx-report';
@@ -926,6 +927,87 @@ export async function employeesTable(ctx: BuildCtx, q: { status?: string }): Pro
         email: x.email,
         id: x.idMasked,
       })),
+    },
+  ];
+}
+
+// --- Puantaj (D2) --------------------------------------------------------------------------------------
+
+const MONTH_NAMES_TR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+export const monthLabelTR = (month: string) => `${MONTH_NAMES_TR[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
+
+/** Aylık puantaj özeti: personel başına gün türüne göre gün ve toplam saat (saatler `qty` biçimli, 2 ondalık). */
+export async function attendanceSummaryTable(ctx: BuildCtx, q: { month: string }): Promise<ReportTable[]> {
+  const d = await monthlySummary(ctx.tx, q.month);
+  return [
+    {
+      key: 'puantaj-ozeti',
+      title: `Puantaj özeti — ${monthLabelTR(q.month)}`,
+      sheet: 'Puantaj özeti',
+      subtitle: sub(ctx, d.lock.closed ? 'Ay kapalı' : 'Ay açık (kapanmadı)', 'kişisel veri: personel kayıtları'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('dept', 'Departman', 'text', 16),
+        col('worked', 'Çalıştı (gün)', 'int'),
+        col('absent', 'Devamsız (gün)', 'int'),
+        col('annual', 'Yıllık izin (gün)', 'int'),
+        col('sick', 'Hastalık izni (gün)', 'int'),
+        col('unpaid', 'Ücretsiz izin (gün)', 'int'),
+        col('holiday', 'Resmî tatil (gün)', 'int'),
+        col('rest', 'Hafta tatili (gün)', 'int'),
+        col('missing', 'Kaydı olmayan (gün)', 'int'),
+        col('normal', 'Normal saat', 'qty'),
+        col('overtime', 'Fazla mesai saati', 'qty'),
+      ],
+      rows: d.rows.map((r) => ({
+        code: r.code,
+        name: r.fullName,
+        dept: r.department,
+        worked: r.days.worked,
+        absent: r.days.absent,
+        annual: r.days.annual_leave,
+        sick: r.days.sick_leave,
+        unpaid: r.days.unpaid_leave,
+        holiday: r.days.public_holiday,
+        rest: r.days.weekly_rest,
+        missing: r.missingDays,
+        normal: r.normalHours,
+        overtime: r.overtimeHours,
+      })),
+      totals: { normal: d.totals.normalHours, overtime: d.totals.overtimeHours, missing: d.totals.missingDays },
+    },
+  ];
+}
+
+/** İşçilik saatleri: proje / iş kalemi / maliyet koduna göre (yalnızca saatli günler). */
+export async function attendanceLaborTable(ctx: BuildCtx, q: { from: string; to: string; projectId?: string }): Promise<ReportTable[]> {
+  const d = await laborByProject(ctx.tx, q);
+  return [
+    {
+      key: 'iscilik-saatleri',
+      title: 'İşçilik saatleri',
+      sheet: 'İşçilik saatleri',
+      subtitle: sub(ctx, period(q.from, q.to), 'etiketsiz saatler ayrı satırdadır'),
+      columns: [
+        col('project', 'Proje', 'text', 26),
+        col('wbs', 'İş kalemi', 'text', 26),
+        col('costCode', 'Maliyet kodu', 'text', 20),
+        col('days', 'Kişi-gün', 'int'),
+        col('emps', 'Personel', 'int'),
+        col('normal', 'Normal saat', 'qty'),
+        col('overtime', 'Fazla mesai saati', 'qty'),
+      ],
+      rows: d.rows.map((r) => ({
+        project: r.projectCode ? `${r.projectCode} — ${r.projectName}` : 'Etiketsiz',
+        wbs: r.wbsCode ? `${r.wbsCode} — ${r.wbsName}` : null,
+        costCode: r.costCode ? `${r.costCode} — ${r.costCodeName}` : null,
+        days: r.personDays,
+        emps: r.employees,
+        normal: r.normalHours,
+        overtime: r.overtimeHours,
+      })),
+      totals: { days: d.totals.personDays, normal: d.totals.normalHours, overtime: d.totals.overtimeHours },
     },
   ];
 }

@@ -73,6 +73,11 @@ describe('demo aracı', () => {
       // Stok hareketleri var ve demo kullanıcıları doğrulanmış (arayüzde "e-postanızı doğrulayın" uyarısı çıkmaz)
       expect((await q(`select count(*)::int as n from stock_movements`)).n).toBeGreaterThan(10);
       expect((await q(`select count(*)::int as n from users where email like '%@ornek.local' and email_verified_at is null`)).n).toBe(0);
+      // Puantaj: kurgusal personel, geçen ayın kayıtları (işçilik etiketli) ve kapalı ay
+      expect((await q(`select count(*)::int as n from employees`)).n).toBe(4);
+      expect((await q(`select count(*)::int as n from attendance_entries`)).n).toBeGreaterThanOrEqual(4 * 28);
+      expect((await q(`select count(*)::int as n from attendance_entries where project_id is not null and wbs_id is not null and cost_code_id is not null`)).n).toBeGreaterThan(40);
+      expect((await q(`select count(*)::int as n from attendance_months where status = 'closed'`)).n).toBe(1);
     } finally {
       await c.end();
     }

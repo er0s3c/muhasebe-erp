@@ -28,3 +28,4 @@ export * from './schemas/procurement';
 export * from './schemas/realestate';
 export * from './schemas/cash-forecast';
 export * from './schemas/hr';
+export * from './schemas/attendance';

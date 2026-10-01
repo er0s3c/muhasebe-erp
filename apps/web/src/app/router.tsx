@@ -123,6 +123,7 @@ export const router = createBrowserRouter([
                 children: [
                   { path: 'hr/employees', ...page(() => import('../features/hr/EmployeesPage'), 'EmployeesPage') },
                   { path: 'hr/employees/:id', ...page(() => import('../features/hr/EmployeePage'), 'EmployeePage') },
+                  { path: 'hr/attendance', ...page(() => import('../features/hr/AttendancePage'), 'AttendancePage') },
                   { path: 'hr/privacy', ...page(() => import('../features/hr/PrivacyPage'), 'PrivacyPage') },
                 ],
               },

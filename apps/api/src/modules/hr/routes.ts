@@ -1,6 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
+  attendanceLaborQuerySchema,
+  attendanceMonthQuerySchema,
+  closeAttendanceMonthSchema,
   createDsrSchema,
   createEmployeeSchema,
   employeeListQuerySchema,
@@ -8,11 +11,13 @@ import {
   hasPermission,
   idParam,
   rehireEmployeeSchema,
+  reopenAttendanceMonthSchema,
   resolveDsrSchema,
   revealFieldSchema,
   terminateEmployeeSchema,
   updateEmployeeSchema,
   updateInventorySchema,
+  upsertAttendanceSchema,
   verifyInventorySchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
@@ -28,6 +33,7 @@ import {
   updateEmployee,
   type HrCtx,
 } from './employees';
+import { closeMonth, getMonthSheet, laborByProject, monthlySummary, reopenMonth, saveAttendance } from './attendance';
 import { createRequest, listAccessLog, listInventory, listRequests, resolveRequest, updateInventory, verifyInventory } from './privacy';
 
 export const hrRoutes: FastifyPluginAsync = async (app) => {
@@ -63,6 +69,27 @@ export const hrRoutes: FastifyPluginAsync = async (app) => {
       return revealField(c.tx, hrCtx(c), idParam.parse(c.req.params).id, body.field, body.reason);
     }),
   );
+
+  // --- Puantaj (Faz D2) -----------------------------------------------------------------------------
+  app.get('/api/attendance/month', tenantRoute(app, read, async ({ tx, req }) => getMonthSheet(tx, attendanceMonthQuerySchema.parse(req.query).month)));
+  // Toplu kayıt: grid ve günlük giriş aynı ucu kullanır (eklenir/güncellenir + silinir; tek işlem)
+  app.put('/api/attendance/entries', tenantRoute(app, manage, async (c) => saveAttendance(c.tx, { companyId: c.company.id, userId: c.user.id }, upsertAttendanceSchema.parse(c.req.body))));
+  app.post(
+    '/api/attendance/months/close',
+    tenantRoute(app, manage, async (c) => {
+      const body = closeAttendanceMonthSchema.parse(c.req.body);
+      return { lock: await closeMonth(c.tx, { companyId: c.company.id, userId: c.user.id }, body.month, body.note) };
+    }),
+  );
+  app.post(
+    '/api/attendance/months/reopen',
+    tenantRoute(app, manage, async (c) => {
+      const body = reopenAttendanceMonthSchema.parse(c.req.body);
+      return { lock: await reopenMonth(c.tx, { companyId: c.company.id, userId: c.user.id }, body.month, body.reason) };
+    }),
+  );
+  app.get('/api/attendance/reports/summary', tenantRoute(app, read, async ({ tx, req }) => monthlySummary(tx, attendanceMonthQuerySchema.parse(req.query).month)));
+  app.get('/api/attendance/reports/labor', tenantRoute(app, read, async ({ tx, req }) => laborByProject(tx, attendanceLaborQuerySchema.parse(req.query))));
 
   // --- Veri koruma ----------------------------------------------------------------------------------
   app.get('/api/privacy/inventory', tenantRoute(app, privacy, async (c) => listInventory(c.tx, c.company.id)));

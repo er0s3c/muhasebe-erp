@@ -146,7 +146,7 @@ export function errorHandler(
     return;
   }
   if (pg?.code === 'ERP13') {
-    // İnsan kaynakları/kişisel veri kuralları (personel silinmez, erişim günlüğü değişmez, sonuçlanmış talep)
+    // İnsan kaynakları/kişisel veri/puantaj kuralları (personel silinmez, erişim günlüğü değişmez, sonuçlanmış talep, kapalı puantaj ayı, çalışma aralığı)
     void reply
       .status(422)
       .send({ error: { code: 'HR_RULE_VIOLATION', message: pg.message } });

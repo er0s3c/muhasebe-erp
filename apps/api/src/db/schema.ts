@@ -1034,6 +1034,87 @@ export const personalDataAccessLog = pgTable(
   ],
 );
 
+// --- Puantaj (Faz D2) --------------------------------------------------------------------------------
+
+/**
+ * Günlük puantaj: personel + tarih tekil. Gün türü bir sınıflandırmadır (yasal gün sayısı/çarpan yok; bordro D3'tedir).
+ * Saat yalnızca çalışılan gün ile tatil/hafta tatilinde çalışmada vardır. İşçilik maliyeti etiketi (proje, yaprak iş kalemi,
+ * maliyet kodu) isteğe bağlıdır ve yalnızca saatli günlerde olur. Kapalı ayda kayıt eklenemez/değişmez/silinemez (ERP13).
+ */
+export const attendanceEntries = pgTable(
+  'attendance_entries',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    workDate: date({ mode: 'string' }).notNull(),
+    /** worked | absent | annual_leave | sick_leave | unpaid_leave | public_holiday | weekly_rest */
+    dayType: text().notNull(),
+    normalHours: numeric({ precision: 5, scale: 2 }).notNull().default('0'),
+    overtimeHours: numeric({ precision: 5, scale: 2 }).notNull().default('0'),
+    projectId: uuid(),
+    wbsId: uuid(),
+    costCodeId: uuid(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('attendance_entries_emp_date_uq').on(t.employeeId, t.workDate),
+    foreignKey({ name: 'attendance_entries_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'attendance_entries_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    foreignKey({ name: 'attendance_entries_wbs_fk', columns: [t.wbsId, t.projectId], foreignColumns: [projectWbs.id, projectWbs.projectId] }),
+    foreignKey({ name: 'attendance_entries_cost_code_fk', columns: [t.costCodeId, t.companyId], foreignColumns: [costCodes.id, costCodes.companyId] }),
+    index('attendance_entries_date_idx').on(t.companyId, t.workDate),
+    index('attendance_entries_project_idx')
+      .on(t.companyId, t.projectId, t.workDate)
+      .where(sql`${t.projectId} is not null`),
+    check('attendance_entries_type_ck', sql`${t.dayType} in ('worked','absent','annual_leave','sick_leave','unpaid_leave','public_holiday','weekly_rest')`),
+    check('attendance_entries_hours_ck', sql`${t.normalHours} >= 0 and ${t.overtimeHours} >= 0 and ${t.normalHours} + ${t.overtimeHours} <= 24`),
+    check(
+      'attendance_entries_hours_type_ck',
+      sql`(${t.dayType} in ('worked','public_holiday','weekly_rest') or (${t.normalHours} = 0 and ${t.overtimeHours} = 0)) and (${t.dayType} <> 'worked' or ${t.normalHours} + ${t.overtimeHours} > 0)`,
+    ),
+    check('attendance_entries_tag_ck', sql`${t.projectId} is null or ${t.normalHours} + ${t.overtimeHours} > 0`),
+    check('attendance_entries_wbs_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
+    check('attendance_entries_cost_code_ck', sql`${t.costCodeId} is null or ${t.projectId} is not null`),
+  ],
+);
+
+/**
+ * Aylık puantaj kapanışı (şirket + ay). Satır "bu ay en az bir kez kapatıldı" demektir; geçerli durum `status`tur.
+ * Kapalı ay açılırken gerekçe zorunludur; her değişiklik ayrıca denetim izine yazılır. Satır silinmez.
+ */
+export const attendanceMonths = pgTable(
+  'attendance_months',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** YYYY-AA */
+    month: text().notNull(),
+    /** closed | open */
+    status: text().notNull().default('closed'),
+    closedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    closedBy: uuid().references(() => users.id),
+    closeNote: text(),
+    reopenedAt: timestamp({ withTimezone: true }),
+    reopenedBy: uuid().references(() => users.id),
+    reopenReason: text(),
+    /** Kaç kez yeniden açıldı (kapanış/açılış geçmişi denetim izindedir). */
+    reopenCount: integer().notNull().default(0),
+  },
+  (t) => [
+    unique('attendance_months_company_month_uq').on(t.companyId, t.month),
+    check('attendance_months_status_ck', sql`${t.status} in ('closed','open')`),
+    check('attendance_months_month_ck', sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
+  ],
+);
+
 export const journalEntries = pgTable(
   'journal_entries',
   {

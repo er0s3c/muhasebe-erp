@@ -83,10 +83,11 @@ export const MODULES: readonly ModuleDef[] = [
   {
     key: 'hr.core',
     labelKey: 'modules.hrCore',
-    label: 'Personel ve kişisel veri',
+    label: 'Personel, puantaj ve kişisel veri',
     sectors: 'all',
     status: 'available',
-    // Personel kartı, kişisel veri envanteri ve erişim günlüğü; muhasebe/stoktan bağımsızdır
+    // Personel kartı, puantaj (devam/izin/mesai), kişisel veri envanteri ve erişim günlüğü; muhasebe/stoktan bağımsızdır.
+    // Puantajdaki proje/iş kalemi etiketi isteğe bağlıdır ve proje modülü açıksa kullanılır (gereksinim değil).
     requires: [],
   },
   {
@@ -400,6 +401,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     labelKey: 'nav.employees',
     path: '/hr/employees',
     icon: 'users',
+    group: 'hr',
+    module: 'hr.core',
+    permission: 'hr.read',
+  },
+  {
+    key: 'attendance',
+    labelKey: 'nav.attendance',
+    path: '/hr/attendance',
+    icon: 'calendar-check',
     group: 'hr',
     module: 'hr.core',
     permission: 'hr.read',

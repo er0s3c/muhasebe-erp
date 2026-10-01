@@ -1,4 +1,5 @@
 /** API yanıt tipleri (sunucu Drizzle satırlarının JSON hâli). Tutarlar her zaman string. */
+import type { AttendanceDayType } from '@erp/shared';
 
 export interface Account {
   id: string;
@@ -1867,4 +1868,99 @@ export interface AccessLogRow {
   employeeCode: string;
   employeeName: string;
   by: string;
+}
+
+// --- Puantaj (Faz D2) ---
+
+export interface AttendanceEmployee {
+  id: string;
+  code: string;
+  fullName: string;
+  status: EmployeeStatus;
+  department: string | null;
+  jobTitle: string | null;
+  hireDate: string | null;
+  leaveDate: string | null;
+  projectId: string | null;
+}
+
+export interface AttendanceEntryRow {
+  id: string;
+  employeeId: string;
+  workDate: string;
+  dayType: AttendanceDayType;
+  normalHours: string;
+  overtimeHours: string;
+  projectId: string | null;
+  projectCode: string | null;
+  wbsId: string | null;
+  wbsCode: string | null;
+  costCodeId: string | null;
+  costCode: string | null;
+  note: string | null;
+}
+
+export interface AttendanceLock {
+  month: string;
+  closed: boolean;
+  closedAt: string | null;
+  closedBy: string | null;
+  closeNote: string | null;
+  reopenedAt: string | null;
+  reopenedBy: string | null;
+  reopenReason: string | null;
+  reopenCount: number;
+}
+
+export interface AttendanceSheetData {
+  month: string;
+  start: string;
+  end: string;
+  lock: AttendanceLock;
+  employees: AttendanceEmployee[];
+  entries: AttendanceEntryRow[];
+  missingHireDate: number;
+}
+
+export interface AttendanceSummaryRow {
+  employeeId: string;
+  code: string;
+  fullName: string;
+  department: string | null;
+  status: EmployeeStatus;
+  hireDate: string | null;
+  leaveDate: string | null;
+  days: Record<AttendanceDayType, number>;
+  entryDays: number;
+  missingDays: number;
+  normalHours: string;
+  overtimeHours: string;
+}
+
+export interface AttendanceSummary {
+  month: string;
+  lock: AttendanceLock;
+  rows: AttendanceSummaryRow[];
+  totals: { normalHours: string; overtimeHours: string; missingDays: number };
+}
+
+export interface AttendanceLaborRow {
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
+  costCode: string | null;
+  costCodeName: string | null;
+  personDays: number;
+  employees: number;
+  normalHours: string;
+  overtimeHours: string;
+}
+
+export interface AttendanceLabor {
+  from: string;
+  to: string;
+  rows: AttendanceLaborRow[];
+  totals: { personDays: number; normalHours: string; overtimeHours: string };
 }

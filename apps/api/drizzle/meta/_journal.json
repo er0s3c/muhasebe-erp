@@ -386,6 +386,20 @@
       "when": 1790885093177,
       "tag": "0054_hr_core_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1790889309091,
+      "tag": "0055_attendance",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1790889318630,
+      "tag": "0056_attendance_rules",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import type { Tx } from '../../db/client';
 import { employees, personalDataAccessLog, projects } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { nextNumber } from '../settings/numbering';
+import { employeeAttendanceRows } from './attendance';
 import { decryptField, encryptField, hashId, lastFour, maskTail } from './crypto';
 
 export interface HrCtx {
@@ -211,6 +212,7 @@ export async function exportEmployeeData(tx: Tx, ctx: HrCtx, id: string, reason:
       jobTitle: row.jobTitle,
       note: row.note,
     },
+    attendance: await employeeAttendanceRows(tx, id),
     accessLog: accessLog.rows,
     requests: requests.rows,
   };

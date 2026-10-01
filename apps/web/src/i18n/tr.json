@@ -96,7 +96,7 @@
     "treasury": "Kasa ve banka",
     "constructionProcurement": "Satın alma ve sipariş",
     "constructionRealestate": "Gayrimenkul satışı",
-    "hrCore": "Personel ve veri koruma"
+    "hrCore": "Personel, puantaj ve veri koruma"
   },
   "nav": {
     "groups": {
@@ -166,6 +166,7 @@
     "orderMatching": "Sipariş eşleştirme",
     "variationOrders": "Değişiklik emirleri",
     "employees": "Personel",
+    "attendance": "Puantaj",
     "privacy": "Veri koruma"
   },
   "shell": {
@@ -3526,6 +3527,117 @@
       "field": "Alan",
       "person": "Kişi",
       "reason": "Gerekçe"
+    }
+  },
+  "attendance": {
+    "title": "Puantaj",
+    "subtitle": "Günlük devam, izin ve mesai kaydı; çalışılan saatler proje ve iş kalemine etiketlenir. Ay kapanınca puantaj kilitlenir.",
+    "month": "Ay",
+    "prevMonth": "Önceki ay",
+    "nextMonth": "Sonraki ay",
+    "dayType": "Gün türü",
+    "normalHours": "Normal saat",
+    "overtimeHours": "Fazla mesai saati",
+    "hoursUnit": "s",
+    "costCode": "Maliyet kodu",
+    "noCostCode": "Maliyet kodu yok",
+    "note": "Not",
+    "saved": "Puantaj kaydedildi",
+    "missingHire": "{{count}} aktif personelin işe giriş tarihi girilmemiş; çizelgede görünmez ve puantaj yazılamaz.",
+    "missingHireLink": "Personel kartları",
+    "weekdays": ["Pz", "Pt", "Sa", "Ça", "Pe", "Cu", "Ct"],
+    "tabs": {
+      "grid": "Aylık çizelge",
+      "day": "Günlük giriş",
+      "summary": "Aylık özet",
+      "labor": "İşçilik saatleri"
+    },
+    "dayTypes": {
+      "worked": "Çalıştı",
+      "absent": "Devamsız",
+      "annual_leave": "Yıllık izin",
+      "sick_leave": "Hastalık izni",
+      "unpaid_leave": "Ücretsiz izin",
+      "public_holiday": "Resmî tatil",
+      "weekly_rest": "Hafta tatili"
+    },
+    "short": {
+      "worked": "Ç",
+      "absent": "D",
+      "annual_leave": "Yİ",
+      "sick_leave": "Hİ",
+      "unpaid_leave": "Üİ",
+      "public_holiday": "RT",
+      "weekly_rest": "HT"
+    },
+    "lock": {
+      "open": "Ay açık",
+      "closed": "Ay kapalı",
+      "close": "Ayı kapat",
+      "reopen": "Ayı yeniden aç",
+      "closeTitle": "{{month}} ayını kapat",
+      "closeDesc": "Kapanınca bu ayın puantajı eklenemez, değiştirilemez ve silinemez. Yeniden açmak gerekçe ister ve kayda geçer.",
+      "reopenTitle": "{{month}} ayını yeniden aç",
+      "reopenDesc": "Açılan ay yeniden düzenlenebilir. Gerekçe, kullanıcı ve zaman ayın kaydına ve denetim izine yazılır.",
+      "note": "Not (isteğe bağlı)",
+      "reason": "Gerekçe",
+      "closedToast": "Ay kapatıldı",
+      "reopenedToast": "Ay yeniden açıldı",
+      "closedTitle": "{{month}} ayı kapalı",
+      "closedBody": "Puantaj değiştirilemez; düzeltme için ayı yeniden açın.",
+      "closedBy": "Kapatan: {{by}}.",
+      "closeNote": "Not: {{note}}",
+      "reopenedInfo": "Bu ay {{count}} kez yeniden açıldı. Son gerekçe: {{reason}}",
+      "future": "Henüz başlamamış ay kapatılamaz"
+    },
+    "grid": {
+      "employee": "Personel",
+      "total": "Saat",
+      "brush": "Fırça",
+      "erase": "Sil (kaydı kaldır)",
+      "hint": "Fırçayı seçin, hücrelere tıklayarak boyayın. Gün başlığı o günü tüm personele, personel adındaki kova düğmesi satırı çalışma aralığına uygular. Değişiklikler Kaydet ile yazılır.",
+      "brushNeedHours": "Çalışılan gün için fırçaya saat girin (ör. normal saat); izin ve devamsızlık günlerinde saat girilmez.",
+      "brushInvalid": "Fırçadaki saatler geçersiz: çalışılan günde saat girin, izin ve devamsızlıkta saat girilmez, günlük toplam 24 saati aşamaz.",
+      "fillDay": "Günü doldur: {{day}}",
+      "fillRow": "Satırı doldur: {{name}}",
+      "blank": "boş",
+      "pending": "{{count}} değişiklik bekliyor",
+      "discard": "Vazgeç",
+      "empty": "Bu ay için personel yok",
+      "emptyDesc": "Çizelge, ay içinde işe giriş tarihi olan personeli gösterir. Personel kartına işe giriş tarihi girin."
+    },
+    "day": {
+      "date": "Tarih",
+      "prev": "Önceki gün",
+      "next": "Sonraki gün",
+      "none": "— Kayıt yok",
+      "tag": "Proje / iş kalemi",
+      "pending": "{{count}} satır değişti",
+      "invalid": "{{count}} satırda saatler geçersiz: çalışılan günde saat girin, izin ve devamsızlıkta saat girilmez, günlük toplam 24 saati aşamaz.",
+      "empty": "Bu gün çalışma aralığında personel yok",
+      "emptyDesc": "Personel, işe giriş ve çıkış tarihleri arasındaki günlerde listelenir."
+    },
+    "summary": {
+      "hint": "Personel başına gün türüne göre gün sayısı ve toplam saatler. Kaydı olmayan günler, çalışma aralığında henüz girilmemiş günlerdir.",
+      "missing": "Kaydı olmayan gün",
+      "missingWarn": "Çalışma aralığında kaydı olmayan toplam {{count}} gün var; ayı kapatmadan önce kontrol edin.",
+      "total": "Toplam",
+      "empty": "Bu ay için puantaj yok",
+      "emptyDesc": "Çizelgeden ya da günlük girişten kayıt ekleyin."
+    },
+    "labor": {
+      "hint": "Yalnızca saatli günler sayılır. Proje etiketi olmayan saatler \"Etiketsiz\" satırında toplanır; işçilik maliyeti bordro aşamasında (sonraki dilim) hesaplanır.",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "project": "Proje",
+      "allProjects": "Tüm projeler",
+      "wbs": "İş kalemi",
+      "personDays": "Kişi-gün",
+      "employees": "Personel",
+      "untagged": "Etiketsiz",
+      "invalidRange": "Başlangıç tarihi bitişten sonra olamaz.",
+      "empty": "Bu aralıkta işçilik saati yok",
+      "emptyDesc": "{{from}} – {{to}} arasında saatli puantaj kaydı bulunmuyor."
     }
   }
 }

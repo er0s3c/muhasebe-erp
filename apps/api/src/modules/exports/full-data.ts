@@ -12,6 +12,15 @@ export const FULL_DATA_SHEET_MAX_ROWS = 100_000;
 
 const STATUS_LABEL: Record<string, string> = { draft: 'Taslak', posted: 'Kaydedildi', cancelled: 'İptal' };
 const bool = (v: unknown) => (v ? 'Evet' : 'Hayır');
+const ATTENDANCE_DAY_LABEL: Record<string, string> = {
+  worked: 'Çalıştı',
+  absent: 'Devamsız',
+  annual_leave: 'Yıllık izin',
+  sick_leave: 'Hastalık izni',
+  unpaid_leave: 'Ücretsiz izin',
+  public_holiday: 'Resmî tatil',
+  weekly_rest: 'Hafta tatili',
+};
 
 /** İsteğe bağlı tarih aralığı koşulu. */
 function between(column: string, q: FullDataQuery): SQL {
@@ -400,6 +409,31 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
         [col('code', 'Kod', 'text', 10), col('name', 'Ad soyad', 'text', 28), col('nat', 'Uyruk', 'text', 14), col('kind', 'Kimlik türü', 'text', 12), col('id', 'Kimlik (maskeli)', 'text', 14), col('iban', 'IBAN (maskeli)', 'text', 14), col('phone', 'Telefon', 'text', 16), col('email', 'E-posta', 'text', 24), col('status', 'Durum', 'text', 10), col('dept', 'Departman', 'text', 16), col('title', 'Unvan', 'text', 16), col('hire', 'İşe giriş', 'date'), col('leave', 'Çıkış', 'date'), col('project', 'Proje', 'text', 12)],
         empRows.map((r) => ({ code: s(r.code), name: s(r.full_name), nat: s(r.nationality), kind: s(r.id_kind), id: r.id_last4 ? `••••${r.id_last4}` : null, iban: r.iban_last4 ? `••••${r.iban_last4}` : null, phone: s(r.phone), email: s(r.email), status: r.status === 'left' ? 'Ayrıldı' : 'Aktif', dept: s(r.department), title: s(r.job_title), hire: s(r.hire_date), leave: s(r.leave_date), project: s(r.project) })),
         'Kişisel veri içerir; kimlik ve IBAN maskelidir',
+      ),
+    );
+  }
+
+  // Puantaj (kişisel veri: personel kodu/adı + gün türü ve saatler; kimlik içermez)
+  const attRows = await query(
+    'Puantaj',
+    sql`select e.code, e.full_name, a.work_date::text as work_date, a.day_type, a.normal_hours::text as normal_hours, a.overtime_hours::text as overtime_hours,
+               p.code as project, w.code as wbs, c.code as cost_code, a.note
+          from attendance_entries a
+          join employees e on e.id = a.employee_id
+          left join projects p on p.id = a.project_id
+          left join project_wbs w on w.id = a.wbs_id
+          left join cost_codes c on c.id = a.cost_code_id
+         where true ${between('a.work_date', q)}
+         order by a.work_date, e.code`,
+  );
+  if (attRows.length > 0) {
+    tables.push(
+      table(
+        'Puantaj',
+        'Puantaj',
+        [col('code', 'Personel kodu', 'text', 12), col('name', 'Ad soyad', 'text', 28), col('date', 'Tarih', 'date'), col('type', 'Gün türü', 'text', 16), col('normal', 'Normal saat', 'qty'), col('overtime', 'Fazla mesai saati', 'qty'), col('project', 'Proje', 'text', 12), col('wbs', 'İş kalemi', 'text', 12), col('costCode', 'Maliyet kodu', 'text', 12), col('note', 'Not', 'text', 28)],
+        attRows.map((r) => ({ code: s(r.code), name: s(r.full_name), date: s(r.work_date), type: ATTENDANCE_DAY_LABEL[String(r.day_type)] ?? s(r.day_type), normal: s(r.normal_hours), overtime: s(r.overtime_hours), project: s(r.project), wbs: s(r.wbs), costCode: s(r.cost_code), note: s(r.note) })),
+        `Kişisel veri içerir · ${scope}`,
       ),
     );
   }
