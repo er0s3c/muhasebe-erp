@@ -17,7 +17,10 @@ type Form = z.infer<typeof schema>;
 
 export function LoginPage() {
   const { t } = useTranslation();
-  const { login } = useSession();
+  const { login, verifyMfa } = useSession();
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const publicConfig = usePublicConfig();
@@ -31,12 +34,64 @@ export function LoginPage() {
   const onSubmit = handleSubmit(async (values) => {
     setError(null);
     try {
-      await login({ email: values.email, password: values.password });
+      const step = await login({ email: values.email, password: values.password });
+      if (step) {
+        setMfaToken(step.mfaToken);
+        return;
+      }
       navigate((location.state as { from?: string } | null)?.from ?? '/', { replace: true });
     } catch (e) {
       setError(errorMessage(e));
     }
   });
+
+  const onVerify = async () => {
+    if (!mfaToken || !code.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await verifyMfa(mfaToken, code.trim());
+      navigate((location.state as { from?: string } | null)?.from ?? '/', { replace: true });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (mfaToken) {
+    return (
+      <AuthLayout title={t('auth.mfa.title')} subtitle={t('auth.mfa.subtitle')} footer={null}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void onVerify();
+          }}
+          className="flex flex-col gap-4"
+          noValidate
+        >
+          {error && <Callout tone="danger">{error}</Callout>}
+          <Field label={t('auth.mfa.code')} hint={t('auth.mfa.hint')}>
+            {(id) => <Input id={id} inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={(e) => setCode(e.target.value)} />}
+          </Field>
+          <Button type="submit" variant="primary" loading={busy} disabled={!code.trim()} className="mt-2 w-full">
+            {t('auth.mfa.verify')}
+          </Button>
+          <button
+            type="button"
+            className="link self-start text-sm"
+            onClick={() => {
+              setMfaToken(null);
+              setCode('');
+              setError(null);
+            }}
+          >
+            {t('auth.mfa.back')}
+          </button>
+        </form>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout

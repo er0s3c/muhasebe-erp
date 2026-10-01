@@ -26,6 +26,24 @@ const sample: ReportTable = {
 };
 
 /** Elle kurulmuş minimal xlsx: `sheetXml` ve isteğe bağlı parçalarla. */
+/** Hücrenin (örn. "D5") biçim kodu, dolgusu (ARGB) ve kalınlığı: stil dosyasındaki `cellXfs` kaydından okunur. */
+function cellStyle(files: Record<string, Uint8Array>, sheetXml: string, ref: string) {
+  const td = new TextDecoder();
+  const styles = td.decode(files['xl/styles.xml']);
+  const sIdx = Number(new RegExp(`<c r="${ref}" s="(\\d+)"`).exec(sheetXml)![1]);
+  const xfs = [...styles.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/)![1]!.matchAll(/<xf [^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)].map((m) => m[0]);
+  const xf = xfs[sIdx]!;
+  const attr = (n: string) => Number(new RegExp(`${n}="(\\d+)"`).exec(xf)![1]);
+  const fmts = new Map([...styles.matchAll(/<numFmt numFmtId="(\d+)" formatCode="([^"]*)"/g)].map((m) => [Number(m[1]), m[2]!]));
+  const fills = [...styles.match(/<fills[^>]*>([\s\S]*?)<\/fills>/)![1]!.matchAll(/<fill>([\s\S]*?)<\/fill>/g)].map((m) => m[1]!);
+  const fonts = [...styles.match(/<fonts[^>]*>([\s\S]*?)<\/fonts>/)![1]!.matchAll(/<font>([\s\S]*?)<\/font>/g)].map((m) => m[1]!);
+  return {
+    format: fmts.get(attr('numFmtId')) ?? null,
+    fill: /fgColor rgb="(\w+)"/.exec(fills[attr('fillId')]!)?.[1] ?? null,
+    bold: fonts[attr('fontId')]!.includes('<b/>'),
+  };
+}
+
 function handmade(opts: { sheet: string; shared?: string; styles?: string; workbookPr?: string; extra?: Record<string, string> }): Uint8Array {
   const files: Record<string, Uint8Array> = {
     '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'),
@@ -64,13 +82,86 @@ describe('xlsx yazıcı ve okuyucu', () => {
     const zip = unzipSync(writeXlsx([sample]));
     const xml = new TextDecoder().decode(zip['xl/worksheets/sheet1.xml']);
     // 1234.5600 sayı hücresi (t niteliği yok), 2026-09-29 seri numarası, metin inlineStr
-    expect(xml).toContain('<c r="D5" s="6"><v>1234.5600</v></c>');
-    expect(xml).toContain(`<c r="B5" s="7"><v>${excelSerial('2026-09-29')}</v></c>`);
-    expect(xml).toMatch(/<c r="A6" s="5" t="inlineStr"><is><t xml:space="preserve">=HYPERLINK/);
+    expect(xml).toMatch(/<c r="D5" s="\d+"><v>1234\.5600<\/v><\/c>/);
+    expect(xml).toMatch(new RegExp(`<c r="B5" s="\\d+"><v>${excelSerial('2026-09-29')}</v></c>`));
+    expect(xml).toMatch(/<c r="A6" s="\d+" t="inlineStr"><is><t xml:space="preserve">=HYPERLINK/);
     expect(xml).toContain('<pane ySplit="4"');
     expect(xml).toContain('<autoFilter ref="A4:F7"/>');
     expect(excelSerial('2026-09-29')).toBe(46294);
     expect(excelSerial('2026-02-30')).toBeNull();
+  });
+
+  it('para birimli tutar sütunları simgeli hücre biçimi alır; hücre yine sayıdır, yüzde/para birimsiz sütun düz kalır', () => {
+    const table: ReportTable = {
+      key: 'para',
+      title: 'Para',
+      columns: [
+        { key: 'name', label: 'Ad', kind: 'text' },
+        { key: 'try', label: 'Tutar (TRY)', kind: 'money', currency: 'TRY' },
+        { key: 'gbp', label: 'Tutar (GBP)', kind: 'money', currency: 'GBP' },
+        { key: 'pct', label: 'Yüzde', kind: 'money' },
+        { key: 'chf', label: 'Tutar (CHF)', kind: 'money', currency: 'CHF' },
+        { key: 'qty', label: 'Adet', kind: 'qty', currency: 'TRY' },
+      ],
+      rows: [{ name: 'A', try: '1234.5000', gbp: '-10.2500', pct: '12.5000', chf: '7.0000', qty: '3.0000' }],
+      totals: { try: '1234.5000', gbp: '-10.2500' },
+    };
+    const bytes = writeXlsx([table]);
+    const files = unzipSync(bytes);
+    const styles = new TextDecoder().decode(files['xl/styles.xml']);
+    const sheet = new TextDecoder().decode(files['xl/worksheets/sheet1.xml']);
+    // Biçimler: tırnaklı simge, negatif kırmızı; bilinmeyen para birimi (CHF) ve para birimi olmayan sütunlar simgesiz kalır
+    expect(styles).not.toContain('CHF');
+    expect(styles).toContain('formatCode="&quot;£&quot;#,##0.00;[Red]-&quot;£&quot;#,##0.00"');
+    expect(styles).toContain('formatCode="&quot;₺&quot;#,##0.00;[Red]-&quot;₺&quot;#,##0.00"');
+    expect(cellStyle(files, sheet, 'B5').format).toBe('&quot;₺&quot;#,##0.00;[Red]-&quot;₺&quot;#,##0.00');
+    expect(cellStyle(files, sheet, 'C5').format).toBe('&quot;£&quot;#,##0.00;[Red]-&quot;£&quot;#,##0.00');
+    expect(cellStyle(files, sheet, 'D5').format).toBe('#,##0.00;[Red]-#,##0.00');
+    expect(cellStyle(files, sheet, 'E5').format).toBe('#,##0.00;[Red]-#,##0.00');
+    expect(cellStyle(files, sheet, 'F5').format).toBe('#,##0.####;[Red]-#,##0.####'); // miktar sütununda para birimi yok sayılır
+    // Toplam satırı: kalın, vurgulu zemin, aynı para birimi biçimi
+    const total = cellStyle(files, sheet, 'B6');
+    expect(total).toMatchObject({ bold: true, fill: 'FFF1F6B4', format: '&quot;₺&quot;#,##0.00;[Red]-&quot;₺&quot;#,##0.00' });
+    // Okuyucu: para birimli hücreler tarih sanılmaz, sayı olarak okunur
+    const read = readXlsx(bytes)[0]!;
+    const row = read.rows.find((r) => r[0] === 'A')!;
+    expect(row.slice(1, 4)).toEqual(['1234.5', '-10.25', '12.5']);
+    expect(isDateFormatCode('"₺"#,##0.00;-"₺"#,##0.00')).toBe(false);
+    expect(isDateFormatCode('"£"#,##0.00;-"£"#,##0.00')).toBe(false);
+  });
+
+  it('renkli düzen: koyu başlık bandı, bantlı satırlar, sarı sekme, yazdırma ayarı; düz tablo (şablon) sade kalır', () => {
+    const table: ReportTable = {
+      key: 'renk',
+      title: 'Renk & Düzen',
+      subtitle: 'Dönem',
+      columns: [
+        { key: 'a', label: 'Ad', kind: 'text' },
+        { key: 'b', label: 'Tutar', kind: 'money' },
+      ],
+      rows: [{ a: 'x', b: '1.0000' }, { a: 'y', b: '-2.0000' }, { a: 'z', b: '3.0000' }],
+      totals: { b: '2.0000' },
+    };
+    const files = unzipSync(writeXlsx([table]));
+    const sheet = new TextDecoder().decode(files['xl/worksheets/sheet1.xml']);
+    expect(cellStyle(files, sheet, 'A1')).toMatchObject({ fill: 'FF1A1919', bold: true }); // başlık bandı
+    expect(cellStyle(files, sheet, 'A4')).toMatchObject({ fill: 'FF262524', bold: true }); // tablo başlığı
+    expect(cellStyle(files, sheet, 'A5').fill).toBeNull(); // 1. satır beyaz
+    expect(cellStyle(files, sheet, 'A6').fill).toBe('FFF4F2F0'); // 2. satır bantlı
+    expect(cellStyle(files, sheet, 'B6').format).toContain('[Red]'); // negatif kırmızı
+    expect(sheet).toContain('showGridLines="0"');
+    expect(sheet).toContain('<tabColor rgb="FFE4F222"/>');
+    expect(sheet).toContain('<mergeCell ref="A1:B1"/>');
+    expect(sheet).toContain('<oddFooter>');
+    expect(new TextDecoder().decode(files['xl/workbook.xml'])).toContain('_xlnm.Print_Titles');
+    // Okuyucu içeriği aynen görür
+    expect(readXlsx(writeXlsx([table]))[0]!.rows[0]![0]).toBe('Renk & Düzen');
+
+    const plain = unzipSync(writeXlsx([{ ...table, plain: true, totals: undefined }]));
+    const psheet = new TextDecoder().decode(plain['xl/worksheets/sheet1.xml']);
+    expect(psheet).not.toContain('tabColor');
+    expect(psheet).not.toContain('mergeCell');
+    expect(cellStyle(plain, psheet, 'A3').fill).toBeNull(); // düz tabloda bant yok
   });
 
   it('çok sayfalı kitap: sayfa adları temizlenir, kısaltılır ve tekilleşir', () => {

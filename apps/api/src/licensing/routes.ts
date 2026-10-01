@@ -15,7 +15,7 @@ const offlineLeaseSchema = z.object({ lease: z.string().trim().min(50).max(16_38
 const iso = (ms: number | null | undefined) => (ms == null ? null : new Date(ms).toISOString());
 
 /** Kurulum yöneticisi: herhangi bir şirkette `owner` rolü olan kullanıcı (kurulum tek müşteriye aittir; docs/LICENSING.md). */
-async function isOwner(tx: Tx, userId: string): Promise<boolean> {
+export async function isOwner(tx: Tx, userId: string): Promise<boolean> {
   const [row] = await tx
     .select({ userId: memberships.userId })
     .from(memberships)

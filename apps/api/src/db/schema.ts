@@ -83,6 +83,53 @@ export const userTokens = pgTable(
   ],
 );
 
+/**
+ * Uygulama kullanıcısı için TOTP ikinci adım. Sır AES-256-GCM ile şifreli saklanır; `enabled_at` boşken kurulum
+ * bekliyordur (giriş zorlanmaz). `last_counter` aynı kodun yeniden kullanımını önler; kurtarma kodları yalnızca özet olarak durur.
+ */
+export const userMfa = pgTable('user_mfa', {
+  userId: uuid()
+    .primaryKey()
+    .references(() => users.id),
+  secretEnc: text().notNull(),
+  enabledAt: timestamp({ withTimezone: true }),
+  lastCounter: bigint({ mode: 'number' }),
+  recoveryHashes: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  createdAt: createdAt(),
+});
+
+/**
+ * Uzaktan güncelleme teklifleri ve uygulama geçmişi (kurulum geneli; kiracı tablosu değildir). Satıcının imzalı manifestosu kalp
+ * atışıyla gelir; kurulum sahibi onaylayınca ana makinedeki güncelleyici isteği alır ve durumu buraya yazar.
+ */
+export const appUpdates = pgTable(
+  'app_updates',
+  {
+    id: id(),
+    version: text().notNull(),
+    notes: text().notNull().default(''),
+    manifest: text().notNull(),
+    files: jsonb().$type<{ target: string; name: string; sha256: string; size: number }[]>().notNull(),
+    downloadToken: text().notNull(),
+    offeredAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** offered | requested | downloading | applying | done | failed | rolled_back | cancelled */
+    status: text().notNull().default('offered'),
+    requestedBy: uuid().references(() => users.id),
+    requestedAt: timestamp({ withTimezone: true }),
+    scheduledFor: timestamp({ withTimezone: true }),
+    startedAt: timestamp({ withTimezone: true }),
+    finishedAt: timestamp({ withTimezone: true }),
+    fromVersion: text(),
+    message: text(),
+    log: text(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('app_updates_version_uq').on(t.version),
+    check('app_updates_status_ck', sql`${t.status} in ('offered','requested','downloading','applying','done','failed','rolled_back','cancelled')`),
+  ],
+);
+
 /** Kimlik doğrulama ve yetki olayları (yalnızca eklenir). Kiracı tablosu değildir; destek/inceleme içindir. */
 export const securityEvents = pgTable(
   'security_events',
@@ -447,6 +494,402 @@ export const accounts = pgTable(
   ],
 );
 
+/**
+ * İnşaat parametreleri (teminat, stopaj, avans mahsup yüzdesi): tarih aralıklı, kaynak notlu, doğrulama alanlı.
+ * Hukuki değerler kod sabiti değildir (LEGAL-NOTES §12); belgeler değeri kayıt anında kopyalar.
+ */
+export const constructionParams = pgTable(
+  'construction_params',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** retention_pct | withholding_pct | advance_recoup_pct */
+    kind: text().notNull(),
+    /** Yüzde, örn. 5.0000 */
+    value: numeric({ precision: 7, scale: 4 }).notNull(),
+    validFrom: date({ mode: 'string' }).notNull(),
+    validTo: date({ mode: 'string' }),
+    sourceNote: text(),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('construction_params_uq').on(t.companyId, t.kind, t.validFrom),
+    check('construction_params_kind_ck', sql`${t.kind} in ('retention_pct','withholding_pct','advance_recoup_pct')`),
+    check('construction_params_value_ck', sql`${t.value} >= 0 and ${t.value} <= 100`),
+    check('construction_params_range_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
+/** Onay kuralı: belge türü + (isteğe bağlı) proje + tutar aralığı → sıralı adımlar. */
+export const approvalRules = pgTable(
+  'approval_rules',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    docType: text().notNull(),
+    projectId: uuid(),
+    /** Defter para biriminde, alt sınır dahil. */
+    minAmount: money().notNull().default('0'),
+    /** Üst sınır hariç; null = sınırsız. */
+    maxAmount: money(),
+    /** true: belgeyi gönderen kendi belgesini onaylayamaz. */
+    separateRequester: boolean().notNull().default(true),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('approval_rules_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'approval_rules_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    check('approval_rules_doc_type_ck', sql`${t.docType} in ('progress_payment','employer_claim','purchase_request','variation_order')`),
+    check('approval_rules_range_ck', sql`${t.minAmount} >= 0 and (${t.maxAmount} is null or ${t.maxAmount} > ${t.minAmount})`),
+  ],
+);
+
+export const approvalRuleSteps = pgTable(
+  'approval_rule_steps',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    ruleId: uuid().notNull(),
+    stepNo: integer().notNull(),
+    /** Rol VEYA kullanıcı (ikisinden tam biri). */
+    approverRole: text(),
+    approverUserId: uuid().references(() => users.id),
+    label: text(),
+  },
+  (t) => [
+    unique('approval_rule_steps_uq').on(t.ruleId, t.stepNo),
+    foreignKey({
+      name: 'approval_rule_steps_rule_fk',
+      columns: [t.ruleId, t.companyId],
+      foreignColumns: [approvalRules.id, approvalRules.companyId],
+    }).onDelete('cascade'),
+    check('approval_rule_steps_no_ck', sql`${t.stepNo} >= 1`),
+    check(
+      'approval_rule_steps_approver_ck',
+      sql`(${t.approverRole} is not null) <> (${t.approverUserId} is not null)`,
+    ),
+  ],
+);
+
+/** Bir belgenin onay talebi; gönderildiği anda kural adımları `approval_steps`e kopyalanır. */
+export const approvalRequests = pgTable(
+  'approval_requests',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    docType: text().notNull(),
+    docId: uuid().notNull(),
+    projectId: uuid(),
+    amount: money().notNull(),
+    /** pending | approved | rejected | cancelled */
+    status: text().notNull().default('pending'),
+    separateRequester: boolean().notNull().default(true),
+    requestedBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    requestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    unique('approval_requests_id_company_uq').on(t.id, t.companyId),
+    // Bir belgenin aynı anda tek bekleyen talebi olur
+    uniqueIndex('approval_requests_pending_uq')
+      .on(t.companyId, t.docType, t.docId)
+      .where(sql`${t.status} = 'pending'`),
+    index('approval_requests_status_idx').on(t.companyId, t.status),
+    check('approval_requests_status_ck', sql`${t.status} in ('pending','approved','rejected','cancelled')`),
+  ],
+);
+
+export const approvalSteps = pgTable(
+  'approval_steps',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    requestId: uuid().notNull(),
+    stepNo: integer().notNull(),
+    /** İkisi de boşsa varsayılan adım: `subcontracts.approve` izni olan herkes. */
+    approverRole: text(),
+    approverUserId: uuid().references(() => users.id),
+    label: text(),
+    /** pending | approved | rejected */
+    status: text().notNull().default('pending'),
+    decidedBy: uuid().references(() => users.id),
+    decidedAt: timestamp({ withTimezone: true }),
+    note: text(),
+  },
+  (t) => [
+    unique('approval_steps_uq').on(t.requestId, t.stepNo),
+    foreignKey({
+      name: 'approval_steps_request_fk',
+      columns: [t.requestId, t.companyId],
+      foreignColumns: [approvalRequests.id, approvalRequests.companyId],
+    }),
+    check('approval_steps_status_ck', sql`${t.status} in ('pending','approved','rejected')`),
+    check('approval_steps_approver_ck', sql`not (${t.approverRole} is not null and ${t.approverUserId} is not null)`),
+  ],
+);
+
+/** Maliyet kodu (maliyet türü): iş kaleminden (WBS) bağımsız üçüncü boyut; malzeme, işçilik, taşeron vb. */
+export const costCodes = pgTable(
+  'cost_codes',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    /** material | labor | subcontract | equipment | transport | overhead | other */
+    kind: text().notNull().default('other'),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('cost_codes_company_code_uq').on(t.companyId, t.code),
+    unique('cost_codes_id_company_uq').on(t.id, t.companyId),
+    check(
+      'cost_codes_kind_ck',
+      sql`${t.kind} in ('material','labor','subcontract','equipment','transport','overhead','fee','other')`,
+    ),
+  ],
+);
+
+/** Taşeron sözleşmesi (başlık). Tutar ve kalemler onaylı revizyonun BOQ satırlarındadır. */
+export const subcontracts = pgTable(
+  'subcontracts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    projectId: uuid().notNull(),
+    /** Taşeron (tedarikçi ya da hem müşteri hem tedarikçi türünde cari). */
+    partyId: uuid().notNull(),
+    title: text().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    startDate: date({ mode: 'string' }),
+    endDate: date({ mode: 'string' }),
+    /** Hakediş vadesi (gün); yaşlandırmada cari satırının vadesi. */
+    paymentDays: integer().notNull().default(30),
+    /** Yüzde anlık görüntüleri: sözleşme açılırken parametreden kopyalanır, sonradan parametre değişse bu değişmez. */
+    retentionPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    advanceRecoupPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    withholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    penaltyNote: text(),
+    /** payable: taşeron sözleşmesi (tedarikçi cari, 320); receivable: işveren sözleşmesi (müşteri cari, 120). */
+    direction: text().notNull().default('payable'),
+    /** draft | active | completed | terminated */
+    status: text().notNull().default('draft'),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('subcontracts_company_code_uq').on(t.companyId, t.code),
+    unique('subcontracts_id_company_uq').on(t.id, t.companyId),
+    unique('subcontracts_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'subcontracts_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'subcontracts_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    index('subcontracts_project_idx').on(t.companyId, t.projectId),
+    index('subcontracts_party_idx').on(t.companyId, t.partyId),
+    check('subcontracts_status_ck', sql`${t.status} in ('draft','active','completed','terminated')`),
+    check('subcontracts_direction_ck', sql`${t.direction} in ('payable','receivable')`),
+    // Projede en çok bir (feshedilmemiş) işveren sözleşmesi
+    uniqueIndex('subcontracts_employer_uq')
+      .on(t.projectId)
+      .where(sql`${t.direction} = 'receivable' and ${t.status} <> 'terminated'`),
+    check('subcontracts_dates_ck', sql`${t.startDate} is null or ${t.endDate} is null or ${t.endDate} >= ${t.startDate}`),
+    check('subcontracts_days_ck', sql`${t.paymentDays} between 0 and 365`),
+    check(
+      'subcontracts_pct_ck',
+      sql`${t.retentionPct} between 0 and 100 and ${t.advanceRecoupPct} between 0 and 100 and ${t.withholdingPct} between 0 and 100`,
+    ),
+  ],
+);
+
+/** Sözleşme revizyonu (bütçe revizyonu düzeni): taslak → onaylı → yerine geçilmiş; onaylı revizyon değişmez. */
+export const subcontractRevisions = pgTable(
+  'subcontract_revisions',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    revisionNo: integer().notNull(),
+    status: text().notNull().default('draft'),
+    title: text(),
+    approvedAt: timestamp({ withTimezone: true }),
+    approvedBy: uuid().references(() => users.id),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('subcontract_revisions_no_uq').on(t.subcontractId, t.revisionNo),
+    unique('subcontract_revisions_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('subcontract_revisions_draft_uq')
+      .on(t.subcontractId)
+      .where(sql`${t.status} = 'draft'`),
+    foreignKey({
+      name: 'subcontract_revisions_subcontract_fk',
+      columns: [t.subcontractId, t.companyId],
+      foreignColumns: [subcontracts.id, subcontracts.companyId],
+    }),
+    check('subcontract_revisions_status_ck', sql`${t.status} in ('draft','approved','superseded')`),
+    check(
+      'subcontract_revisions_approved_ck',
+      sql`(${t.status} = 'draft' and ${t.approvedAt} is null) or (${t.status} <> 'draft' and ${t.approvedAt} is not null)`,
+    ),
+  ],
+);
+
+/**
+ * BOQ satırı. `lineKey` revizyonlar arasında sabittir (kopyalanınca korunur): hakediş kümülatif miktarı
+ * `lineKey` ile takip edilir.
+ */
+export const subcontractBoqLines = pgTable(
+  'subcontract_boq_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    revisionId: uuid().notNull(),
+    subcontractId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    lineKey: uuid().notNull(),
+    lineNo: integer().notNull(),
+    itemNo: text(),
+    description: text().notNull(),
+    unit: text().notNull(),
+    quantity: qty().notNull(),
+    unitPrice: numeric({ precision: 19, scale: 4 }).notNull(),
+    /** Maliyetin yazılacağı yaprak iş kalemi. */
+    wbsId: uuid().notNull(),
+    costCodeId: uuid(),
+  },
+  (t) => [
+    unique('subcontract_boq_lines_rev_key_uq').on(t.revisionId, t.lineKey),
+    unique('subcontract_boq_lines_rev_no_uq').on(t.revisionId, t.lineNo),
+    index('subcontract_boq_lines_sub_idx').on(t.subcontractId, t.lineKey),
+    index('subcontract_boq_lines_wbs_idx').on(t.wbsId),
+    foreignKey({
+      name: 'subcontract_boq_lines_revision_fk',
+      columns: [t.revisionId, t.companyId],
+      foreignColumns: [subcontractRevisions.id, subcontractRevisions.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'subcontract_boq_lines_subcontract_fk',
+      columns: [t.subcontractId, t.projectId],
+      foreignColumns: [subcontracts.id, subcontracts.projectId],
+    }),
+    foreignKey({
+      name: 'subcontract_boq_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'subcontract_boq_lines_cost_code_fk',
+      columns: [t.costCodeId, t.companyId],
+      foreignColumns: [costCodes.id, costCodes.companyId],
+    }),
+    check('subcontract_boq_lines_amount_ck', sql`${t.quantity} > 0 and ${t.unitPrice} >= 0`),
+  ],
+);
+
+/**
+ * Değişiklik emri (DE): yürürlükteki sözleşmenin BOQ/süre değişikliği. Kendi taslak revizyonunu taşır; onay motorundan geçer,
+ * işveren sözleşmesinde ayrıca işveren kabulü kaydedilir. Uygulanınca revizyon yürürlüğe girer ve bitiş tarihi uzar.
+ */
+export const variationOrders = pgTable(
+  'variation_orders',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    direction: text().notNull(),
+    /** DE'nin taslak/uygulanan revizyonu; iptal ya da işveren reddinde taslak silinir ve bağ boşalır. */
+    revisionId: uuid().references(() => subcontractRevisions.id, { onDelete: 'set null' }),
+    baseRevisionId: uuid().notNull(),
+    code: text().notNull(),
+    title: text().notNull(),
+    /** client_request | design_change | site_condition | omission_error | other */
+    reason: text().notNull(),
+    description: text(),
+    timeExtensionDays: integer().notNull().default(0),
+    previousEndDate: date({ mode: 'string' }),
+    newEndDate: date({ mode: 'string' }),
+    amountBefore: money(),
+    amountAfter: money(),
+    amountDelta: money(),
+    /** draft | submitted | awaiting_client | applied | rejected | cancelled */
+    status: text().notNull().default('draft'),
+    submittedAt: timestamp({ withTimezone: true }),
+    submittedBy: uuid().references(() => users.id),
+    approvedAt: timestamp({ withTimezone: true }),
+    clientAcceptedAt: date({ mode: 'string' }),
+    clientReference: text(),
+    appliedAt: timestamp({ withTimezone: true }),
+    rejectionNote: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('variation_orders_code_uq').on(t.companyId, t.code),
+    unique('variation_orders_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('variation_orders_revision_uq').on(t.revisionId),
+    index('variation_orders_subcontract_idx').on(t.subcontractId, t.status),
+    index('variation_orders_project_idx').on(t.companyId, t.projectId),
+    foreignKey({
+      name: 'variation_orders_subcontract_fk',
+      columns: [t.subcontractId, t.projectId],
+      foreignColumns: [subcontracts.id, subcontracts.projectId],
+    }),
+    foreignKey({
+      name: 'variation_orders_base_revision_fk',
+      columns: [t.baseRevisionId, t.companyId],
+      foreignColumns: [subcontractRevisions.id, subcontractRevisions.companyId],
+    }),
+    check('variation_orders_status_ck', sql`${t.status} in ('draft','submitted','awaiting_client','applied','rejected','cancelled')`),
+    check('variation_orders_reason_ck', sql`${t.reason} in ('client_request','design_change','site_condition','omission_error','other')`),
+    check('variation_orders_direction_ck', sql`${t.direction} in ('payable','receivable')`),
+    check('variation_orders_days_ck', sql`${t.timeExtensionDays} between 0 and 3650`),
+  ],
+);
+
 export const journalEntries = pgTable(
   'journal_entries',
   {
@@ -507,6 +950,196 @@ export const journalEntries = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Şantiye / proje (Faz B1): proje, iş kırılımı (WBS), bütçe revizyonları, ilerleme.
+// Gerçekleşen maliyet ayrı tutulmaz: yevmiye satırlarındaki proje/iş kalemi boyutundan türer.
+// ---------------------------------------------------------------------------
+
+export const projects = pgTable(
+  'projects',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    /** 'own': kendi projesi; 'contract': işverene yapılan iş (işveren carisi zorunlu). */
+    kind: text().notNull().default('own'),
+    status: text().notNull().default('planned'),
+    clientPartyId: uuid(),
+    startDate: date({ mode: 'string' }),
+    endDate: date({ mode: 'string' }),
+    location: text(),
+    description: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('projects_company_code_uq').on(t.companyId, t.code),
+    unique('projects_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'projects_client_fk',
+      columns: [t.clientPartyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    index('projects_status_idx').on(t.companyId, t.status),
+    check('projects_kind_ck', sql`${t.kind} in ('own','contract')`),
+    check('projects_status_ck', sql`${t.status} in ('planned','active','on_hold','completed','cancelled')`),
+    check(
+      'projects_client_ck',
+      sql`(${t.kind} = 'contract' and ${t.clientPartyId} is not null) or (${t.kind} = 'own' and ${t.clientPartyId} is null)`,
+    ),
+    check('projects_dates_ck', sql`${t.startDate} is null or ${t.endDate} is null or ${t.endDate} >= ${t.startDate}`),
+  ],
+);
+
+/** İş kırılımı ağacı; maliyet yalnızca yaprak düğümlere yazılır (tetikleyici denetler). */
+export const projectWbs = pgTable(
+  'project_wbs',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    projectId: uuid().notNull(),
+    parentId: uuid(),
+    code: text().notNull(),
+    name: text().notNull(),
+    sortOrder: integer().notNull().default(0),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('project_wbs_project_code_uq').on(t.projectId, t.code),
+    unique('project_wbs_id_company_uq').on(t.id, t.companyId),
+    // Satırlar (iş kalemi, proje) çiftiyle bağlanır: iş kalemi etiketlenen projeye ait olmak zorundadır
+    unique('project_wbs_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'project_wbs_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'project_wbs_parent_fk',
+      columns: [t.parentId, t.projectId],
+      foreignColumns: [t.id, t.projectId],
+    }),
+    index('project_wbs_parent_idx').on(t.projectId, t.parentId),
+    check('project_wbs_parent_ck', sql`${t.parentId} is null or ${t.parentId} <> ${t.id}`),
+  ],
+);
+
+/** Bütçe revizyonu: taslak → onaylı (değiştirilemez) → yenisi onaylanınca 'superseded'. Yürürlükteki = en yüksek numaralı onaylı. */
+export const projectBudgets = pgTable(
+  'project_budgets',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    projectId: uuid().notNull(),
+    revisionNo: integer().notNull(),
+    status: text().notNull().default('draft'),
+    title: text(),
+    approvedAt: timestamp({ withTimezone: true }),
+    approvedBy: uuid().references(() => users.id),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('project_budgets_revision_uq').on(t.projectId, t.revisionNo),
+    unique('project_budgets_id_company_uq').on(t.id, t.companyId),
+    unique('project_budgets_id_project_uq').on(t.id, t.projectId),
+    // Projede en çok bir taslak revizyon
+    uniqueIndex('project_budgets_draft_uq')
+      .on(t.projectId)
+      .where(sql`${t.status} = 'draft'`),
+    foreignKey({
+      name: 'project_budgets_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    check('project_budgets_status_ck', sql`${t.status} in ('draft','approved','superseded')`),
+    check(
+      'project_budgets_approved_ck',
+      sql`(${t.status} = 'draft' and ${t.approvedAt} is null) or (${t.status} <> 'draft' and ${t.approvedAt} is not null)`,
+    ),
+    check('project_budgets_rev_ck', sql`${t.revisionNo} >= 1`),
+  ],
+);
+
+export const projectBudgetLines = pgTable(
+  'project_budget_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    budgetId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    wbsId: uuid().notNull(),
+    /** Şirket defter para biriminde, 2 ondalık. */
+    amount: numeric({ precision: 19, scale: 2 }).notNull(),
+  },
+  (t) => [
+    unique('project_budget_lines_uq').on(t.budgetId, t.wbsId),
+    foreignKey({
+      name: 'project_budget_lines_budget_fk',
+      columns: [t.budgetId, t.projectId],
+      foreignColumns: [projectBudgets.id, projectBudgets.projectId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'project_budget_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'project_budget_lines_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('project_budget_lines_wbs_idx').on(t.wbsId),
+    check('project_budget_lines_amount_ck', sql`${t.amount} >= 0`),
+  ],
+);
+
+/** İş kalemi ilerleme kayıtları: yalnızca eklenir; asOf tarihine kadarki en son kayıt geçerlidir. */
+export const projectProgress = pgTable(
+  'project_progress',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    projectId: uuid().notNull(),
+    wbsId: uuid().notNull(),
+    asOfDate: date({ mode: 'string' }).notNull(),
+    percent: numeric({ precision: 5, scale: 2 }).notNull(),
+    /** Elle tamamlanmaya kalan maliyet tahmini (defter para birimi); boşsa formülle hesaplanır. */
+    etcOverride: numeric({ precision: 19, scale: 2 }),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: 'project_progress_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'project_progress_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('project_progress_wbs_idx').on(t.wbsId, t.asOfDate, t.createdAt),
+    check('project_progress_percent_ck', sql`${t.percent} between 0 and 100`),
+    check('project_progress_etc_ck', sql`${t.etcOverride} is null or ${t.etcOverride} >= 0`),
+  ],
+);
+
 export const journalLines = pgTable(
   'journal_lines',
   {
@@ -534,6 +1167,12 @@ export const journalLines = pgTable(
     partyId: uuid(),
     /** Yaşlandırma vadeye göre yapılır; yoksa fiş tarihi kullanılır. */
     dueDate: date({ mode: 'string' }),
+    /** Proje boyutu (yalnızca gelir/gider/maliyet hesaplarında; tetikleyici denetler). Kayıttan sonra değişmez. */
+    projectId: uuid(),
+    /** Projenin yaprak iş kalemi. */
+    wbsId: uuid(),
+    /** Maliyet kodu (üçüncü boyut); yalnızca proje etiketli satırda. */
+    costCodeId: uuid(),
   },
   (t) => [
     foreignKey({
@@ -551,6 +1190,29 @@ export const journalLines = pgTable(
       columns: [t.partyId, t.companyId],
       foreignColumns: [parties.id, parties.companyId],
     }),
+    foreignKey({
+      name: 'journal_lines_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'journal_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    index('journal_lines_project_idx')
+      .on(t.companyId, t.projectId, t.wbsId)
+      .where(sql`${t.projectId} is not null`),
+    index('journal_lines_wbs_idx')
+      .on(t.wbsId)
+      .where(sql`${t.wbsId} is not null`),
+    check('journal_lines_wbs_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
+    foreignKey({
+      name: 'journal_lines_cost_code_fk',
+      columns: [t.costCodeId, t.companyId],
+      foreignColumns: [costCodes.id, costCodes.companyId],
+    }),
+    check('journal_lines_cost_code_ck', sql`${t.costCodeId} is null or ${t.projectId} is not null`),
     unique('journal_lines_entry_line_uq').on(t.entryId, t.lineNo),
     // Cari eşleştirmesi (party_allocations) satıra bileşik anahtarla bağlanır
     unique('journal_lines_id_company_uq').on(t.id, t.companyId),
@@ -749,9 +1411,29 @@ export const stockMovements = pgTable(
     currencyCode: text().references(() => currencies.code),
     unitCost: unitCost(),
     fxRate: rate(),
+    /** Proje boyutu: yalnızca sarf/fire hareketlerinde (tetikleyici denetler). */
+    projectId: uuid(),
+    wbsId: uuid(),
   },
   (t) => [
     unique('stock_movements_seq_uq').on(t.seq),
+    foreignKey({
+      name: 'stock_movements_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'stock_movements_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    index('stock_movements_project_idx')
+      .on(t.projectId, t.wbsId)
+      .where(sql`${t.projectId} is not null`),
+    index('stock_movements_wbs_idx')
+      .on(t.wbsId)
+      .where(sql`${t.wbsId} is not null`),
+    check('stock_movements_wbs_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
     foreignKey({
       name: 'stock_movements_document_fk',
       columns: [t.documentId, t.companyId],
@@ -877,7 +1559,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable')`,
     ),
   ],
 );
@@ -927,6 +1609,9 @@ export const invoices = pgTable(
     cancelReason: text(),
     cancelJournalEntryId: uuid(),
     cancelStockDocumentId: uuid(),
+    /** Üçlü eşleştirme tolerans dışıysa kaydı geçiren yetkilinin gerekçesi (boşsa eşleşme sorunsuzdu ya da siparişe bağlı değildi). */
+    matchOverrideReason: text(),
+    matchOverrideBy: uuid().references(() => users.id),
     createdBy: uuid().references(() => users.id),
     createdAt: createdAt(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -1155,9 +1840,37 @@ export const invoiceLines = pgTable(
     /** Kaydetme anında yazılır: irsaliye satırının bu satıra düşen değer ve maliyet düzeltmesi payı. */
     deliveryValue: money(),
     deliveryAdjust: money(),
+    /** Proje boyutu: yalnızca stoksuz alış/gider/alış iadesi satırında (net tarafa yazılır). */
+    projectId: uuid(),
+    wbsId: uuid(),
+    /** Alış faturasında, faturalanan sipariş satırı (üçlü eşleştirme: sipariş – mal kabul – fatura). */
+    poLineId: uuid(),
   },
   (t) => [
     unique('invoice_lines_uq').on(t.invoiceId, t.lineNo),
+    index('invoice_lines_po_line_idx').on(t.poLineId),
+    foreignKey({
+      name: 'invoice_lines_po_line_fk',
+      columns: [t.poLineId, t.companyId],
+      foreignColumns: [purchaseOrderLines.id, purchaseOrderLines.companyId],
+    }),
+    foreignKey({
+      name: 'invoice_lines_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'invoice_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    index('invoice_lines_project_idx')
+      .on(t.projectId, t.wbsId)
+      .where(sql`${t.projectId} is not null`),
+    index('invoice_lines_wbs_idx')
+      .on(t.wbsId)
+      .where(sql`${t.wbsId} is not null`),
+    check('invoice_lines_wbs_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
     unique('invoice_lines_id_company_uq').on(t.id, t.companyId),
     index('invoice_lines_item_idx').on(t.companyId, t.itemId),
     foreignKey({
@@ -1506,5 +2219,946 @@ export const bankStatementLines = pgTable(
       'bank_statement_lines_match_ck',
       sql`(${t.status} = 'matched') = (${t.journalLineId} is not null and ${t.matchedAt} is not null)`,
     ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Taşeron hakedişi (Faz B2c)
+// ---------------------------------------------------------------------------
+
+/**
+ * Taşeron hakedişi (kümülatif). Sözleşmede aynı anda en çok bir açık (taslak/onayda) hakediş olur; böylece
+ * kümülatif miktar zinciri sırayla ilerler. Onay tamamlanınca aynı işlemde yevmiye yazılır ve belge değişmez olur.
+ * Tutarlar sözleşme para birimindedir; defter karşılığı yevmiyededir.
+ */
+export const progressPayments = pgTable(
+  'progress_payments',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    /** Sözleşme içindeki sıra (1, 2, 3…). */
+    paymentNo: integer().notNull(),
+    /** Kaydedilince boşluksuz belge numarası (HKD-2026-000001); taslakta yok. */
+    number: text(),
+    periodEnd: date({ mode: 'string' }).notNull(),
+    /** Sözleşmenin yönü (payable: verilen hakediş, receivable: işverene alınan hakediş). */
+    direction: text().notNull().default('payable'),
+    /** draft | submitted | posted | cancelled */
+    status: text().notNull().default('draft'),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    fxRate: rate(),
+    vatCode: text(),
+    vatRate: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    /** Yüzde anlık görüntüleri (sözleşmeden). */
+    retentionPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    advancePct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    withholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    gross: money().notNull().default('0'),
+    vat: money().notNull().default('0'),
+    retention: money().notNull().default('0'),
+    advance: money().notNull().default('0'),
+    withholding: money().notNull().default('0'),
+    otherDeductions: money().notNull().default('0'),
+    net: money().notNull().default('0'),
+    note: text(),
+    rejectionNote: text(),
+    entryId: uuid(),
+    submittedAt: timestamp({ withTimezone: true }),
+    postedAt: timestamp({ withTimezone: true }),
+    cancelledAt: timestamp({ withTimezone: true }),
+    cancelReason: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('progress_payments_no_uq').on(t.subcontractId, t.paymentNo),
+    unique('progress_payments_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('progress_payments_number_uq')
+      .on(t.companyId, t.number)
+      .where(sql`${t.number} is not null`),
+    // Sözleşmede en çok bir açık hakediş
+    uniqueIndex('progress_payments_open_uq')
+      .on(t.subcontractId)
+      .where(sql`${t.status} in ('draft','submitted')`),
+    foreignKey({
+      name: 'progress_payments_subcontract_fk',
+      columns: [t.subcontractId, t.projectId],
+      foreignColumns: [subcontracts.id, subcontracts.projectId],
+    }),
+    foreignKey({
+      name: 'progress_payments_entry_fk',
+      columns: [t.entryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    index('progress_payments_project_idx').on(t.companyId, t.projectId, t.status),
+    check('progress_payments_status_ck', sql`${t.status} in ('draft','submitted','posted','cancelled')`),
+    check('progress_payments_direction_ck', sql`${t.direction} in ('payable','receivable')`),
+    check(
+      'progress_payments_amounts_ck',
+      sql`${t.gross} >= 0 and ${t.vat} >= 0 and ${t.retention} >= 0 and ${t.advance} >= 0 and ${t.withholding} >= 0 and ${t.otherDeductions} >= 0 and ${t.net} >= 0`,
+    ),
+    // Net = brüt + KDV − teminat − avans − stopaj − diğer kesinti (her satırda doğrulanır)
+    check(
+      'progress_payments_net_ck',
+      sql`${t.net} = ${t.gross} + ${t.vat} - ${t.retention} - ${t.advance} - ${t.withholding} - ${t.otherDeductions}`,
+    ),
+    check(
+      'progress_payments_posted_ck',
+      sql`(${t.status} in ('posted','cancelled')) = (${t.number} is not null and ${t.entryId} is not null and ${t.fxRate} is not null and ${t.postedAt} is not null)`,
+    ),
+  ],
+);
+
+export const progressPaymentLines = pgTable(
+  'progress_payment_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    paymentId: uuid().notNull(),
+    subcontractId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    lineKey: uuid().notNull(),
+    lineNo: integer().notNull(),
+    itemNo: text(),
+    description: text().notNull(),
+    unit: text().notNull(),
+    unitPrice: numeric({ precision: 19, scale: 4 }).notNull(),
+    /** Önceki hakedişlerin kümülatifi, bu hakedişin kümülatifi ve farkı (bu dönem). */
+    prevQty: qty().notNull(),
+    cumQty: qty().notNull(),
+    thisQty: qty().notNull(),
+    amount: money().notNull(),
+    wbsId: uuid().notNull(),
+    costCodeId: uuid(),
+  },
+  (t) => [
+    unique('progress_payment_lines_key_uq').on(t.paymentId, t.lineKey),
+    index('progress_payment_lines_sub_idx').on(t.subcontractId, t.lineKey),
+    index('progress_payment_lines_wbs_idx').on(t.wbsId),
+    foreignKey({
+      name: 'progress_payment_lines_payment_fk',
+      columns: [t.paymentId, t.companyId],
+      foreignColumns: [progressPayments.id, progressPayments.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'progress_payment_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'progress_payment_lines_cost_code_fk',
+      columns: [t.costCodeId, t.companyId],
+      foreignColumns: [costCodes.id, costCodes.companyId],
+    }),
+    check('progress_payment_lines_qty_ck', sql`${t.prevQty} >= 0 and ${t.cumQty} >= ${t.prevQty} and ${t.thisQty} = ${t.cumQty} - ${t.prevQty}`),
+  ],
+);
+
+/** Hakedişteki diğer kesintiler (ceza, malzeme mahsubu vb.). */
+export const progressPaymentDeductions = pgTable(
+  'progress_payment_deductions',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    paymentId: uuid().notNull(),
+    description: text().notNull(),
+    amount: money().notNull(),
+  },
+  (t) => [
+    foreignKey({
+      name: 'progress_payment_deductions_payment_fk',
+      columns: [t.paymentId, t.companyId],
+      foreignColumns: [progressPayments.id, progressPayments.companyId],
+    }).onDelete('cascade'),
+    check('progress_payment_deductions_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+/** Taşerona verilen avans (sözleşme bazında izlenir; hakedişte `advance` ile mahsup edilir). */
+export const subcontractAdvances = pgTable(
+  'subcontract_advances',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    advanceDate: date({ mode: 'string' }).notNull(),
+    /** Sözleşme para biriminde. */
+    amount: money().notNull(),
+    /** Ödemeyi yapan kasa/banka hareketi. */
+    transactionId: uuid().notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('subcontract_advances_txn_uq').on(t.transactionId),
+    foreignKey({
+      name: 'subcontract_advances_subcontract_fk',
+      columns: [t.subcontractId, t.companyId],
+      foreignColumns: [subcontracts.id, subcontracts.companyId],
+    }),
+    foreignKey({
+      name: 'subcontract_advances_txn_fk',
+      columns: [t.transactionId, t.companyId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId],
+    }),
+    check('subcontract_advances_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+/** Tutulan teminatın serbest bırakılması (teminat borcu → taşeron carisi). */
+export const retentionReleases = pgTable(
+  'retention_releases',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    releaseDate: date({ mode: 'string' }).notNull(),
+    /** Sözleşme para biriminde. */
+    amount: money().notNull(),
+    entryId: uuid().notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('retention_releases_entry_uq').on(t.entryId),
+    foreignKey({
+      name: 'retention_releases_subcontract_fk',
+      columns: [t.subcontractId, t.companyId],
+      foreignColumns: [subcontracts.id, subcontracts.companyId],
+    }),
+    foreignKey({
+      name: 'retention_releases_entry_fk',
+      columns: [t.entryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    check('retention_releases_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Satın alma zinciri (Faz B3-P): talep → RFQ/teklif → sipariş → mal kabul
+// ---------------------------------------------------------------------------
+
+/** Şantiyeden satın alma talebi. Onay motorundan (`purchase_request`) geçer. */
+export const purchaseRequests = pgTable(
+  'purchase_requests',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    projectId: uuid().notNull(),
+    title: text().notNull(),
+    needDate: date({ mode: 'string' }),
+    note: text(),
+    /** draft | submitted | approved | rejected | ordered | cancelled */
+    status: text().notNull().default('draft'),
+    rejectionNote: text(),
+    requestedBy: uuid().references(() => users.id),
+    submittedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('purchase_requests_code_uq').on(t.companyId, t.code),
+    unique('purchase_requests_id_company_uq').on(t.id, t.companyId),
+    unique('purchase_requests_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'purchase_requests_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('purchase_requests_project_idx').on(t.companyId, t.projectId, t.status),
+    check('purchase_requests_status_ck', sql`${t.status} in ('draft','submitted','approved','rejected','ordered','cancelled')`),
+  ],
+);
+
+export const purchaseRequestLines = pgTable(
+  'purchase_request_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    requestId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    lineNo: integer().notNull(),
+    itemId: uuid(),
+    description: text().notNull(),
+    unit: text().notNull(),
+    quantity: qty().notNull(),
+    /** Tahmini birim fiyat (defter para birimi); onay tutarı için. */
+    estUnitPrice: numeric({ precision: 19, scale: 4 }),
+    wbsId: uuid(),
+  },
+  (t) => [
+    unique('purchase_request_lines_no_uq').on(t.requestId, t.lineNo),
+    unique('purchase_request_lines_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'purchase_request_lines_request_fk',
+      columns: [t.requestId, t.projectId],
+      foreignColumns: [purchaseRequests.id, purchaseRequests.projectId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'purchase_request_lines_item_fk',
+      columns: [t.itemId, t.companyId],
+      foreignColumns: [items.id, items.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_request_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    check('purchase_request_lines_qty_ck', sql`${t.quantity} > 0 and (${t.estUnitPrice} is null or ${t.estUnitPrice} >= 0)`),
+  ],
+);
+
+/** Teklif isteği (talebe bağlı). */
+export const rfqs = pgTable(
+  'rfqs',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    requestId: uuid().notNull(),
+    /** open | awarded | cancelled */
+    status: text().notNull().default('open'),
+    dueDate: date({ mode: 'string' }),
+    note: text(),
+    awardedOfferId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('rfqs_code_uq').on(t.companyId, t.code),
+    unique('rfqs_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'rfqs_request_fk',
+      columns: [t.requestId, t.companyId],
+      foreignColumns: [purchaseRequests.id, purchaseRequests.companyId],
+    }),
+    // Talep başına en çok bir açık/verilmiş RFQ
+    uniqueIndex('rfqs_request_open_uq')
+      .on(t.requestId)
+      .where(sql`${t.status} <> 'cancelled'`),
+    check('rfqs_status_ck', sql`${t.status} in ('open','awarded','cancelled')`),
+  ],
+);
+
+export const rfqOffers = pgTable(
+  'rfq_offers',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    rfqId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    deliveryDays: integer(),
+    paymentDays: integer().notNull().default(0),
+    note: text(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('rfq_offers_party_uq').on(t.rfqId, t.partyId),
+    unique('rfq_offers_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'rfq_offers_rfq_fk',
+      columns: [t.rfqId, t.companyId],
+      foreignColumns: [rfqs.id, rfqs.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'rfq_offers_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    check('rfq_offers_terms_ck', sql`${t.paymentDays} between 0 and 365 and (${t.deliveryDays} is null or ${t.deliveryDays} >= 0)`),
+  ],
+);
+
+export const rfqOfferLines = pgTable(
+  'rfq_offer_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    offerId: uuid().notNull(),
+    requestLineId: uuid().notNull(),
+    unitPrice: numeric({ precision: 19, scale: 4 }).notNull(),
+  },
+  (t) => [
+    unique('rfq_offer_lines_uq').on(t.offerId, t.requestLineId),
+    foreignKey({
+      name: 'rfq_offer_lines_offer_fk',
+      columns: [t.offerId, t.companyId],
+      foreignColumns: [rfqOffers.id, rfqOffers.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'rfq_offer_lines_line_fk',
+      columns: [t.requestLineId, t.companyId],
+      foreignColumns: [purchaseRequestLines.id, purchaseRequestLines.companyId],
+    }),
+    check('rfq_offer_lines_price_ck', sql`${t.unitPrice} >= 0`),
+  ],
+);
+
+/** Satın alma siparişi. Verilmiş (issued) sipariş taahhüt yaratır; kabul edilen miktar taahhütten düşer. */
+export const purchaseOrders = pgTable(
+  'purchase_orders',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    projectId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    requestId: uuid(),
+    offerId: uuid(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    vatCode: text(),
+    vatRate: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    paymentDays: integer().notNull().default(30),
+    deliveryLocation: text(),
+    note: text(),
+    /** draft | issued | closed | cancelled */
+    status: text().notNull().default('draft'),
+    issuedAt: timestamp({ withTimezone: true }),
+    cancelReason: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('purchase_orders_code_uq').on(t.companyId, t.code),
+    unique('purchase_orders_id_company_uq').on(t.id, t.companyId),
+    unique('purchase_orders_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'purchase_orders_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_orders_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_orders_request_fk',
+      columns: [t.requestId, t.companyId],
+      foreignColumns: [purchaseRequests.id, purchaseRequests.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_orders_offer_fk',
+      columns: [t.offerId, t.companyId],
+      foreignColumns: [rfqOffers.id, rfqOffers.companyId],
+    }),
+    index('purchase_orders_project_idx').on(t.companyId, t.projectId, t.status),
+    index('purchase_orders_party_idx').on(t.companyId, t.partyId),
+    check('purchase_orders_status_ck', sql`${t.status} in ('draft','issued','closed','cancelled')`),
+    check('purchase_orders_terms_ck', sql`${t.paymentDays} between 0 and 365 and ${t.vatRate} between 0 and 100`),
+    check('purchase_orders_issued_ck', sql`(${t.status} in ('issued','closed')) = (${t.issuedAt} is not null) or ${t.status} = 'cancelled'`),
+  ],
+);
+
+export const purchaseOrderLines = pgTable(
+  'purchase_order_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    orderId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    lineNo: integer().notNull(),
+    requestLineId: uuid(),
+    itemId: uuid(),
+    description: text().notNull(),
+    unit: text().notNull(),
+    quantity: qty().notNull(),
+    unitPrice: numeric({ precision: 19, scale: 4 }).notNull(),
+    wbsId: uuid(),
+  },
+  (t) => [
+    unique('purchase_order_lines_no_uq').on(t.orderId, t.lineNo),
+    unique('purchase_order_lines_id_company_uq').on(t.id, t.companyId),
+    index('purchase_order_lines_wbs_idx').on(t.wbsId),
+    foreignKey({
+      name: 'purchase_order_lines_order_fk',
+      columns: [t.orderId, t.projectId],
+      foreignColumns: [purchaseOrders.id, purchaseOrders.projectId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'purchase_order_lines_item_fk',
+      columns: [t.itemId, t.companyId],
+      foreignColumns: [items.id, items.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_order_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'purchase_order_lines_request_line_fk',
+      columns: [t.requestLineId, t.companyId],
+      foreignColumns: [purchaseRequestLines.id, purchaseRequestLines.companyId],
+    }),
+    check('purchase_order_lines_amount_ck', sql`${t.quantity} > 0 and ${t.unitPrice} >= 0`),
+  ],
+);
+
+/** Mal kabul (siparişe karşı teslim alınan miktar); stoklu satır varsa bir alış irsaliyesi de üretir. */
+export const poReceipts = pgTable(
+  'po_receipts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    orderId: uuid().notNull(),
+    receiptNo: text().notNull(),
+    receiptDate: date({ mode: 'string' }).notNull(),
+    deliveryNoteId: uuid(),
+    note: text(),
+    /** posted | cancelled */
+    status: text().notNull().default('posted'),
+    cancelReason: text(),
+    cancelledAt: timestamp({ withTimezone: true }),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('po_receipts_no_uq').on(t.companyId, t.receiptNo),
+    unique('po_receipts_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'po_receipts_order_fk',
+      columns: [t.orderId, t.companyId],
+      foreignColumns: [purchaseOrders.id, purchaseOrders.companyId],
+    }),
+    foreignKey({
+      name: 'po_receipts_note_fk',
+      columns: [t.deliveryNoteId, t.companyId],
+      foreignColumns: [deliveryNotes.id, deliveryNotes.companyId],
+    }),
+    index('po_receipts_order_idx').on(t.orderId),
+    check('po_receipts_status_ck', sql`${t.status} in ('posted','cancelled')`),
+  ],
+);
+
+export const poReceiptLines = pgTable(
+  'po_receipt_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    receiptId: uuid().notNull(),
+    orderLineId: uuid().notNull(),
+    quantity: qty().notNull(),
+  },
+  (t) => [
+    unique('po_receipt_lines_uq').on(t.receiptId, t.orderLineId),
+    index('po_receipt_lines_line_idx').on(t.orderLineId),
+    foreignKey({
+      name: 'po_receipt_lines_receipt_fk',
+      columns: [t.receiptId, t.companyId],
+      foreignColumns: [poReceipts.id, poReceipts.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'po_receipt_lines_line_fk',
+      columns: [t.orderLineId, t.companyId],
+      foreignColumns: [purchaseOrderLines.id, purchaseOrderLines.companyId],
+    }),
+    check('po_receipt_lines_qty_ck', sql`${t.quantity} > 0`),
+  ],
+);
+
+/** Üçlü eşleştirme toleransları (şirket politikası; yasal parametre değildir). Satır yoksa varsayılanlar geçerlidir (miktar %0, fiyat %2). */
+export const procurementSettings = pgTable(
+  'procurement_settings',
+  {
+    companyId: uuid()
+      .primaryKey()
+      .references(() => companies.id),
+    qtyTolerancePct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    priceTolerancePct: numeric({ precision: 7, scale: 4 }).notNull().default('2'),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('procurement_settings_ck', sql`${t.qtyTolerancePct} between 0 and 100 and ${t.priceTolerancePct} between 0 and 100`)],
+);
+
+// ---------------------------------------------------------------------------
+// Gayrimenkul satışı (Faz B3): bağımsız bölüm envanteri, satış sözleşmesi, taksit planı, fesih
+// ---------------------------------------------------------------------------
+
+/** Kendi projesindeki satılabilir bağımsız bölüm. Durum yalnızca sözleşme akışıyla değişir (tetikleyici denetler). */
+export const realEstateUnits = pgTable(
+  'real_estate_units',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    projectId: uuid().notNull(),
+    /** Blok/etap; yoksa boş metin (tekillik anahtarında yer alır). */
+    block: text().notNull().default(''),
+    floor: integer(),
+    unitNo: text().notNull(),
+    /** apartment | villa | shop | office | land | parking | storage | other */
+    unitType: text().notNull().default('apartment'),
+    grossM2: numeric({ precision: 12, scale: 2 }),
+    netM2: numeric({ precision: 12, scale: 2 }),
+    /** Oda düzeni, örn. "2+1". */
+    rooms: text(),
+    listPrice: money(),
+    listCurrency: text().references(() => currencies.code),
+    /** available | reserved | sold | handed_over */
+    status: text().notNull().default('available'),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('real_estate_units_no_uq').on(t.companyId, t.projectId, t.block, t.unitNo),
+    unique('real_estate_units_id_company_uq').on(t.id, t.companyId),
+    unique('real_estate_units_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'real_estate_units_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('real_estate_units_project_idx').on(t.companyId, t.projectId, t.status),
+    check('real_estate_units_type_ck', sql`${t.unitType} in ('apartment','villa','shop','office','land','parking','storage','other')`),
+    check('real_estate_units_status_ck', sql`${t.status} in ('available','reserved','sold','handed_over')`),
+    check('real_estate_units_price_ck', sql`(${t.listPrice} is null or (${t.listPrice} >= 0 and ${t.listCurrency} is not null))`),
+    check('real_estate_units_area_ck', sql`(${t.grossM2} is null or ${t.grossM2} > 0) and (${t.netM2} is null or ${t.netM2} > 0)`),
+  ],
+);
+
+/**
+ * Satış sözleşmesi: bir birim, bir alıcı, dövizli bedel ve taksit planı. Etkinleşince taksit başına alıcı carisine
+ * vadeli 120 satırı ve ertelenmiş gelir (380) yazılır; teslimde gelire (600) aktarılır.
+ */
+export const salesContracts = pgTable(
+  'sales_contracts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    unitId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    contractDate: date({ mode: 'string' }).notNull(),
+    plannedHandover: date({ mode: 'string' }),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    price: money().notNull(),
+    downPayment: money().notNull().default('0'),
+    /** Gelir tanıma yöntemi (veri olarak saklanır): on_handover. */
+    recognition: text().notNull().default('on_handover'),
+    /** draft | active | handed_over | terminated | cancelled */
+    status: text().notNull().default('draft'),
+    /** Etkinleşme tarihi ve kuru (sözleşme para biriminden defter para birimine). */
+    activatedOn: date({ mode: 'string' }),
+    activationFx: rate(),
+    activationEntryId: uuid(),
+    handedOverOn: date({ mode: 'string' }),
+    handoverEntryId: uuid(),
+    terminatedOn: date({ mode: 'string' }),
+    cancelledAt: timestamp({ withTimezone: true }),
+    cancelReason: text(),
+    penaltyNote: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('sales_contracts_code_uq').on(t.companyId, t.code),
+    unique('sales_contracts_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'sales_contracts_unit_fk',
+      columns: [t.unitId, t.projectId],
+      foreignColumns: [realEstateUnits.id, realEstateUnits.projectId],
+    }),
+    foreignKey({
+      name: 'sales_contracts_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'sales_contracts_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    foreignKey({
+      name: 'sales_contracts_activation_fk',
+      columns: [t.activationEntryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    foreignKey({
+      name: 'sales_contracts_handover_fk',
+      columns: [t.handoverEntryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    // Birim başına tek canlı sözleşme (taslak, etkin ya da teslim edilmiş)
+    uniqueIndex('sales_contracts_unit_live_uq')
+      .on(t.unitId)
+      .where(sql`${t.status} in ('draft','active','handed_over')`),
+    index('sales_contracts_project_idx').on(t.companyId, t.projectId, t.status),
+    index('sales_contracts_party_idx').on(t.companyId, t.partyId),
+    check('sales_contracts_status_ck', sql`${t.status} in ('draft','active','handed_over','terminated','cancelled')`),
+    check('sales_contracts_recognition_ck', sql`${t.recognition} in ('on_handover')`),
+    check('sales_contracts_amount_ck', sql`${t.price} > 0 and ${t.downPayment} >= 0 and ${t.downPayment} <= ${t.price}`),
+    check(
+      'sales_contracts_active_ck',
+      sql`${t.status} in ('draft','cancelled') or (${t.activatedOn} is not null and ${t.activationEntryId} is not null and ${t.activationFx} is not null)`,
+    ),
+    check('sales_contracts_handover_ck', sql`(${t.status} = 'handed_over') = (${t.handoverEntryId} is not null)`),
+  ],
+);
+
+/** Taksit planı satırı. Taslakta serbestçe düzenlenir; etkinleşince değişmez ve `journal_line_id` açık kalemi gösterir. */
+export const salesInstallments = pgTable(
+  'sales_installments',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    contractId: uuid().notNull(),
+    seq: integer().notNull(),
+    /** down_payment | installment | balloon */
+    kind: text().notNull().default('installment'),
+    dueDate: date({ mode: 'string' }).notNull(),
+    /** Sözleşme para biriminde. */
+    amount: money().notNull(),
+    journalLineId: uuid(),
+    /** Alıcıdan tahsil edilen fon/harç satırı (kind = 'fee'): kaynak tarife ve etiket. Bedele sayılmaz; 329 yükümlülüğüne yazılır. */
+    feeScheduleId: uuid(),
+    label: text(),
+  },
+  (t) => [
+    unique('sales_installments_seq_uq').on(t.contractId, t.seq),
+    unique('sales_installments_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'sales_installments_contract_fk',
+      columns: [t.contractId, t.companyId],
+      foreignColumns: [salesContracts.id, salesContracts.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'sales_installments_line_fk',
+      columns: [t.journalLineId, t.companyId],
+      foreignColumns: [journalLines.id, journalLines.companyId],
+    }),
+    index('sales_installments_due_idx').on(t.companyId, t.dueDate),
+    foreignKey({
+      name: 'sales_installments_fee_fk',
+      columns: [t.feeScheduleId, t.companyId],
+      foreignColumns: [feeSchedules.id, feeSchedules.companyId],
+    }),
+    check('sales_installments_kind_ck', sql`${t.kind} in ('down_payment','installment','balloon','fee')`),
+    check('sales_installments_fee_ck', sql`(${t.kind} = 'fee') or (${t.feeScheduleId} is null and ${t.label} is null)`),
+    check('sales_installments_amount_ck', sql`${t.amount} > 0 and ${t.seq} >= 1`),
+  ],
+);
+
+/** Teslim öncesi fesih: tahsil edilen tutardan kesinti ve iade; ödenmemiş taksitler kapatılır. Değişmez. */
+export const salesTerminations = pgTable(
+  'sales_terminations',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    contractId: uuid().notNull(),
+    terminationDate: date({ mode: 'string' }).notNull(),
+    reason: text().notNull(),
+    /** Sözleşme para biriminde. */
+    collected: money().notNull(),
+    retained: money().notNull(),
+    refund: money().notNull(),
+    entryId: uuid().notNull(),
+    /** İadenin ödendiği kasa/banka hesabı (iade varsa). */
+    refundAccountId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('sales_terminations_contract_uq').on(t.contractId),
+    foreignKey({
+      name: 'sales_terminations_contract_fk',
+      columns: [t.contractId, t.companyId],
+      foreignColumns: [salesContracts.id, salesContracts.companyId],
+    }),
+    foreignKey({
+      name: 'sales_terminations_entry_fk',
+      columns: [t.entryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    foreignKey({
+      name: 'sales_terminations_account_fk',
+      columns: [t.refundAccountId, t.companyId],
+      foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId],
+    }),
+    check('sales_terminations_amount_ck', sql`${t.collected} >= 0 and ${t.retained} >= 0 and ${t.refund} >= 0 and ${t.retained} + ${t.refund} = ${t.collected}`),
+    check('sales_terminations_refund_ck', sql`${t.refund} = 0 or ${t.refundAccountId} is not null`),
+  ],
+);
+
+/**
+ * Kasasız açık kalem kapatma: fesihte ödenmemiş taksit kalemi, fesih yevmiyesinin cari alacak satırıyla kalem bazında
+ * kapatılır (`party_allocations`'ın kasa/banka hareketsiz karşılığı). Cari açık kalem hesabı bunları okur; FIFO havuzuna girmez.
+ */
+export const salesWriteoffs = pgTable(
+  'sales_writeoffs',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    contractId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    /** Kapatılan taksit satırı ve kapatan (fesih yevmiyesi) cari satırı. */
+    chargeLineId: uuid().notNull(),
+    settleLineId: uuid().notNull(),
+    entryId: uuid().notNull(),
+    /** Kalemin para biriminde ve defter tutarında kapatılan pay. */
+    amount: money().notNull(),
+    amountBase: money().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('sales_writeoffs_settle_uq').on(t.settleLineId),
+    index('sales_writeoffs_charge_idx').on(t.chargeLineId),
+    index('sales_writeoffs_party_idx').on(t.companyId, t.partyId),
+    foreignKey({
+      name: 'sales_writeoffs_contract_fk',
+      columns: [t.contractId, t.companyId],
+      foreignColumns: [salesContracts.id, salesContracts.companyId],
+    }),
+    foreignKey({
+      name: 'sales_writeoffs_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    foreignKey({
+      name: 'sales_writeoffs_charge_fk',
+      columns: [t.chargeLineId, t.companyId],
+      foreignColumns: [journalLines.id, journalLines.companyId],
+    }),
+    foreignKey({
+      name: 'sales_writeoffs_settle_fk',
+      columns: [t.settleLineId, t.companyId],
+      foreignColumns: [journalLines.id, journalLines.companyId],
+    }),
+    foreignKey({
+      name: 'sales_writeoffs_entry_fk',
+      columns: [t.entryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    check('sales_writeoffs_amount_ck', sql`${t.amount} > 0 and ${t.amountBase} > 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Nakit projeksiyonu (Faz B4): elle girilen ek kalemler (kira, maaş, vergi vb.)
+// ---------------------------------------------------------------------------
+
+export const cashForecastItems = pgTable(
+  'cash_forecast_items',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    itemDate: date({ mode: 'string' }).notNull(),
+    /** in | out */
+    direction: text().notNull(),
+    description: text().notNull(),
+    amount: money().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    projectId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('cash_forecast_items_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'cash_forecast_items_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('cash_forecast_items_date_idx').on(t.companyId, t.itemDate),
+    check('cash_forecast_items_direction_ck', sql`${t.direction} in ('in','out')`),
+    check('cash_forecast_items_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Altyapı fonları ve harçlar (Faz B4): tarihli, kaynak notlu, doğrulama alanlı tarifeler
+// ---------------------------------------------------------------------------
+
+/**
+ * Altyapı fonu/harç tarifesi (elektrik, su, kanalizasyon, belediye, tapu vb.). Oranlar/tutarlar kodda sabit değildir:
+ * tarihli kayıt, kaynak notu ve "doğrulandı" işareti taşır (tax_rates deseni). `side`: buyer = alıcıdan tahsil edilen fon
+ * (satış sözleşmesine eklenir), project = projenin ödediği maliyet (tahmin ve bütçe karşılaştırması).
+ * `basis`: per_unit (birim başına), per_m2 (brüt m² başına), pct_of_price (sözleşme bedeli yüzdesi), fixed (sabit).
+ */
+export const feeSchedules = pgTable(
+  'fee_schedules',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    side: text().notNull(),
+    basis: text().notNull(),
+    /** Tutar (para biriminde) ya da yüzde (pct_of_price). */
+    amount: numeric({ precision: 19, scale: 4 }).notNull(),
+    currencyCode: text().references(() => currencies.code),
+    validFrom: date({ mode: 'string' }).notNull(),
+    validTo: date({ mode: 'string' }),
+    sourceNote: text(),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('fee_schedules_uq').on(t.companyId, t.code, t.validFrom),
+    unique('fee_schedules_id_company_uq').on(t.id, t.companyId),
+    check('fee_schedules_side_ck', sql`${t.side} in ('buyer','project')`),
+    check('fee_schedules_basis_ck', sql`${t.basis} in ('per_unit','per_m2','pct_of_price','fixed')`),
+    check('fee_schedules_amount_ck', sql`${t.amount} >= 0 and (${t.basis} <> 'pct_of_price' or ${t.amount} <= 100)`),
+    check('fee_schedules_currency_ck', sql`(${t.basis} = 'pct_of_price') or ${t.currencyCode} is not null`),
+    check('fee_schedules_range_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
   ],
 );

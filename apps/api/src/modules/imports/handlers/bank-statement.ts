@@ -1,16 +1,6 @@
 import { createHash } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import {
-  bankStatementOptionsSchema,
-  dec,
-  formatDateTR,
-  formatTR,
-  sum,
-  toDbAmount,
-  type ImportMessage,
-  type ImportRow,
-  type MoneyValue,
-} from '@erp/shared';
+import { bankStatementOptionsSchema, currencySymbol, dec, formatDateTR, formatMoney, formatTR, type ImportMessage, type ImportRow, type MoneyValue, sum, toDbAmount } from '@erp/shared';
 import { bankStatementLines, bankStatements, treasuryAccounts } from '../../../db/schema';
 import { foldKey, parseDate, parseDecimal } from '../values';
 import { RowState, cellOf, type ImportCtx, type ImportHandler, type PlanResult } from './common';
@@ -198,9 +188,9 @@ export const bankStatementHandler: ImportHandler = {
         { label: 'Banka hesabı', value: account ? account.name : '—' },
         { label: 'Ekstre aralığı', value: from && to ? `${formatDateTR(from)} – ${formatDateTR(to)}` : '—' },
         { label: 'Alınacak satır', value: String(toWrite.length) },
-        { label: `Giren toplam (${cur})`, value: formatTR(totalIn) },
-        { label: `Çıkan toplam (${cur})`, value: formatTR(totalOut) },
-        { label: 'Kapanış bakiyesi', value: closing ? `${formatTR(closing)} ${cur}` : 'bilinmiyor' },
+        { label: `Giren toplam (${currencySymbol(cur)})`, value: formatTR(totalIn) },
+        { label: `Çıkan toplam (${currencySymbol(cur)})`, value: formatTR(totalOut) },
+        { label: 'Kapanış bakiyesi', value: closing ? formatMoney(closing, cur) : 'bilinmiyor' },
         { label: 'Atlanacak satır', value: String(skipped) },
       ],
       apply: async () => {
@@ -244,7 +234,7 @@ export const bankStatementHandler: ImportHandler = {
           summary: [
             { label: 'Ekstre aralığı', value: from && to ? `${formatDateTR(from)} – ${formatDateTR(to)}` : '—' },
             { label: 'Alınan satır', value: String(toWrite.length) },
-            { label: 'Kapanış bakiyesi', value: closing ? `${formatTR(closing)} ${cur}` : 'bilinmiyor' },
+            { label: 'Kapanış bakiyesi', value: closing ? formatMoney(closing, cur) : 'bilinmiyor' },
           ],
           entries: [],
         };

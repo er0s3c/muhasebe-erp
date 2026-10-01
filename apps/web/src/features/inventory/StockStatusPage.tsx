@@ -12,7 +12,7 @@ import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { isZero, money } from '../../lib/format';
+import { currencySymbol, isZero, money } from '../../lib/format';
 import { useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { StockStatusReport } from '../../lib/types';
 import { qtyText, useCategories, useUnitLabel, useWarehouses } from './common';
@@ -140,7 +140,7 @@ export function StockStatusPage() {
                   <Th num>{t('inventory.status.minLevel')}</Th>
                   <Th num>{t('inventory.status.avgCost')}</Th>
                   <Th num>
-                    {t('inventory.status.value')} ({data.baseCurrency})
+                    {t('inventory.status.value')} ({currencySymbol(data.baseCurrency)})
                   </Th>
                 </tr>
               </thead>
@@ -178,7 +178,7 @@ export function StockStatusPage() {
 
         {data && data.totals.reportingValue && (
           <p className="text-sm text-muted">
-            {t('inventory.status.reporting', { currency: data.totals.reportingCurrency })}: <span className="num text-text">{money(data.totals.reportingValue)}</span>
+            {t('inventory.status.reporting', { currency: currencySymbol(data.totals.reportingCurrency ?? '') })}: <span className="num text-text">{money(data.totals.reportingValue)}</span>
           </p>
         )}
 

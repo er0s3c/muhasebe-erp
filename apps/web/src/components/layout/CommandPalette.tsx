@@ -45,6 +45,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       list.push({ id: 'new-receipt', label: t('shell.newReceipt'), group: t('shell.quickActions'), path: '/treasury/transactions?new=receipt', icon: 'wallet', keywords: 'yeni tahsilat para al kasa banka' });
       list.push({ id: 'new-payment', label: t('shell.newPayment'), group: t('shell.quickActions'), path: '/treasury/transactions?new=payment', icon: 'landmark', keywords: 'yeni ödeme para ver kasa banka' });
     }
+    if (modules.includes('construction.projects') && can('projects.manage')) {
+      list.push({ id: 'new-project', label: t('shell.newProject'), group: t('shell.quickActions'), path: '/projects?new=1', icon: 'hard-hat', keywords: 'yeni proje şantiye inşaat ekle' });
+    }
     if (modules.includes('core.settings') && can('rates.manage')) {
       list.push({ id: 'enter-rates', label: t('shell.enterRates'), group: t('shell.quickActions'), path: '/settings/currencies', icon: 'coins', keywords: 'döviz kur dolar euro sterlin' });
     }

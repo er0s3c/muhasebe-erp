@@ -17,6 +17,7 @@ import { audit } from '../audit';
 import { activations, customers, licenses } from '../db/schema';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors';
 import { buildLease, countActiveActivations, getLicenseForUpdate, type ActivationRow } from './licenses';
+import { updateOfferFor } from './releases';
 
 /** İstemci ile satıcı saati arasında kabul edilen en büyük fark (yeniden oynatma penceresi de budur). */
 export const MAX_SKEW_MS = 10 * 60 * 1000;
@@ -153,7 +154,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     if (payload.fingerprint !== activation.fingerprint) {
       throw conflict('Sunucu parmak izi değişti; uygulamadan yeniden etkinleştirin', 'FINGERPRINT_CHANGED');
     }
-    const token = await app.db.transaction(async (tx) => {
+    return app.db.transaction(async (tx) => {
       const now = app.now();
       // Yeniden oynatma koruması: yalnızca daha yeni `ts` kabul edilir; koşullu güncelleme eşzamanlı çift isteği de eler.
       const history = [...activation.ipHistory.filter((h) => h.ip !== req.ip), { ip: req.ip, at: now }].slice(-IP_HISTORY_MAX);
@@ -166,6 +167,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
           lastSeenAt: new Date(now),
           lastIp: req.ip,
           appVersion: payload.appVersion,
+          platform: payload.platform ?? activation.platform,
           reportedDevices: payload.stats.devices,
           reportedCompanies: payload.stats.companies,
           ipHistory: history,
@@ -180,9 +182,16 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
         .innerJoin(customers, eq(customers.id, licenses.customerId))
         .where(eq(licenses.id, activation.licenseId));
       const lease = buildLease(row!.license, row!.customer, { installationId: activation.installationId, fingerprint: activation.fingerprint }, { typ: 'lease', nonce: payload.nonce, now });
-      return signToken('lease', lease, app.signer);
+      // Uzaktan güncelleme: satıcı bu lisansa bir sürüm gönderdiyse teklif (imzalı manifesto + indirme belirteci) eklenir
+      const update = await updateOfferFor(app, tx, {
+        license: row!.license,
+        installationId: activation.installationId,
+        appVersion: payload.appVersion,
+        platform: payload.platform ?? (activation.platform as 'linux-x64' | 'win-x64' | null) ?? undefined,
+        now,
+      });
+      return { lease: signToken('lease', lease, app.signer), ...(update ? { update } : {}) };
     });
-    return { lease: token };
   });
 
   app.post('/v1/deactivate', { bodyLimit: 16 * 1024 }, async (req) => {

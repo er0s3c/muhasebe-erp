@@ -14,10 +14,12 @@ import { MemoryLimiter, Semaphore } from './http/limits';
 import { createMailer, type Mailer } from './modules/mail/mailer';
 import { assertLicensed, createLicenseService, type LicenseSetup } from './licensing';
 import { licenseRoutes } from './licensing/routes';
+import { updateRoutes } from './modules/system/updates';
 import { DeviceService } from './licensing/devices';
 import { deviceRoutes } from './licensing/device-routes';
 import { accountRoutes } from './modules/auth/account';
 import { registerWebApp, webNotFoundHandler } from './http/static';
+import { mfaRoutes } from './modules/auth/mfa';
 import { authRoutes } from './modules/auth/routes';
 import { inventoryRoutes } from './modules/inventory/routes';
 import { deliveryRoutes } from './modules/deliveries/routes';
@@ -26,6 +28,11 @@ import { treasuryRoutes } from './modules/treasury/routes';
 import { exportRoutes } from './modules/exports/routes';
 import { importRoutes } from './modules/imports/routes';
 import { bankStatementRoutes } from './modules/bank-statements/routes';
+import { projectRoutes } from './modules/projects/routes';
+import { procurementRoutes } from './modules/procurement/routes';
+import { realEstateRoutes } from './modules/realestate/routes';
+import { cashRoutes } from './modules/cash/routes';
+import { subcontractRoutes } from './modules/subcontracts/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
@@ -154,9 +161,11 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   });
 
   await app.register(licenseRoutes);
+  await app.register(updateRoutes);
   await app.register(deviceRoutes);
   await app.register(authRoutes);
   await app.register(accountRoutes);
+  await app.register(mfaRoutes);
   await app.register(tenancyRoutes);
   await app.register(memberRoutes);
   await app.register(settingsRoutes);
@@ -169,6 +178,11 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(exportRoutes);
   await app.register(importRoutes);
   await app.register(bankStatementRoutes);
+  await app.register(projectRoutes);
+  await app.register(subcontractRoutes);
+  await app.register(procurementRoutes);
+  await app.register(realEstateRoutes);
+  await app.register(cashRoutes);
 
   // Derlenmiş web arayüzü (üretim): rotalardan SONRA kaydedilir; SPA yedeği yukarıdaki 404 işleyicisindedir.
   if (config.WEB_DIST_DIR) {

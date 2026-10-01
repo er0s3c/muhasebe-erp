@@ -64,6 +64,8 @@ export const heartbeatRequestSchema = z.object({
     devices: z.number().int().min(0).max(1_000_000),
     companies: z.number().int().min(0).max(1_000_000),
   }),
+  /** Kurulum kitinin hedefi (uzaktan güncellemede hangi arşivin teklif edileceği); elle/eski kurulumda yoktur. */
+  platform: z.enum(['linux-x64', 'win-x64']).optional(),
 });
 export type HeartbeatRequest = z.infer<typeof heartbeatRequestSchema>;
 

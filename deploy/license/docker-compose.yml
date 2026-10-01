@@ -49,12 +49,17 @@ services:
       LICENSE_DATA_KEY: ${LICENSE_DATA_KEY:?LICENSE_DATA_KEY gerekli (openssl rand -base64 48)}
       LICENSE_SIGNING_KEY_FILE: /run/keys/signing-key.json
       LICENSE_SIGNING_KEY_PASSPHRASE: ${LICENSE_SIGNING_KEY_PASSPHRASE:?LICENSE_SIGNING_KEY_PASSPHRASE gerekli}
-      TRUST_PROXY: '1'
+      # Fastify ≥ 5.12 sayısal atlama değerini ("1") yok sayar; yalnızca iç ağdaki vekile (Caddy) güvenilir.
+      TRUST_PROXY: 'loopback,uniquelocal'
       ADMIN_COOKIE_SECURE: 'true'
+      # Giriş anahtarları (passkey) bu kökene bağlanır; alan adı değişirse eski anahtarlar çalışmaz.
+      LICENSE_ADMIN_ORIGIN: https://${LICENSE_DOMAIN}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       # Mühürlü imza anahtarı dosyası (ana makinede yalnızca root okuyabilmeli): <LICENSE_KEY_DIR>/signing-key.json
       - ${LICENSE_KEY_DIR:?LICENSE_KEY_DIR gerekli}:/run/keys:ro
+      # Uzaktan güncelleme kit arşivleri (panelden yüklenir; yedeklenmesi gerekmez, npm run release ile yeniden üretilebilir)
+      - releases:/var/lib/erp-license/releases
     depends_on:
       db:
         condition: service_healthy
@@ -80,5 +85,6 @@ services:
 
 volumes:
   licensedata:
+  releases:
   caddy_data:
   caddy_config:

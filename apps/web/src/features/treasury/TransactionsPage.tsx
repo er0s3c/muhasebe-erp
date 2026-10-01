@@ -8,7 +8,7 @@ import { Card, PageHeader } from '../../components/ui/Card';
 import { EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { formatDateTR, money } from '../../lib/format';
+import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import type { TreasuryTxnListRow, TreasuryTxnStatus, TreasuryTxnType } from '../../lib/types';
 import { TXN_TYPES, TxnStatusBadge, TxnTypeBadge, accountLabel, useTreasuryAccounts } from './common';
@@ -172,16 +172,16 @@ export function TransactionsPage() {
                       {r.type === 'exchange' && r.counterAmount ? (
                         <>
                           <span className="block">
-                            −{money(r.amount)} {r.currencyCode}
+                            −{moneyIn(r.amount, r.currencyCode)}
                           </span>
                           <span className="block text-xs text-muted">
-                            +{money(r.counterAmount)} {r.toCurrencyCode}
+                            +{moneyIn(r.counterAmount, r.toCurrencyCode ?? r.currencyCode)}
                           </span>
                         </>
                       ) : (
                         <>
                           {r.type === 'receipt' || r.type === 'other_receipt' ? '+' : r.type === 'transfer' ? '' : '−'}
-                          {money(r.amount)} {r.currencyCode}
+                          {moneyIn(r.amount, r.currencyCode)}
                         </>
                       )}
                     </Td>

@@ -28,8 +28,31 @@ async function waitForServer(url: string, tries = 60) {
 }
 
 const settle = (page: Page, ms = 500) => page.waitForLoadState('networkidle').then(() => page.waitForTimeout(ms));
+/** Ekranda simge yerine çıplak para birimi kodu (TRY/GBP/EUR/USD) kalan metinler; veri kaynaklı adlar ("KTB GBP Hesabı") beklenen istisnadır. */
+const bareCodes = new Set<string>();
+async function scanBareCodes(page: Page, name: string) {
+  const found = await page.evaluate(() => {
+    const re = /\b(TRY|GBP|EUR|USD)\b/;
+    const out: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const p = n.parentElement;
+      if (!p || ['SCRIPT', 'STYLE'].includes(p.tagName)) continue;
+      if (re.test(n.textContent ?? '')) out.push(`metin: ${(n.textContent ?? '').trim().slice(0, 70)}`);
+    }
+    for (const el of Array.from(document.querySelectorAll('[aria-label],[placeholder],[title]'))) {
+      for (const attr of ['aria-label', 'placeholder', 'title']) {
+        const v = el.getAttribute(attr);
+        if (v && re.test(v)) out.push(`${attr}: ${v.slice(0, 70)}`);
+      }
+    }
+    return out;
+  });
+  for (const f of found) bareCodes.add(`${name} → ${f}`);
+}
 const shot = async (page: Page, name: string) => {
   await page.screenshot({ path: `${OUT}/${name}.png` });
+  await scanBareCodes(page, name);
   console.log('  ✓', name);
 };
 
@@ -153,7 +176,7 @@ async function main() {
   await stockForm.getByLabel('Miktar 1').fill('5');
   await stockForm.getByLabel('Birim maliyet 1').fill('110');
   await stockForm.getByLabel('Para birimi 1').selectOption('GBP');
-  await stockForm.getByLabel('Tutar (TRY) 1').filter({ hasText: /\d/ }).waitFor();
+  await stockForm.getByLabel('Tutar (₺) 1').filter({ hasText: /\d/ }).waitFor();
   await settle(page, 600);
   await shot(page, '32-stok-giris-formu');
   await page.keyboard.press('Escape');
@@ -285,7 +308,7 @@ async function main() {
   await page.getByRole('button', { name: 'Tahsilat al' }).click();
   const receipt = page.getByRole('dialog');
   await receipt.getByText('Açık kalemler').waitFor();
-  await receipt.getByLabel('Tahsil edilen tutar (TRY)').fill('700.000,00');
+  await receipt.getByLabel('Tahsil edilen tutar (₺)').fill('700.000,00');
   await receipt.getByRole('button', { name: 'Tutarı en eskiden dağıt' }).click();
   await settle(page, 600);
   await shot(page, '65-tahsilat-formu');
@@ -299,7 +322,7 @@ async function main() {
   await page.getByRole('button', { name: 'Ödeme yap' }).click();
   const payment = page.getByRole('dialog');
   await payment.getByText('Açık kalemler').waitFor();
-  await payment.getByLabel('Ödeme hesabı (çıkış)').selectOption({ label: 'KTB TL Vadesiz · TRY' });
+  await payment.getByLabel('Ödeme hesabı (çıkış)').selectOption({ label: 'KTB TL Vadesiz · ₺' });
   await payment.getByRole('button', { name: 'Tümünü seç' }).click();
   await settle(page, 700);
   await shot(page, '66-odeme-formu-kur-farki');
@@ -311,12 +334,56 @@ async function main() {
   await page.getByRole('button', { name: 'Yeni işlem' }).click();
   const exchange = page.getByRole('dialog');
   await exchange.getByRole('tab', { name: 'Döviz alım-satım' }).click();
-  await exchange.getByLabel('Kaynak hesap (çıkış)').selectOption({ label: 'KTB GBP Hesabı · GBP' });
-  await exchange.getByLabel('Hedef hesap (giriş)').selectOption({ label: 'KTB TL Vadesiz · TRY' });
-  await exchange.getByLabel('Çıkan tutar (GBP)').fill('10.000,00');
-  await exchange.getByLabel('Giren tutar (TRY)').fill('648.000,00');
+  await exchange.getByLabel('Kaynak hesap (çıkış)').selectOption({ label: 'KTB GBP Hesabı · £' });
+  await exchange.getByLabel('Hedef hesap (giriş)').selectOption({ label: 'KTB TL Vadesiz · ₺' });
+  await exchange.getByLabel('Çıkan tutar (£)').fill('10.000,00');
+  await exchange.getByLabel('Giren tutar (₺)').fill('648.000,00');
   await settle(page, 700);
   await shot(page, '67-doviz-satis-formu');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
+  // Şantiye projeleri: liste, özet (iş kırılımı maliyet tablosu), iş kırılımı, bütçe revizyonları, hareketler, form ve seçiciler
+  await go('/projects', '90-projeler', 'Projeler');
+  await page.getByRole('button', { name: 'Yeni proje' }).first().click();
+  await page.getByRole('dialog').getByLabel('Proje adı').waitFor();
+  await settle(page, 500);
+  await shot(page, '91-yeni-proje-formu');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await page.getByRole('row', { name: /Güneş Sitesi/ }).click();
+  await page.getByRole('heading', { name: 'Güneş Sitesi', level: 1 }).waitFor();
+  await settle(page, 700);
+  await shot(page, '92-proje-ozet');
+  for (const [tab, name] of [['İş kırılımı', '93-proje-is-kirilimi'], ['Bütçe', '94-proje-butce'], ['Hareketler', '95-proje-hareketler']] as const) {
+    await page.getByRole('tab', { name: tab }).click();
+    await settle(page, 600);
+    await shot(page, name);
+  }
+  await page.getByRole('tab', { name: 'İş kırılımı' }).click();
+  await page.getByRole('button', { name: 'İlerleme gir' }).click();
+  await page.getByRole('dialog').getByText('İlerleme girişi').waitFor();
+  await settle(page, 500);
+  await shot(page, '96-proje-ilerleme-girisi');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await go('/projects', '97-projeler-liste', 'Projeler');
+  await page.getByRole('row', { name: /Kuzey Villa/ }).click();
+  await page.getByRole('heading', { name: 'Kuzey Villa', level: 1 }).waitFor();
+  await settle(page, 600);
+  await shot(page, '98-proje-isverene-yapilan-is');
+  // Yevmiye formunda gider satırı: proje + iş kalemi seçicisi
+  await go('/accounting/journal', '99a-yevmiye-listesi', 'Yevmiye kayıtları');
+  await page.getByRole('button', { name: 'Yeni yevmiye' }).first().click();
+  const jbox = page.getByRole('combobox', { name: 'Hesap 1' });
+  await jbox.click();
+  await jbox.fill('770');
+  await page.getByRole('listbox').getByRole('option').first().click();
+  await page.getByRole('combobox', { name: 'Proje 1' }).click();
+  await page.getByRole('combobox', { name: 'Proje 1' }).fill('Güneş');
+  await page.getByRole('listbox').getByRole('option').first().click();
+  await settle(page, 500);
+  await shot(page, '99-yevmiye-proje-secici');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
 
@@ -443,7 +510,7 @@ async function main() {
 
   // Mobilde yatay taşma denetimi (sayfa içeriği ekrandan geniş olmamalı)
   const overflowing: string[] = [];
-  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/reports/journal-book', '/reports/general-ledger', '/reports/sales', '/reports/purchases', '/reports/item-profit', '/reports/fx-differences', '/reports/data-export', '/accounting/openings', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members', '/settings/modules', '/settings/license', '/settings/devices']) {
+  for (const path of ['/', '/parties', '/parties/aging', '/inventory/items', '/inventory/status', '/inventory/movements', '/inventory/counts', '/inventory/warehouses', '/invoices/sales', '/invoices/purchases', '/invoices/new?type=sales', '/delivery-notes/sales', '/delivery-notes/purchases', '/delivery-notes/new?type=sales', '/delivery-notes/new?type=purchase', '/treasury/accounts', '/treasury/transactions', '/reports/journal-book', '/reports/general-ledger', '/reports/sales', '/reports/purchases', '/reports/item-profit', '/reports/fx-differences', '/reports/data-export', '/accounting/openings', '/invoices/vat-summary', '/settings/account-mapping', '/accounting/journal', '/accounting/accounts', '/accounting/trial-balance', '/accounting/account-ledger', '/settings/company', '/settings/currencies', '/settings/tax-rates', '/settings/periods', '/settings/custom-codes', '/settings/members', '/settings/modules', '/settings/license', '/settings/devices', '/projects']) {
     await m.goto(`${BASE}${path}`);
     await m.getByRole('heading', { level: 1 }).first().waitFor();
     await settle(m, 400);
@@ -454,6 +521,26 @@ async function main() {
     if (over > 1) overflowing.push(`${path} (+${over}px)`);
   }
   console.log(overflowing.length ? `  ✗ Yatay taşma: ${overflowing.join(', ')}` : '  ✓ mobilde yatay taşma yok');
+
+  // Mobilde proje detayı (iş kırılımı maliyet tablosu ve sekmeler) da yatay taşmamalı
+  await m.goto(`${BASE}/projects`);
+  await m.getByRole('heading', { level: 1 }).first().waitFor();
+  await m.getByText('Güneş Sitesi').first().click();
+  await m.getByRole('heading', { name: 'Güneş Sitesi', level: 1 }).waitFor();
+  for (const tab of ['Özet', 'İş kırılımı', 'Bütçe', 'Hareketler']) {
+    await m.getByRole('tab', { name: tab }).click();
+    await settle(m, 500);
+    const over = await m.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    if (over > 1) {
+      overflowing.push(`proje detayı/${tab} (+${over}px)`);
+      console.log(`  ✗ Proje detayı/${tab} mobilde taşıyor (+${over}px)`);
+    }
+  }
+  await m.screenshot({ path: `${OUT}/100-mobil-proje-detay.png` });
+  console.log('  ✓ 100-mobil-proje-detay');
 
   // Mobilde tahsilat formu (açık kalem ızgarası) da yatay taşmamalı
   await m.goto(`${BASE}/parties`);
@@ -477,6 +564,8 @@ async function main() {
   } else {
     console.log('  ✓ mobilde tahsilat formu taşmıyor');
   }
+
+  console.log(bareCodes.size ? `  ! Çıplak para birimi kodu kalan ${bareCodes.size} yer (veri adları beklenen istisna):\n    ${[...bareCodes].join('\n    ')}` : '  ✓ çıplak para birimi kodu kalmadı');
 
   await browser.close();
   if (overflowing.length) process.exitCode = 1;

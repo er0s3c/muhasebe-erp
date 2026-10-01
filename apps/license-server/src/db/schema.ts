@@ -26,6 +26,29 @@ export const admins = pgTable(
   (t) => [uniqueIndex('admins_email_uq').on(t.email)],
 );
 
+/** Yönetici giriş anahtarları (WebAuthn/passkey): açık anahtar ve imza sayacı; özel anahtar kullanıcının cihazında/kasasındadır. */
+export const adminPasskeys = pgTable(
+  'admin_passkeys',
+  {
+    id: id(),
+    adminId: uuid()
+      .notNull()
+      .references(() => admins.id),
+    /** base64url kimlik bilgisi kimliği. */
+    credentialId: text().notNull(),
+    /** base64url COSE açık anahtarı. */
+    publicKey: text().notNull(),
+    counter: bigint({ mode: 'number' }).notNull().default(0),
+    transports: text().array().notNull().default(sql`'{}'::text[]`),
+    name: text().notNull(),
+    /** Anahtar eşitlenen bir kasada mı (ör. Vaultwarden, iCloud) yoksa tek cihazda mı. */
+    backedUp: boolean().notNull().default(false),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [uniqueIndex('admin_passkeys_credential_uq').on(t.credentialId), index('admin_passkeys_admin_idx').on(t.adminId)],
+);
+
 /** Oturum kimliği = çerezdeki rastgele değerin sha256 özeti. */
 export const adminSessions = pgTable(
   'admin_sessions',
@@ -75,6 +98,9 @@ export const licenses = pgTable(
     codePrefix: text().notNull(),
     /** Sunucu taşıma (devre dışı bırakma) sayısı. */
     transfersUsed: integer().notNull().default(0),
+    /** Uzaktan güncelleme: satıcının bu lisansın kurulumlarına gönderdiği sürüm (boşsa teklif yok). */
+    updateVersion: text(),
+    updateSentAt: timestamp({ withTimezone: true }),
     notes: text(),
     createdAt: createdAt(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -109,6 +135,8 @@ export const activations = pgTable(
     lastIp: text(),
     /** Kabul edilen son istek zamanı (ms): daha eski/aynı `ts` yeniden oynatma sayılır. */
     lastTs: bigint({ mode: 'number' }).notNull().default(0),
+    /** Kurulum kitinin hedefi (linux-x64 / win-x64); kalp atışıyla bildirilir, güncelleme dosyasını seçer. */
+    platform: text(),
     reportedDevices: integer().notNull().default(0),
     reportedCompanies: integer().notNull().default(0),
     /** Son görülen farklı IP'ler (en çok 10): klon tespiti için. */
@@ -141,3 +169,28 @@ export const auditLog = pgTable(
   },
   (t) => [index('audit_log_at_idx').on(t.at)],
 );
+
+/**
+ * Uzaktan güncelleme için yayımlanan sürümler. Dosyalar diskte (`RELEASES_DIR/<sürüm>/<ad>`) durur; `files` yüklenen her kit
+ * arşivinin özeti ve boyutudur. Yayımlanınca manifesto satıcı anahtarıyla imzalanır ve artık dosya eklenemez.
+ */
+export const releases = pgTable(
+  'releases',
+  {
+    id: id(),
+    version: text().notNull(),
+    notes: text().notNull().default(''),
+    status: text().notNull().default('draft'),
+    files: jsonb().$type<{ target: 'linux-x64' | 'win-x64'; name: string; sha256: string; size: number }[]>().notNull().default(sql`'[]'::jsonb`),
+    manifest: text(),
+    createdBy: uuid().references(() => admins.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    publishedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('releases_version_uq').on(t.version),
+    check('releases_status_ck', sql`${t.status} in ('draft', 'published', 'withdrawn')`),
+    check('releases_manifest_ck', sql`(${t.status} = 'draft') = (${t.manifest} is null)`),
+  ],
+);
+

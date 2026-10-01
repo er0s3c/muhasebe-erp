@@ -93,6 +93,7 @@ export const router = createBrowserRouter([
                 children: [
                   { path: 'treasury/accounts', ...page(() => import('../features/treasury/AccountsPage'), 'AccountsPage') },
                   { path: 'treasury/accounts/:id', ...page(() => import('../features/treasury/AccountDetailPage'), 'AccountDetailPage') },
+                  { path: 'treasury/cash-forecast', ...page(() => import('../features/treasury/CashForecastPage'), 'CashForecastPage') },
                   { path: 'treasury/transactions', ...page(() => import('../features/treasury/TransactionsPage'), 'TransactionsPage') },
                   { path: 'reports/fx-differences', ...page(() => import('../features/reports/FxDifferencePage'), 'FxDifferencePage') },
                 ],
@@ -107,6 +108,51 @@ export const router = createBrowserRouter([
                   { path: 'inventory/counts', ...page(() => import('../features/inventory/CountsPage'), 'CountsPage') },
                   { path: 'inventory/counts/:id', ...page(() => import('../features/inventory/CountEditorPage'), 'CountEditorPage') },
                   { path: 'inventory/warehouses', ...page(() => import('../features/inventory/WarehousesPage'), 'WarehousesPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="construction.projects" />,
+                children: [
+                  { path: 'projects', ...page(() => import('../features/projects/ProjectsPage'), 'ProjectsPage') },
+                  { path: 'reports/project-profitability', ...page(() => import('../features/projects/ProfitabilityPage'), 'ProfitabilityPage') },
+                  { path: 'projects/:id', ...page(() => import('../features/projects/ProjectDetailPage'), 'ProjectDetailPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="construction.subcontracts" />,
+                children: [
+                  { path: 'subcontracts', ...page(() => import('../features/subcontracts/SubcontractsPage'), 'SubcontractsPage') },
+                  { path: 'subcontracts/:id', ...page(() => import('../features/subcontracts/SubcontractDetailPage'), 'SubcontractDetailPage') },
+                  { path: 'employer-contracts', ...page(() => import('../features/subcontracts/SubcontractsPage'), 'EmployerContractsPage') },
+                  { path: 'employer-claims', ...page(() => import('../features/subcontracts/ProgressList'), 'EmployerClaimsPage') },
+                  { path: 'progress-payments', ...page(() => import('../features/subcontracts/ProgressList'), 'ProgressPaymentsPage') },
+                  { path: 'progress-payments/new', ...page(() => import('../features/subcontracts/ProgressEditorPage'), 'ProgressEditorPage') },
+                  { path: 'progress-payments/:id', ...page(() => import('../features/subcontracts/ProgressEditorPage'), 'ProgressEditorPage') },
+                  { path: 'variation-orders', ...page(() => import('../features/subcontracts/VariationsPage'), 'VariationsPage') },
+                  { path: 'variation-orders/:id', ...page(() => import('../features/subcontracts/VariationPage'), 'VariationPage') },
+                  { path: 'approvals', ...page(() => import('../features/subcontracts/ApprovalsPage'), 'ApprovalsPage') },
+                  { path: 'settings/construction', ...page(() => import('../features/settings/ConstructionSettingsPage'), 'ConstructionSettingsPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="construction.procurement" />,
+                children: [
+                  { path: 'purchasing/requests', ...page(() => import('../features/procurement/RequestsPage'), 'PurchaseRequestsPage') },
+                  { path: 'purchasing/requests/:id', ...page(() => import('../features/procurement/RequestEditorPage'), 'PurchaseRequestEditorPage') },
+                  { path: 'purchasing/rfqs', ...page(() => import('../features/procurement/RfqsPage'), 'RfqsPage') },
+                  { path: 'purchasing/rfqs/:id', ...page(() => import('../features/procurement/RfqPage'), 'RfqPage') },
+                  { path: 'purchasing/matching', ...page(() => import('../features/procurement/MatchingPage'), 'OrderMatchingPage') },
+                  { path: 'purchasing/orders', ...page(() => import('../features/procurement/OrdersPage'), 'PurchaseOrdersPage') },
+                  { path: 'purchasing/orders/:id', ...page(() => import('../features/procurement/OrderEditorPage'), 'PurchaseOrderEditorPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="construction.realestate" />,
+                children: [
+                  { path: 'real-estate/units', ...page(() => import('../features/realestate/UnitsPage'), 'UnitsPage') },
+                  { path: 'real-estate/contracts', ...page(() => import('../features/realestate/ContractsPage'), 'SalesContractsPage') },
+                  { path: 'real-estate/contracts/:id', ...page(() => import('../features/realestate/ContractPage'), 'SalesContractPage') },
+                  { path: 'real-estate/installments', ...page(() => import('../features/realestate/InstallmentsPage'), 'SalesInstallmentsPage') },
                 ],
               },
               {
@@ -125,6 +171,7 @@ export const router = createBrowserRouter([
                   { path: 'reports/data-export', ...page(() => import('../features/reports/DataExportPage'), 'DataExportPage') },
                 ],
               },
+              { path: 'account/security', ...page(() => import('../features/settings/SecurityPage'), 'SecurityPage') },
               { path: '*', element: <NotFoundPage /> },
             ],
           },

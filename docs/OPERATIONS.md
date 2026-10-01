@@ -13,6 +13,8 @@ Tek artefakt bir **Docker imajıdır** (`Dockerfile`): derlenmiş API ve web ara
 | `deploy/.env.production.example` | Ortam değişkenleri şablonu (`deploy/.env` olarak kopyalanır; depoya girmez) |
 | `infra/postgres/init-prod.sh` | İlk açılışta rolleri ve veritabanını yaratır |
 | `scripts/backup.sh`, `restore.sh`, `restore-drill.sh` | Yedek, geri yükleme, geri yükleme tatbikatı |
+| `install.sh`, `Kur.cmd`, `installer/` | Kurulum sihirbazı (Linux/WSL, Windows; Docker'lı ve Docker'sız), §2 |
+| `npm run release` | Sürüm kitleri (linux-x64, win-x64): Docker'sız kurulum da kitten yapılır |
 
 Uygulama kabı yalnızca **RLS'e tabi çalışma zamanı rolünü** (`erp_app`) bilir; şema sahibi rolün (`erp`) parolası yalnızca tek seferlik `migrate` kabındadır. Uygulama, süper kullanıcı/`BYPASSRLS`/tablo sahibi bir rolle ya da RLS'siz tablolarla açılmayı **reddeder** (üretimde `exit 1`).
 
@@ -22,7 +24,32 @@ Uygulama kabı yalnızca **RLS'e tabi çalışma zamanı rolünü** (`erp_app`) 
 
 İmaj yayını (registry) henüz yoktur: imaj müşteri sunucusunda `docker build` ile ya da sizin derleyip `docker save/load` ile taşıdığınız imajla kurulur.
 
-## 2. Kurulum (Docker Compose)
+## 2. Kurulum
+
+### Kurulum sihirbazı (önerilen)
+
+Tek giriş noktası: **Linux/WSL** `./install.sh`, **Windows** `Kur.cmd` (çift tıklama; Windows PowerShell 5.1 yeterli, gerekirse UAC ile yönetici izni ister). Sihirbaz dört aşamada çalışır ve güvenle yeniden çalıştırılabilir (mevcut parolalara/ayarlara dokunmaz):
+
+1. **Uyumluluk kontrolü** — işletim sistemi ve sürümü (Ubuntu 22.04+, Debian 12+, WSL, Windows 10 1809+/11/Server 2019+), mimari (x64), bellek (en az 2 GB, 4 GB önerilir), boş disk (en az 5 GB), yönetici yetkisi, systemd, Docker + compose v2, sanallaştırma (Windows), mevcut Node.js ve PostgreSQL, portlar, internet, makine kimliği, kit hedefi. Her satır ✓/!/✗; ✗ varsa kurulum başlamaz. Yalnızca rapor: `./install.sh --check` / `installer\install.ps1 -Check`.
+2. **Yol seçimi** — kip: `dev` (depodan test/geliştirme) ya da `prod` (sürüm kitinden müşteri kurulumu; `kit.json` varsa varsayılan). Yol: `docker` (Docker çalışıyorsa önerilir) ya da `native` (Docker'sız; sanallaştırması kapalı PC'ler dahil). Erişim: `local` (yalnız bu bilgisayar), `lan` (yerel ağ, http), `domain` (alan adı + otomatik HTTPS, yalnız Docker yolunda Caddy ile).
+3. **Gerekli paketler** — geliştirmede Node.js 22 (nodejs.org resmî paketi, SHA-256 doğrulamalı); yerel yolda PostgreSQL 16 (Linux: dağıtım deposu ya da resmî PGDG deposu; Windows: winget, yoksa EnterpriseDB sessiz kurulumu, Authenticode imzası doğrulanır). Müşteri kitinde Node.js gömülüdür, ayrıca kurulmaz.
+4. **Sistemin kurulumu** — aşağıdaki tabloya göre.
+
+| Kip / yol | Ne yapılır |
+|---|---|
+| dev / docker | `.env` (rastgele JWT), `docker compose up -d db`, geliştirme rolleri, `npm ci`, migration, demo verisi → `npm run dev` |
+| dev / native | Aynısı; veritabanı yerel PostgreSQL'de (`infra/postgres/init.sql`) |
+| prod / docker | İmaj kitteki derlenmiş dosyalardan yerelde oluşturulur (kaynak gerekmez); `deploy/.env` rastgele parolalarla yazılır (chmod 600 / yalnız yöneticiler), `docker compose up -d`, sağlık kontrolü. Windows'ta makine kimliği `ProgramData\MuhasebeERP\host-machine-id` dosyasına yazılıp `ERP_HOST_ID_FILE` ile bağlanır |
+| prod / native (Linux) | `/opt/muhasebe-erp/versions/<sürüm>` + `current` bağı, `/etc/muhasebe-erp/erp.env` (640, uygulama) ve `migrate.env` (600, şema sahibi), `muhasebe-erp` sistem kullanıcısı, systemd hizmeti (yoksa `erpctl start|stop|status|logs`; WSL'de systemd'yi açmayı önerir), günlük yedek zamanlayıcısı (02:30, son 14; `/var/lib/muhasebe-erp/backups`), isteğe bağlı ufw kuralı |
+| prod / native (Windows) | `Program Files\MuhasebeERP\versions\<sürüm>` + `current` bağlantısı (junction), `ProgramData\MuhasebeERP` (yalnız SYSTEM ve Yöneticiler; ayarlar, günlükler, yedekler), **Muhasebe ERP** Windows hizmeti (WinSW; otomatik başlar, çökmede yeniden başlar; LocalService hesabıyla), günlük yedek zamanlanmış görevi (02:30, son 14), isteğe bağlı güvenlik duvarı kuralı, masaüstü kısayolu |
+
+Yeniden çalıştırma = yükseltme: yeni kitin sihirbazı ayarları korur, uygulamayı durdurur, yeni sürümü yan klasöre kopyalar, `current`'ı çevirir, migration'ı uygular, başlatır; migration başarısızsa önceki sürüme döner. **Yükseltmeden önce yedek alın** (`sudo /opt/muhasebe-erp/bin/erp-backup` / `ProgramData\MuhasebeERP` altındaki yedek görevi; Docker: `scripts/backup.sh --compose`). Kaldırma: `./install.sh --uninstall` (veri korunur), `--uninstall --purge` (veritabanı, ayarlar ve yedekler silinir; Windows: `-Uninstall -Purge`).
+
+**Sürüm kiti üretimi (satıcı):** `npm run release -- --version=1.2.0 [--targets=linux-x64,win-x64]` → `release/1.2.0/` altında arşivler ve `SHA256SUMS`. Kitte derlenmiş API + web (kaynak haritası yok), hedef platformun üretim bağımlılıkları (yerel argon2 dahil), resmî Node.js çalışma zamanı, kurulum sihirbazı, Docker yolu dosyaları; Windows kitinde ayrıca WinSW (MIT, sabit SHA-256) ve Docker yolu için Linux bağımlılıkları bulunur. Kit lisanslı derlenir (satıcı açık anahtarı gömülü; [LICENSING.md §5](LICENSING.md)). Kitler şimdilik yalnızca x64'tür.
+
+**Sınamalar:** Linux yerel ve Docker yolları (dev ve prod) Ubuntu 24.04 üzerinde uçtan uca denenmiştir. Windows sihirbazı Windows PowerShell 5.1 sözdizimi/cmdlet uyumluluğu için statik olarak denetlenmiştir; gerçek bir Windows makinede ilk kurulumu bu bölüme göre doğrulayın (özellikle PostgreSQL sessiz kurulumu ve hizmet hesabı).
+
+### Docker Compose ile elle kurulum
 
 Gerekenler: Docker Engine + Compose v2, ≥ 2 GB bellek, kalıcı disk.
 
@@ -89,6 +116,8 @@ Geçersiz/eksik değerde uygulama başlamaz ve nedenini yazar. Boş değer "tan�
 | `LICENSE_HOST_ID_FILE` | `/etc/host-machine-id` | Ana makine kimliği dosyası (compose bağlar); sunucu parmak izinin parçası |
 | `LICENSE_ALLOW_INSECURE_URL` | `false` | Yalnızca test düzenekleri (`http://` lisans sunucusu); **müşteri kurulumunda kullanılmaz** |
 | `LICENSE_ENFORCEMENT_DEV`, `LICENSE_DEV_KEYRING` | yok | Yalnızca `NODE_ENV≠production` (geliştirme/e2e); üretimde **reddedilir**. Üretim paketinde lisans denetimi **derleme zamanı sabitidir**, ortam değişkeniyle kapatılamaz |
+| `ERP_UPDATER_TOKEN` | yok | Uzaktan güncelleme: ana makinedeki güncelleyiciyle paylaşılan belirteç (≥ 32 karakter; sihirbaz üretir). Yoksa güncelleyici uçları kapalıdır |
+| `ERP_KIT_TARGET` | yok | `linux-x64` / `win-x64`: kurulum kitinin hedefi (sihirbaz yazar); kalp atışında satıcıya bildirilir, güncelleme arşivini seçer |
 | `ALLOW_DEMO` | yok | Yalnızca demo örneğinde `true` (bkz. §8); müşteri kurulumunda **asla** |
 
 Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceliklidir**; kabukta eski bir `JWT_SECRET` tanımlıysa dosyadaki değer yok sayılır.
@@ -117,6 +146,25 @@ Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceli
 
 ## 5. Yükseltme
 
+### Uzaktan güncelleme (sihirbazla kurulmuş müşteri kurulumları)
+
+Satıcı yeni sürümü lisans panelinden **gönderir**; müşteride **kurulum sahibi onaylar**; ana makinedeki güncelleyici uygular.
+
+1. Uygulama kalp atışında (yaklaşık 12 saatte bir; **Ayarlar > Lisans > Yazılım güncellemesi > Güncellemeleri denetle** ile hemen) satıcının imzalı sürüm manifestosunu alır ve gömülü satıcı anahtarıyla doğrular. Sahte/bozuk teklif yok sayılır.
+2. Sahip aynı kartta sürüm notunu görür: **Şimdi güncelle** ya da **Bu gece güncelle (02:00, sunucu saati)**. Onay `security_events`'e yazılır (`update_requested`).
+3. Güncelleyici (Linux: `muhasebe-erp-updater.timer`, dakikada bir; Windows: **Muhasebe ERP Güncelleyici** zamanlanmış görevi, SYSTEM) onaylı işi alır: kiti lisans sunucusundan kısa ömürlü, kuruluma özel bir belirteçle indirir, **SHA-256 ve boyutu** manifestoyla karşılaştırır, **yedek alır** (yedek alınamazsa güncelleme yapılmaz), kiti açar ve **yeni kitin kurulum sihirbazını** etkileşimsiz çalıştırır (durdurma, yan klasöre kopyalama, migration, başlatma, sağlık). Uygulama yeni sürümle yanıt verince durum **Tamamlandı** olur.
+4. **Başarısızlıkta:** migration tek işlemde çalıştığından migration hatası veritabanını değiştirmez; eski sürüm çalışmaya devam eder → **Başarısız**. Yeni sürüm migration sonrası ayağa kalkmazsa güncelleyici **önceki sürümün sihirbazını yedekten veritabanı geri yüklemesiyle** çalıştırır → **Geri alındı** (güncelleme sonrası girilen veri yoktur, çünkü uygulama kapalıydı). İkisi de olmazsa durum ve yedeğin yolu günlükte kalır; §6'ya göre elle geri yükleyin.
+
+Gereksinimler ve notlar:
+
+- Docker'lı ve Docker'sız kurulumlarda çalışır (Docker'da yedek `pg_dump` kap içinde alınır, ayarlar yeni kit klasörüne taşınır, aynı compose projesi ve birimler kullanılır).
+- Linux'ta **systemd** gerekir; yoksa (ör. systemd kapalı WSL) onaylanan güncellemeyi `sudo erp-update` çalıştırır.
+- Günlük: Linux `/var/lib/muhasebe-erp/updater/updater.log`, Windows `C:\ProgramData\MuhasebeERP\updater-work\updater.log`. Ayar: `/etc/muhasebe-erp/updater.json` / `C:\ProgramData\MuhasebeERP\updater.json`.
+- Uygulama ile güncelleyici, sihirbazın ürettiği `ERP_UPDATER_TOKEN` ile konuşur (ayar dosyasında; yoksa uzaktan güncelleme kapalıdır, uçlar 401 döner). Kalp atışında satıcıya ayrıca kit hedefi (`linux-x64`/`win-x64`) gönderilir; başka veri gönderilmez.
+- Elle (sihirbazsız) kurulumlarda teklif yine görünür ama onay düğmesi yerine "yeni kiti indirip sihirbazla güncelleyin" uyarısı çıkar.
+
+### Elle yükseltme
+
 ```bash
 scripts/backup.sh --compose                      # 1) yedek al
 git pull                                         # 2) yeni sürüm (ya da yeni imaj etiketi: ERP_IMAGE)
@@ -127,6 +175,8 @@ curl -fsS http://127.0.0.1:3000/api/health/ready # 3) doğrula, bir oturum açma
 `up -d` önce `migrate` kabını çalıştırır (yalnızca bekleyen migration'lar uygulanır), ardından uygulamayı yeniden başlatır; uygulama kapanırken süren istekleri `SHUTDOWN_TIMEOUT_MS`'e kadar bitirir.
 
 **Lisanslama öncesi bir sürümden yükseltme:** ilk lisanslı imaja geçişte mevcut kurulum **lisanssız** (yalnızca etkinleştirme ekranı) açılır; veriler bozulmaz ve silinmez. Müşteri lisans kodunu girene kadar giriş/yazma kapalıdır: geçişi önceden planlayın, kodu hazır edin. Lisans süresi dolar ya da lisans sunucusuna ulaşılamazsa uygulama **salt-okunur** moda düşer (veri görüntülenir ve dışa aktarılır, yazma kilitlenir); ayrıntı [LICENSING.md §7](LICENSING.md).
+
+**Faz B1 (şantiye projeleri) yükseltmesi:** `0023_projects` / `0024_projects_rls_rules` migration'ları beş yeni tablo ve `journal_lines`, `stock_movements`, `invoice_lines` üzerinde **boş (nullable) proje/iş kalemi sütunları** ekler; mevcut veriler değişmez, hiçbir kayıtta proje zorunlu olmaz. `construction.projects` modülü inşaat şirketlerinde kendiliğinden açılır (Ayarlar > Modüller'den kapatılabilir; kullanılmayan şirkette menüde "Şantiye" grubu görünmez). Yeni ortam değişkeni ya da bağımlılık yoktur. Yedekten geri yükleme ve yük özellikleri değişmez; `restore-drill` yeni tabloları da kapsar.
 
 **Geri dönüş:** migration'lar ileri yönlüdür. Yükseltme başarısız olursa eski imaja dönüp (`ERP_IMAGE=<eski>`) **yedeği geri yükleyin** (§6, `--recreate`). Bu yüzden yükseltmeden önce yedek şarttır.
 
@@ -169,6 +219,8 @@ RESTORE_DATABASE_URL=postgres://erp:…@host/BOS_VERITABANI scripts/restore.sh y
 ```
 
 Geri yükleme tek işlemde çalışır; hata olursa hedefte yarım veri kalmaz. Sonrasında `/api/health/ready` ve bir oturum açma ile doğrulayın.
+
+**Yerel (Docker'sız) kurulumda** yedekler `/var/lib/muhasebe-erp/backups` (Linux) ya da `C:\ProgramData\MuhasebeERP\backups` (Windows) altındadır. Felaket kurtarma: hizmeti durdurun (`erpctl stop` / `services.msc` → Muhasebe ERP), süper kullanıcıyla veritabanını silip `erp` sahibiyle boş yaratın (`DROP DATABASE erp; CREATE DATABASE erp OWNER erp; GRANT CONNECT ON DATABASE erp TO erp_app; REVOKE ALL ON DATABASE erp FROM PUBLIC;`), ardından `RESTORE_DATABASE_URL=<migrate.env içindeki adres> scripts/restore.sh yedek.dump` (Windows'ta `pg_restore --exit-on-error --single-transaction --no-owner --role=erp -d <adres> yedek.dump`) ve hizmeti başlatın.
 
 ### Tatbikat: "yedeğim gerçekten geri yüklenir mi?"
 
@@ -248,7 +300,8 @@ $D stop app && $D run --rm demo-reset && $D up -d app
 **Kurulumdan önce**
 - [ ] Alan adı ve (internete açıksa) TLS planı; sunucu ≥ 2 GB bellek, kalıcı disk
 - [ ] Yedek hedefi (ofis dışı, şifreli) ve yedekten sorumlu kişi belirlendi
-- [ ] Mali müşavirle teyit: hesap eşlemesi varsayılanları, KDV oranları, açılış bakiyesi karşı hesabı, stok değerleme yöntemi, yıl sonu kapanış/devir (henüz yok; LEGAL-NOTES)
+- [ ] Mali müşavirle teyit: hesap eşlemesi varsayılanları, KDV oranları (yürürlükteki tüzük değişiklikleriyle; %20 dahil), açılış bakiyesi karşı hesabı, stok değerleme yöntemi, yıl sonu kapanış/devir (henüz yok; LEGAL-NOTES)
+- [ ] Kişisel veri: SMTP, yedek ve diğer üçüncü taraf servisler KKTC dışındaysa aktarım ruhsatı değerlendirildi (LEGAL-NOTES §5)
 - [ ] İç belgelerin (fatura, irsaliye, defter çıktısı) **yasal belge yerine geçmediği** müşteriye yazılı bildirildi
 - [ ] Lisans sözleşmesi/EULA müşteriyle imzalandı (hukuki metin avukata yazdırılır; LEGAL-NOTES §11) ve lisans kodu müşteriye güvenli kanaldan iletildi (kod yalnızca bir kez gösterilir)
 - [ ] Sunucu giden HTTPS ile lisans sunucusuna ulaşabiliyor (güvenlik duvarı/vekil); `/etc/machine-id` mevcut ve kalıcı
@@ -271,4 +324,4 @@ $D stop app && $D run --rm demo-reset && $D up -d app
 
 ## 12. Bilinen sınırlar
 
-Tek uygulama örneği varsayımı (bellek içi oran sınırı; lisans durumu ve cihaz koltukları tek kurulum içindir); uygulama kullanıcıları için MFA/TOTP yok (lisans yönetim paneli için zorunlu TOTP vardır: LICENSING.md); lisanslama müşteri sunucusunda çalıştığından **%100 kırılamaz değildir** (LICENSING.md §1, §10); çevrimdışı lisans yıllık yenilenir; `users` tablosu çalışma zamanı rolüne tüm kiracılar için açıktır (giriş bunu gerektirir; kolon yetkisi/ayrı giriş rolü sonraya); dışa aktarma bellek içi üretilir (eşzamanlılık kapısı ve satır tavanı ile sınırlı); yıl sonu kapanış/devir ve kur değerlemesi (M7b) mali müşavir teyidine bağlıdır ve henüz yoktur; yedekleme/saklama/kişisel veri politikası hukuken **doğrulanmamıştır** (LEGAL-NOTES §5); imaj kayıt defterine yayınlanmaz ve Caddy TLS profili otomatik sınanmaz.
+Tek uygulama örneği varsayımı (bellek içi oran sınırı; lisans durumu ve cihaz koltukları tek kurulum içindir); uygulama kullanıcıları için TOTP isteğe bağlıdır, şirket düzeyinde zorunlu kılma yoktur (lisans yönetim paneli için TOTP zorunludur: LICENSING.md); MFA sırrı `JWT_SECRET`'ten türetilen anahtarla şifrelenir, `JWT_SECRET` değişirse kayıtlı MFA sırları çözülemez (kullanıcıların MFA'sı yönetici tarafından sıfırlanır); lisanslama müşteri sunucusunda çalıştığından **%100 kırılamaz değildir** (LICENSING.md §1, §10); çevrimdışı lisans yıllık yenilenir; `users` tablosu çalışma zamanı rolüne tüm kiracılar için açıktır (giriş bunu gerektirir; kolon yetkisi/ayrı giriş rolü sonraya); dışa aktarma bellek içi üretilir (eşzamanlılık kapısı ve satır tavanı ile sınırlı); yıl sonu kapanış/devir ve kur değerlemesi (M7b) mali müşavir teyidine bağlıdır ve henüz yoktur; yedekleme/saklama/kişisel veri politikası hukuken **doğrulanmamıştır** (LEGAL-NOTES §5); imaj kayıt defterine yayınlanmaz ve Caddy TLS profili otomatik sınanmaz.

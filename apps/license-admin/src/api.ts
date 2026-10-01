@@ -11,7 +11,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, opts: { method?: 'GET' | 'POST' | 'PATCH'; body?: unknown } = {}): Promise<T> {
+export async function api<T>(path: string, opts: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown } = {}): Promise<T> {
   const method = opts.method ?? 'GET';
   const headers: Record<string, string> = { accept: 'application/json' };
   if (opts.body !== undefined) headers['content-type'] = 'application/json';
@@ -119,4 +119,13 @@ export interface Dashboard {
   licenses: Partial<Record<LicenseStatus, number>>;
   activations: { active: number; flagged: number; reportedDevices: number };
   expiringIn30Days: number;
+}
+
+export interface Passkey {
+  id: string;
+  name: string;
+  /** Eşitlenen kasada (Vaultwarden, iCloud…) mı, tek cihazda mı. */
+  backedUp: boolean;
+  createdAt: string;
+  lastUsedAt: string | null;
 }

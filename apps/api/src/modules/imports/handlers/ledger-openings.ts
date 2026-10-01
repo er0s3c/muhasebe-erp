@@ -1,15 +1,4 @@
-import {
-  applyRate,
-  type CurrencyCode,
-  dec,
-  formatTR,
-  ledgerOpeningsOptionsSchema,
-  sum,
-  toDbRate,
-  type ImportMessage,
-  type ImportRow,
-  type MoneyValue,
-} from '@erp/shared';
+import { applyRate, type CurrencyCode, currencySymbol, dec, formatMoney, formatTR, type ImportMessage, type ImportRow, ledgerOpeningsOptionsSchema, type MoneyValue, sum, toDbRate } from '@erp/shared';
 import { accounts } from '../../../db/schema';
 import { createJournalEntry, type AutoJournalLine } from '../../ledger/journal';
 import { loadMappings } from '../../ledger/mappings';
@@ -118,7 +107,7 @@ export const ledgerOpeningsHandler: ImportHandler = {
       general.push({
         severity: 'error',
         code: 'LEDGER_UNBALANCED',
-        message: `Borç ve alacak toplamı eşit değil (fark ${formatTR(diff.abs())} ${base}); dosyayı düzeltin ya da farkı açılış karşı hesabına atma seçeneğini açın`,
+        message: `Borç ve alacak toplamı eşit değil (fark ${formatMoney(diff.abs(), base)}); dosyayı düzeltin ya da farkı açılış karşı hesabına atma seçeneğini açın`,
       });
     }
     const skipped = states.filter((s) => s.status === 'skip').length;
@@ -130,8 +119,8 @@ export const ledgerOpeningsHandler: ImportHandler = {
       summary: [
         { label: 'Açılış tarihi', value: opts.openingDate.split('-').reverse().join('.') },
         { label: 'Yevmiye satırı', value: String(planned.length) },
-        { label: `Borç toplamı (${base})`, value: formatTR(debitTotal) },
-        { label: `Alacak toplamı (${base})`, value: formatTR(creditTotal) },
+        { label: `Borç toplamı (${currencySymbol(base)})`, value: formatTR(debitTotal) },
+        { label: `Alacak toplamı (${currencySymbol(base)})`, value: formatTR(creditTotal) },
         { label: 'Fark / karşı hesap satırı', value: plugText },
         { label: 'Atlanacak satır', value: String(skipped) },
       ],

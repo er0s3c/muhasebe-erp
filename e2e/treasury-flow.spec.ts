@@ -42,7 +42,7 @@ test('kasa ve banka: dövizli fatura → farklı kurlu tahsilat (kur kârı) →
   await page.getByLabel('Açıklama 1').fill('Seramik satışı');
   await page.getByLabel('Miktar 1').fill('1');
   await page.getByLabel('Birim fiyat 1').fill('100');
-  await expect(page.getByTestId('gross-total')).toHaveText('100,00 GBP');
+  await expect(page.getByTestId('gross-total')).toHaveText('£100,00');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByRole('heading', { name: /SF-\d{4}-000001/, level: 1 })).toBeVisible();
 
@@ -63,20 +63,20 @@ test('kasa ve banka: dövizli fatura → farklı kurlu tahsilat (kur kârı) →
   await customerBox.fill('Sarah');
   await page.getByRole('listbox').getByRole('option').first().click();
   await dialog.getByRole('button', { name: 'Tümünü seç' }).click();
-  await expect(dialog.getByLabel('Tahsil edilen tutar (GBP)')).toHaveValue('100,00');
-  await expect(dialog.getByText('+500,00 TRY')).toBeVisible();
+  await expect(dialog.getByLabel('Tahsil edilen tutar (£)')).toHaveValue('100,00');
+  await expect(dialog.getByText('+₺500,00')).toBeVisible();
   await dialog.getByRole('button', { name: 'Kaydet', exact: true }).click();
 
   // Kayıttan sonra hareket ayrıntısı açılır: numara, kambiyo kârı ve kapatılan kalem
   await expect(dialog.getByText(/TAH-\d{4}-000001/).first()).toBeVisible();
   await expect(dialog.getByText('Kambiyo kârı')).toBeVisible();
-  await expect(dialog.getByText('500,00 TRY').first()).toBeVisible();
+  await expect(dialog.getByText('₺500,00').first()).toBeVisible();
   await expect(dialog.getByText('Kapatılan kalemler')).toBeVisible();
   await page.keyboard.press('Escape');
 
   // 5) Ekstre: 100 GBP bakiye, defter değeri 4.500 TL
-  await expect(page.getByText('100,00 GBP').first()).toBeVisible();
-  await expect(page.getByText('4.500,00 TRY').first()).toBeVisible();
+  await expect(page.getByText('£100,00').first()).toBeVisible();
+  await expect(page.getByText('₺4.500,00').first()).toBeVisible();
   await expect(page.getByRole('row', { name: /Tahsilat TAH-\d{4}-000001/ })).toBeVisible();
 
   // 6) Cari açık kalemi kapandı
@@ -108,7 +108,7 @@ test('kasa ve banka: dövizli fatura → farklı kurlu tahsilat (kur kârı) →
     await expect(page.getByRole('tab', { name: 'Açık kalemler' })).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 25_000 });
   await page.getByRole('tab', { name: 'Açık kalemler' }).click();
-  await expect(page.getByText('100,00 GBP').first()).toBeVisible();
+  await expect(page.getByText('£100,00').first()).toBeVisible();
 
   // 8) Cari sayfasından "Tahsilat al": cari hazır gelir
   await page.getByRole('button', { name: 'Tahsilat al' }).click();

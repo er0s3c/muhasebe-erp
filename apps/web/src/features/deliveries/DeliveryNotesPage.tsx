@@ -8,7 +8,7 @@ import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { formatDateTR, money } from '../../lib/format';
+import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { DeliveryInvoicing, DeliveryNoteListRow, DeliveryNoteStatus, DeliveryNoteType, DeliverySummary } from '../../lib/types';
@@ -89,7 +89,7 @@ function DeliveryNotesPage({ type }: { type: DeliveryNoteType }) {
               ) : undefined
             }
           >
-            {t('deliveries.pending.summary', { count: open.openCount, value: money(open.openValue.replace('-', '')), currency: company.baseCurrency })}
+            {t('deliveries.pending.summary', { count: open.openCount, value: moneyIn(open.openValue.replace('-', ''), company.baseCurrency) })}
           </Callout>
         </div>
       )}

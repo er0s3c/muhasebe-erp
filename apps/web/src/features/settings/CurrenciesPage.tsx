@@ -10,7 +10,7 @@ import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { Rate } from '../../lib/types';
@@ -68,7 +68,7 @@ export function CurrenciesPage() {
       t('settings.currencies.imported', {
         source: `KKTCMB${r.announcementNo ? ` ${r.announcementNo}` : ''}`,
         date: formatDateTR(r.date),
-        summary: r.imported.map((i) => `${i.currency} ${money(i.buy, 4)}`).join(' · '),
+        summary: r.imported.map((i) => `1 ${currencySymbol(i.currency)} = ${moneyIn(i.buy, company.baseCurrency, 4)}`).join(' · '),
       }),
     );
   const importFromBank = () =>
@@ -146,7 +146,7 @@ export function CurrenciesPage() {
                   return (
                     <div key={code} className="rounded-lg border border-border p-4">
                       <p className="mb-3 text-sm">
-                        {t('settings.currencies.unit', { from: code })} <span className="text-muted">{company.baseCurrency}</span>
+                        {t('settings.currencies.unit', { from: currencySymbol(code) })} <span className="text-muted">{currencySymbol(company.baseCurrency)}</span>
                       </p>
                       <div className="grid grid-cols-2 gap-3">
                         <Field label={t('settings.currencies.buy')}>
@@ -228,7 +228,7 @@ export function CurrenciesPage() {
                     <Tr key={r.id}>
                       <Td>{formatDateTR(r.rateDate)}</Td>
                       <Td>
-                        {r.currencyCode}/{r.quoteCode}
+                        {currencySymbol(r.currencyCode)}/{currencySymbol(r.quoteCode)}
                       </Td>
                       <Td num>{money(r.buy, 4)}</Td>
                       <Td num>{money(r.sell, 4)}</Td>

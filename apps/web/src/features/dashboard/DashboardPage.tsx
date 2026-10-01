@@ -7,7 +7,7 @@ import { CURRENCY_CODES, todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { cn } from '../../lib/cn';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCQuery, useCompanyApi, useModuleEnabled } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import type { AgingReport, DeliverySummary, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData, TreasurySummary } from '../../lib/types';
@@ -154,17 +154,17 @@ export function DashboardPage() {
               : []),
             ...(canParties
               ? [
-                  { key: 'recv', label: t('dashboard.receivables'), value: recv ? `${money(recv.totals.total)} ${company.baseCurrency}` : '—', to: '/parties/aging' },
-                  { key: 'pay', label: t('dashboard.payables'), value: pay ? `${money(pay.totals.total)} ${company.baseCurrency}` : '—', to: '/parties/aging' },
+                  { key: 'recv', label: t('dashboard.receivables'), value: recv ? moneyIn(recv.totals.total, company.baseCurrency) : '—', to: '/parties/aging' },
+                  { key: 'pay', label: t('dashboard.payables'), value: pay ? moneyIn(pay.totals.total, company.baseCurrency) : '—', to: '/parties/aging' },
                 ]
               : []),
             ...(canTreasury
-              ? [{ key: 'treasury', label: t('dashboard.treasuryBalance'), value: treasury ? `${money(treasury.equivalent)} ${company.baseCurrency}` : '—', to: '/treasury/accounts' }]
+              ? [{ key: 'treasury', label: t('dashboard.treasuryBalance'), value: treasury ? moneyIn(treasury.equivalent, company.baseCurrency) : '—', to: '/treasury/accounts' }]
               : []),
             ...(canInvoices
               ? [
-                  { key: 'monthSales', label: t('dashboard.monthSales'), value: invSummary ? `${money(invSummary.salesNet)} ${company.baseCurrency}` : '—', to: '/invoices/sales' },
-                  { key: 'monthPurchases', label: t('dashboard.monthPurchases'), value: invSummary ? `${money(invSummary.purchasesNet)} ${company.baseCurrency}` : '—', to: '/invoices/purchases' },
+                  { key: 'monthSales', label: t('dashboard.monthSales'), value: invSummary ? moneyIn(invSummary.salesNet, company.baseCurrency) : '—', to: '/invoices/sales' },
+                  { key: 'monthPurchases', label: t('dashboard.monthPurchases'), value: invSummary ? moneyIn(invSummary.purchasesNet, company.baseCurrency) : '—', to: '/invoices/purchases' },
                   { key: 'draftInvoices', label: t('dashboard.draftInvoices'), value: invSummary ? invSummary.draftCount : '—', to: '/invoices/sales', tone: invSummary && invSummary.draftCount > 0 ? ('warning' as const) : undefined },
                 ]
               : []),
@@ -181,7 +181,7 @@ export function DashboardPage() {
               : []),
             ...(canInventory
               ? [
-                  { key: 'stock', label: t('dashboard.stockValue'), value: stockSummary ? `${money(stockSummary.stockValue)} ${company.baseCurrency}` : '—', to: '/inventory/status' },
+                  { key: 'stock', label: t('dashboard.stockValue'), value: stockSummary ? moneyIn(stockSummary.stockValue, company.baseCurrency) : '—', to: '/inventory/status' },
                   { key: 'low', label: t('dashboard.lowStock'), value: stockSummary ? stockSummary.lowCount : '—', to: '/inventory/status?low=1', tone: stockSummary && stockSummary.lowCount > 0 ? ('warning' as const) : undefined },
                 ]
               : []),
@@ -260,7 +260,7 @@ export function DashboardPage() {
                 return (
                   <div key={cur} className="bg-surface p-5">
                     <p className="text-sm text-muted">
-                      {cur}/{company.baseCurrency}
+                      {currencySymbol(cur)}/{currencySymbol(company.baseCurrency)}
                     </p>
                     <p className="mt-1 text-heading">{rate ? money(rate, 4) : <span className="text-base text-warning">{t('dashboard.rateMissing')}</span>}</p>
                   </div>

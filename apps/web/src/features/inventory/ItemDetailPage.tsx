@@ -17,7 +17,7 @@ import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ItemDetail, ItemStatementData } from '../../lib/types';
@@ -68,7 +68,7 @@ export function ItemDetailPage() {
 
   return (
     <>
-      <Link to="/inventory/items" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text">
+      <Link to="/inventory/items" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
         {t('inventory.detail.back')}
       </Link>
@@ -118,9 +118,9 @@ export function ItemDetailPage() {
               {qtyText(stock.qty) || '0'} {unit}
             </span>
           </Stat>
-          <Stat label={t('inventory.detail.avgCost')}>{stock.avgCost ? `${money(stock.avgCost)} ${company.baseCurrency}` : '—'}</Stat>
+          <Stat label={t('inventory.detail.avgCost')}>{stock.avgCost ? moneyIn(stock.avgCost, company.baseCurrency) : '—'}</Stat>
           <Stat label={t('inventory.detail.value')}>
-            {money(stock.value)} {company.baseCurrency}
+            {moneyIn(stock.value, company.baseCurrency)}
           </Stat>
         </div>
       )}
@@ -190,8 +190,8 @@ export function ItemDetailPage() {
                 [t('inventory.form.unit'), unit],
                 [t('inventory.form.barcode'), item.barcode],
                 [t('inventory.form.vatCode'), item.vatCode],
-                [t('inventory.form.purchasePrice'), item.purchasePrice ? `${money(item.purchasePrice, 2)} ${item.purchaseCurrency}` : null],
-                [t('inventory.form.salePrice'), item.salePrice ? `${money(item.salePrice, 2)} ${item.saleCurrency}` : null],
+                [t('inventory.form.purchasePrice'), item.purchasePrice ? moneyIn(item.purchasePrice, item.purchaseCurrency, 2) : null],
+                [t('inventory.form.salePrice'), item.salePrice ? moneyIn(item.salePrice, item.saleCurrency, 2) : null],
                 [t('inventory.form.minLevel'), item.minLevel ? `${qtyText(item.minLevel)} ${unit}` : null],
                 [t('inventory.form.notes'), item.notes],
               ] as const
@@ -294,7 +294,7 @@ function StatementTab({ itemId, unit, onOpenDoc }: { itemId: string; unit: strin
                 <Th num>{t('inventory.detail.out')}</Th>
                 <Th num>{t('inventory.detail.balanceQty')}</Th>
                 <Th num>
-                  {t('inventory.detail.balanceValue')} ({company.baseCurrency})
+                  {t('inventory.detail.balanceValue')} ({currencySymbol(company.baseCurrency)})
                 </Th>
               </tr>
             </thead>

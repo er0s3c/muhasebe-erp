@@ -10,7 +10,7 @@ import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, isZero, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { Account, AccountLedgerData } from '../../lib/types';
@@ -81,7 +81,7 @@ export function AccountLedgerPage() {
                 <Th num>{t('common.debit')}</Th>
                 <Th num>{t('common.credit')}</Th>
                 <Th num>
-                  {t('common.balance')} ({company.baseCurrency})
+                  {t('common.balance')} ({currencySymbol(company.baseCurrency)})
                 </Th>
               </tr>
             </thead>
@@ -110,7 +110,7 @@ export function AccountLedgerPage() {
                     {l.description}
                   </Td>
                   <Td num className="text-muted">
-                    {l.currencyCode !== company.baseCurrency ? `${money(Number(l.debit) > 0 ? l.debit : l.credit)} ${l.currencyCode}` : ''}
+                    {l.currencyCode !== company.baseCurrency ? moneyIn(Number(l.debit) > 0 ? l.debit : l.credit, l.currencyCode) : ''}
                   </Td>
                   <Td num>{isZero(l.debitBase) ? '' : money(l.debitBase)}</Td>
                   <Td num>{isZero(l.creditBase) ? '' : money(l.creditBase)}</Td>

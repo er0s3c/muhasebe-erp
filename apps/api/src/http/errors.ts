@@ -117,6 +117,34 @@ export function errorHandler(
       .send({ error: { code: 'LICENSE_STATE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP09') {
+    // Proje kuralları (yaprak olmayan iş kalemi, kapalı projeye kayıt, değiştirilemez onaylı bütçe vb.)
+    void reply
+      .status(422)
+      .send({ error: { code: 'PROJECT_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP10') {
+    // Taşeron/onay kuralları (değiştirilemez karar, kaydedilmiş hakediş vb.)
+    void reply
+      .status(422)
+      .send({ error: { code: 'SUBCONTRACT_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP12') {
+    // Gayrimenkul satışı kuralları (birim durumu, sözleşme geçişleri, kilitli taksit planı, fesih)
+    void reply
+      .status(422)
+      .send({ error: { code: 'REAL_ESTATE_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP11') {
+    // Satın alma kuralları (talep, RFQ, sipariş, mal kabul)
+    void reply
+      .status(422)
+      .send({ error: { code: 'PROCUREMENT_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

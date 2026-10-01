@@ -34,7 +34,7 @@ test('stok: kart aç → giriş → çıkış → kritik seviye → stok durumu 
   await expect(dialog.getByRole('combobox', { name: 'Stok kartı 1' })).toHaveValue(/Çimento 50 kg/);
   await dialog.getByLabel('Miktar 1').fill('10');
   await dialog.getByLabel('Birim maliyet 1').fill('10');
-  await expect(dialog.getByLabel('Tutar (TRY) 1')).toHaveText('100,00');
+  await expect(dialog.getByLabel('Tutar (₺) 1')).toHaveText('100,00');
   await dialog.getByRole('button', { name: 'Hareketi kaydet' }).click();
   await expect(page.getByText(/Stok hareketi kaydedildi: SH-\d{4}-000001/)).toBeVisible();
   await page.keyboard.press('Escape');

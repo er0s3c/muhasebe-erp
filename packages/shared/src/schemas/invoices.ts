@@ -63,6 +63,21 @@ export const ACCOUNT_MAPPING_KEYS = [
   'opening_offset',
   'fx_gain',
   'fx_loss',
+  // Taşeron hakedişi (B2c); varsayılanlar doğrulanmamıştır
+  'subcontract_cost',
+  'retention_payable',
+  'withholding_payable',
+  'subcontract_advance',
+  // İşveren hakedişi (B2e)
+  'claim_revenue',
+  'retention_receivable',
+  'advance_received',
+  'withholding_receivable',
+  // Gayrimenkul satışı (B3); varsayılanlar doğrulanmamıştır
+  'deferred_revenue',
+  'property_revenue',
+  'termination_income',
+  'fee_payable',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -85,6 +100,22 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     // Kambiyo kârı/zararı (gerçekleşen kur farkı). Varsayılanlar doğrulanmamıştır.
     fx_gain: '646',
     fx_loss: '656',
+    // Taşeron hakedişi: hizmet üretim maliyeti, alınan depozito/teminat, ödenecek vergi, verilen sipariş avansı
+    subcontract_cost: '740',
+    retention_payable: '326',
+    withholding_payable: '360',
+    subcontract_advance: '159',
+    // İşveren hakedişi: hakediş geliri, verilen depozito/teminat, alınan sipariş avansı, peşin ödenen vergi
+    claim_revenue: '600',
+    retention_receivable: '126',
+    advance_received: '340',
+    withholding_receivable: '193',
+    // Gayrimenkul satışı: ertelenmiş gelir (teslime kadar), taşınmaz satış geliri, fesih kesintisi geliri
+    deferred_revenue: '380',
+    property_revenue: '600',
+    termination_income: '679',
+    // Alıcıdan tahsil edilen altyapı fonu/harç (yükümlülük): diğer ticari borçlar
+    fee_payable: '329',
   };
 }
 
@@ -130,6 +161,15 @@ export const invoiceLineSchema = z.object({
    * (mal irsaliyede zaten çıktı/girdi); yalnızca fatura ve yevmiye oluşur.
    */
   deliveryLineId: uuid.nullable().optional(),
+  /**
+   * Proje boyutu (inşaat): yalnızca alış, gider ve alış iadesi faturasının stoksuz (hizmet/serbest) satırında.
+   * Stoklu kalem projeye doğrudan değil, stoktan proje sarfı anında yazılır.
+   */
+  projectId: uuid.nullable().optional(),
+  /** Projenin yaprak iş kalemi; projesiz verilemez. */
+  wbsId: uuid.nullable().optional(),
+  /** Alış faturasında, faturalanan sipariş satırı (üçlü eşleştirme: sipariş – mal kabul – fatura). */
+  orderLineId: uuid.nullable().optional(),
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
 
@@ -152,6 +192,8 @@ const invoiceBase = z.object({
   returnOfId: uuid.nullable().optional(),
   description: optionalText(300),
   lines: z.array(invoiceLineSchema).min(1, 'En az bir satır gerekli').max(300),
+  /** Üçlü eşleştirme tolerans dışıyken kaydı geçirme gerekçesi (`procurement.approve` yetkisi gerekir). */
+  matchOverrideReason: z.string().trim().min(3, 'Gerekçe en az 3 karakter').max(500).nullable().optional(),
   /** true ise taslak beklemeden kaydedilir ve muhasebeleştirilir. */
   post: z.boolean().default(false),
 });
@@ -162,6 +204,11 @@ function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx)
   if (doc.dueDate && doc.dueDate < doc.invoiceDate) {
     ctx.addIssue({ code: 'custom', path: ['dueDate'], message: 'Vade tarihi fatura tarihinden önce olamaz' });
   }
+  doc.lines.forEach((l, i) => {
+    if (l.wbsId && !l.projectId) {
+      ctx.addIssue({ code: 'custom', path: ['lines', i, 'wbsId'], message: 'İş kalemi için proje seçilmeli' });
+    }
+  });
   if (doc.type) {
     const meta = INVOICE_TYPE_META[doc.type];
     if (doc.returnOfId && !meta.isReturn) {
@@ -177,11 +224,17 @@ function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx)
       if (l.deliveryLineId && doc.type !== 'sales' && doc.type !== 'purchase') {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'İrsaliye bağı yalnızca satış ve alış faturasında kullanılır' });
       }
+      if (l.orderLineId && doc.type !== 'purchase') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'orderLineId'], message: 'Sipariş bağı yalnızca alış faturasında kullanılır' });
+      }
       if (l.deliveryLineId && l.sourceLineId) {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'Satır hem iadeye hem irsaliyeye bağlanamaz' });
       }
       if (l.deliveryLineId && !l.itemId) {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'itemId'], message: 'İrsaliyeye bağlı satırda stok kartı gerekli' });
+      }
+      if (l.projectId && doc.type !== 'purchase' && doc.type !== 'expense' && doc.type !== 'purchase_return') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'projectId'], message: 'Proje şimdilik yalnızca alış, gider ve alış iadesi faturası kalemlerine yazılır' });
       }
     });
   }

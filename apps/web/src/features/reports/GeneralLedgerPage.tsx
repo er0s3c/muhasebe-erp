@@ -69,7 +69,7 @@ export function GeneralLedgerPage() {
                   <span className="font-mono">{a.code}</span> · {a.name}
                 </h2>
                 <span className="text-sm text-muted">
-                  {t('reports.generalLedger.closing')}: <BalanceText value={a.closing} /> {base}
+                  {t('reports.generalLedger.closing')}: <BalanceText value={a.closing} currency={base} />
                 </span>
               </div>
               <TableWrap>

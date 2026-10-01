@@ -7,7 +7,7 @@ import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { money } from '../../lib/format';
+import { currencySymbol, money, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ItemProfitData } from '../../lib/types';
@@ -51,10 +51,10 @@ export function ItemProfitPage() {
       ) : (
         <div className="flex flex-col gap-5">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <Stat label={t('reports.itemProfit.sales')}>{money(data.totals.sales)} {base}</Stat>
-            <Stat label={t('reports.itemProfit.cost')}>{money(data.totals.cost)} {base}</Stat>
+            <Stat label={t('reports.itemProfit.sales')}>{moneyIn(data.totals.sales, base)}</Stat>
+            <Stat label={t('reports.itemProfit.cost')}>{moneyIn(data.totals.cost, base)}</Stat>
             <Stat label={t('reports.itemProfit.profit')}>
-              <span className={cn(tone(data.totals.profit))}>{money(data.totals.profit)} {base}</span>
+              <span className={cn(tone(data.totals.profit))}>{moneyIn(data.totals.profit, base)}</span>
             </Stat>
             <Stat label={t('reports.itemProfit.margin')}>{margin(data.totals.marginPct)}</Stat>
           </div>
@@ -65,9 +65,9 @@ export function ItemProfitPage() {
                   <Th className="w-28">{t('inventory.items.code')}</Th>
                   <Th>{t('reports.itemProfit.item')}</Th>
                   <Th num>{t('reports.itemProfit.qty')}</Th>
-                  <Th num>{t('reports.itemProfit.sales')} ({base})</Th>
-                  <Th num>{t('reports.itemProfit.cost')} ({base})</Th>
-                  <Th num>{t('reports.itemProfit.profit')} ({base})</Th>
+                  <Th num>{t('reports.itemProfit.sales')} ({currencySymbol(base)})</Th>
+                  <Th num>{t('reports.itemProfit.cost')} ({currencySymbol(base)})</Th>
+                  <Th num>{t('reports.itemProfit.profit')} ({currencySymbol(base)})</Th>
                   <Th num>{t('reports.itemProfit.margin')}</Th>
                 </tr>
               </thead>

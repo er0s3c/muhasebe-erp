@@ -14,6 +14,9 @@ export interface DraftRow {
   currencyCode?: string | null;
   unitCost?: string | null;
   fxRate?: string | null;
+  /** Proje boyutu: yalnızca sarf/fire belgesinin çıkış satırları. Yevmiyede tüketim/fire tarafını böler. */
+  projectId?: string | null;
+  wbsId?: string | null;
   /**
    * Yalnızca bellekte: 'delivery_variance' = irsaliyeli alışta fatura fiyat farkının stokta kalan payı.
    * Bu tutar yevmiyede zaten stok hesabındadır; alış girişinin eksi bakiye kapanış düzeltmesinden (621'e

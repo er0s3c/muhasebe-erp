@@ -1,0 +1,29 @@
+# Cloudflare Tunnel arkasında iç ters vekil (TLS Cloudflare'de biter; bu Caddy yalnızca ağ içinden, cloudflared'den erişilir).
+# İstemci adresi Cf-Connecting-IP başlığından alınır; başlığa yalnızca iç ağdaki vekiller (cloudflared) için güvenilir.
+# Herkese açık olan YALNIZCA /v1/* ve /healthz'dir; yönetim paneli ve /admin/api LICENSE_ADMIN_ALLOW ile sınırlandırılır.
+{
+	auto_https off
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers Cf-Connecting-IP
+	}
+}
+
+:80 {
+	encode zstd gzip
+
+	@public path /v1/* /healthz
+	handle @public {
+		reverse_proxy license:4000 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
+	handle {
+		@denied not client_ip {$LICENSE_ADMIN_ALLOW:0.0.0.0/0 ::/0}
+		respond @denied "Erişim reddedildi" 403
+		reverse_proxy license:4000 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CURRENCY_CODES, TREASURY_PARENT_CODE } from '@erp/shared';
+import { currencySymbol, TREASURY_PARENT_CODE } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { Callout } from '../../components/ui/Feedback';
@@ -8,6 +8,7 @@ import { Field, Input, Select } from '../../components/ui/Field';
 import { Sheet } from '../../components/ui/Sheet';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { errorMessage } from '../../lib/errors';
 import { useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
@@ -150,11 +151,7 @@ export function AccountFormSheet({ open, onOpenChange, account, onSaved }: Props
         <Field label={t('treasury.form.currency')} hint={editing ? t('treasury.form.currencyLocked') : undefined}>
           {(id) => (
             <Select id={id} value={currency} disabled={editing} onChange={(e) => setCurrency(e.target.value)}>
-              {CURRENCY_CODES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
+              <CurrencyOptions wide />
             </Select>
           )}
         </Field>
@@ -182,7 +179,7 @@ export function AccountFormSheet({ open, onOpenChange, account, onSaved }: Props
             {link && (
               <div className="mt-3">
                 <Combobox options={linkOptions} value={linkAccountId || null} onChange={setLinkAccountId} placeholder={t('treasury.form.linkPick')} aria-label={t('treasury.form.linkAria')} />
-                {linkOptions.length === 0 && <p className="mt-2 text-[13px] text-muted">{t('treasury.form.linkNone', { code: TREASURY_PARENT_CODE[kind], currency })}</p>}
+                {linkOptions.length === 0 && <p className="mt-2 text-[13px] text-muted">{t('treasury.form.linkNone', { code: TREASURY_PARENT_CODE[kind], currency: currencySymbol(currency) })}</p>}
               </div>
             )}
           </div>

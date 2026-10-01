@@ -7,7 +7,7 @@ import { PrintHeader } from '../../components/ui/PrintHeader';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { SalesReportData, SalesReportGroup } from '../../lib/types';
@@ -38,9 +38,9 @@ function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
   const partyLabel = side === 'sales' ? t('reports.sales.customer') : t('reports.sales.supplier');
   const amountHead = (
     <>
-      <Th num>{t('reports.sales.net')} ({base})</Th>
-      <Th num>{t('reports.sales.vat')} ({base})</Th>
-      <Th num>{t('reports.sales.gross')} ({base})</Th>
+      <Th num>{t('reports.sales.net')} ({currencySymbol(base)})</Th>
+      <Th num>{t('reports.sales.vat')} ({currencySymbol(base)})</Th>
+      <Th num>{t('reports.sales.gross')} ({currencySymbol(base)})</Th>
     </>
   );
 

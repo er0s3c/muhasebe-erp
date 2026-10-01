@@ -11,7 +11,7 @@ import { Modal, Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { StockDocDetail } from '../../lib/types';
@@ -33,6 +33,7 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
   const unitLabel = useUnitLabel();
   const canMove = useCan()('inventory.move');
   const invoicesOn = useModuleEnabled('core.invoices');
+  const projectsOn = useModuleEnabled('construction.projects');
   const { data, isPending, error } = useCQuery<StockDocDetail>(['stock-doc', id], id ? `/api/stock-documents/${id}` : null);
   const [reversing, setReversing] = useState(false);
   const [revDate, setRevDate] = useState(todayIso());
@@ -150,7 +151,7 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
                     <Th num>{t('inventory.mdetail.qty')}</Th>
                     <Th num>{t('inventory.mdetail.unitCost')}</Th>
                     <Th num>
-                      {t('inventory.mdetail.value')} ({company.baseCurrency})
+                      {t('inventory.mdetail.value')} ({currencySymbol(company.baseCurrency)})
                     </Th>
                   </tr>
                 </thead>
@@ -162,12 +163,25 @@ export function MovementDetailSheet({ id, onClose, onOpen }: Props) {
                         <span className="ml-2 font-mono text-xs text-muted">{l.itemCode}</span>
                         {l.currencyCode && l.currencyCode !== company.baseCurrency && l.unitCost && l.fxRate && (
                           <span className="block text-xs text-muted">
-                            {t('inventory.mdetail.fx', { cost: money(l.unitCost, 4), currency: l.currencyCode, rate: money(l.fxRate, 4) })}
+                            {t('inventory.mdetail.fx', { cost: moneyIn(l.unitCost, l.currencyCode, 4), rate: money(l.fxRate, 4) })}
+                          </span>
+                        )}
+                        {l.projectId && (
+                          <span className="block text-xs text-muted">
+                            {t('projects.picker.label')}:{' '}
+                            {projectsOn ? (
+                              <Link to={`/projects/${l.projectId}`} className="link" onClick={onClose}>
+                                {l.projectCode}
+                              </Link>
+                            ) : (
+                              l.projectCode
+                            )}
+                            {l.wbsCode ? ` · ${l.wbsCode}` : ''}
                           </span>
                         )}
                         {l.adjustment && (
                           <span className="block text-xs text-warning">
-                            {t('inventory.mdetail.adjustment')}: {money(l.adjustment)} {company.baseCurrency}
+                            {t('inventory.mdetail.adjustment')}: {moneyIn(l.adjustment, company.baseCurrency)}
                           </span>
                         )}
                       </Td>

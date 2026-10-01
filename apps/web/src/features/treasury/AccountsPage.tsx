@@ -8,7 +8,7 @@ import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { TreasurySummary } from '../../lib/types';
@@ -51,14 +51,14 @@ export function AccountsPage() {
                 label={t('treasury.accounts.totalEquivalent')}
                 sub={summary.approximate ? t('treasury.accounts.approx') : t('treasury.accounts.equivalentNote')}
               >
-                {money(summary.equivalent)} {base}
+                {moneyIn(summary.equivalent, base)}
               </Stat>
               <Stat label={t('treasury.accounts.accountCount')}>{summary.accountCount}</Stat>
               <Stat label={t('treasury.accounts.byCurrency')}>
                 <span className="block text-base leading-relaxed">
                   {summary.byCurrency.map((c) => (
                     <span key={c.currency} className="mr-4 inline-block whitespace-nowrap">
-                      {money(c.balance)} {c.currency}
+                      {moneyIn(c.balance, c.currency)}
                     </span>
                   ))}
                 </span>
@@ -75,7 +75,7 @@ export function AccountsPage() {
                   <Th>{t('treasury.accounts.name')}</Th>
                   <Th className="w-28">{t('treasury.accounts.glCode')}</Th>
                   <Th num>{t('treasury.accounts.balance')}</Th>
-                  <Th num>{t('treasury.accounts.equivalent', { currency: base })}</Th>
+                  <Th num>{t('treasury.accounts.equivalent', { currency: currencySymbol(base) })}</Th>
                   <Th className="w-32">{t('treasury.accounts.lastActivity')}</Th>
                 </tr>
               </thead>
@@ -111,7 +111,7 @@ export function AccountsPage() {
                       </Td>
                       <Td className="font-mono text-[13px] text-muted">{a.accountCode}</Td>
                       <Td num>
-                        {money(a.balance)} {a.currencyCode}
+                        {moneyIn(a.balance, a.currencyCode)}
                       </Td>
                       <Td num className="text-muted">
                         {a.currencyCode === base ? '' : a.equivalent === null ? t('treasury.accounts.noRate') : money(a.equivalent)}

@@ -68,6 +68,10 @@ export interface LicenseServiceOptions {
   fingerprint?: () => Promise<ServerFingerprint>;
   /** Kalp atışında satıcıya giden kullanım sayıları (yalnızca sayı). */
   stats?: () => Promise<{ devices: number; companies: number }>;
+  /** Kurulum kitinin hedefi: kalp atışında bildirilir (güncelleme arşivini seçer). */
+  platform?: 'linux-x64' | 'win-x64';
+  /** Kalp atışı yanıtında güncelleme teklifi geldiğinde çağrılır (hata kalp atışını bozmaz). */
+  onUpdateOffer?: (offer: unknown) => Promise<void>;
 }
 
 const HEARTBEAT_INTERVAL_MS = 12 * 60 * 60 * 1000;
@@ -97,6 +101,8 @@ export class LicenseService {
   private readonly reloadMs: number;
   private readonly heartbeatIntervalMs: number;
   private readonly appVersion: string;
+  private readonly platform: LicenseServiceOptions['platform'];
+  private readonly onUpdateOffer: LicenseServiceOptions['onUpdateOffer'];
   private readonly fingerprintProvider: () => Promise<ServerFingerprint>;
   private readonly statsProvider: () => Promise<{ devices: number; companies: number }>;
 
@@ -121,6 +127,8 @@ export class LicenseService {
     this.reloadMs = opts.reloadMs ?? 60_000;
     this.heartbeatIntervalMs = opts.heartbeatIntervalMs ?? Math.round(HEARTBEAT_INTERVAL_MS * (0.9 + Math.random() * 0.2));
     this.appVersion = opts.appVersion.slice(0, 40);
+    this.platform = opts.platform;
+    this.onUpdateOffer = opts.onUpdateOffer;
     this.fingerprintProvider = opts.fingerprint ?? (() => serverFingerprint(opts.db, opts.hostIdFile));
     this.statsProvider =
       opts.stats ??
@@ -351,11 +359,18 @@ export class LicenseService {
       const stats = await this.statsProvider();
       const env = signEnvelope(
         'heartbeat',
-        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, nonce, ts: this.now(), stats },
+        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, nonce, ts: this.now(), stats, ...(this.platform ? { platform: this.platform } : {}) },
         key,
       );
       const res = await this.call(() => transport.heartbeat(env));
       await this.accept(res.lease, { typ: 'lease', nonce });
+      if (res.update !== undefined && this.onUpdateOffer) {
+        try {
+          await this.onUpdateOffer(res.update);
+        } catch (err) {
+          this.log.warn({ err: err instanceof Error ? err.message : err }, 'güncelleme teklifi işlenemedi (imza/biçim)');
+        }
+      }
       return this.snapshot();
     });
   }

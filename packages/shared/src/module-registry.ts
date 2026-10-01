@@ -48,7 +48,37 @@ export const MODULES: readonly ModuleDef[] = [
     labelKey: 'modules.constructionProjects',
     label: 'Şantiye ve projeler',
     sectors: ['CONSTRUCTION'],
-    status: 'planned',
+    status: 'available',
+    // Maliyet boyutu yevmiye satırlarında taşınır; proje raporu defterden türer
+    requires: ['core.ledger'],
+  },
+  {
+    key: 'construction.subcontracts',
+    labelKey: 'modules.constructionSubcontracts',
+    label: 'Taşeron ve hakediş',
+    sectors: ['CONSTRUCTION'],
+    status: 'available',
+    // Hakediş yevmiye yazar ve taşeron cari hesaba bağlıdır; ödeme kasa/banka modülünden bağımsız yapılır
+    // (avans ve ödeme eylemleri kasa/banka kapalıysa çalışmaz, hakediş kaydı etkilenmez)
+    requires: ['core.ledger', 'core.parties', 'construction.projects'],
+  },
+  {
+    key: 'construction.procurement',
+    labelKey: 'modules.constructionProcurement',
+    label: 'Satın alma ve sipariş',
+    sectors: ['CONSTRUCTION'],
+    status: 'available',
+    // Sipariş taahhüt yaratır (proje); teklif ve sipariş tedarikçi carisine bağlıdır
+    requires: ['core.parties', 'construction.projects'],
+  },
+  {
+    key: 'construction.realestate',
+    labelKey: 'modules.constructionRealestate',
+    label: 'Gayrimenkul satışı',
+    sectors: ['CONSTRUCTION'],
+    status: 'available',
+    // Satış yevmiye yazar (alıcı carisi, ertelenmiş gelir, gelir) ve birimler projeye bağlıdır; tahsilat kasa/banka modülünden yapılır
+    requires: ['core.ledger', 'core.parties', 'construction.projects'],
   },
   {
     key: 'retail.pos',
@@ -59,7 +89,16 @@ export const MODULES: readonly ModuleDef[] = [
   },
 ];
 
-export type NavGroupKey = 'overview' | 'parties' | 'invoices' | 'treasury' | 'stock' | 'accounting' | 'reports' | 'settings';
+export type NavGroupKey =
+  | 'overview'
+  | 'parties'
+  | 'invoices'
+  | 'treasury'
+  | 'stock'
+  | 'construction'
+  | 'accounting'
+  | 'reports'
+  | 'settings';
 
 export interface NavItemDef {
   key: string;
@@ -78,6 +117,7 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
   { key: 'invoices', labelKey: 'nav.groups.invoices' },
   { key: 'treasury', labelKey: 'nav.groups.treasury' },
   { key: 'stock', labelKey: 'nav.groups.stock' },
+  { key: 'construction', labelKey: 'nav.groups.construction' },
   { key: 'accounting', labelKey: 'nav.groups.accounting' },
   { key: 'reports', labelKey: 'nav.groups.reports' },
   { key: 'settings', labelKey: 'nav.groups.settings' },
@@ -165,6 +205,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'treasury.read',
   },
   {
+    key: 'cash-forecast',
+    labelKey: 'nav.cashForecast',
+    path: '/treasury/cash-forecast',
+    icon: 'trending-up',
+    group: 'treasury',
+    module: 'core.treasury',
+    permission: 'treasury.read',
+  },
+  {
     key: 'treasury-transactions',
     labelKey: 'nav.treasuryTransactions',
     path: '/treasury/transactions',
@@ -217,6 +266,141 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'stock',
     module: 'core.inventory',
     permission: 'inventory.read',
+  },
+  {
+    key: 'projects',
+    labelKey: 'nav.projects',
+    path: '/projects',
+    icon: 'hard-hat',
+    group: 'construction',
+    module: 'construction.projects',
+    permission: 'projects.read',
+  },
+  {
+    key: 'purchase-requests',
+    labelKey: 'nav.purchaseRequests',
+    path: '/purchasing/requests',
+    icon: 'clipboard-check',
+    group: 'construction',
+    module: 'construction.procurement',
+    permission: 'procurement.read',
+  },
+  {
+    key: 'rfqs',
+    labelKey: 'nav.rfqs',
+    path: '/purchasing/rfqs',
+    icon: 'scale',
+    group: 'construction',
+    module: 'construction.procurement',
+    permission: 'procurement.read',
+  },
+  {
+    key: 'purchase-orders',
+    labelKey: 'nav.purchaseOrders',
+    path: '/purchasing/orders',
+    icon: 'package-check',
+    group: 'construction',
+    module: 'construction.procurement',
+    permission: 'procurement.read',
+  },
+  {
+    key: 'order-matching',
+    labelKey: 'nav.orderMatching',
+    path: '/purchasing/matching',
+    icon: 'link-2',
+    group: 'construction',
+    module: 'construction.procurement',
+    permission: 'procurement.read',
+  },
+  {
+    key: 'real-estate-units',
+    labelKey: 'nav.realEstateUnits',
+    path: '/real-estate/units',
+    icon: 'building-2',
+    group: 'construction',
+    module: 'construction.realestate',
+    permission: 'realestate.read',
+  },
+  {
+    key: 'sales-contracts',
+    labelKey: 'nav.salesContracts',
+    path: '/real-estate/contracts',
+    icon: 'file-signature',
+    group: 'construction',
+    module: 'construction.realestate',
+    permission: 'realestate.read',
+  },
+  {
+    key: 'sales-installments',
+    labelKey: 'nav.salesInstallments',
+    path: '/real-estate/installments',
+    icon: 'calendar-days',
+    group: 'construction',
+    module: 'construction.realestate',
+    permission: 'realestate.read',
+  },
+  {
+    key: 'subcontracts',
+    labelKey: 'nav.subcontracts',
+    path: '/subcontracts',
+    icon: 'file-signature',
+    group: 'construction',
+    module: 'construction.subcontracts',
+    permission: 'subcontracts.read',
+  },
+  {
+    key: 'employer-contracts',
+    labelKey: 'nav.employerContracts',
+    path: '/employer-contracts',
+    icon: 'file-signature',
+    group: 'construction',
+    module: 'construction.subcontracts',
+    permission: 'subcontracts.read',
+  },
+  {
+    key: 'employer-claims',
+    labelKey: 'nav.employerClaims',
+    path: '/employer-claims',
+    icon: 'file-check',
+    group: 'construction',
+    module: 'construction.subcontracts',
+    permission: 'subcontracts.read',
+  },
+  {
+    key: 'progress-payments',
+    labelKey: 'nav.progressPayments',
+    path: '/progress-payments',
+    icon: 'file-check',
+    group: 'construction',
+    module: 'construction.subcontracts',
+    permission: 'subcontracts.read',
+  },
+  {
+    key: 'variation-orders',
+    labelKey: 'nav.variationOrders',
+    path: '/variation-orders',
+    icon: 'file-diff',
+    group: 'construction',
+    module: 'construction.subcontracts',
+    permission: 'subcontracts.read',
+  },
+  {
+    key: 'approvals',
+    labelKey: 'nav.approvals',
+    path: '/approvals',
+    icon: 'inbox',
+    group: 'construction',
+    module: 'construction.subcontracts',
+    permission: 'subcontracts.read',
+  },
+  {
+    key: 'project-profitability',
+    labelKey: 'nav.projectProfitability',
+    path: '/reports/project-profitability',
+    icon: 'trending-up',
+    group: 'reports',
+    module: 'construction.projects',
+    permission: 'projects.read',
   },
   {
     key: 'journal',
@@ -406,6 +590,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'settings',
     module: 'core.settings',
     permission: 'accounts.manage',
+  },
+  {
+    key: 'construction-settings',
+    labelKey: 'nav.constructionSettings',
+    path: '/settings/construction',
+    icon: 'sliders-horizontal',
+    group: 'settings',
+    module: 'construction.subcontracts',
+    permission: 'subcontracts.read',
   },
   {
     key: 'custom-codes',

@@ -16,6 +16,7 @@ import { forbidden } from '../../http/errors';
 import { lockItems } from '../inventory/balances';
 import { lockDeliveryLines } from './delivery-link';
 import { itemProfitability, salesReport } from './analytics';
+import { evaluateInvoiceMatch } from '../procurement/matching';
 import { cancelInvoice, postInvoice } from './posting';
 import { invoiceSummary, vatSummary } from './reports';
 import {
@@ -58,6 +59,15 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
   app.get('/api/invoices/summary', tenantRoute(app, read, async ({ tx }) => invoiceSummary(tx)));
 
   app.get(
+    '/api/invoices/:id/match',
+    tenantRoute(app, read, async ({ tx, req }) => {
+      const { id } = idParam.parse(req.params);
+      const { lines } = await getInvoice(tx, id);
+      return { rows: await evaluateInvoiceMatch(tx, lines.map((l) => ({ lineNo: l.lineNo, poLineId: l.poLineId, quantity: l.quantity, net: l.net })), id) };
+    }),
+  );
+
+  app.get(
     '/api/invoices/:id',
     tenantRoute(app, read, async ({ tx, req }) => getInvoice(tx, idParam.parse(req.params).id)),
   );
@@ -68,6 +78,7 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       const input = createInvoiceSchema.parse(c.req.body);
       // Taslak hazırlama ile muhasebeleştirme ayrı yetkilerdir
       if (input.post && !hasPermission(c.role, 'invoices.post')) throw forbidden();
+      if (input.matchOverrideReason && !hasPermission(c.role, 'procurement.approve')) throw forbidden('Eşleştirme sapmasını geçirmek için satın alma onay yetkisi gerekir');
       const ctx = invoiceCtx(c);
       if (input.post) await lockForPosting(c.tx, input.lines);
       const id = await createInvoiceDraft(c.tx, ctx, input);
@@ -83,6 +94,7 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       const { id } = idParam.parse(c.req.params);
       const input = updateInvoiceSchema.parse(c.req.body);
       if (input.post && !hasPermission(c.role, 'invoices.post')) throw forbidden();
+      if (input.matchOverrideReason && !hasPermission(c.role, 'procurement.approve')) throw forbidden('Eşleştirme sapmasını geçirmek için satın alma onay yetkisi gerekir');
       const ctx = invoiceCtx(c);
       if (input.post && input.lines) await lockForPosting(c.tx, input.lines);
       await updateInvoiceDraft(c.tx, ctx, id, input);

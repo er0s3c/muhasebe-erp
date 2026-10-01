@@ -81,5 +81,20 @@ for (const out of Object.values(result.metafile.outputs)) {
 }
 if (missing.size > 0) throw new Error(`Dış içe aktarma dependencies içinde yok: ${[...missing].join(', ')}`);
 
+// Ana makine güncelleyicisi: kurulumun dışında (node_modules olmadan) çalışır; bu yüzden TÜM bağımlılıkları gömülü tek dosyadır.
+await build({
+  absWorkingDir: root,
+  entryPoints: { updater: 'src/updater/cli.ts' },
+  outdir,
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node22',
+  minify: true,
+  define: { __LICENSE_KEYRING__: JSON.stringify(JSON.stringify(ring)) },
+  logLevel: 'warning',
+  banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
+});
+
 cpSync(join(root, 'drizzle'), join(outdir, 'drizzle'), { recursive: true });
-console.log(`API derlemesi tamam: ${outdir} (server.js, migrate.js, demo.js, admin.js, drizzle/)`);
+console.log(`API derlemesi tamam: ${outdir} (server.js, migrate.js, demo.js, admin.js, updater.js, drizzle/)`);

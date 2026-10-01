@@ -2,7 +2,7 @@ import { ArrowLeft, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { CURRENCY_CODES, DELIVERY_NOTE_TYPE_META, dec, todayIso } from '@erp/shared';
+import { DELIVERY_NOTE_TYPE_META, dec, todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
@@ -11,6 +11,7 @@ import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCompanyApi, useNavigation } from '../../lib/queries';
@@ -150,7 +151,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
 
   return (
     <>
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text">
+      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
         {t(`deliveries.${side}.title`)}
       </Link>
@@ -242,11 +243,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
                             aria-label={`${t('deliveries.form.currency')} ${i + 1}`}
                             onChange={(e) => patch(l.key, { currency: e.target.value, fxRate: '' })}
                           >
-                            {CURRENCY_CODES.map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
+                            <CurrencyOptions />
                           </Select>
                           <MoneyInput value={l.fxRate} decimals={4} maxDecimals={8} disabled={l.currency === base || l.unitCost === ''} placeholder="—" aria-label={`${t('deliveries.form.fxRate')} ${i + 1}`} className="text-right" onChange={(v) => patch(l.key, { fxRate: v })} />
                         </>

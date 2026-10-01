@@ -1,7 +1,7 @@
 import { ListTree, Plus, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CURRENCY_CODES } from '@erp/shared';
+import { currencySymbol } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
@@ -10,6 +10,7 @@ import { Field, Input, Select } from '../../components/ui/Field';
 import { Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
@@ -134,7 +135,7 @@ export function AccountsPage() {
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge tone={a.isPostable ? 'brand' : 'neutral'}>{a.isPostable ? t('ledger.accounts.postable') : t('ledger.accounts.group')}</Badge>
                           <Badge>{t(`ledger.accounts.types.${a.type}`)}</Badge>
-                          {a.currencyCode && <Badge tone="warning">{a.currencyCode}</Badge>}
+                          {a.currencyCode && <Badge tone="warning">{currencySymbol(a.currencyCode)}</Badge>}
                           {!a.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
                         </div>
                       </Td>
@@ -200,11 +201,7 @@ export function AccountsPage() {
             {(id) => (
               <Select id={id} value={currency} onChange={(e) => setCurrency(e.target.value)}>
                 <option value="">{t('ledger.accounts.noLimit')}</option>
-                {CURRENCY_CODES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
+                <CurrencyOptions wide />
               </Select>
             )}
           </Field>

@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { applyRate, dec, formatTR, parseTR, roundMoney, sum, toDbAmount } from './money';
+import { applyRate, currencySymbol, dec, formatMoney, formatTR, parseTR, roundMoney, sum, toDbAmount } from './money';
 import { resolveEnabledModules, MODULES, type ModuleDef } from './module-registry';
 import { hasPermission } from './permissions';
 import { createJournalSchema, accountTypeForCode } from './schemas/ledger';
 import { todayIso, formatDateTR } from './dates';
+
+describe('para birimi simgeleri', () => {
+  it('simge önde, negatifte işaret simgeden önce', () => {
+    expect(formatMoney('1234.5', 'TRY')).toBe('₺1.234,50');
+    expect(formatMoney('-1234.5', 'GBP')).toBe('-£1.234,50');
+    expect(formatMoney('0', 'EUR')).toBe('€0,00');
+    expect(formatMoney('12.3456', 'USD', 4)).toBe('$12,3456');
+    expect(formatMoney(null, 'TRY')).toBe('');
+    expect(formatMoney('', 'TRY')).toBe('');
+  });
+
+  it('bilinmeyen kod kodla gösterilir (sabit boşluk önekli); prototip anahtarları simge sanılmaz', () => {
+    expect(formatMoney('5', 'CHF')).toBe('CHF\u00A05,00');
+    expect(currencySymbol('CHF')).toBe('CHF');
+    expect(currencySymbol('constructor')).toBe('constructor');
+    expect(currencySymbol('TRY')).toBe('₺');
+  });
+});
 
 describe('money', () => {
   it('float sapması yok: 0,1 + 0,2 = 0,3', () => {
@@ -61,7 +79,13 @@ describe('module registry', () => {
   });
 
   it('planlanan modüller henüz kimseye açılmaz', () => {
-    expect(resolveEnabledModules('CONSTRUCTION').has('construction.projects')).toBe(false);
+    expect(resolveEnabledModules('RETAIL_MARKET').has('retail.pos')).toBe(false);
+  });
+
+  it('proje modülü yalnızca inşaat şirketine açılır', () => {
+    expect(resolveEnabledModules('CONSTRUCTION').has('construction.projects')).toBe(true);
+    expect(resolveEnabledModules('COMMERCE').has('construction.projects')).toBe(false);
+    expect(resolveEnabledModules('RETAIL_MARKET').has('construction.projects')).toBe(false);
   });
 
   it('sektör yalıtımı: inşaatta market modülü yok, markette inşaat modülü yok', () => {

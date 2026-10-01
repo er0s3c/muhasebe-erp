@@ -15,8 +15,9 @@ import {
   type MoneyValue,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { accounts, fiscalPeriods, journalEntries, journalLines, parties } from '../../db/schema';
+import { accounts, costCodes, fiscalPeriods, journalEntries, journalLines, parties, projects, projectWbs } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
+import { validateDimensions, type DimensionLine } from '../projects/dimension';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { findRate, requireRate } from '../settings/rates';
@@ -54,6 +55,9 @@ interface PreparedLine {
   creditReporting: MoneyValue | null;
   partyId: string | null;
   dueDate: string | null;
+  projectId: string | null;
+  wbsId: string | null;
+  costCodeId: string | null;
 }
 
 export interface ReportingLine {
@@ -127,6 +131,7 @@ async function prepareLines(
   }
 
   const prepared: PreparedLine[] = [];
+  const dimensions: DimensionLine[] = [];
   for (const [i, line] of lines.entries()) {
     const label = `Satır ${i + 1}`;
     const account = byId.get(line.accountId);
@@ -196,8 +201,14 @@ async function prepareLines(
       creditReporting: reportingRate ? applyRate(creditBase, reportingRate) : null,
       partyId: line.partyId ?? null,
       dueDate: line.dueDate ?? null,
+      projectId: line.projectId ?? null,
+      wbsId: line.wbsId ?? null,
+      costCodeId: line.costCodeId ?? null,
     });
+    dimensions.push({ label, projectId: line.projectId, wbsId: line.wbsId, costCodeId: line.costCodeId, accountType: account.type });
   }
+  // Proje/iş kalemi etiketleri (yalnızca etiketli satır varsa sorgu yapar)
+  await validateDimensions(tx, ctx.companyId, dimensions);
   balanceReporting(prepared);
   return prepared;
 }
@@ -219,6 +230,9 @@ function toRows(entryId: string, companyId: string, lines: PreparedLine[]) {
     creditReporting: l.creditReporting ? toDbAmount(l.creditReporting) : null,
     partyId: l.partyId,
     dueDate: l.dueDate,
+    projectId: l.projectId,
+    wbsId: l.wbsId,
+    costCodeId: l.costCodeId,
   }));
 }
 
@@ -380,6 +394,10 @@ export async function reverseJournalEntry(
       creditReporting: l.debitReporting,
       partyId: l.partyId,
       dueDate: l.dueDate,
+      // Ters kayıt önceki etiketi nötrler: proje/iş kalemi aynen kopyalanır (kapalı projeye de yazılabilir)
+      projectId: l.projectId,
+      wbsId: l.wbsId,
+      costCodeId: l.costCodeId,
     })),
   );
 
@@ -433,10 +451,22 @@ export async function getJournalEntry(tx: Tx, id: string) {
       partyCode: parties.code,
       partyName: parties.name,
       dueDate: journalLines.dueDate,
+      projectId: journalLines.projectId,
+      projectCode: projects.code,
+      projectName: projects.name,
+      wbsId: journalLines.wbsId,
+      wbsCode: projectWbs.code,
+      wbsName: projectWbs.name,
+      costCodeId: journalLines.costCodeId,
+      costCode: costCodes.code,
+      costCodeName: costCodes.name,
     })
     .from(journalLines)
     .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
     .leftJoin(parties, eq(parties.id, journalLines.partyId))
+    .leftJoin(projects, eq(projects.id, journalLines.projectId))
+    .leftJoin(projectWbs, eq(projectWbs.id, journalLines.wbsId))
+    .leftJoin(costCodes, eq(costCodes.id, journalLines.costCodeId))
     .where(eq(journalLines.entryId, id))
     .orderBy(asc(journalLines.lineNo));
   return { ...entry, lines };

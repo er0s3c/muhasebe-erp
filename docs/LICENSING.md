@@ -33,7 +33,7 @@ Uygulama yalnızca **açık anahtarınızı** bilir (imaja gömülür); özel an
 ## 3. Uygulamadan lisans sunucusuna giden bilgiler
 
 Yalnızca: kurulum kimliği, kurulum açık anahtarı, sunucu parmak izi (özet), uygulama sürümü, etkinleştirme kodu (etkinleştirmede), ve kalp atışında
-**kayıtlı etkin cihaz sayısı ile şirket sayısı**. Kullanıcı, müşteri, fatura, stok, tutar gibi hiçbir muhasebe verisi gönderilmez. Sunucu IP adresini
+**kayıtlı etkin cihaz sayısı ile şirket sayısı**, kurulum sihirbazıyla kurulmuşsa **kit hedefi** (`linux-x64`/`win-x64`; uzaktan güncelleme arşivini seçer). Kullanıcı, müşteri, fatura, stok, tutar gibi hiçbir muhasebe verisi gönderilmez. Sunucu IP adresini
 TCP bağlantısı gereği görür (klon şüphesi tespitinde kullanılır; `docs/LEGAL-NOTES.md` §11). Bu açıklama uygulamada da (Lisans sayfası) vardır.
 
 ## 4. Satıcı kurulumu (lisans sunucusu, VPS)
@@ -94,16 +94,68 @@ curl https://<alan-adı>/healthz        # {"ok":true,...}
   ile izin verilen adreslere kısıtlıdır: kendi IP adresinizi yazın (varsayılan "herkes" yalnızca ilk kurulum içindir). IP'niz değişiyorsa VPN/sabit IP kullanın.
 - Veritabanı portu yayınlanmaz. Yönetici parolası/TOTP sırrı diskte şifrelidir (`LICENSE_DATA_KEY`).
 
-### 4.4 Yönetici hesabı (panel: parola + zorunlu TOTP)
+**Cloudflare Tunnel varyantı** (80/443 açmadan; paylaşılan sunucuda): Caddy port yayınlamaz, TLS Cloudflare'de biter, Caddy istemci adresini
+`Cf-Connecting-IP`'den alır (`LICENSE_ADMIN_ALLOW` ve oran sınırı doğru çalışır; bu varyantta "DNS only" uyarısı geçerli değildir).
+
+```bash
+cloudflared tunnel create muhasebe-lisans                       # ~/.cloudflared/<tünel-id>.json üretir
+mkdir -p /etc/muhasebe-lisans-tunnel && install -m 400 -o 65532 -g 65532 ~/.cloudflared/<tünel-id>.json /etc/muhasebe-lisans-tunnel/
+cat > /etc/muhasebe-lisans-tunnel/config.yml <<EOF
+tunnel: <tünel-id>
+credentials-file: /etc/cloudflared/<tünel-id>.json
+ingress:
+  - hostname: <alan-adı>
+    service: http://caddy:80
+  - service: http_status:404
+EOF
+chown -R 65532:65532 /etc/muhasebe-lisans-tunnel
+cloudflared tunnel route dns muhasebe-lisans <alan-adı>
+# .env: CLOUDFLARED_DIR=/etc/muhasebe-lisans-tunnel
+docker compose -f deploy/license/docker-compose.yml -f deploy/license/docker-compose.tunnel.yml --env-file deploy/license/.env up -d --build
+```
+
+> `TRUST_PROXY` sayısal atlama değeri (`1`) almaz: Fastify ≥ 5.12 sayıyı güvenlik gereği yok sayar ve tüm istekler vekilin adresinden gelmiş görünür
+> (oran sınırı tek kovaya düşer). Lisans sunucusu `loopback,uniquelocal` kullanır (yalnızca iç ağdaki Caddy'ye güvenir); **sayısal değerle açılmayı reddeder**.
+> Üretimde **`LICENSE_ADMIN_ORIGIN` zorunludur** (https) ve compose `https://${LICENSE_DOMAIN}` verir: giriş anahtarlarının bağlandığı köken istekteki `Host`
+> başlığından türetilmez.
+>
+> Tünel varyantı için gereken Compose sürümü ≥ 2.24'tür (`!reset`/`!override`). `cloudflare/cloudflared` imajını ilk kurulumdan sonra belirli bir sürüm
+> etiketine sabitlemeniz önerilir (`latest` her `pull`'da değişir).
+
+### 4.4 Yönetici hesabı (panel: parola + zorunlu TOTP ya da giriş anahtarı)
+
+**İlk kurulum panelden** (yalnızca hiç yönetici yokken): `https://<alan-adı>/` adresi `/setup` sayfasına yönlenir.
+
+```bash
+docker compose -f deploy/license/docker-compose.yml [-f deploy/license/docker-compose.tunnel.yml] --env-file deploy/license/.env exec license \
+  node dist/cli.js setup:token        # kurulum kodu: XXXX-XXXX-XXXX-XXXX-XXXX
+```
+
+1. **Hesap:** kurulum kodu, e-posta, ad soyad, parola ve parola tekrarı (≥ 12 karakter; Vaultwarden eklentisi kaydetmeyi önerir).
+2. **Doğrulama uygulaması:** QR kodu, anahtar ve `otpauth://` adresi gösterilir. Vaultwarden/Bitwarden'da kaydın **Kimlik doğrulayıcı anahtarı (TOTP)**
+   alanına adresi yapıştırın (ya da mobil uygulamayla QR'ı okutun). Kasadaki 6 haneli kod girilince hesap oluşur ve oturum açılır.
+3. **Giriş anahtarı (isteğe bağlı):** passkey eklenir; Vaultwarden eklentisi saklar. Sonraki girişlerde "Giriş anahtarıyla giriş" e-posta/parola/kod sormaz
+   (kasa kilidi/PIN/biyometri zorunludur). Anahtarlar sonradan **Güvenlik** sayfasından eklenir/silinir.
+
+Kurulum kodu `LICENSE_DATA_KEY`'den türetilir (yalnızca sunucuya erişen görebilir); ilk yönetici oluşunca kurulum kapanır, kod geçersizleşir. Panel internete
+açıkken hesabı ilk gelenin kapmasını bu kod önler (IP başına 10 hatalı denemede kilitlenir). Giriş anahtarları `LICENSE_ADMIN_ORIGIN` kökenine
+(compose: `https://${LICENSE_DOMAIN}`) bağlıdır: alan adı değişirse yeniden eklenmeleri gerekir.
+
+Bilinen sınırlar: giriş anahtarı **eklemek yeniden doğrulama istemez** (çalınmış bir oturum kalıcı bir anahtar ekleyebilir; oturum `httpOnly` + `SameSite=Strict` ve 8 saatlik,
+ama hesap ele geçirildiğinde `admin:reset` tüm giriş anahtarlarını da siler); giriş anahtarı meydan okumaları bellekte tutulur (tek örnek varsayımı);
+kurulum sihirbazının tarayıcı senaryosu depoda otomatik sınanmaz (sunucu tarafı kurulum ve WebAuthn akışları `test/setup-passkey.test.ts` ile sınanır).
+
+Ek yönetici (komut satırından):
 
 ```bash
 docker compose -f deploy/license/docker-compose.yml --env-file deploy/license/.env exec license \
   node dist/cli.js admin:create --email=siz@ornek.com --name="Ad Soyad"
 ```
 
-Çıktıdaki **parola** ve **TOTP sırrı** yalnızca bir kez görünür: sırrı Authenticator uygulamasına (Google/Microsoft Authenticator, Aegis…) elle ekleyin.
+Çıktıdaki **parola** ve **TOTP sırrı** yalnızca bir kez görünür: sırrı Vaultwarden'a ya da bir Authenticator uygulamasına (Aegis…) elle ekleyin.
 Giriş: e-posta + parola + 6 haneli kod. Kurallar: aynı kod iki kez kullanılamaz, 5 başarısız denemede (IP+e-posta) ve 15'te (yalnızca e-posta) kilitlenir,
-oturum 8 saattir, değiştiren isteklerde CSRF başlığı ve köken denetimi vardır. Parola/TOTP kaybolursa: `admin:reset --email=…`.
+oturum 8 saattir, değiştiren isteklerde CSRF başlığı ve köken denetimi vardır. Parola/TOTP kaybolursa: `admin:reset --email=…` (parola ve TOTP yenilenir,
+giriş anahtarları silinir).
 
 ### 4.5 Komut satırı (panelin eşi; SSH ile)
 
@@ -116,7 +168,8 @@ oturum 8 saattir, değiştiren isteklerde CSRF başlığı ve köken denetimi va
 | `license:extend --id=… --valid-until=YYYY-MM-DD` | Süreyi uzatır. |
 | `license:suspend / resume / revoke --id=…` | Askıya alır / devam ettirir / iptal eder (kurulumlar sonraki kalp atışında etkilenir, en geç ~12 saat). |
 | `license:code --id=…` | Yeni etkinleştirme kodu üretir (eskisi geçersiz olur). |
-| `admin:create / admin:reset` | Yönetici oluşturur / parola ve TOTP'yi yeniler. |
+| `setup:token` | İlk yönetici kurulum kodunu yazdırır (yalnızca hiç yönetici yokken; panel `/setup`). |
+| `admin:create / admin:reset` | Yönetici oluşturur / parola ve TOTP'yi yeniler (giriş anahtarlarını siler). |
 | `keygen --kid=… --out=…` | İmza anahtarı üretir (yalnızca anahtar töreninde). |
 
 ## 5. Uygulama imajını derleme ve müşteriye verme
@@ -134,6 +187,17 @@ docker build -t registry.ornek.com/muhasebe-erp:1.0.0 --build-arg APP_VERSION=1.
 - `LICENSE_SERVER_URL` https olmalıdır (`LICENSE_ALLOW_INSECURE_URL=true` yalnızca test düzenekleri).
 - Üretim kipi denetimsiz paketle başlamaz (`server.ts`). API kaynak haritası üretilmez, paket küçültülür.
 - Müşterilere imaj kayıt defteriniz (özel registry) ya da `docker save` dosyasıyla iletilir; müşteri kurulum belgesi `docs/OPERATIONS.md`'dir.
+
+### 5.1 Sürüm kiti ve uzaktan güncelleme (tek tıkla gönderme)
+
+Sihirbazla kurulan müşteriler (Docker'lı ya da Docker'sız) **sürüm kiti** kullanır: `npm run release -- --version=1.2.0` (aynı `LICENSE_PUBLIC_KEYS_JSON` / `LICENSE_SERVER_URL` ortamıyla derleyin; kit bu anahtarı gömer). Yeni sürümü müşterilere göndermek:
+
+1. Panel **Sürümler** → **Yeni sürüm** (sürüm numarası = kitin sürümü; notu müşteri görür) → **Kit arşivi seç** (`muhasebe-erp-1.2.0-linux-x64.tar.gz`, `…-win-x64.zip`; 8 MB'lık parçalarla yüklenir, kopan yükleme kaldığı yerden sürer) → **Yayımla (imzala)**: dosya özetleriyle manifesto satıcı anahtarınızla imzalanır; yayımlanan sürümün dosyaları ve özetleri artık değişmez (veritabanı tetikleyicisi, `LIC03`).
+2. Aynı ekranda müşteri lisanslarını seçip **Seçilenlere gönder** ya da **Tüm etkin lisanslara gönder**. Kurulumlar bir sonraki kalp atışında teklifi alır (müşteri "Güncellemeleri denetle" ile hemen). Kurulumun sürümü ve platformu tabloda görünür; platformu olmayanlar elle kurulumdur, onlara teklif gitmez.
+3. Müşteride kurulum sahibi onaylar; güncelleyici yedek alır, uygular, sorun çıkarsa önceki sürüme ve yedeğe döner (`docs/OPERATIONS.md` §5). Durum müşteride görünür; panelde "Bu sürümde kurulum" sayısı sonraki kalp atışıyla artar.
+4. Sorunlu sürüm: **Sürümü geri çek** (yeni teklif kesilir, gönderilmiş hedefler temizlenir; kurulmuş olanlar etkilenmez). Seçili lisanslardan göndermeyi geri almak için **Seçilenlerden geri al**.
+
+Güvenlik: kit indirmesi `/v1/releases/<sürüm>/<dosya>?t=<belirteç>` ile yapılır; belirteç kalp atışında kuruluma özel verilir (HMAC, `LICENSE_DATA_KEY`'den türetilen anahtar, 24 saat), etkin olmayan kuruluma dosya verilmez. Bütünlüğü belirteç değil, **imzalı manifesto + SHA-256** sağlar: lisans sunucusu ele geçirilse bile satıcı anahtarı olmadan kurulumlara kabul edilecek bir kit gönderilemez. Kit arşivleri `RELEASES_DIR` altında saklanır (compose: `releases` birimi; yedek gerektirmez, yeniden üretilebilir).
 
 ## 6. Lisans verme, yenileme, taşıma (adım adım)
 
@@ -262,9 +326,9 @@ Panel/CLI kullanıcı bilgileri de sızdıysa: `admin:reset`, `LICENSE_DATA_KEY`
 - Testler: `packages/license-core` (belirteç, durum makinesi, TOTP), `apps/license-server` (genel/yönetim uçları, panel sunumu; gerçek PostgreSQL), `apps/api/test/licensing*.test.ts`, `devices.test.ts` (sahte satıcıyla istemci sözleşmesi),
   e2e: `license-api`, `license-ui`, `license-admin` (gerçek lisans sunucusu + küçültülmüş üretim paketi). CI `scripts/ci-license-host.sh` / `scripts/ci-license-docker.sh` ile gerçek lisans sunucusu kurar.
 - Ortam değişkenleri — **uygulama:** `LICENSE_SERVER_URL`, `LICENSE_ALLOW_INSECURE_URL`, `LICENSE_HOST_ID_FILE`, `LICENSE_ENFORCEMENT_DEV`, `LICENSE_DEV_KEYRING`. **Lisans sunucusu:** `DATABASE_URL`, `LICENSE_SIGNING_KEY_FILE`,
-  `LICENSE_SIGNING_KEY_PASSPHRASE`, `LICENSE_DATA_KEY`, `TRUST_PROXY`, `ADMIN_COOKIE_SECURE`, `RATE_LIMIT_ENABLED`, `LOG_LEVEL`, `PANEL_DIST_DIR`, `SHUTDOWN_TIMEOUT_MS`, `APP_VERSION`.
+  `LICENSE_SIGNING_KEY_PASSPHRASE`, `LICENSE_DATA_KEY`, `LICENSE_ADMIN_ORIGIN`, `TRUST_PROXY`, `ADMIN_COOKIE_SECURE`, `RATE_LIMIT_ENABLED`, `LOG_LEVEL`, `PANEL_DIST_DIR`, `SHUTDOWN_TIMEOUT_MS`, `APP_VERSION`.
 
 ## 14. Kapsam dışı (şimdilik)
 
-Ödeme/fatura entegrasyonu, eklenti (modül) bazlı lisans, çok kiracılı barındırmada kiracı başına lisans, kurulum bazında uzaktan "kill switch" dışında uzaktan müdahale, çerez kopyalama tespiti.
+Ödeme/fatura entegrasyonu, eklenti (modül) bazlı lisans, çok kiracılı barındırmada kiracı başına lisans, kurulum bazında uzaktan "kill switch" ve sahip onaylı uzaktan güncelleme dışında uzaktan müdahale, sahip onayı olmadan otomatik güncelleme, çerez kopyalama tespiti.
 Lisans metni/EULA ve sözleşme hukuki belgedir: avukata yazdırılmalıdır (`docs/LEGAL-NOTES.md` §11).

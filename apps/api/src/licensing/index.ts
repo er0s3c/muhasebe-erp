@@ -1,3 +1,4 @@
+import { storeUpdateOffer } from '../modules/system/update-store';
 import type { Config } from '../config';
 import type { Db } from '../db/client';
 import { BUILD_ENFORCED, BUILD_KEYRING_JSON, BUILD_SERVER_URL } from './build-info';
@@ -57,5 +58,10 @@ export function createLicenseService(opts: { db: Db; config: Config; log?: Licen
     now: setup?.now,
     reloadMs: setup?.reloadMs,
     log: opts.log,
+    platform: config.ERP_KIT_TARGET,
+    onUpdateOffer: (offer) => storeUpdateOffer(db, keyring, offer),
   });
 }
+
+/** Satıcı lisans sunucusunun adresi (yapılandırma ya da derlemeye gömülü); güncelleme indirme adresi bundan türetilir. */
+export const licenseServerUrl = (config: Config): string | null => config.LICENSE_SERVER_URL ?? BUILD_SERVER_URL;

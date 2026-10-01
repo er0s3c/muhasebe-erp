@@ -24,6 +24,7 @@ import { requireMappings } from '../ledger/mappings';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
+import { assertMatchOrOverride, evaluateInvoiceMatch } from '../procurement/matching';
 import { DeliveryAllocator } from './delivery-link';
 import { buildInvoiceJournal, requiredMappingKeys } from './journal';
 import {
@@ -108,10 +109,22 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       accountId: l.accountId,
       sourceLineId: l.sourceLineId,
       deliveryLineId: l.deliveryLineId,
+      orderLineId: l.poLineId,
+      projectId: l.projectId,
+      wbsId: l.wbsId,
     })),
     inv.vatIncluded,
+    ctx.companyId,
   );
   if (totals.gross.isZero()) throw unprocessable('Fatura tutarı sıfır olamaz', 'INVOICE_TOTAL_ZERO');
+
+  // Üçlü eşleştirme: sipariş bağlı satırlar kilit altında (id sırasıyla) sipariş ve mal kabulle karşılaştırılır
+  const poIds = [...new Set(lines.map((l) => l.orderLineId).filter((v): v is string => !!v))].sort();
+  if (poIds.length > 0) {
+    for (const pid of poIds) await tx.execute(sql`select 1 from purchase_order_lines where id = ${pid} for update`);
+    const rows = await evaluateInvoiceMatch(tx, lines.map((l) => ({ lineNo: l.lineNo, poLineId: l.orderLineId, quantity: l.quantity, net: l.net })), inv.id);
+    assertMatchOrOverride(rows, inv.matchOverrideReason);
+  }
 
   const fx =
     inv.currencyCode === ctx.baseCurrency
@@ -273,6 +286,8 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       accountId: l.accountId,
       isStock: l.isStock,
       costValue: costByLine.get(l.lineNo) ?? dec(0),
+      projectId: l.projectId,
+      wbsId: l.wbsId,
     })),
   });
 

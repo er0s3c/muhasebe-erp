@@ -1,22 +1,9 @@
-import { useTranslation } from 'react-i18next';
-import { formatDateTR, todayIso } from '@erp/shared';
-import { useCompany } from '../../lib/session';
-
 /**
- * Yalnızca yazdırırken görünen rapor başlığı: şirket unvanı, dönem/süzgeç bilgisi ve yazdırma tarihi.
- * (Ekranda gizlidir; rapor başlığının kendisi sayfanın `PageHeader` başlığıdır.)
+ * Yalnızca yazdırırken görünen rapor süzgeç/dönem satırı. Şirket unvanı ve yazdırma tarihi AppShell'deki
+ * `PrintLetterhead`'dedir; bu bileşen sayfa başlığının altına dönem/süzgeç bilgisini ekler.
  */
 export function PrintHeader({ subtitle, note }: { subtitle?: string; note?: string }) {
-  const { t } = useTranslation();
-  const company = useCompany();
-  return (
-    <div className="mb-4 hidden border-b border-black pb-2 print:block">
-      <p className="text-base">{company.name}</p>
-      {subtitle && <p className="text-[10pt]">{subtitle}</p>}
-      <p className="text-[9pt] text-neutral-600">
-        {t('reports.print.printedAt', { date: formatDateTR(todayIso()) })}
-        {note ? ` · ${note}` : ''}
-      </p>
-    </div>
-  );
+  const text = [subtitle, note].filter(Boolean).join(' · ');
+  if (!text) return null;
+  return <p className="print-only -mt-4 mb-3 text-[9.5pt] text-[#55534f]">{text}</p>;
 }

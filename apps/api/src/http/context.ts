@@ -33,6 +33,8 @@ export interface AccessTokenPayload {
   org: string;
   /** Oturumun açıldığı kayıtlı cihaz (lisans denetimi açıkken her erişim belirtecinde bulunur). */
   did?: string;
+  /** 'mfa': yalnızca ikinci adım için verilen kısa ömürlü belirteç; hiçbir korumalı uçta geçmez. */
+  purpose?: 'mfa';
 }
 
 declare module 'fastify' {
@@ -97,6 +99,7 @@ async function authenticate(app: FastifyInstance, req: FastifyRequest): Promise<
   } catch {
     throw unauthorized();
   }
+  if (req.user.purpose) throw unauthorized();
   if (app.license.enforced) {
     // Lisans denetimi açıkken her erişim belirteci kayıtlı bir cihaza aittir; cihaz kaldırıldıysa belirteç geçersizdir.
     // (Cihaz bilgisi olmayan eski belirteç yeniden girişle/yenilemeyle cihaz kazanır.)

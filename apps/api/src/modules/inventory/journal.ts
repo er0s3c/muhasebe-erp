@@ -55,6 +55,28 @@ export function stockAmounts(rows: readonly DraftRow[]): StockAmounts {
   return { inflow, outflow, adjust };
 }
 
+export interface OutflowGroup {
+  projectId: string | null;
+  wbsId: string | null;
+  amount: MoneyValue;
+}
+
+/**
+ * Çıkış değerini (mutlak) proje/iş kalemi bazında toplar; etiketsiz satırlar tek grupta kalır (eski davranış).
+ * Gruplar ilk görülme sırasındadır; toplamları `stockAmounts().outflow`'a eşittir.
+ */
+export function outflowByDimension(rows: readonly DraftRow[]): OutflowGroup[] {
+  const groups = new Map<string, OutflowGroup>();
+  for (const r of rows) {
+    if (r.kind !== 'qty' || !r.qty.lt(0)) continue;
+    const key = `${r.projectId ?? ''}|${r.wbsId ?? ''}`;
+    const g = groups.get(key) ?? { projectId: r.projectId ?? null, wbsId: r.wbsId ?? null, amount: dec(0) };
+    g.amount = g.amount.plus(r.value.abs());
+    groups.set(key, g);
+  }
+  return [...groups.values()].filter((g) => g.amount.gt(0));
+}
+
 /**
  * Faturadan doğmayan (elle girilen / sayımdan gelen) stok belgesi için yevmiye üretir.
  * Tutar yoksa (sıfır maliyetli giriş, transfer) fiş yazılmaz ve null döner.
@@ -75,16 +97,27 @@ export async function journalStockDocument(
   if (keys.size === 0) return null;
 
   const acc: Partial<Record<AccountMappingKey, string>> = await requireMappings(tx, [...keys]);
-  const line = (key: AccountMappingKey, side: 'debit' | 'credit', amount: MoneyValue): AutoJournalLine => ({
+  const line = (
+    key: AccountMappingKey,
+    side: 'debit' | 'credit',
+    amount: MoneyValue,
+    dim: { projectId?: string | null; wbsId?: string | null } = {},
+  ): AutoJournalLine => ({
     accountId: acc[key]!,
     currency: ctx.baseCurrency as CurrencyCode,
     debit: side === 'debit' ? toDbAmount(amount) : '0',
     credit: side === 'credit' ? toDbAmount(amount) : '0',
+    ...(dim.projectId ? { projectId: dim.projectId } : {}),
+    ...(dim.wbsId ? { wbsId: dim.wbsId } : {}),
   });
 
   const lines: AutoJournalLine[] = [];
   if (inflow.gt(0)) lines.push(line('stock', 'debit', inflow), line(OFFSET[type].in, 'credit', inflow));
-  if (outflow.gt(0)) lines.push(line(OFFSET[type].out, 'debit', outflow), line('stock', 'credit', outflow));
+  if (outflow.gt(0)) {
+    // Sarf/fire: tüketim (ya da fire) tarafı proje ve iş kalemi bazında bölünür; stok tarafı toplu kalır
+    for (const g of outflowByDimension(rows)) lines.push(line(OFFSET[type].out, 'debit', g.amount, g));
+    lines.push(line('stock', 'credit', outflow));
+  }
   if (adjust.isNegative()) lines.push(line('cogs', 'debit', adjust.abs()), line('stock', 'credit', adjust.abs()));
   else if (adjust.gt(0)) lines.push(line('stock', 'debit', adjust), line('cogs', 'credit', adjust));
 

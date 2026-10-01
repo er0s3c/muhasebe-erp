@@ -1,14 +1,14 @@
 import { hash } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, writeFileSync } from 'node:fs';
-import { eq, sql } from 'drizzle-orm';
+import { count, eq, sql } from 'drizzle-orm';
 import { generateKeyPair, generateTotpSecret, otpauthUri, sealSigningKey, formatActivationCode, normalizeActivationCode } from '@erp/license-core';
 import { SECTORS } from '@erp/shared';
 import { loadConfig } from './config';
 import { createDb } from './db/client';
-import { admins, customers, licenses } from './db/schema';
+import { adminPasskeys, admins, customers, licenses } from './db/schema';
 import { audit } from './audit';
-import { encryptSecret } from './crypto';
+import { encryptSecret, setupToken } from './crypto';
 import {
   createCustomer,
   createLicense,
@@ -24,8 +24,9 @@ import {
  * Satıcı komut satırı aracı (VPS'te SSH ile; kapta: `node dist/cli.js <komut>`).
  *
  *   keygen --kid=<kimlik> --out=<dosya>            imza anahtar çifti üretir, parola ile mühürlü dosyaya yazar
+ *   setup:token                                    ilk yönetici kurulum kodunu yazdırır (panel /setup; yalnızca hiç yönetici yokken)
  *   admin:create --email= --name=                  yönetici oluşturur (rastgele parola + TOTP sırrı bir kez yazdırılır)
- *   admin:reset --email=                           parolayı ve TOTP'yi yeniler (yeni değerler bir kez yazdırılır)
+ *   admin:reset --email=                           parolayı ve TOTP'yi yeniler, giriş anahtarlarını siler (yeni değerler bir kez yazdırılır)
  *   license:issue --customer="Ad" --sectors=A,B --devices=N [--companies=1] [--valid-until=YYYY-MM-DD]
  *                 [--kind=commercial|trial|demo] [--lease-days=7] [--grace-days=14] [--activations=1] [--offline]
  *   license:list | license:extend --id= --valid-until= | license:suspend|resume|revoke --id= | license:code --id=
@@ -68,6 +69,12 @@ const config = loadConfig();
 const handle = createDb(config.DATABASE_URL);
 try {
   switch (command) {
+    case 'setup:token': {
+      const [row] = await handle.db.select({ n: count() }).from(admins);
+      if ((row?.n ?? 0) > 0) fail('Kurulum tamamlanmış (yönetici var); kurulum kodu artık geçersiz. Yeni yönetici için admin:create kullanın.');
+      console.log(`İlk yönetici kurulum kodu: ${setupToken(config.LICENSE_DATA_KEY)}\nPanelde /setup sayfasında girin; ilk yönetici oluşturulunca geçersiz olur.`);
+      break;
+    }
     case 'admin:create': {
       const email = need('email').toLowerCase();
       const fullName = flag('name') ?? email;
@@ -95,7 +102,9 @@ try {
         .where(eq(admins.email, email))
         .returning({ id: admins.id });
       if (done.length === 0) fail(`${email} bulunamadı`);
-      await audit(handle.db, { ...cliActor, action: 'admin.reset', targetType: 'admin', targetId: done[0]!.id });
+      // Kimlik bilgileri tamamen yenilenir: ele geçirilmiş olabilecek giriş anahtarları da silinir.
+      const removed = await handle.db.delete(adminPasskeys).where(eq(adminPasskeys.adminId, done[0]!.id)).returning({ id: adminPasskeys.id });
+      await audit(handle.db, { ...cliActor, action: 'admin.reset', targetType: 'admin', targetId: done[0]!.id, meta: { passkeysRemoved: removed.length } });
       console.log(`Yeni parola (bir kez): ${password}\nYeni TOTP sırrı: ${secret}\n${otpauthUri(secret, email, 'Muhasebe Lisans')}`);
       break;
     }
@@ -162,7 +171,7 @@ try {
       break;
     }
     default:
-      fail('Kullanım: cli <keygen | admin:create | admin:reset | license:issue | license:list | license:extend | license:suspend | license:resume | license:revoke | license:code>');
+      fail('Kullanım: cli <keygen | setup:token | admin:create | admin:reset | license:issue | license:list | license:extend | license:suspend | license:resume | license:revoke | license:code>');
   }
 } catch (err) {
   console.error('Komut başarısız:', err instanceof Error ? err.message : err);

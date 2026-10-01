@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { WEAK_PASSWORD_MESSAGE, addMemberSchema, isWeakPassword, updateMemberSchema, uuid } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { memberships, users } from '../../db/schema';
+import { memberships, userMfa, users } from '../../db/schema';
 import { tenantRoute } from '../../http/context';
 import { AppError, forbidden, notFound, unprocessable } from '../../http/errors';
 import { TR } from '../../db/search';
@@ -38,6 +38,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
           fullName: users.fullName,
           isActive: users.isActive,
           role: memberships.role,
+          mfaEnabled: sql<boolean>`exists (select 1 from user_mfa m where m.user_id = ${users.id} and m.enabled_at is not null)`,
         })
         .from(memberships)
         .innerJoin(users, eq(users.id, memberships.userId))
@@ -112,6 +113,23 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
       if (!row) throw notFound('Üye');
       await recordSecurityEvent(app.db, app.log, req, { event: 'member_role_changed', organizationId: user.orgId, userId, meta: { companyId: company.id, from: current.role, to: role, by: user.id } });
       return { member: { userId, role: row.role } };
+    }),
+  );
+
+  /** Telefonunu/kurtarma kodlarını kaybeden üyenin iki adımlı doğrulamasını sıfırlar (kullanıcı yeniden kurar). */
+  app.delete(
+    '/api/company/members/:userId/mfa',
+    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole, user }) => {
+      const { userId } = userIdParam.parse(req.params);
+      const [current] = await tx
+        .select({ role: memberships.role })
+        .from(memberships)
+        .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)));
+      if (!current) throw notFound('Üye');
+      requireOwnerFor(callerRole, current.role);
+      await tx.delete(userMfa).where(eq(userMfa.userId, userId));
+      await recordSecurityEvent(app.db, app.log, req, { event: 'mfa_reset', organizationId: user.orgId, userId, meta: { companyId: company.id, by: user.id } });
+      return { ok: true };
     }),
   );
 

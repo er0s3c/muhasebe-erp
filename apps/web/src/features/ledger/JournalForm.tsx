@@ -3,7 +3,7 @@ import { Plus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { CURRENCY_CODES, applyRate, dec, formatTR, todayIso } from '@erp/shared';
+import { applyRate, currencySymbol, dec, formatTR, todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { Callout } from '../../components/ui/Feedback';
@@ -11,10 +11,12 @@ import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Sheet } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
 import { useCMutation, useCQuery, useCan, useCompanyApi } from '../../lib/queries';
 import type { Account, JournalEntry, PartyListRow } from '../../lib/types';
+import { PROJECT_COST_INVALIDATE, ProjectLineRow, isProjectTaggable, projectFields } from '../projects/common';
 
 interface LineState {
   key: number;
@@ -27,10 +29,13 @@ interface LineState {
   /** Cari kontrol hesabı (120, 320…) satırlarında zorunlu */
   partyId: string;
   dueDate: string;
+  /** Proje boyutu (inşaat): gelir/gider/maliyet hesaplarında isteğe bağlı */
+  projectId: string;
+  wbsId: string;
 }
 
 let lineKey = 1;
-const emptyLine = (currency: string): LineState => ({ key: lineKey++, accountId: '', description: '', currency, debit: '', credit: '', fxRate: '', partyId: '', dueDate: '' });
+const emptyLine = (currency: string): LineState => ({ key: lineKey++, accountId: '', description: '', currency, debit: '', credit: '', fxRate: '', partyId: '', dueDate: '', projectId: '', wbsId: '' });
 
 interface Props {
   open: boolean;
@@ -82,6 +87,8 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
           fxRate: l.currencyCode !== base ? trimZeros(l.fxRate) : '',
           partyId: l.partyId ?? '',
           dueDate: l.dueDate ?? '',
+          projectId: l.projectId ?? '',
+          wbsId: l.wbsId ?? '',
         })),
       );
     } else {
@@ -161,6 +168,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
             ...(l.currency !== base && l.fxRate ? { fxRate: l.fxRate } : {}),
             ...(l.partyId ? { partyId: l.partyId } : {}),
             ...(l.partyId && l.dueDate ? { dueDate: l.dueDate } : {}),
+            ...(isProjectTaggable(accountById.get(l.accountId)) ? projectFields(l.projectId, l.wbsId) : {}),
           })),
       };
       const res = initial
@@ -169,7 +177,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
       return res.entry;
     },
     // Cari bakiye/ekstre/yaşlandırma da defterden hesaplandığı için birlikte yenilenir
-    [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger'], ['parties'], ['party'], ['party-aging']],
+    [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger'], ['parties'], ['party'], ['party-aging'], ...PROJECT_COST_INVALIDATE],
   );
 
   const submit = (post: boolean) => {
@@ -282,6 +290,8 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                         accountId: v,
                         ...(a?.currencyCode ? { currency: a.currencyCode } : {}),
                         ...(resetParty ? { partyId: '', dueDate: '' } : {}),
+                        // Proje yalnızca gelir/gider/maliyet hesaplarında anlamlıdır
+                        ...(isProjectTaggable(a) ? {} : { projectId: '', wbsId: '' }),
                       });
                     }}
                   />
@@ -298,11 +308,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                     onChange={(e) => patch(l.key, { currency: e.target.value, fxRate: '' })}
                     aria-label={`${t('common.currency')} ${i + 1}`}
                   >
-                    {CURRENCY_CODES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
+                    <CurrencyOptions />
                   </Select>
                   <MoneyInput
                     value={l.debit}
@@ -359,6 +365,15 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
                       />
                     </div>
                   )}
+                  {isProjectTaggable(acc) && (
+                    <ProjectLineRow
+                      className="col-span-full lg:mt-1"
+                      label={String(i + 1)}
+                      projectId={l.projectId}
+                      wbsId={l.wbsId}
+                      onChange={(v) => patch(l.key, v)}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -369,7 +384,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
               {t('ledger.journal.addLine')}
             </Button>
             <dl className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
-              <dt className="text-muted">{t('ledger.journal.totalsBase', { currency: base })}</dt>
+              <dt className="text-muted">{t('ledger.journal.totalsBase', { currency: currencySymbol(base) })}</dt>
               <div className="flex gap-2">
                 <dt className="text-muted">{t('common.debit')}</dt>
                 <dd className="num">{formatTR(computed.debit.toFixed(2))}</dd>

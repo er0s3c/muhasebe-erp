@@ -1,5 +1,5 @@
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronsUpDown, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Sun, X } from 'lucide-react';
+import { Check, ChevronsUpDown, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, ShieldCheck, Sun, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -17,6 +17,8 @@ import { useToast } from '../ui/Toast';
 import { BrandMark } from './Brand';
 import { CommandPalette } from './CommandPalette';
 import { navIcon } from './icons';
+import { PrintLetterhead } from '../print/PrintLetterhead';
+import { usePrintSetup } from '../print/usePrintSetup';
 import { useTheme } from './theme';
 
 const COLLAPSE_KEY = 'sidebarCollapsed';
@@ -37,6 +39,7 @@ export function AppShell() {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
+  usePrintSetup(useSession().activeCompany?.name ?? '');
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -107,6 +110,7 @@ export function AppShell() {
 
         <main id="main" className="flex-1 overflow-y-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-8 sm:py-8">
+            <PrintLetterhead />
             <LicenseBanner />
             <VerifyEmailBanner />
             <Outlet />
@@ -254,6 +258,7 @@ function ThemeButton() {
 function UserMenu({ onChangePassword, onLogout }: { onChangePassword: () => void; onLogout: () => void }) {
   const { t } = useTranslation();
   const { user, logout } = useSession();
+  const navigate = useNavigate();
   if (!user) return null;
   const initials = user.fullName
     .split(/\s+/)
@@ -275,6 +280,10 @@ function UserMenu({ onChangePassword, onLogout }: { onChangePassword: () => void
           <Dropdown.Item className={menuItem} onSelect={onChangePassword}>
             <KeyRound className="size-4 text-muted" aria-hidden />
             {t('shell.changePassword')}
+          </Dropdown.Item>
+          <Dropdown.Item className={menuItem} onSelect={() => navigate('/account/security')}>
+            <ShieldCheck className="size-4 text-muted" aria-hidden />
+            {t('shell.security')}
           </Dropdown.Item>
           <Dropdown.Item
             className={menuItem}

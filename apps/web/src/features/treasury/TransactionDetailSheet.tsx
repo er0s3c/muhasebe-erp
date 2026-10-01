@@ -10,7 +10,7 @@ import { Modal, Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { TreasuryTxnDetail } from '../../lib/types';
@@ -114,13 +114,13 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
               )}
               <Item label={t('treasury.view.amount')}>
                 <span className="num">
-                  {money(tx.amount)} {tx.currencyCode}
+                  {moneyIn(tx.amount, tx.currencyCode)}
                 </span>
               </Item>
               {tx.counterAmount && tx.toCurrencyCode && (
                 <Item label={t('treasury.view.counterAmount')}>
                   <span className="num">
-                    {money(tx.counterAmount)} {tx.toCurrencyCode}
+                    {moneyIn(tx.counterAmount, tx.toCurrencyCode)}
                   </span>
                 </Item>
               )}
@@ -145,7 +145,7 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
                 <Item label={fxNet.gt(0) ? t('treasury.view.fxGain') : t('treasury.view.fxLoss')}>
                   <span className={fxNet.gt(0) ? 'text-success' : 'text-danger'}>
                     <span className="num">
-                      {money(fxNet.abs().toFixed(2))} {base}
+                      {moneyIn(fxNet.abs().toFixed(2), base)}
                     </span>
                   </span>
                 </Item>
@@ -173,8 +173,8 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
                         <Th className="w-28">{t('common.date')}</Th>
                         <Th>{t('common.description')}</Th>
                         <Th num>{t('treasury.view.closed')}</Th>
-                        <Th num>{t('treasury.view.settled', { currency: tx.currencyCode })}</Th>
-                        <Th num>{t('treasury.view.carried', { currency: base })}</Th>
+                        <Th num>{t('treasury.view.settled', { currency: currencySymbol(tx.currencyCode) })}</Th>
+                        <Th num>{t('treasury.view.carried', { currency: currencySymbol(base) })}</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -188,7 +188,7 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
                             </Link>
                           </Td>
                           <Td num>
-                            {money(a.amount)} {a.currencyCode}
+                            {moneyIn(a.amount, a.currencyCode)}
                           </Td>
                           <Td num className="text-muted">
                             {money(a.settleAmount)}

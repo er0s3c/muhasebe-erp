@@ -3,6 +3,7 @@ import { isoYear, todayIso, type CreateCompanyInput } from '@erp/shared';
 import { setContext, type Tx } from '../../db/client';
 import { companies, memberships, warehouses } from '../../db/schema';
 import { seedChartOfAccounts } from '../ledger/accounts';
+import { seedCostCodes } from '../projects/cost-codes';
 import { seedMappings } from '../ledger/mappings';
 import { seedTaxRates } from '../settings/defaults';
 import { generatePeriods } from '../settings/periods';
@@ -57,6 +58,7 @@ export async function createCompany(
   await seedChartOfAccounts(tx, companyId);
   await seedMappings(tx, companyId, input.sector);
   await seedTaxRates(tx, companyId);
+  await seedCostCodes(tx, companyId);
   await tx.insert(warehouses).values({ companyId, code: 'ANA', name: 'Ana depo', isDefault: true });
 
   const [created] = await tx.select().from(companies).where(eq(companies.id, companyId));

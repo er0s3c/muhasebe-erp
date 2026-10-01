@@ -12,7 +12,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { isZero, money, splitBalance } from '../../lib/format';
+import { currencySymbol, isZero, money, splitBalance } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { TrialBalanceData } from '../../lib/types';
@@ -68,8 +68,8 @@ export function TrialBalancePage() {
         <Field label={t('ledger.trialBalance.basis')}>
           {(id) => (
             <Select id={id} value={currency} onChange={(e) => setCurrency(e.target.value as 'base' | 'reporting')} className="w-56">
-              <option value="base">{t('ledger.trialBalance.base', { currency: company.baseCurrency })}</option>
-              {company.reportingCurrency && <option value="reporting">{t('ledger.trialBalance.reporting', { currency: company.reportingCurrency })}</option>}
+              <option value="base">{t('ledger.trialBalance.base', { currency: currencySymbol(company.baseCurrency) })}</option>
+              {company.reportingCurrency && <option value="reporting">{t('ledger.trialBalance.reporting', { currency: currencySymbol(company.reportingCurrency) })}</option>}
             </Select>
           )}
         </Field>
@@ -157,7 +157,7 @@ export function TrialBalancePage() {
                   <tfoot>
                     <tr className="bg-surface-2">
                       <Td colSpan={3}>
-                        {t('ledger.trialBalance.grandTotal')} ({data.currency})
+                        {t('ledger.trialBalance.grandTotal')} ({currencySymbol(data.currency)})
                       </Td>
                       <Td num>{money(data.totals.debit)}</Td>
                       <Td num>{money(data.totals.credit)}</Td>

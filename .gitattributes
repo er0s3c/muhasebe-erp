@@ -1,0 +1,5 @@
+# Kurulum sihirbazı: Windows'ta autocrlf ile klonlanan depoda da bash betikleri LF kalmalı (WSL'de çalışır);
+# cmd betiği CRLF; PowerShell betiği BOM'lu UTF-8 olarak olduğu gibi saklanır.
+*.sh text eol=lf
+*.cmd text eol=crlf
+*.ps1 -text

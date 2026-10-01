@@ -1,0 +1,7 @@
+# Kit kökü derleme bağlamıdır: yalnızca imaja girenler gönderilir (çalışma zamanı ikilileri, belgeler vb. hariç)
+*
+!app/dist
+!app/web
+!app/node_modules
+!app/THIRD-PARTY-NOTICES.md
+!docker/node_modules

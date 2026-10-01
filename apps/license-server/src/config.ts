@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-/** Fastify `trustProxy` değeri (bkz. apps/api/src/config.ts): varsayılan false; Caddy arkasında 1. */
+/**
+ * Fastify `trustProxy` değeri (bkz. apps/api/src/config.ts): varsayılan false; vekil (Caddy/cloudflared) arkasında vekilin adresini
+ * kapsayan liste (`loopback,uniquelocal`). Sayısal atlama değeri (`1`) `loadConfig` tarafından reddedilir: Fastify ≥ 5.12 onu
+ * hiçbir adrese güvenmeyen bir işleve çevirir (tüm istekler vekil adresinden görünür, oran sınırı tek kovaya düşer).
+ */
 export function parseTrustProxy(value: string): boolean | number | string[] {
   const v = value.trim();
   if (v === '' || v === 'false') return false;
@@ -35,12 +39,22 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => (v === undefined ? undefined : v === 'true')),
+  /**
+   * Yönetim panelinin tarayıcıdaki kökeni (ör. https://lisans.ornek.com): giriş anahtarları (WebAuthn) bu köken ve alan adına
+   * bağlanır. Verilmezse istekteki protokol + Host kullanılır (yalnızca geliştirme için).
+   */
+  LICENSE_ADMIN_ORIGIN: z
+    .url({ protocol: /^https?$/ })
+    .optional()
+    .transform((v) => (v === undefined ? undefined : new URL(v).origin)),
   RATE_LIMIT_ENABLED: flag(true),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Derlenmiş yönetim paneli (apps/license-admin/dist); verilirse aynı kökenden sunulur. */
   PANEL_DIST_DIR: z.string().optional(),
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15_000),
   APP_VERSION: z.string().default('dev'),
+  /** Uzaktan güncelleme kit arşivlerinin saklandığı klasör (kalıcı birim; compose: releases birimi). */
+  RELEASES_DIR: z.string().default('releases'),
 });
 
 export type Config = Omit<z.infer<typeof envSchema>, 'ADMIN_COOKIE_SECURE'> & { ADMIN_COOKIE_SECURE: boolean };
@@ -50,6 +64,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = envSchema.safeParse(present);
   if (!parsed.success) throw new Error(`Geçersiz ortam değişkenleri:\n${z.prettifyError(parsed.error)}`);
   const c = parsed.data;
+  if (typeof c.TRUST_PROXY === 'number') {
+    throw new Error(
+      "Sayısal TRUST_PROXY (atlama sayısı) Fastify 5'te yok sayılır; vekilin adresini kapsayan bir liste verin (ör. loopback,uniquelocal) ya da vekil yoksa false",
+    );
+  }
+  if (c.NODE_ENV === 'production') {
+    // WebAuthn (giriş anahtarları) köken ve alan adına bağlanır; istekteki Host başlığına güvenilmez.
+    if (!c.LICENSE_ADMIN_ORIGIN) throw new Error('Üretimde LICENSE_ADMIN_ORIGIN (panelin https kökeni, ör. https://lisans.ornek.com) gerekli: giriş anahtarları bu köke bağlanır');
+    if (!c.LICENSE_ADMIN_ORIGIN.startsWith('https://')) throw new Error('Üretimde LICENSE_ADMIN_ORIGIN https olmalı (WebAuthn güvenli bağlam ister)');
+  }
   if (c.NODE_ENV === 'production' && !c.LICENSE_SIGNING_KEY_FILE) {
     throw new Error('Üretimde LICENSE_SIGNING_KEY_FILE ve LICENSE_SIGNING_KEY_PASSPHRASE gerekli');
   }

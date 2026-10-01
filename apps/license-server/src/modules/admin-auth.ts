@@ -69,6 +69,26 @@ export function adminRoute<T>(app: FastifyInstance, handler: (ctx: AdminCtx) => 
   return Object.assign(route, { [ADMIN_GUARD]: true });
 }
 
+/** Kimliği doğrulanmış yönetici için oturum açar (httpOnly, SameSite=Strict çerez); denetim kaydını çağıran yazar. */
+export async function startSession(app: FastifyInstance, req: FastifyRequest, reply: FastifyReply, admin: AdminRow): Promise<AdminRow> {
+  const token = randomBytes(32).toString('base64url');
+  await app.db.insert(adminSessions).values({
+    id: sha256(token),
+    adminId: admin.id,
+    expiresAt: new Date(app.now() + SESSION_TTL_MS),
+    ip: req.ip,
+    userAgent: req.headers['user-agent']?.slice(0, 300) ?? null,
+  });
+  void reply.setCookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: app.config.ADMIN_COOKIE_SECURE,
+    path: '/',
+    maxAge: Math.floor(SESSION_TTL_MS / 1000),
+  });
+  return { id: admin.id, email: admin.email, fullName: admin.fullName };
+}
+
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().max(254),
   password: z.string().min(1).max(200),
@@ -109,23 +129,8 @@ export const adminAuthRoutes: FastifyPluginAsync = async (app) => {
       .returning({ id: admins.id });
     if (claimed.length === 0) throw unauthorized('E-posta, parola ya da doğrulama kodu hatalı', 'INVALID_CREDENTIALS');
 
-    const token = randomBytes(32).toString('base64url');
-    await app.db.insert(adminSessions).values({
-      id: sha256(token),
-      adminId: admin.id,
-      expiresAt: new Date(app.now() + SESSION_TTL_MS),
-      ip: req.ip,
-      userAgent: req.headers['user-agent']?.slice(0, 300) ?? null,
-    });
-    await audit(app.db, { actor: 'admin', adminId: admin.id, action: 'admin.login', ip: req.ip });
-    void reply.setCookie(SESSION_COOKIE, token, {
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: app.config.ADMIN_COOKIE_SECURE,
-      path: '/',
-      maxAge: Math.floor(SESSION_TTL_MS / 1000),
-    });
-    return { admin: { id: admin.id, email: admin.email, fullName: admin.fullName } };
+    await audit(app.db, { actor: 'admin', adminId: admin.id, action: 'admin.login', ip: req.ip, meta: { method: 'password_totp' } });
+    return { admin: await startSession(app, req, reply, admin) };
   });
 
   app.post(

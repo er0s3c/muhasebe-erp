@@ -76,7 +76,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Excel ile fatura/irsaliye içe aktarma | ⏳ |
 | Gider kartları ve gider raporları | ⏳ |
 | İthalat maliyet dağıtımı (navlun, gümrük, liman) | ⏳ Faz B |
-| e-Fatura entegrasyonu | ⏳ Faz C ⚠️ |
+| e-Fatura entegrasyonu (resmî REST API v1.2.3; iç faturadan ayrı gönderim durumu) | ⏳ Faz C ⚠️ yetkilendirme/test erişimi gerekir |
 
 ## Kasa ve banka
 
@@ -97,18 +97,25 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Kurdan eksik raporlama tutarlarını sonradan doldurma | ✅ |
 | Merkez Bankası kurlarını resmî adresten getir veya XML dosyası yükle (elle tetiklenir) | ✅ ⚠️ kullanım şartı doğrulanmadı |
 | Kurların zamanlanmış otomatik çekimi | ⏳ ⚠️ |
-| Tarih aralıklı KDV oranları, doğrulama işareti | ✅ ⚠️ oranlar doğrulanmadı |
+| Tarih aralıklı KDV oranları (%0/5/10/16/20 tohumu), doğrulama işareti | ✅ ⚠️ oranlar doğrulanmadı; vergi kategorisi modeli ⏳ |
 | KDV/stopaj/BSİV beyannameleri | ⏳ Faz C ⚠️ |
 
 ## Sektör paketleri
 
 | İşlev | Durum |
 |---|---|
-| **İnşaat:** şantiye/proje maliyeti, bütçe ve gerçekleşen | ⏳ Faz B |
-| **İnşaat:** gayrimenkul envanteri, dövizli taksit planı, tahsilat mahsubu | ⏳ Faz B |
-| **İnşaat:** taşeron sözleşmesi, kümülatif hakediş, teminat kesintisi | ⏳ Faz B |
-| **İnşaat:** yabancılara satış kotaları ve yasal süre takibi | ⏳ Faz C ⚠️ |
-| **İnşaat:** altyapı fonları (elektrik/belediye) | ⏳ Faz B ⚠️ |
+| **İnşaat:** proje, iş kırılımı (WBS, en çok 6 seviye), bütçe revizyonları (değişmez, yürürlükteki revizyon) | ✅ (B1) |
+| **İnşaat:** gerçekleşen maliyet (yevmiye, fatura kalemi, stok sarfı, kasa/banka ödemesi proje + iş kalemine etiketli), tamamlanma %, tahmini toplam maliyet (EAC), sapma ve CPI, projesiz maliyet mutabakatı | ✅ (B1) ⚠️ hesap sınıflandırması doğrulanmadı |
+| **İnşaat:** işverene yapılan iş (`contract` proje, işveren cari) | ✅ (B1; hakediş B2) |
+| **İnşaat:** gayrimenkul envanteri, satış sözleşmesi, dövizli taksit planı, tahsilat mahsubu, teslimde gelir tanıma, fesih ve iade | ✅ (B3) ⚠️ gelir tanıma yöntemi, hesap kodları (380/600/679), KDV ve tapu harcı doğrulanmadı |
+| **İnşaat:** taşeron sözleşmesi, revizyonlu BOQ, kümülatif hakediş (verilen), teminat/avans/stopaj/diğer kesinti, onay kuralları, avans ve teminat iadesi, maliyet kodu, kalan taahhüt | ✅ (B2) ⚠️ yüzdeler ve yevmiye hesapları doğrulanmadı |
+| **İnşaat:** işveren sözleşmesi, revizyonlu BOQ, alınan hakediş (kümülatif), teminat/avans/stopaj, tahsilat, işveren özeti | ✅ (B2e) ⚠️ hesap kodları ve gelir tanıma doğrulanmadı |
+| **İnşaat:** satın alma talebi, onay, RFQ/teklif karşılaştırma, sipariş (taahhüt), mal kabul (stoğa giriş) | ✅ (B2p) ⚠️ hesap kodu eklenmedi: mal kabul mevcut alış irsaliyesi muhasebesini kullanır |
+| **İnşaat:** faturanın siparişe bağlanması (3'lü eşleştirme: sipariş – mal kabul – fatura, tolerans, yetkili gerekçeli geçiş, faturasız kabul raporu) | ✅ |
+| **İnşaat:** değişiklik emri (variation order; taşeron ve işveren, süre uzatımı, işveren kabulü) | ✅ |
+| **İnşaat:** malzeme mahsubu, KDV tevkifatı | ⏳ sonraki fazlar ⚠️ |
+| **İnşaat:** yabancılara satış sınırları ve yasal süre takibi (89/2026 YGK ve sonrası) | ⏳ Faz C ⚠️ |
+| **İnşaat:** altyapı fonları ve harçlar (elektrik/su/belediye): tarihli, doğrulama alanlı tarifeler; alıcıdan tahsil edilen fon (satış sözleşmesine ek satır, 329 yükümlülük, fesihte iade); projenin ödediği fon tahmini | ✅ (B4) ⚠️ tutar/oranlar, 329 hesabı ve fonların vergi/hukuki niteliği doğrulanmadı |
 | **İnşaat:** yabancı işçi belge/teminat takibi, bordro | ⏳ Faz D ⚠️ |
 | **İnşaat:** müteahhitlik sınıf karnesi ve kapasite kontrolü | ⏳ Faz C ⚠️ |
 | **Market:** hızlı satış (POS), barkod, gün sonu | ⏳ Faz E |
@@ -119,9 +126,10 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 
 | İşlev | Durum |
 |---|---|
-| 13 haftalık nakit projeksiyonu | ⏳ |
+| 13 haftalık nakit projeksiyonu (açık alacak/borç vadeleri + elle kalemler, haftalık kapanış bakiyesi) | ✅ (B4) |
 | Döviz pozisyon raporu | ⏳ |
-| Proje kârlılığı, sapma analizi | ⏳ Faz B |
+| Proje bütçe / gerçekleşen / tahmini toplam sapma analizi (EAC, CPI), Excel | ✅ (B1) |
+| Proje kârlılığı (sözleşmeli gelir, tanınmış gelir/maliyet, EAC, tahmini kâr; defter ve GBP raporlama) | ✅ (B4) |
 | Yönetici özet raporu | ⏳ |
 
 ## Veri güvencesi
@@ -136,7 +144,9 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Parola sıfırlama, e-posta doğrulama (SMTP ile), geçici parola, operatör parola kurtarma | ✅ |
 | Güvenlik olayı kaydı (giriş, sıfırlama, yetki değişikliği) | ✅ |
 | Docker imajı, compose dağıtımı, ayrı demo örneği, üçüncü taraf lisans bildirimi | ✅ |
+| Kurulum sihirbazı (uyumluluk kontrolü → yol seçimi → paketler → sistem): Linux/WSL ve Windows, Docker'lı ve Docker'sız (systemd / Windows hizmeti), geliştirme ve müşteri kipi; platform başına sürüm kiti | ✅ ⚠️ Windows yolu gerçek makinede ilk kurulumla doğrulanmalı |
+| Uzaktan tek tıkla güncelleme (satıcı panelden gönderir, müşteride sahip onaylar; imzalı manifesto + SHA-256, otomatik yedek, başarısızlıkta önceki sürüme ve yedeğe dönüş; Docker'lı ve Docker'sız) | ✅ ⚠️ Windows güncelleyicisi gerçek makinede doğrulanmalı |
 | Lisanslama: sektör/cihaz/şirket sınırlı, imzalı kiralı lisans; satıcı lisans sunucusu ve web paneli (parola + zorunlu TOTP); salt-okunur mod | ✅ ⚠️ EULA/sözleşme ve veri işleme doğrulanmadı |
 | Cihaz koltukları (kayıtlı tarayıcı/bilgisayar, yönetici kaldırır, boşta cihaz düşer) | ✅ |
-| Uygulama kullanıcıları için iki adımlı doğrulama (TOTP/MFA) | ⏳ |
-| Kişisel veri silme/dışa aktarma talebi süreci | ⏳ ⚠️ |
+| Uygulama kullanıcıları için iki adımlı doğrulama (TOTP, kurtarma kodları, yönetici sıfırlaması) | ✅ (şirket düzeyinde zorunlu kılma ⏳) |
+| Kişisel veri envanteri, saklama/imha, ilgili kişi dışa aktarma/düzeltme/anonimleştirme, aktarım kaydı (89/2007) | ⏳ ⚠️ |

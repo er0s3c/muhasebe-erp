@@ -37,12 +37,13 @@ export interface Server {
   routes: { method: string | string[]; url: string; handler?: unknown }[];
 }
 
-export async function makeServer(opts: { rateLimit?: boolean } = {}): Promise<Server> {
+export async function makeServer(opts: { rateLimit?: boolean; env?: Record<string, string> } = {}): Promise<Server> {
   const config = loadConfig({
     NODE_ENV: 'test',
     DATABASE_URL: process.env.DATABASE_URL,
     LICENSE_DATA_KEY: DATA_KEY,
     RATE_LIMIT_ENABLED: opts.rateLimit ? 'true' : 'false',
+    ...opts.env,
   });
   const handle = createDb(config.DATABASE_URL);
   const signer = ephemeralSigner('k-test');
@@ -168,5 +169,5 @@ export async function adminClient(s: Server) {
   const cookie = res.cookies.find((c) => c.name === 'lic_admin')!.value;
   const call = (method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE') => (url: string, payload?: unknown) =>
     s.app.inject({ method, url, payload: payload as object | undefined, cookies: { lic_admin: cookie }, headers: method === 'GET' ? {} : { [CSRF_HEADER]: CSRF_VALUE } });
-  return { admin: a, cookie, get: call('GET'), post: call('POST'), patch: call('PATCH') };
+  return { admin: a, cookie, get: call('GET'), post: call('POST'), patch: call('PATCH'), del: call('DELETE') };
 }

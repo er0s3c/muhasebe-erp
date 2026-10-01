@@ -15,7 +15,7 @@ import { SegmentedTabs } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, isZero, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { TreasuryAccount } from '../../lib/types';
 import { ImportWizard } from '../imports/ImportWizard';
@@ -126,10 +126,10 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Stat label={t('treasury.recon.stats.closing')} sub={s.statementClosingDate ? t('treasury.recon.stats.closingSub', { date: formatDateTR(s.statementClosingDate) }) : t('treasury.recon.stats.closingUnknown')}>
-              {s.statementClosing === null ? '—' : `${money(s.statementClosing)} ${cur}`}
+              {s.statementClosing === null ? '—' : moneyIn(s.statementClosing, cur)}
             </Stat>
             <Stat label={t('treasury.recon.stats.ledger')} sub={s.statementClosingDate ? t('treasury.recon.stats.closingSub', { date: formatDateTR(s.statementClosingDate) }) : undefined}>
-              {money(s.ledgerBalance)} {cur}
+              {moneyIn(s.ledgerBalance, cur)}
             </Stat>
             <Stat label={t('treasury.recon.stats.difference')} sub={differenceZero ? undefined : t('treasury.recon.stats.differenceSub')}>
               {s.difference === null ? (
@@ -141,14 +141,14 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
                 </span>
               ) : (
                 <span className="text-danger">
-                  {money(s.difference)} {cur}
+                  {moneyIn(s.difference, cur)}
                 </span>
               )}
             </Stat>
-            <Stat label={t('treasury.recon.stats.openLines')} sub={`${money(s.openAmount)} ${cur}`}>
+            <Stat label={t('treasury.recon.stats.openLines')} sub={moneyIn(s.openAmount, cur)}>
               {s.openLines}
             </Stat>
-            <Stat label={t('treasury.recon.stats.unmatchedLedger')} sub={`${money(s.unmatchedLedgerAmount)} ${cur}`}>
+            <Stat label={t('treasury.recon.stats.unmatchedLedger')} sub={moneyIn(s.unmatchedLedgerAmount, cur)}>
               {s.unmatchedLedgerCount}
             </Stat>
           </div>
@@ -166,7 +166,7 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
                   <Th className="w-28">{t('treasury.recon.cols.date')}</Th>
                   <Th>{t('treasury.recon.cols.description')}</Th>
                   <Th num>
-                    {t('treasury.recon.cols.amount')} ({cur})
+                    {t('treasury.recon.cols.amount')} ({currencySymbol(cur)})
                   </Th>
                   <Th>{t('treasury.recon.cols.match')}</Th>
                   {canPost && <Th className="text-right">{t('treasury.recon.cols.actions')}</Th>}
@@ -297,7 +297,7 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
                       <Th>{t('treasury.recon.cols.description')}</Th>
                       <Th>{t('treasury.recon.ledger.party')}</Th>
                       <Th num>
-                        {t('treasury.recon.cols.amount')} ({cur})
+                        {t('treasury.recon.cols.amount')} ({currencySymbol(cur)})
                       </Th>
                     </tr>
                   </thead>
@@ -347,7 +347,7 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
                       </Td>
                       <Td num>{st.lineCount}</Td>
                       <Td num>{st.matchedCount}</Td>
-                      <Td num>{st.closingBalance === null ? '—' : `${money(st.closingBalance)} ${cur}`}</Td>
+                      <Td num>{st.closingBalance === null ? '—' : moneyIn(st.closingBalance, cur)}</Td>
                       {canPost && (
                         <Td className="text-right">
                           <Button size="sm" variant="ghost" disabled={st.matchedCount > 0} onClick={() => setUndoing({ id: st.id, name: st.fileName })}>

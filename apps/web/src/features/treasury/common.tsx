@@ -1,6 +1,6 @@
 import { useQueries } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { dec, type MoneyValue } from '@erp/shared';
+import { currencySymbol, dec, type MoneyValue } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { useCompanyApi, useCQuery } from '../../lib/queries';
 import type { TreasuryAccount, TreasuryTxnStatus, TreasuryTxnType } from '../../lib/types';
@@ -39,7 +39,7 @@ export const useTreasuryAccounts = (enabled = true) =>
   useCQuery<{ accounts: TreasuryAccount[] }>(['treasury', 'accounts'], '/api/treasury/accounts', { enabled });
 
 /** Hesap seçicide "Ana kasa · TRY" biçiminde etiket. */
-export const accountLabel = (a: Pick<TreasuryAccount, 'name' | 'currencyCode'>) => `${a.name} · ${a.currencyCode}`;
+export const accountLabel = (a: Pick<TreasuryAccount, 'name' | 'currencyCode'>) => `${a.name} · ${currencySymbol(a.currencyCode)}`;
 
 const isIsoDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d);
 

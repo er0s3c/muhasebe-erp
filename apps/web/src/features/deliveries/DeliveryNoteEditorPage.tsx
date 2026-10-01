@@ -1,4 +1,5 @@
 import { ArrowLeft, Ban, FileText, Printer } from 'lucide-react';
+import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -12,7 +13,7 @@ import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { DeliveryNoteDetail, DeliveryNoteType } from '../../lib/types';
@@ -180,7 +181,7 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
                 {meta.inbound && <Th num>{t('deliveries.view.unitCost')}</Th>}
                 {posted && (
                   <Th num className="print:hidden">
-                    {t('deliveries.view.value')} ({base})
+                    {t('deliveries.view.value')} ({currencySymbol(base)})
                   </Th>
                 )}
               </tr>
@@ -203,7 +204,7 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
                   )}
                   {meta.inbound && (
                     <Td num className="text-muted">
-                      {l.unitCost ? `${money(l.unitCost, 4)} ${l.currencyCode ?? base}` : <Badge tone="warning">{t('deliveries.view.noPrice')}</Badge>}
+                      {l.unitCost ? moneyIn(l.unitCost, l.currencyCode ?? base, 4) : <Badge tone="warning">{t('deliveries.view.noPrice')}</Badge>}
                     </Td>
                   )}
                   {posted && (
@@ -219,6 +220,7 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
 
         <p className="text-xs text-muted print:hidden">{t('deliveries.view.noStockNote')}</p>
         <p className="text-xs text-muted">{t('deliveries.view.internalNote')}</p>
+        <PrintSignatures labels={[t('printDoc.delivered'), t('printDoc.receiver')]} />
       </div>
 
       <Modal
