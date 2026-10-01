@@ -33,7 +33,7 @@ export function RfqPage() {
   const [editing, setEditing] = useState<RfqOfferRow | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
-  const award = useCMutation((offerId: string, call) => call<{ order: PurchaseOrderDetail['order'] }>(`/api/rfqs/${id}/award`, { method: 'POST', body: { offerId } }), PROCUREMENT_INVALIDATE);
+  const award = useCMutation((offerId: string, call) => call<{ order: PurchaseOrderDetail }>(`/api/rfqs/${id}/award`, { method: 'POST', body: { offerId } }), PROCUREMENT_INVALIDATE);
   const cancel = useCMutation((_: void, call) => call(`/api/rfqs/${id}/cancel`, { method: 'POST', body: {} }), PROCUREMENT_INVALIDATE);
   const removeOffer = useCMutation((offerId: string, call) => call(`/api/rfqs/${id}/offers/${offerId}`, { method: 'DELETE' }), PROCUREMENT_INVALIDATE);
 
@@ -128,7 +128,7 @@ export function RfqPage() {
                       <div className="flex flex-wrap justify-end gap-1">
                         {open && can('procurement.approve') && (
                           <Button size="sm" variant="primary" disabled={!o.complete} loading={award.isPending} aria-label={`${t('procurement.rfqs.award')} ${o.partyName}`}
-                            onClick={() => { setError(null); award.mutate(o.id, { onSuccess: (r) => { toast.success(t('procurement.rfqs.awardedToast')); navigate(`/purchasing/orders/${r.order.id}`); }, onError: setError }); }}>
+                            onClick={() => { setError(null); award.mutate(o.id, { onSuccess: (r) => { toast.success(t('procurement.rfqs.awardedToast')); navigate(`/purchasing/orders/${r.order.order.id}`); }, onError: setError }); }}>
                             {t('procurement.rfqs.award')}
                           </Button>
                         )}

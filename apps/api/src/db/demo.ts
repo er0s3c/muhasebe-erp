@@ -57,6 +57,10 @@ import { approveBudget, createBudget, putBudgetLines } from '../modules/projects
 import { recordProgress } from '../modules/projects/progress';
 import { createProject, setProjectStatus } from '../modules/projects/service';
 import { createWbs } from '../modules/projects/wbs';
+import { getOrder, issueOrder } from '../modules/procurement/orders';
+import { createReceipt } from '../modules/procurement/receipts';
+import { createRequest, submitRequest } from '../modules/procurement/requests';
+import { awardRfq, createRfq, getRfq, upsertOffer } from '../modules/procurement/rfq';
 import { createParam } from '../modules/subcontracts/params';
 import { createProgress, giveAdvance, submitProgress, type ProgressCtx } from '../modules/subcontracts/progress';
 import { approveRevision, createSubcontract, putBoqLines } from '../modules/subcontracts/service';
@@ -515,7 +519,38 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
     lines: [{ lineKey: ek('1'), cumulativeQty: '0.5' }, { lineKey: ek('2'), cumulativeQty: '0' }], deductions: [],
   });
 
-  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans; işveren: 1 sözleşme, 1 onaylı + 1 taslak alınan hakediş, avans';
+  // ---- Satın alma zinciri: Güneş Sitesi betonarme malzemesi ------------------------------------------
+  const idOf = (o: unknown) => (o as { id: string }).id;
+  const prc = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: ctx.baseCurrency };
+  const rq1 = await createRequest(tx, prc, {
+    projectId: gunes, title: 'Karkas betonu ve kalıp malzemesi', needDate: date(10, 15), note: 'C Blok 3. kat döşeme için.',
+    lines: [
+      { description: 'C30 hazır beton', unit: 'm³', quantity: '120', estUnitPrice: '3200', wbsId: w.betonarme },
+      { description: 'Kalıp tahtası 4 m', unit: 'adet', quantity: '400', estUnitPrice: '180', wbsId: w.betonarme },
+    ],
+  });
+  const rq1s = await submitRequest(tx, prc, ctxOwner, idOf(rq1.request));
+  await decide(tx, ctxOwner, rq1s.approvals[0]!.id, { decision: 'approve' });
+  const rfq1 = await createRfq(tx, prc, { requestId: idOf(rq1.request), dueDate: date(9, 20) });
+  const rfqId = rfq1.rfq.id as string;
+  const lineIds = rq1.lines.map(idOf);
+  await upsertOffer(tx, prc, rfqId, { partyId: partyId.get('beton')!, currencyCode: 'TRY', deliveryDays: 3, paymentDays: 30, lines: [{ requestLineId: lineIds[0]!, unitPrice: '3150' }, { requestLineId: lineIds[1]!, unitPrice: '190' }] });
+  await upsertOffer(tx, prc, rfqId, { partyId: partyId.get('demir')!, currencyCode: 'TRY', deliveryDays: 7, paymentDays: 60, lines: [{ requestLineId: lineIds[0]!, unitPrice: '3250' }, { requestLineId: lineIds[1]!, unitPrice: '170' }] });
+  const rfqView = await getRfq(tx, rfqId);
+  const awarded = await awardRfq(tx, prc, rfqId, rfqView.offers.find((o) => o.partyName.startsWith('Hazır Beton'))!.id);
+  const poId = idOf(awarded.order.order);
+  await issueOrder(tx, poId);
+  const po = await getOrder(tx, poId);
+  // İlk parti beton geldi; kalan miktar taahhütte kalır
+  await createReceipt(tx, prc, poId, { receiptDate: date(9, 29), note: 'İlk parti', lines: [{ orderLineId: idOf(po.lines[0]), quantity: '40' }] });
+  // İkinci talep onayda bekler (arayüzde onay kutusunda görünür)
+  const rq2 = await createRequest(tx, prc, {
+    projectId: kuzey, title: 'Villa seramik ve fayans', needDate: date(11, 5),
+    lines: [{ description: 'Porselen seramik 60x60', unit: 'm²', quantity: '320', estUnitPrice: '420', wbsId: k.ince }],
+  });
+  await submitRequest(tx, prc, ctxOwner, idOf(rq2.request));
+
+  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans; işveren: 1 sözleşme, 1 onaylı + 1 taslak alınan hakediş, avans; satın alma: 2 talep, 1 RFQ (2 teklif), 1 sipariş (kısmi mal kabul)';
 }
 
 /**

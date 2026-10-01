@@ -115,6 +115,14 @@ describe('demo aracı', () => {
       expect((await q(`select count(*)::int as n from journal_entries where source_type = 'progress_payment'`))[0].n).toBe(2);
       expect((await q(`select count(*)::int as n from journal_lines jl join cost_codes c on c.id = jl.cost_code_id where c.kind = 'subcontract' and jl.project_id is not null`))[0].n).toBeGreaterThan(0);
       expect((await q(`select coalesce(sum(amount), 0)::int as n from subcontract_advances`))[0].n).toBe(160000);
+      // Satın alma: 2 talep (1 siparişe dönüşmüş, 1 onayda), RFQ 2 teklif, verilmiş sipariş ve kısmi mal kabul
+      expect(await q(`select status, count(*)::int as n from purchase_requests group by status order by status`)).toEqual([
+        { status: 'ordered', n: 1 },
+        { status: 'submitted', n: 1 },
+      ]);
+      expect((await q(`select count(*)::int as n from rfq_offers`))[0].n).toBe(2);
+      expect((await q(`select status from purchase_orders`)).map((r) => r.status)).toEqual(['issued']);
+      expect((await q(`select count(*)::int as n from po_receipts where status = 'posted'`))[0].n).toBe(1);
       // Kalem etiketsiz proje satırı (iş kalemine atanmamış) ve projesiz maliyet demo'da bilerek bulunur
       expect((await q(`select count(*)::int as n from journal_lines where project_id is not null and wbs_id is null and debit_base > 0`))[0].n).toBeGreaterThan(0);
       ids = (await q(`select u.id as uid, u.organization_id as oid, c.id as cid from users u join companies c on c.organization_id = u.organization_id where u.email = $1`, [DEMO_EMAIL]))[0];
