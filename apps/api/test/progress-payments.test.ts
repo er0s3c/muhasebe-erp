@@ -76,6 +76,9 @@ describe('taşeron hakedişi (B2c): kümülatif hakediş, kesintiler, onay, yevm
 
     // Sözleşmede aynı anda tek açık hakediş
     expect((await w.c.post('/api/progress-payments', w.payload('10', '1'))).json().error.code).toBe('PROGRESS_OPEN_EXISTS');
+    const basis = (await w.c.get(`/api/subcontracts/${w.sc.id}/progress-basis`)).json();
+    expect(basis.subcontract).toMatchObject({ currencyCode: 'TRY', retentionPct: '5.0000', paymentDays: 30 });
+    expect(basis.lines.map((l: { itemNo: string; prevQty: string }) => [l.itemNo, l.prevQty])).toEqual([['1', '0.0000'], ['2', '0.0000']]);
 
     const done = await w.approveFlow(p.id);
     expect(done.payment.status).toBe('posted');

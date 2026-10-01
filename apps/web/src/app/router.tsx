@@ -117,6 +117,18 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="construction.subcontracts" />,
+                children: [
+                  { path: 'subcontracts', ...page(() => import('../features/subcontracts/SubcontractsPage'), 'SubcontractsPage') },
+                  { path: 'subcontracts/:id', ...page(() => import('../features/subcontracts/SubcontractDetailPage'), 'SubcontractDetailPage') },
+                  { path: 'progress-payments', ...page(() => import('../features/subcontracts/ProgressList'), 'ProgressPaymentsPage') },
+                  { path: 'progress-payments/new', ...page(() => import('../features/subcontracts/ProgressEditorPage'), 'ProgressEditorPage') },
+                  { path: 'progress-payments/:id', ...page(() => import('../features/subcontracts/ProgressEditorPage'), 'ProgressEditorPage') },
+                  { path: 'approvals', ...page(() => import('../features/subcontracts/ApprovalsPage'), 'ApprovalsPage') },
+                  { path: 'settings/construction', ...page(() => import('../features/settings/ConstructionSettingsPage'), 'ConstructionSettingsPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="core.settings" />,
                 children: [
                   { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage') },

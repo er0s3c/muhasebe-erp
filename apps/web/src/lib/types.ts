@@ -1015,6 +1015,9 @@ export interface ProjectCostRow extends ProjectMetrics {
   unassigned: boolean;
   progress: { percent: string; etcOverride: string | null; asOfDate: string; note: string | null } | null;
   revenue: string;
+  /** Kalan taahhüt (yürürlükteki taşeron sözleşmeleri); EAC/CPI'ya girmez. */
+  committed: string;
+  actualPlusCommitted: string;
 }
 
 export interface ProjectCostReport {
@@ -1022,7 +1025,8 @@ export interface ProjectCostReport {
   asOf: string;
   budget: { id: string; revisionNo: number; approvedAt: string } | null;
   rows: ProjectCostRow[];
-  totals: ProjectMetrics & { revenue: string };
+  totals: ProjectMetrics & { revenue: string; committed: string; actualPlusCommitted: string };
+  commitments: { contracts: number; missingRate: number };
 }
 
 export interface ProjectBudgetRow {
@@ -1103,3 +1107,207 @@ export const MODULE_LABEL_KEYS = {
   'construction.subcontracts': 'modules.constructionSubcontracts',
   'retail.pos': 'modules.retailPos',
 } as const;
+
+// --- Taşeron ve hakediş (B2) ---------------------------------------------------------------
+
+export interface CostCode {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'material' | 'labor' | 'subcontract' | 'equipment' | 'transport' | 'overhead' | 'other';
+  isActive: boolean;
+}
+
+export interface ProjectCostByCode {
+  project: { id: string; code: string; name: string };
+  asOf: string;
+  rows: { costCodeId: string | null; code: string | null; name: string; actual: string; share: string }[];
+  total: string;
+}
+
+export type SubcontractStatus = 'draft' | 'active' | 'completed' | 'terminated';
+
+export interface SubcontractRow {
+  id: string;
+  code: string;
+  title: string;
+  status: SubcontractStatus;
+  currencyCode: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  partyId: string;
+  partyName: string;
+  startDate: string | null;
+  endDate: string | null;
+  contractAmount: string;
+}
+
+export interface SubcontractRevisionRow {
+  id: string;
+  revisionNo: number;
+  status: 'draft' | 'approved' | 'superseded';
+  title: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  total: string;
+  isCurrent: boolean;
+}
+
+export interface SubcontractDetail {
+  subcontract: {
+    id: string;
+    code: string;
+    projectId: string;
+    partyId: string;
+    title: string;
+    currencyCode: string;
+    startDate: string | null;
+    endDate: string | null;
+    paymentDays: number;
+    retentionPct: string;
+    advanceRecoupPct: string;
+    withholdingPct: string;
+    penaltyNote: string | null;
+    status: SubcontractStatus;
+    projectCode: string;
+    projectName: string;
+    partyCode: string;
+    partyName: string;
+    contractAmount: string;
+  };
+  revisions: SubcontractRevisionRow[];
+}
+
+export interface BoqLineRow {
+  id: string;
+  lineKey: string;
+  lineNo: number;
+  itemNo: string | null;
+  description: string;
+  unit: string;
+  quantity: string;
+  unitPrice: string;
+  amount: string;
+  wbsId: string;
+  wbsCode: string;
+  wbsName: string;
+  costCodeId: string | null;
+  costCode: string | null;
+}
+
+export interface SubcontractRevisionDetail {
+  revision: { id: string; subcontractId: string; revisionNo: number; status: 'draft' | 'approved' | 'superseded'; title: string | null; approvedAt: string | null; total: string };
+  lines: BoqLineRow[];
+}
+
+export interface SubcontractBalances {
+  advanceGiven: string;
+  advanceRecouped: string;
+  advanceBalance: string;
+  retentionHeld: string;
+  retentionReleased: string;
+  retentionBalance: string;
+  certifiedGross: string;
+}
+
+export type ProgressStatus = 'draft' | 'submitted' | 'posted' | 'cancelled';
+
+export interface ProgressRow {
+  id: string;
+  number: string | null;
+  paymentNo: number;
+  status: ProgressStatus;
+  periodEnd: string;
+  subcontractId: string;
+  subcontractCode: string;
+  partyName: string;
+  projectId: string;
+  projectCode: string;
+  currencyCode: string;
+  gross: string;
+  net: string;
+}
+
+export interface ApprovalStepRow {
+  id: string;
+  stepNo: number;
+  approverRole: string | null;
+  approverUserId: string | null;
+  label: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  decidedBy: string | null;
+  decidedAt: string | null;
+  note: string | null;
+}
+
+export interface ApprovalRequestRow {
+  id: string;
+  docType: 'progress_payment';
+  docId: string;
+  amount: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  requestedAt: string;
+  completedAt: string | null;
+  steps: ApprovalStepRow[];
+}
+
+export interface ProgressDetail {
+  payment: {
+    id: string;
+    subcontractId: string;
+    subcontractCode: string;
+    subcontractTitle: string;
+    projectId: string;
+    projectCode: string;
+    partyId: string;
+    partyName: string;
+    paymentNo: number;
+    number: string | null;
+    periodEnd: string;
+    status: ProgressStatus;
+    currencyCode: string;
+    fxRate: string | null;
+    vatCode: string | null;
+    vatRate: string;
+    retentionPct: string;
+    advancePct: string;
+    withholdingPct: string;
+    gross: string;
+    vat: string;
+    retention: string;
+    advance: string;
+    withholding: string;
+    otherDeductions: string;
+    net: string;
+    note: string | null;
+    rejectionNote: string | null;
+    entryId: string | null;
+    cancelReason: string | null;
+  };
+  lines: { id: string; lineKey: string; lineNo: number; itemNo: string | null; description: string; unit: string; unitPrice: string; prevQty: string; cumQty: string; thisQty: string; amount: string; wbsCode: string; costCode: string | null }[];
+  deductions: { id: string; description: string; amount: string }[];
+  approvals: ApprovalRequestRow[];
+}
+
+export interface ConstructionParam {
+  id: string;
+  kind: 'retention_pct' | 'withholding_pct' | 'advance_recoup_pct';
+  value: string;
+  validFrom: string;
+  validTo: string | null;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface ApprovalRuleRow {
+  id: string;
+  docType: 'progress_payment';
+  projectId: string | null;
+  minAmount: string;
+  maxAmount: string | null;
+  separateRequester: boolean;
+  isActive: boolean;
+  steps: { id: string; stepNo: number; approverRole: string | null; approverUserId: string | null; label: string | null }[];
+}

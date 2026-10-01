@@ -504,3 +504,41 @@ export async function listProgress(tx: Tx, q: { subcontractId?: string; projectI
      order by p.created_at desc`);
   return { payments: rows.rows };
 }
+
+/**
+ * Yeni/taslak hakediş için temel: yürürlükteki BOQ satırları, önceki (kaydedilmiş) kümülatif miktarlar,
+ * sözleşmedeki yüzde anlık görüntüleri ve avans/teminat bakiyeleri. Arayüz önizlemeyi bununla hesaplar.
+ */
+export async function getProgressBasis(tx: Tx, subcontractId: string) {
+  const [sc] = await tx.select().from(subcontracts).where(eq(subcontracts.id, subcontractId));
+  if (!sc) throw notFound('Taşeron sözleşmesi');
+  const revision = await currentRevision(tx, subcontractId);
+  const lines = revision
+    ? await tx.execute<Record<string, unknown>>(sql`
+        select l.line_key as "lineKey", l.line_no as "lineNo", l.item_no as "itemNo", l.description, l.unit,
+               l.quantity::text as quantity, l.unit_price::text as "unitPrice",
+               coalesce((select max(p.cum_qty) from progress_payment_lines p join progress_payments pp on pp.id = p.payment_id
+                          where pp.subcontract_id = l.subcontract_id and pp.status = 'posted' and p.line_key = l.line_key), 0)::numeric(19,4)::text as "prevQty",
+               w.code as "wbsCode", c.code as "costCode"
+          from subcontract_boq_lines l
+          join project_wbs w on w.id = l.wbs_id
+          left join cost_codes c on c.id = l.cost_code_id
+         where l.revision_id = ${revision.id}
+         order by l.line_no`)
+    : { rows: [] };
+  return {
+    subcontract: {
+      id: sc.id,
+      code: sc.code,
+      title: sc.title,
+      status: sc.status,
+      currencyCode: sc.currencyCode,
+      paymentDays: sc.paymentDays,
+      retentionPct: dec(sc.retentionPct).toFixed(4),
+      advanceRecoupPct: dec(sc.advanceRecoupPct).toFixed(4),
+      withholdingPct: dec(sc.withholdingPct).toFixed(4),
+    },
+    lines: lines.rows,
+    balances: await getBalances(tx, subcontractId),
+  };
+}

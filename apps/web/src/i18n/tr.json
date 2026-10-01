@@ -53,7 +53,8 @@
     "balanceDebtor": "Borçlu",
     "balanceCreditor": "Alacaklı",
     "loadMore": "Daha fazla göster",
-    "back": "Geri"
+    "back": "Geri",
+    "confirm": "Onayla"
   },
   "months": [
     "Ocak",
@@ -143,7 +144,11 @@
     "openings": "Açılış bakiyeleri",
     "modules": "Modüller",
     "license": "Lisans",
-    "devices": "Cihazlar"
+    "devices": "Cihazlar",
+    "subcontracts": "Taşeron sözleşmeleri",
+    "progressPayments": "Hakedişler",
+    "approvals": "Onay kutusu",
+    "constructionSettings": "İnşaat ayarları"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -2012,7 +2017,8 @@
       "variance": "Sapma",
       "wbs": "İş kalemi",
       "spent": "Harcama",
-      "etc": "Kalan (ETC)"
+      "etc": "Kalan (ETC)",
+      "committed": "Taahhüt"
     },
     "tabs": {
       "overview": "Özet",
@@ -2067,7 +2073,11 @@
       "hideEmpty": "Boş pasif kalemleri gizle",
       "noWbs": "Henüz iş kalemi yok",
       "noWbsDesc": "Maliyeti iş kalemine göre izlemek için İş kırılımı sekmesinden iş kalemlerini tanımlayın.",
-      "goWbs": "İş kırılımına git"
+      "goWbs": "İş kırılımına git",
+      "committed": "Kalan taahhüt",
+      "committedSub": "{{n}} yürürlükteki taşeron sözleşmesi: BOQ − kaydedilmiş hakediş. EAC'ye girmez",
+      "committedMissingRateTitle": "Taahhüt eksik olabilir",
+      "committedMissingRate": "{{n}} dövizli sözleşmenin kuru bulunamadı; taahhüde katılamadı. Kuru girin."
     },
     "wbs": {
       "title": "İş kırılımı",
@@ -2162,6 +2172,338 @@
       "noWbs": "İş kalemi seçilmedi",
       "label": "Proje",
       "hint": "Bu satırın maliyeti/geliri hangi projeye ve iş kalemine yazılsın? Boş bırakabilirsiniz."
+    }
+  },
+  "constructionSettings": {
+    "title": "İnşaat ayarları",
+    "subtitle": "Maliyet kodları, teminat/stopaj/avans parametreleri ve hakediş onay kuralları",
+    "activate": "Etkinleştir",
+    "deactivate": "Pasifleştir",
+    "costCodes": {
+      "title": "Maliyet kodları",
+      "desc": "Maliyet türü: iş kaleminden bağımsız üçüncü boyut (malzeme, işçilik, taşeron…). Hakediş maliyeti BOQ satırının koduyla, yoksa \"taşeron\" kodu ile yazılır.",
+      "code": "Kod",
+      "name": "Ad",
+      "kind": "Tür",
+      "added": "Maliyet kodu eklendi",
+      "kinds": {
+        "material": "Malzeme",
+        "labor": "İşçilik",
+        "subcontract": "Taşeron",
+        "equipment": "Ekipman",
+        "transport": "Nakliye",
+        "overhead": "Genel gider",
+        "other": "Diğer"
+      }
+    },
+    "params": {
+      "title": "Teminat, stopaj ve avans parametreleri",
+      "desc": "Tarih aralıklı ve kaynak notlu değerler. Yeni sözleşme açılırken geçerli değer sözleşmeye kopyalanır; sonradan değişiklik eski sözleşmeyi etkilemez.",
+      "legal": "Bu oranlar yasal değer olarak kodda tanımlı değildir ve doğrulanmamıştır. Oranları resmî kaynaktan/mali müşavirden teyit edip kaynak notuyla girin ve \"doğrulandı\" olarak işaretleyin.",
+      "empty": "Henüz parametre girilmemiş. Oranlar sözleşme açılırken elle de girilebilir.",
+      "kind": "Parametre",
+      "value": "Oran",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "source": "Kaynak notu",
+      "sourcePlaceholder": "ör. sözleşme şartı, resmî kaynak",
+      "verification": "Doğrulama",
+      "verified": "Doğrulandı: {{by}}",
+      "unverified": "Doğrulanmamış",
+      "verify": "Doğrula",
+      "verifyTitle": "Parametreyi doğrula",
+      "verifyDesc": "Değerin resmî kaynaktan ya da mali müşavirden teyit edildiğini işaretlersiniz.",
+      "verifiedBy": "Doğrulayan kişi/kurum",
+      "added": "Parametre eklendi",
+      "kinds": {
+        "retention_pct": "Teminat kesintisi %",
+        "withholding_pct": "Stopaj %",
+        "advance_recoup_pct": "Avans mahsup %"
+      }
+    },
+    "rules": {
+      "title": "Hakediş onay kuralları",
+      "desc": "Tutara göre sıralı onay adımları. Kural yoksa onay izni olan herkes tek adımda onaylar.",
+      "none": "Tanımlı kural yok: onay izni olan (muhasebeci, yönetici, sahip) herkes hakedişi onaylayabilir; gönderen de dahil.",
+      "range": "Tutar aralığı",
+      "rangeBetween": "{{min}} – {{max}} arası",
+      "rangeFrom": "{{min}} ve üzeri",
+      "steps": "Onay adımları",
+      "step": "Adım",
+      "separate": "Gönderen onaylayamaz",
+      "min": "Alt sınır (dahil)",
+      "max": "Üst sınır (hariç)",
+      "maxHint": "Boş: sınırsız",
+      "add": "Kural ekle",
+      "addStep": "Adım ekle",
+      "added": "Onay kuralı eklendi"
+    }
+  },
+  "subcontracts": {
+    "title": "Taşeron sözleşmeleri",
+    "subtitle": "Sözleşme, BOQ, hakediş, avans ve teminat",
+    "add": "Yeni sözleşme",
+    "back": "Sözleşmeler",
+    "notFound": "Sözleşme bulunamadı",
+    "deleted": "Sözleşme silindi",
+    "empty": "Henüz taşeron sözleşmesi yok",
+    "emptyDesc": "Bir projeye taşeron sözleşmesi açın, BOQ girin; hakedişler bu BOQ üzerinden kümülatif hazırlanır.",
+    "status": {
+      "draft": "Taslak",
+      "active": "Yürürlükte",
+      "completed": "Tamamlandı",
+      "terminated": "Feshedildi"
+    },
+    "progressStatus": {
+      "draft": "Taslak",
+      "submitted": "Onayda",
+      "posted": "Kaydedildi",
+      "cancelled": "İptal"
+    },
+    "filters": {
+      "project": "Proje",
+      "allProjects": "Tüm projeler",
+      "status": "Durum",
+      "allStatuses": "Tüm durumlar"
+    },
+    "cols": {
+      "code": "Sözleşme",
+      "title": "İş",
+      "party": "Taşeron",
+      "project": "Proje",
+      "status": "Durum",
+      "amount": "Sözleşme tutarı",
+      "end": "Bitiş"
+    },
+    "kpi": {
+      "amount": "Sözleşme tutarı",
+      "amountSub": "Yürürlükteki revizyonun BOQ toplamı",
+      "retention": "Teminat",
+      "retentionSub": "Hakedişten kesilir",
+      "advance": "Avans mahsubu",
+      "advanceSub": "Brüt üzerinden, kalan avansla sınırlı",
+      "terms": "Ödeme vadesi",
+      "termsSub": "Stopaj %{{withholding}}",
+      "days": "{{days}} gün"
+    },
+    "tabs": {
+      "boq": "BOQ ve revizyonlar",
+      "progress": "Hakedişler",
+      "balances": "Avans ve teminat"
+    },
+    "actions": {
+      "complete": "Tamamlandı yap",
+      "terminate": "Feshet"
+    },
+    "confirm": {
+      "completed": {
+        "title": "Sözleşmeyi tamamla",
+        "body": "Tamamlanan sözleşmeye yeni hakediş ve revizyon girilemez."
+      },
+      "terminated": {
+        "title": "Sözleşmeyi feshet",
+        "body": "Feshedilen sözleşmeye yeni hakediş ve revizyon girilemez. Bu işlem geri alınamaz."
+      },
+      "delete": {
+        "title": "Sözleşmeyi sil",
+        "body": "Taslak sözleşme ve taslak revizyonu silinir."
+      }
+    },
+    "form": {
+      "newTitle": "Yeni taşeron sözleşmesi",
+      "newDesc": "Yürürlüğe girmek için BOQ girip revizyonu onaylayın.",
+      "editTitle": "Sözleşmeyi düzenle",
+      "saved": "Sözleşme kaydedildi",
+      "project": "Proje",
+      "projectPlaceholder": "Proje seçin",
+      "party": "Taşeron",
+      "partyHint": "Tedarikçi türünde cari",
+      "partyPlaceholder": "Taşeron seçin",
+      "title": "İş tanımı",
+      "titlePlaceholder": "ör. Elektrik tesisatı",
+      "currency": "Para birimi",
+      "currencyHint": "Hakediş ve BOQ bu para biriminde girilir; defter karşılığı kurla hesaplanır.",
+      "startDate": "Başlangıç",
+      "endDate": "Bitiş",
+      "endBeforeStart": "Bitiş tarihi başlangıçtan önce olamaz",
+      "paymentDays": "Ödeme vadesi (gün)",
+      "paymentDaysHint": "Hakediş cari satırının vadesi: hakediş tarihi + gün",
+      "deductions": "Kesinti yüzdeleri",
+      "deductionsHint": "Boş bırakılırsa sözleşme tarihinde geçerli inşaat parametresinden kopyalanır (yoksa 0).",
+      "pctLocked": "Yürürlükteki sözleşmenin yüzdeleri değiştirilemez.",
+      "retention": "Teminat %",
+      "advance": "Avans mahsup %",
+      "withholding": "Stopaj %",
+      "penaltyNote": "Ceza/özel koşullar (not)"
+    },
+    "boq": {
+      "revision": "Revizyon",
+      "revLabel": "Rev. {{rev}} — {{status}} — {{total}}",
+      "revStatus": {
+        "draft": "taslak",
+        "approved": "onaylı",
+        "superseded": "yerine geçilmiş"
+      },
+      "current": "Yürürlükteki",
+      "approvedAt": "Onay: {{date}}",
+      "newRevision": "Yeni revizyon",
+      "revCreated": "Taslak revizyon açıldı (yürürlükteki BOQ kopyalandı)",
+      "firstDraftHint": "İlk revizyonu onayladığınızda sözleşme yürürlüğe girer. Onay, ekrandaki son hâli de kaydeder.",
+      "noWbs": "Projede maliyet yazılabilecek iş kalemi yok. Önce projede iş kırılımı oluşturun.",
+      "title": "BOQ (iş kalemleri)",
+      "desc": "Birim fiyatlı metraj. Onaylı revizyon değişmez; değişiklik yeni revizyonla yapılır.",
+      "addLine": "Satır ekle",
+      "empty": "BOQ boş",
+      "emptyDesc": "Satır ekleyerek başlayın.",
+      "pickWbs": "İş kalemi seçin",
+      "defaultCode": "Varsayılan (taşeron)",
+      "cols": {
+        "itemNo": "Poz",
+        "description": "Tanım",
+        "unit": "Birim",
+        "quantity": "Miktar",
+        "unitPrice": "Birim fiyat",
+        "amount": "Tutar",
+        "wbs": "İş kalemi",
+        "costCode": "Maliyet kodu"
+      },
+      "deleteDraft": "Taslağı sil",
+      "deleted": "Taslak revizyon silindi",
+      "save": "Kaydet",
+      "saved": "BOQ kaydedildi",
+      "approve": "Revizyonu onayla",
+      "approveActivate": "Onayla ve yürürlüğe al",
+      "approved": "Revizyon onaylandı"
+    },
+    "balances": {
+      "certified": "Hakediş brütü",
+      "certifiedSub": "Kaydedilmiş hakedişler toplamı",
+      "advanceBalance": "Kalan avans",
+      "advanceSub": "Verilen {{given}} · mahsup {{recouped}}",
+      "retentionBalance": "Tutulan teminat",
+      "retentionSub": "Tutulan {{held}} · iade {{released}}",
+      "actionsTitle": "İşlemler",
+      "actionsDesc": "Avans kasa/bankadan ödenir; teminat iadesi taşeron carisine açık kalem yazar ve normal ödeme akışıyla ödenir.",
+      "giveAdvance": "Avans ver",
+      "releaseRetention": "Teminat iade et",
+      "noPermission": "Bu işlemler için onaylayıcı yetkisi gerekir.",
+      "advanceDesc": "Sözleşme para biriminde ({{currency}}) bir kasa/banka hesabından ödenir.",
+      "releaseDesc": "En çok tutulan teminat bakiyesi kadar: {{max}}",
+      "account": "Kasa/banka hesabı",
+      "pickAccount": "Hesap seçin",
+      "noAccount": "{{currency}} cinsinden kasa/banka hesabı yok",
+      "amount": "Tutar",
+      "note": "Not",
+      "done": "İşlem kaydedildi"
+    },
+    "progress": {
+      "title": "Hakedişler",
+      "subtitle": "Taşeron hakedişleri (kümülatif)",
+      "add": "Yeni hakediş",
+      "empty": "Henüz hakediş yok",
+      "emptyDesc": "Yürürlükteki sözleşmeye kümülatif metrajla hakediş hazırlayın.",
+      "cols": {
+        "number": "Belge no",
+        "no": "Sıra",
+        "contract": "Sözleşme",
+        "party": "Taşeron",
+        "period": "Dönem sonu",
+        "status": "Durum",
+        "gross": "Brüt",
+        "net": "Net",
+        "contractQty": "Sözleşme",
+        "prevQty": "Önceki küm.",
+        "cumQty": "Bu dönem küm.",
+        "thisQty": "Bu dönem"
+      },
+      "noContract": "Sözleşme seçilmedi",
+      "newTitle": "Yeni hakediş",
+      "editTitle": "Hakediş {{no}}",
+      "rejected": "Reddedildi — taslağa döndü",
+      "cancelledTitle": "İptal edildi",
+      "legalNote": "Hakediş hesabı (KDV, teminat, stopaj tabanı) iç yönetim hesabıdır; yasal hakediş belgesi yerine geçmez ve oranlar mali müşavirce doğrulanmalıdır.",
+      "periodEnd": "Dönem sonu",
+      "vatCode": "KDV",
+      "noVat": "KDV yok",
+      "vatUnverified": "Bu KDV oranı doğrulanmamış",
+      "note": "Not",
+      "linesTitle": "Metraj (kümülatif)",
+      "linesDesc": "Her satıra bugüne kadar yapılan toplam miktarı girin; bu dönemin miktarı farktan hesaplanır.",
+      "overContract": "Sözleşmeyi aşıyor",
+      "belowPrev": "Öncekinden az",
+      "deductionsTitle": "Diğer kesintiler",
+      "deductionsDesc": "Ceza, malzeme mahsubu vb. Maliyetten düşülür.",
+      "addDeduction": "Kesinti ekle",
+      "noDeductions": "Kesinti yok",
+      "deductionDesc": "Açıklama",
+      "deductionAmount": "Tutar",
+      "summaryTitle": "Hesap",
+      "summaryDraftDesc": "Ekrandaki önizleme; kayıt anında yeniden hesaplanır.",
+      "sum": {
+        "gross": "Brüt hakediş",
+        "vat": "KDV",
+        "retention": "Teminat",
+        "advance": "Avans mahsubu",
+        "advanceBalance": "Kalan avans: {{balance}}",
+        "withholding": "Stopaj",
+        "other": "Diğer kesintiler",
+        "net": "Net ödenecek"
+      },
+      "netNegative": "Net ödenecek tutar negatif olamaz.",
+      "saveDraft": "Taslak kaydet",
+      "saved": "Hakediş taslağı kaydedildi",
+      "submit": "Onaya gönder",
+      "submitted": "Hakediş onaya gönderildi",
+      "withdraw": "Geri çek",
+      "withdrawn": "Hakediş geri çekildi",
+      "deleted": "Hakediş silindi",
+      "cancel": "İptal et",
+      "cancelTitle": "Hakedişi iptal et",
+      "cancelDesc": "Yevmiye ters kayıtla geri alınır. Ödemesi eşleşmiş hakediş iptal edilemez.",
+      "cancelReason": "İptal nedeni",
+      "cancelled": "Hakediş iptal edildi"
+    },
+    "approval": {
+      "inboxTitle": "Onay kutusu",
+      "inboxSubtitle": "Sırası size gelen onay talepleri",
+      "inboxEmpty": "Bekleyen onay yok",
+      "inboxEmptyDesc": "Sırası size gelen talepler burada görünür.",
+      "cols": {
+        "doc": "Belge",
+        "requested": "Talep tarihi",
+        "step": "Adım",
+        "amount": "Brüt ({{currency}})"
+      },
+      "docTypes": {
+        "progress_payment": "Taşeron hakedişi"
+      },
+      "defaultStep": "Onay",
+      "userStep": "Kullanıcı",
+      "historyTitle": "Onay geçmişi",
+      "status": {
+        "pending": "Bekliyor",
+        "approved": "Onaylandı",
+        "rejected": "Reddedildi",
+        "cancelled": "Geri çekildi"
+      },
+      "stepStatus": {
+        "pending": "bekliyor",
+        "approved": "onayladı",
+        "rejected": "reddetti"
+      },
+      "roles": {
+        "owner": "Sahip",
+        "admin": "Yönetici",
+        "accountant": "Muhasebeci",
+        "sales": "Satış",
+        "site_manager": "Şantiye sorumlusu",
+        "viewer": "İzleyici"
+      },
+      "note": "Karar notu",
+      "approve": "Onayla",
+      "reject": "Reddet",
+      "approvedToast": "Onaylandı",
+      "rejectedToast": "Reddedildi, hakediş taslağa döndü"
     }
   }
 }

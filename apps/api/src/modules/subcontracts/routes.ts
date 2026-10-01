@@ -50,6 +50,7 @@ import {
   createProgress,
   deleteProgress,
   getBalances,
+  getProgressBasis,
   getProgress,
   giveAdvance,
   listProgress,
@@ -257,6 +258,8 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
     '/api/progress-payments/:id/cancel',
     tenantRoute(app, approve, async (c) => cancelProgress(c.tx, progressCtx(c), idParam.parse(c.req.params).id, cancelProgressPaymentSchema.parse(c.req.body))),
   );
+
+  app.get('/api/subcontracts/:id/progress-basis', tenantRoute(app, read, async ({ tx, req }) => getProgressBasis(tx, idParam.parse(req.params).id)));
 
   // --- Avans ve teminat ----------------------------------------------------------------------------------
   app.get('/api/subcontracts/:id/balances', tenantRoute(app, read, async ({ tx, req }) => ({ balances: await getBalances(tx, idParam.parse(req.params).id) })));
