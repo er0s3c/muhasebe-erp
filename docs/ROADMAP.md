@@ -50,7 +50,7 @@ Her faz, ilgili yasal parametrelerin resmi kaynaktan doğrulanmasına bağlıdı
 ## Teknik borç ve iyileştirmeler
 
 - Ana JS paketini bölmek (Vite 8/Rolldown `advancedChunks`).
-- Oran sınırı için paylaşılan depo (çok örnekli barındırma; lisans sunucusunun oran sınırı da bellek içidir), uygulama kullanıcıları için MFA/TOTP, akışlı xlsx yazımı.
+- Oran sınırı için paylaşılan depo (çok örnekli barındırma; lisans sunucusunun oran sınırı da bellek içidir), MFA'nın şirket düzeyinde zorunlu kılınması, akışlı xlsx yazımı.
 - Lisans: modül bazlı (eklenti) lisans alanı (`features`), ödeme/fatura entegrasyonu, lisans sunucusu yönetici çoklu-rol modeli, barındırmalı (kiracı başına lisans) kip.
 - İmajın kayıt defterine yayını ve sürüm/sürüm notu akışı; Caddy TLS profilinin otomatik sınanması.
 - Özel rol tablosu (gerçek ihtiyaç doğunca).

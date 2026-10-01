@@ -144,5 +144,5 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Docker imajı, compose dağıtımı, ayrı demo örneği, üçüncü taraf lisans bildirimi | ✅ |
 | Lisanslama: sektör/cihaz/şirket sınırlı, imzalı kiralı lisans; satıcı lisans sunucusu ve web paneli (parola + zorunlu TOTP); salt-okunur mod | ✅ ⚠️ EULA/sözleşme ve veri işleme doğrulanmadı |
 | Cihaz koltukları (kayıtlı tarayıcı/bilgisayar, yönetici kaldırır, boşta cihaz düşer) | ✅ |
-| Uygulama kullanıcıları için iki adımlı doğrulama (TOTP/MFA) | ⏳ |
+| Uygulama kullanıcıları için iki adımlı doğrulama (TOTP, kurtarma kodları, yönetici sıfırlaması) | ✅ (şirket düzeyinde zorunlu kılma ⏳) |
 | Kişisel veri envanteri, saklama/imha, ilgili kişi dışa aktarma/düzeltme/anonimleştirme, aktarım kaydı (89/2007) | ⏳ ⚠️ |

@@ -20,6 +20,13 @@ export const loginSchema = z.object({
   email: z.email().max(254).transform((v) => v.toLowerCase()),
   password: z.string().min(1).max(200),
 });
+export const mfaVerifySchema = z.object({
+  mfaToken: z.string().min(20).max(2000),
+  /** 6 haneli uygulama kodu ya da kurtarma kodu. */
+  code: z.string().trim().min(6).max(20),
+});
+export type MfaVerifyInput = z.infer<typeof mfaVerifySchema>;
+
 export type LoginInput = z.infer<typeof loginSchema>;
 
 export const forgotPasswordSchema = z.object({

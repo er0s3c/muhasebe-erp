@@ -83,6 +83,21 @@ export const userTokens = pgTable(
   ],
 );
 
+/**
+ * Uygulama kullanıcısı için TOTP ikinci adım. Sır AES-256-GCM ile şifreli saklanır; `enabled_at` boşken kurulum
+ * bekliyordur (giriş zorlanmaz). `last_counter` aynı kodun yeniden kullanımını önler; kurtarma kodları yalnızca özet olarak durur.
+ */
+export const userMfa = pgTable('user_mfa', {
+  userId: uuid()
+    .primaryKey()
+    .references(() => users.id),
+  secretEnc: text().notNull(),
+  enabledAt: timestamp({ withTimezone: true }),
+  lastCounter: bigint({ mode: 'number' }),
+  recoveryHashes: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  createdAt: createdAt(),
+});
+
 /** Kimlik doğrulama ve yetki olayları (yalnızca eklenir). Kiracı tablosu değildir; destek/inceleme içindir. */
 export const securityEvents = pgTable(
   'security_events',

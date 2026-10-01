@@ -280,8 +280,16 @@ React 19 + Vite + Tailwind v4. Renk/yüzey belirteçleri CSS değişkenidir (aç
 - Ana JS paketi ~715 kB (gzip ~227 kB); `manualChunks` ile bölünebilir (Vite 8/Rolldown'da `advancedChunks` gerekir).
 - **Proje maliyet/gelir hesap sınıflandırması (60/61/64 = gelir) varsayılandır**, bütçe/gerçekleşen yalnızca defter para biriminde, ilerleme yüzdesi elle girilir (metraj/birim fiyat yok), bütçe Excel'den içe aktarılamaz, projede kullanıcı kısıtı yoktur.
 - **Yıl sonu kapanış/devir ve dönem sonu kur değerlemesi (M7b) yoktur**; ikisi de mali müşavir teyidine bağlıdır (LEGAL-NOTES).
-- Oran sınırı deposu bellektedir (uygulama ve lisans sunucusu): **tek örnek** çalışır; çok örnekli barındırma için paylaşılan depo gerekir. Uygulama kullanıcıları için MFA/TOTP yoktur (lisans paneli için zorunlu TOTP vardır).
+- Oran sınırı deposu bellektedir (uygulama ve lisans sunucusu): **tek örnek** çalışır; çok örnekli barındırma için paylaşılan depo gerekir. Uygulama kullanıcıları için isteğe bağlı TOTP vardır (aşağıda); lisans paneli için TOTP zorunludur.
 - **Lisans denetimi müşteri sunucusunda çalıştığı için %100 kırılamaz değildir:** kodu yamalamak engellenemez, yalnızca zorlaştırılır; en güçlü koruma barındırmalı kurulumdur (LICENSING.md §10). Çerezi kopyalayarak cihaz koltuğu paylaşmak teknik olarak mümkündür (kalp atışındaki cihaz sayısı ve sözleşmeyle denetlenir). Eski imajlar sızdırılmış eski anahtarı güvenmeye devam eder (anahtar döndürme prosedürü: LICENSING.md §11).
 - `users` tablosu çalışma zamanı rolüne tüm kiracılar için açıktır (giriş e-postayla yapıldığı için); kolon yetkisi ya da ayrı giriş rolü sonraya.
 - Dışa aktarma (xlsx/CSV) ve tam veri dışa aktarma bellek içi üretilir (eşzamanlılık kapısı ve satır tavanlarıyla sınırlı); cari yaşlandırma maliyeti toplam satır sayısıyla doğrusaldır (PERFORMANCE.md).
 - İmaj kayıt defterine (registry) yayınlanmaz; Caddy TLS profili otomatik sınanmaz; yedekleme/saklama/kişisel veri politikası hukuken doğrulanmamıştır.
+
+## İki adımlı doğrulama (uygulama kullanıcıları)
+
+- **İsteğe bağlı TOTP** (RFC 6238, `@erp/license-core`): kullanıcı `/account/security` sayfasında QR/anahtarla kurar, uygulama kodunu girerek etkinleştirir; 8 kurtarma kodu **yalnızca bir kez** gösterilir (sadece sha256 özeti saklanır, tek kullanımlık).
+- `user_mfa` kiracı tablosu değildir (RLS yok). Sır AES-256-GCM ile şifreli saklanır (anahtar `JWT_SECRET`'ten HKDF). `last_counter` aynı kodun yeniden kullanımını önler (koşullu güncelleme: eşzamanlı iki deneme birini geçirir).
+- **Giriş akışı:** MFA açıksa `POST /api/auth/login` oturum vermez, 5 dakikalık `purpose:'mfa'` belirteci döner; `POST /api/auth/mfa/verify` kodu doğrulayıp oturumu (çerez + erişim belirteci + cihaz koltuğu) açar. `authenticate` `purpose` taşıyan belirteci reddeder. Hatalı kodlar kullanıcı başına 15 dakikada 5 ile sınırlıdır (429).
+- Kapatma ve kurtarma kodu yenileme parola/güncel kod ister; `members.manage` yetkisi olan yönetici üyenin MFA'sını sıfırlayabilir (`DELETE /api/company/members/:userId/mfa`; sahip için yalnızca sahip). Olaylar `security_events`'e yazılır (`mfa_enabled/disabled/reset/failed/recovery_used/recovery_regenerated`).
+- Kapsam dışı: şirket düzeyinde zorunlu kılma, WebAuthn/passkey, güvenilir cihaz hatırlama.

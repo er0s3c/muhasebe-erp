@@ -189,7 +189,8 @@
     "newPurchaseDelivery": "Yeni alış irsaliyesi",
     "newReceipt": "Tahsilat al",
     "newPayment": "Ödeme yap",
-    "newProject": "Yeni proje"
+    "newProject": "Yeni proje",
+    "security": "Güvenlik (iki adımlı doğrulama)"
   },
   "auth": {
     "loginTitle": "Hesabınıza giriş yapın",
@@ -239,7 +240,15 @@
     "mustChangeSubtitle": "Yöneticiniz size geçici bir şifre verdi. Devam etmek için kendi şifrenizi seçin.",
     "currentPassword": "Mevcut şifre",
     "newPassword": "Yeni şifre",
-    "passwordChanged": "Şifreniz değiştirildi. Diğer oturumlar kapatıldı."
+    "passwordChanged": "Şifreniz değiştirildi. Diğer oturumlar kapatıldı.",
+    "mfa": {
+      "title": "İki adımlı doğrulama",
+      "subtitle": "Doğrulama uygulamanızdaki 6 haneli kodu girin.",
+      "code": "Doğrulama kodu",
+      "hint": "Kodunuza erişemiyorsanız kurtarma kodlarınızdan birini girebilirsiniz.",
+      "verify": "Doğrula",
+      "back": "Girişe dön"
+    }
   },
   "onboarding": {
     "title": "İlk şirketinizi kuralım",
@@ -334,7 +343,12 @@
         "sales": "Şimdilik yalnızca genel bakış",
         "site_manager": "Şimdilik yalnızca genel bakış",
         "viewer": "Kayıt ve raporları görür, değiştiremez"
-      }
+      },
+      "mfa": "İki adımlı",
+      "mfaOn": "Açık",
+      "mfaResetAction": "İki adımlı doğrulamayı sıfırla",
+      "mfaResetConfirm": "{{name}} için iki adımlı doğrulama sıfırlansın mı? Kullanıcı gerekirse yeniden kurar.",
+      "mfaReset": "İki adımlı doğrulama sıfırlandı"
     },
     "currencies": {
       "title": "Para birimi ve kurlar",
@@ -2038,7 +2052,7 @@
       "budget": "Bütçe",
       "transactions": "Hareketler",
       "employer": "İşveren sözleşmesi",
-        "sales": "Satış"
+      "sales": "Satış"
     },
     "form": {
       "newTitle": "Yeni proje",
@@ -2329,19 +2343,49 @@
     "lowestNow": "Açılış bakiyesinin altına inmiyor",
     "end": "Dönem sonu bakiyesi",
     "endSub": "{{n}}. hafta kapanışı",
-    "cols": {"week": "Hafta", "range": "Tarih aralığı", "receivables": "Tahsilat", "manualIn": "Diğer giriş", "payables": "Ödeme", "manualOut": "Diğer çıkış", "net": "Net", "closing": "Kapanış bakiyesi"},
+    "cols": {
+      "week": "Hafta",
+      "range": "Tarih aralığı",
+      "receivables": "Tahsilat",
+      "manualIn": "Diğer giriş",
+      "payables": "Ödeme",
+      "manualOut": "Diğer çıkış",
+      "net": "Net",
+      "closing": "Kapanış bakiyesi"
+    },
     "negative": "Bakiye eksiye düşüyor",
     "later": "Ufkun ötesi: tahsilat {{in}}, ödeme {{out}}",
     "itemsTitle": "Kalemler",
     "itemsDesc": "Projeksiyona giren açık kalemler ve elle girişler.",
-    "itemCols": {"date": "Vade", "week": "Hafta", "source": "Kaynak", "party": "Cari / açıklama", "amount": "Tutar", "base": "Karşılık"},
-    "sources": {"receivable": "Alacak", "payable": "Borç", "manualIn": "Elle giriş", "manualOut": "Elle çıkış"},
+    "itemCols": {
+      "date": "Vade",
+      "week": "Hafta",
+      "source": "Kaynak",
+      "party": "Cari / açıklama",
+      "amount": "Tutar",
+      "base": "Karşılık"
+    },
+    "sources": {
+      "receivable": "Alacak",
+      "payable": "Borç",
+      "manualIn": "Elle giriş",
+      "manualOut": "Elle çıkış"
+    },
     "overdue": "gecikmiş",
     "add": "Kalem ekle",
     "addTitle": "Projeksiyon kalemi",
     "editTitle": "Kalemi düzenle",
-    "direction": {"in": "Giriş", "out": "Çıkış"},
-    "form": {"date": "Tarih", "direction": "Yön", "description": "Açıklama", "amount": "Tutar", "currency": "Para birimi"},
+    "direction": {
+      "in": "Giriş",
+      "out": "Çıkış"
+    },
+    "form": {
+      "date": "Tarih",
+      "direction": "Yön",
+      "description": "Açıklama",
+      "amount": "Tutar",
+      "currency": "Para birimi"
+    },
     "saved": "Kalem kaydedildi",
     "deleted": "Kalem silindi",
     "noRate": "{{n}} dövizli kalem için kur yok; defter tutarı kullanıldı.",
@@ -2351,9 +2395,25 @@
     "title": "Proje kârlılığı",
     "subtitle": "Sözleşmeli gelir ile tahmini toplam maliyet (EAC) arasındaki kâr; tanınmış gelir ve gerçekleşen maliyetle birlikte.",
     "asOf": "Tarih itibarıyla",
-    "view": {"base": "Defter ({{cur}})", "reporting": "Yönetim ({{cur}})"},
-    "cols": {"project": "Proje", "kind": "Tür", "contracted": "Sözleşmeli gelir", "revenue": "Tanınmış gelir", "actual": "Gerçekleşen maliyet", "eac": "Tahmini maliyet (EAC)", "projected": "Tahmini kâr", "recognized": "Tanınmış kâr", "margin": "Marj"},
-    "kinds": {"own": "Kendi projesi", "contract": "İşverene yapılan iş"},
+    "view": {
+      "base": "Defter ({{cur}})",
+      "reporting": "Yönetim ({{cur}})"
+    },
+    "cols": {
+      "project": "Proje",
+      "kind": "Tür",
+      "contracted": "Sözleşmeli gelir",
+      "revenue": "Tanınmış gelir",
+      "actual": "Gerçekleşen maliyet",
+      "eac": "Tahmini maliyet (EAC)",
+      "projected": "Tahmini kâr",
+      "recognized": "Tanınmış kâr",
+      "margin": "Marj"
+    },
+    "kinds": {
+      "own": "Kendi projesi",
+      "contract": "İşverene yapılan iş"
+    },
     "total": "Genel toplam",
     "unsold": "Satılmamış birimlerin liste değeri: {{value}}",
     "noRate": "{{n}} tutar için kur bulunamadı; bu tutarlar sıfır sayıldı. Kur girin.",
@@ -2470,9 +2530,9 @@
       "planDesc": "Toplam sözleşme bedeline eşit olmalı.",
       "addRow": "Satır ekle",
       "addFee": "Fon: {{name}}",
-    "feesTotal": "Fon/harç (bedele sayılmaz)",
-    "feesCollected": "Tahsil edilen fon/harç",
-    "planEmpty": "Plan boş: taksit sayısını girip planı oluşturun.",
+      "feesTotal": "Fon/harç (bedele sayılmaz)",
+      "feesCollected": "Tahsil edilen fon/harç",
+      "planEmpty": "Plan boş: taksit sayısını girip planı oluşturun.",
       "planTotal": "Plan toplamı",
       "planDiff": "Bedelden fark",
       "saveDraft": "Taslak kaydet",
@@ -3029,5 +3089,36 @@
         "remainingSub": "Tutulan teminat {{retention}}"
       }
     }
+  },
+  "security": {
+    "title": "Hesap güvenliği",
+    "subtitle": "Giriş sırasında şifrenize ek olarak telefonunuzdaki doğrulama uygulamasından kod istenir.",
+    "status": "İki adımlı doğrulama",
+    "on": "Açık",
+    "off": "Kapalı",
+    "recoveryLeft": "{{count}} kurtarma kodu kaldı",
+    "enable": "Etkinleştir",
+    "disable": "Kapat",
+    "regenerate": "Kurtarma kodlarını yenile",
+    "setupTitle": "Doğrulama uygulamasını bağlayın",
+    "setupStep1": "Google Authenticator, Microsoft Authenticator veya benzeri bir uygulamada QR kodu okutun.",
+    "qrLabel": "İki adımlı doğrulama QR kodu",
+    "manualKey": "Okutamıyorsanız anahtarı elle girin",
+    "setupStep2": "Uygulamanın gösterdiği 6 haneli kodu girin.",
+    "code": "Doğrulama kodu",
+    "confirm": "Doğrula ve etkinleştir",
+    "cancel": "Vazgeç",
+    "recoveryTitle": "Kurtarma kodlarınız",
+    "recoveryWarn": "Bu kodları şimdi güvenli bir yere kaydedin; bir daha gösterilmeyecek. Her biri bir kez kullanılabilir ve telefonunuza erişemediğinizde girişi sağlar.",
+    "copy": "Kopyala",
+    "copied": "Kopyalandı",
+    "done": "Kaydettim",
+    "disableTitle": "İki adımlı doğrulamayı kapat",
+    "disableHint": "Güvenlik için şifrenizi ve güncel bir doğrulama (veya kurtarma) kodunu girin.",
+    "password": "Şifre",
+    "regenTitle": "Kurtarma kodlarını yenile",
+    "regenHint": "Mevcut kodlar geçersiz olur. Güncel bir doğrulama kodu girin.",
+    "enabledToast": "İki adımlı doğrulama etkinleştirildi",
+    "disabledToast": "İki adımlı doğrulama kapatıldı"
   }
 }

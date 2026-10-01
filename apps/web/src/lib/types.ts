@@ -58,6 +58,7 @@ export interface Member {
   fullName: string;
   isActive: boolean;
   role: string;
+  mfaEnabled: boolean;
 }
 
 export interface JournalListItem {

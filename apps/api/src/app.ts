@@ -18,6 +18,7 @@ import { DeviceService } from './licensing/devices';
 import { deviceRoutes } from './licensing/device-routes';
 import { accountRoutes } from './modules/auth/account';
 import { registerWebApp, webNotFoundHandler } from './http/static';
+import { mfaRoutes } from './modules/auth/mfa';
 import { authRoutes } from './modules/auth/routes';
 import { inventoryRoutes } from './modules/inventory/routes';
 import { deliveryRoutes } from './modules/deliveries/routes';
@@ -162,6 +163,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(deviceRoutes);
   await app.register(authRoutes);
   await app.register(accountRoutes);
+  await app.register(mfaRoutes);
   await app.register(tenancyRoutes);
   await app.register(memberRoutes);
   await app.register(settingsRoutes);

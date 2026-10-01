@@ -168,6 +168,7 @@ export const router = createBrowserRouter([
                   { path: 'reports/data-export', ...page(() => import('../features/reports/DataExportPage'), 'DataExportPage') },
                 ],
               },
+              { path: 'account/security', ...page(() => import('../features/settings/SecurityPage'), 'SecurityPage') },
               { path: '*', element: <NotFoundPage /> },
             ],
           },

@@ -302,6 +302,20 @@
       "when": 1790843644598,
       "tag": "0042_fee_schedules_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1790845071537,
+      "tag": "0043_user_mfa",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790845073019,
+      "tag": "0044_user_mfa_rules",
+      "breakpoints": true
     }
   ]
 }

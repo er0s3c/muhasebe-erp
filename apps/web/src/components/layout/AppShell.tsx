@@ -1,5 +1,5 @@
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronsUpDown, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, Sun, X } from 'lucide-react';
+import { Check, ChevronsUpDown, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, ShieldCheck, Sun, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -258,6 +258,7 @@ function ThemeButton() {
 function UserMenu({ onChangePassword, onLogout }: { onChangePassword: () => void; onLogout: () => void }) {
   const { t } = useTranslation();
   const { user, logout } = useSession();
+  const navigate = useNavigate();
   if (!user) return null;
   const initials = user.fullName
     .split(/\s+/)
@@ -279,6 +280,10 @@ function UserMenu({ onChangePassword, onLogout }: { onChangePassword: () => void
           <Dropdown.Item className={menuItem} onSelect={onChangePassword}>
             <KeyRound className="size-4 text-muted" aria-hidden />
             {t('shell.changePassword')}
+          </Dropdown.Item>
+          <Dropdown.Item className={menuItem} onSelect={() => navigate('/account/security')}>
+            <ShieldCheck className="size-4 text-muted" aria-hidden />
+            {t('shell.security')}
           </Dropdown.Item>
           <Dropdown.Item
             className={menuItem}
