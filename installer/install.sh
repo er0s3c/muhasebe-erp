@@ -139,8 +139,9 @@ detect() {
 node_version() { command -v node >/dev/null && node -v 2>/dev/null | sed 's/^v//' || true; }
 pg_server_version() { # kurulu PostgreSQL sunucusunun ana sürümü (yoksa boş)
   local v=""
-  if command -v pg_lsclusters >/dev/null; then v="$(pg_lsclusters -h 2>/dev/null | awk '{print $1}' | sort -V | tail -n1)"; fi
-  if [[ -z "$v" ]]; then v="$(ls /usr/lib/postgresql 2>/dev/null | sort -V | tail -n1)"; fi
+  # pipefail + set -e: PostgreSQL hiç kurulu değilse (dizin yok) boru hattı hata döner; "yok" geçerli bir yanıttır
+  if command -v pg_lsclusters >/dev/null; then v="$(pg_lsclusters -h 2>/dev/null | awk '{print $1}' | sort -V | tail -n1 || true)"; fi
+  if [[ -z "$v" ]]; then v="$(ls /usr/lib/postgresql 2>/dev/null | sort -V | tail -n1 || true)"; fi
   printf '%s' "$v"
 }
 pg_port() { # PG_MAJOR kümesinin portu (Debian postgresql-common); bulunamazsa 5432
@@ -384,7 +385,7 @@ install_dev() {
     info "PostgreSQL Docker'da başlatılıyor (docker compose up -d db)…"
     as_user docker compose up -d db >/dev/null
     local i
-    for i in $(seq 1 60); do as_user docker compose exec -T db pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
+    for i in $(seq 1 60); do as_user docker compose exec -T db pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break; sleep 1; done
     as_user docker compose exec -T db psql -U postgres -v ON_ERROR_STOP=1 -q -f - < infra/postgres/init.sql >/dev/null
     okm "Veritabanı hazır (Docker, port 5432)"
   else
@@ -749,7 +750,7 @@ restore_db_docker() {
   info "Veritabanı yedekten geri yükleniyor (Docker): $file"
   "${dc[@]}" stop app >/dev/null 2>&1 || true
   "${dc[@]}" up -d db >/dev/null
-  for i in $(seq 1 60); do "${dc[@]}" exec -T db pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
+  for i in $(seq 1 60); do "${dc[@]}" exec -T db pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break; sleep 1; done
   "${dc[@]}" exec -T db psql -U postgres -v ON_ERROR_STOP=1 -q -c "drop database if exists $DB_NAME with (force)" -c "create database $DB_NAME owner erp" \
     -c "revoke all on database $DB_NAME from public" -c "grant connect on database $DB_NAME to erp_app" >/dev/null
   "${dc[@]}" exec -T db pg_restore -U postgres --exit-on-error --single-transaction --no-owner --role=erp -d "$DB_NAME" < "$file"
