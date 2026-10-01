@@ -141,3 +141,60 @@ export const putBoqLinesSchema = z.object({
     .refine((l) => new Set(l.map((x) => x.lineKey).filter(Boolean)).size === l.filter((x) => x.lineKey).length, 'Aynı satır anahtarı birden çok kez girilemez'),
 });
 export type PutBoqLinesInput = z.infer<typeof putBoqLinesSchema>;
+
+// --- Hakediş (verilen) ---------------------------------------------------------------------
+
+export const PROGRESS_STATUSES = ['draft', 'submitted', 'posted', 'cancelled'] as const;
+export type ProgressStatus = (typeof PROGRESS_STATUSES)[number];
+
+const nonNegativeQty = z.string().regex(/^\d{1,15}(\.\d{1,4})?$/, 'Geçersiz miktar');
+const positiveAmount = z.string().regex(/^\d{1,15}(\.\d{1,2})?$/, 'Geçersiz tutar').refine((v) => Number(v) > 0, 'Tutar sıfırdan büyük olmalı');
+
+const progressBody = {
+  periodEnd: isoDate,
+  /** KDV kodu (tax_rates); boşsa KDV yok. */
+  vatCode: z.string().trim().max(20).nullable().optional(),
+  note: z.string().trim().max(500).nullable().optional(),
+  /** Her BOQ satırı için KÜMÜLATİF miktar (önceki hakedişlerdeki dahil). */
+  lines: z
+    .array(z.object({ lineKey: uuid, cumulativeQty: nonNegativeQty }))
+    .min(1, 'En az bir satır girilmeli')
+    .max(2000)
+    .refine((l) => new Set(l.map((x) => x.lineKey)).size === l.length, 'Aynı BOQ satırı birden çok kez girilemez'),
+  deductions: z.array(z.object({ description: z.string().trim().min(1).max(200), amount: positiveAmount })).max(50).default([]),
+};
+
+export const createProgressPaymentSchema = z.object({ subcontractId: uuid, ...progressBody });
+export type CreateProgressPaymentInput = z.infer<typeof createProgressPaymentSchema>;
+
+export const updateProgressPaymentSchema = z.object(progressBody);
+export type UpdateProgressPaymentInput = z.infer<typeof updateProgressPaymentSchema>;
+
+export const progressPaymentListQuerySchema = z.object({
+  subcontractId: uuid.optional(),
+  projectId: uuid.optional(),
+  status: z.enum(PROGRESS_STATUSES).optional(),
+});
+
+export const cancelProgressPaymentSchema = z.object({
+  reason: z.string().trim().min(3, 'İptal nedeni gerekli').max(300),
+  /** Ters kayıt tarihi; boşsa bugün. */
+  entryDate: isoDate.optional(),
+});
+export type CancelProgressPaymentInput = z.infer<typeof cancelProgressPaymentSchema>;
+
+export const giveAdvanceSchema = z.object({
+  /** Ödemeyi yapacak kasa/banka hesabı; para birimi sözleşmeyle aynı olmalı. */
+  accountId: uuid,
+  date: isoDate,
+  amount: positiveAmount,
+  note: z.string().trim().max(300).optional(),
+});
+export type GiveAdvanceInput = z.infer<typeof giveAdvanceSchema>;
+
+export const releaseRetentionSchema = z.object({
+  date: isoDate,
+  amount: positiveAmount,
+  note: z.string().trim().max(300).optional(),
+});
+export type ReleaseRetentionInput = z.infer<typeof releaseRetentionSchema>;

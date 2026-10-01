@@ -27,6 +27,10 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   opening_offset: 'Stok devri karşı hesabı',
   fx_gain: 'Kambiyo kârı (gerçekleşen kur farkı)',
   fx_loss: 'Kambiyo zararı (gerçekleşen kur farkı)',
+  subcontract_cost: 'Taşeron hakediş maliyeti',
+  retention_payable: 'Taşeron teminat borcu (tutulan teminat)',
+  withholding_payable: 'Taşeron hakedişinden kesilen stopaj borcu',
+  subcontract_advance: 'Taşerona verilen avanslar',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

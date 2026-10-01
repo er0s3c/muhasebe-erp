@@ -218,6 +218,20 @@
       "when": 1790826140887,
       "tag": "0030_subcontracts_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790826508698,
+      "tag": "0031_progress_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790826509823,
+      "tag": "0032_progress_payments_rules",
+      "breakpoints": true
     }
   ]
 }

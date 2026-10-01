@@ -1441,7 +1441,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance')`,
     ),
   ],
 );
@@ -2090,5 +2090,231 @@ export const bankStatementLines = pgTable(
       'bank_statement_lines_match_ck',
       sql`(${t.status} = 'matched') = (${t.journalLineId} is not null and ${t.matchedAt} is not null)`,
     ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Taşeron hakedişi (Faz B2c)
+// ---------------------------------------------------------------------------
+
+/**
+ * Taşeron hakedişi (kümülatif). Sözleşmede aynı anda en çok bir açık (taslak/onayda) hakediş olur; böylece
+ * kümülatif miktar zinciri sırayla ilerler. Onay tamamlanınca aynı işlemde yevmiye yazılır ve belge değişmez olur.
+ * Tutarlar sözleşme para birimindedir; defter karşılığı yevmiyededir.
+ */
+export const progressPayments = pgTable(
+  'progress_payments',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    /** Sözleşme içindeki sıra (1, 2, 3…). */
+    paymentNo: integer().notNull(),
+    /** Kaydedilince boşluksuz belge numarası (HKD-2026-000001); taslakta yok. */
+    number: text(),
+    periodEnd: date({ mode: 'string' }).notNull(),
+    /** draft | submitted | posted | cancelled */
+    status: text().notNull().default('draft'),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    fxRate: rate(),
+    vatCode: text(),
+    vatRate: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    /** Yüzde anlık görüntüleri (sözleşmeden). */
+    retentionPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    advancePct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    withholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    gross: money().notNull().default('0'),
+    vat: money().notNull().default('0'),
+    retention: money().notNull().default('0'),
+    advance: money().notNull().default('0'),
+    withholding: money().notNull().default('0'),
+    otherDeductions: money().notNull().default('0'),
+    net: money().notNull().default('0'),
+    note: text(),
+    rejectionNote: text(),
+    entryId: uuid(),
+    submittedAt: timestamp({ withTimezone: true }),
+    postedAt: timestamp({ withTimezone: true }),
+    cancelledAt: timestamp({ withTimezone: true }),
+    cancelReason: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('progress_payments_no_uq').on(t.subcontractId, t.paymentNo),
+    unique('progress_payments_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('progress_payments_number_uq')
+      .on(t.companyId, t.number)
+      .where(sql`${t.number} is not null`),
+    // Sözleşmede en çok bir açık hakediş
+    uniqueIndex('progress_payments_open_uq')
+      .on(t.subcontractId)
+      .where(sql`${t.status} in ('draft','submitted')`),
+    foreignKey({
+      name: 'progress_payments_subcontract_fk',
+      columns: [t.subcontractId, t.projectId],
+      foreignColumns: [subcontracts.id, subcontracts.projectId],
+    }),
+    foreignKey({
+      name: 'progress_payments_entry_fk',
+      columns: [t.entryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    index('progress_payments_project_idx').on(t.companyId, t.projectId, t.status),
+    check('progress_payments_status_ck', sql`${t.status} in ('draft','submitted','posted','cancelled')`),
+    check(
+      'progress_payments_amounts_ck',
+      sql`${t.gross} >= 0 and ${t.vat} >= 0 and ${t.retention} >= 0 and ${t.advance} >= 0 and ${t.withholding} >= 0 and ${t.otherDeductions} >= 0 and ${t.net} >= 0`,
+    ),
+    // Net = brüt + KDV − teminat − avans − stopaj − diğer kesinti (her satırda doğrulanır)
+    check(
+      'progress_payments_net_ck',
+      sql`${t.net} = ${t.gross} + ${t.vat} - ${t.retention} - ${t.advance} - ${t.withholding} - ${t.otherDeductions}`,
+    ),
+    check(
+      'progress_payments_posted_ck',
+      sql`(${t.status} in ('posted','cancelled')) = (${t.number} is not null and ${t.entryId} is not null and ${t.fxRate} is not null and ${t.postedAt} is not null)`,
+    ),
+  ],
+);
+
+export const progressPaymentLines = pgTable(
+  'progress_payment_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    paymentId: uuid().notNull(),
+    subcontractId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    lineKey: uuid().notNull(),
+    lineNo: integer().notNull(),
+    itemNo: text(),
+    description: text().notNull(),
+    unit: text().notNull(),
+    unitPrice: numeric({ precision: 19, scale: 4 }).notNull(),
+    /** Önceki hakedişlerin kümülatifi, bu hakedişin kümülatifi ve farkı (bu dönem). */
+    prevQty: qty().notNull(),
+    cumQty: qty().notNull(),
+    thisQty: qty().notNull(),
+    amount: money().notNull(),
+    wbsId: uuid().notNull(),
+    costCodeId: uuid(),
+  },
+  (t) => [
+    unique('progress_payment_lines_key_uq').on(t.paymentId, t.lineKey),
+    index('progress_payment_lines_sub_idx').on(t.subcontractId, t.lineKey),
+    index('progress_payment_lines_wbs_idx').on(t.wbsId),
+    foreignKey({
+      name: 'progress_payment_lines_payment_fk',
+      columns: [t.paymentId, t.companyId],
+      foreignColumns: [progressPayments.id, progressPayments.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'progress_payment_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'progress_payment_lines_cost_code_fk',
+      columns: [t.costCodeId, t.companyId],
+      foreignColumns: [costCodes.id, costCodes.companyId],
+    }),
+    check('progress_payment_lines_qty_ck', sql`${t.prevQty} >= 0 and ${t.cumQty} >= ${t.prevQty} and ${t.thisQty} = ${t.cumQty} - ${t.prevQty}`),
+  ],
+);
+
+/** Hakedişteki diğer kesintiler (ceza, malzeme mahsubu vb.). */
+export const progressPaymentDeductions = pgTable(
+  'progress_payment_deductions',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    paymentId: uuid().notNull(),
+    description: text().notNull(),
+    amount: money().notNull(),
+  },
+  (t) => [
+    foreignKey({
+      name: 'progress_payment_deductions_payment_fk',
+      columns: [t.paymentId, t.companyId],
+      foreignColumns: [progressPayments.id, progressPayments.companyId],
+    }).onDelete('cascade'),
+    check('progress_payment_deductions_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+/** Taşerona verilen avans (sözleşme bazında izlenir; hakedişte `advance` ile mahsup edilir). */
+export const subcontractAdvances = pgTable(
+  'subcontract_advances',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    advanceDate: date({ mode: 'string' }).notNull(),
+    /** Sözleşme para biriminde. */
+    amount: money().notNull(),
+    /** Ödemeyi yapan kasa/banka hareketi. */
+    transactionId: uuid().notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('subcontract_advances_txn_uq').on(t.transactionId),
+    foreignKey({
+      name: 'subcontract_advances_subcontract_fk',
+      columns: [t.subcontractId, t.companyId],
+      foreignColumns: [subcontracts.id, subcontracts.companyId],
+    }),
+    foreignKey({
+      name: 'subcontract_advances_txn_fk',
+      columns: [t.transactionId, t.companyId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId],
+    }),
+    check('subcontract_advances_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+/** Tutulan teminatın serbest bırakılması (teminat borcu → taşeron carisi). */
+export const retentionReleases = pgTable(
+  'retention_releases',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    releaseDate: date({ mode: 'string' }).notNull(),
+    /** Sözleşme para biriminde. */
+    amount: money().notNull(),
+    entryId: uuid().notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('retention_releases_entry_uq').on(t.entryId),
+    foreignKey({
+      name: 'retention_releases_subcontract_fk',
+      columns: [t.subcontractId, t.companyId],
+      foreignColumns: [subcontracts.id, subcontracts.companyId],
+    }),
+    foreignKey({
+      name: 'retention_releases_entry_fk',
+      columns: [t.entryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    check('retention_releases_amount_ck', sql`${t.amount} > 0`),
   ],
 );

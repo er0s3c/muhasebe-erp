@@ -4,6 +4,7 @@ export * from './password';
 export * from './invoice-calc';
 export * from './treasury-calc';
 export * from './project-cost';
+export * from './progress-calc';
 export * from './permissions';
 export * from './module-registry';
 export * from './schemas/common';

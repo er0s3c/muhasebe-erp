@@ -20,8 +20,9 @@ type StepSpec = { approverRole: string | null; approverUserId: string | null; la
 
 /** Belge tarafı, talep sonuçlandığında aynı işlemde çalışacak işleyiciyi kaydeder (ör. hakediş → yevmiye). */
 export type ApprovalOutcome = 'approved' | 'rejected';
+export type ApprovalRequestWithSteps = typeof approvalRequests.$inferSelect & { steps: (typeof approvalSteps.$inferSelect)[] };
 export interface ApprovalHandler {
-  onResolved(tx: Tx, ctx: ApprovalCtx, request: typeof approvalRequests.$inferSelect, outcome: ApprovalOutcome): Promise<void>;
+  onResolved(tx: Tx, ctx: ApprovalCtx, request: ApprovalRequestWithSteps, outcome: ApprovalOutcome): Promise<void>;
 }
 const handlers = new Map<ApprovalDocType, ApprovalHandler>();
 export function registerApprovalHandler(docType: ApprovalDocType, handler: ApprovalHandler) {

@@ -1,14 +1,20 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
   createApprovalRuleSchema,
+  cancelProgressPaymentSchema,
   createConstructionParamSchema,
+  createProgressPaymentSchema,
   createRevisionSchema,
   createSubcontractSchema,
   decideApprovalSchema,
+  giveAdvanceSchema,
   idParam,
+  progressPaymentListQuerySchema,
   putBoqLinesSchema,
+  releaseRetentionSchema,
   subcontractListQuerySchema,
   subcontractStatusSchema,
+  updateProgressPaymentSchema,
   updateSubcontractSchema,
   verifyConstructionParamSchema,
 } from '@erp/shared';
@@ -39,9 +45,29 @@ import {
   updateSubcontract,
   type SubcontractCtx,
 } from './service';
+import {
+  cancelProgress,
+  createProgress,
+  deleteProgress,
+  getBalances,
+  getProgress,
+  giveAdvance,
+  listProgress,
+  releaseRetention,
+  submitProgress,
+  updateProgress,
+  withdrawProgress,
+  type ProgressCtx,
+} from './progress';
 import { createParam, deleteParam, listParams, verifyParam } from './params';
 
 const subCtx = ({ company, user }: TenantCtx): SubcontractCtx => ({ companyId: company.id, userId: user.id });
+const progressCtx = ({ company, user }: TenantCtx): ProgressCtx => ({
+  companyId: company.id,
+  userId: user.id,
+  baseCurrency: company.baseCurrency,
+  reportingCurrency: company.reportingCurrency,
+});
 const approvalCtx = ({ company, user, role }: TenantCtx): ApprovalCtx => ({ companyId: company.id, userId: user.id, role });
 
 export const subcontractRoutes: FastifyPluginAsync = async (app) => {
@@ -186,6 +212,70 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, manage, async ({ tx, req, reply }) => {
       await deleteRevision(tx, idParam.parse(req.params).id);
       void reply.code(204);
+    }),
+  );
+
+  // --- Hakediş (verilen) -----------------------------------------------------------------------------
+  app.get('/api/progress-payments', tenantRoute(app, read, async ({ tx, req }) => listProgress(tx, progressPaymentListQuerySchema.parse(req.query))));
+
+  app.post(
+    '/api/progress-payments',
+    tenantRoute(app, manage, async (c) => {
+      const out = await createProgress(c.tx, progressCtx(c), createProgressPaymentSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return out;
+    }),
+  );
+
+  app.get('/api/progress-payments/:id', tenantRoute(app, read, async ({ tx, req }) => getProgress(tx, idParam.parse(req.params).id)));
+
+  app.put(
+    '/api/progress-payments/:id',
+    tenantRoute(app, manage, async (c) => updateProgress(c.tx, progressCtx(c), idParam.parse(c.req.params).id, updateProgressPaymentSchema.parse(c.req.body))),
+  );
+
+  app.delete(
+    '/api/progress-payments/:id',
+    tenantRoute(app, manage, async ({ tx, req, reply }) => {
+      await deleteProgress(tx, idParam.parse(req.params).id);
+      void reply.code(204);
+    }),
+  );
+
+  app.post(
+    '/api/progress-payments/:id/submit',
+    tenantRoute(app, manage, async (c) => submitProgress(c.tx, progressCtx(c), approvalCtx(c), idParam.parse(c.req.params).id)),
+  );
+
+  app.post(
+    '/api/progress-payments/:id/withdraw',
+    tenantRoute(app, manage, async (c) => withdrawProgress(c.tx, approvalCtx(c), idParam.parse(c.req.params).id)),
+  );
+
+  // Kaydedilmiş hakedişin iptali yevmiyeyi ters çevirir: onaylayıcı izni ister
+  app.post(
+    '/api/progress-payments/:id/cancel',
+    tenantRoute(app, approve, async (c) => cancelProgress(c.tx, progressCtx(c), idParam.parse(c.req.params).id, cancelProgressPaymentSchema.parse(c.req.body))),
+  );
+
+  // --- Avans ve teminat ----------------------------------------------------------------------------------
+  app.get('/api/subcontracts/:id/balances', tenantRoute(app, read, async ({ tx, req }) => ({ balances: await getBalances(tx, idParam.parse(req.params).id) })));
+
+  app.post(
+    '/api/subcontracts/:id/advances',
+    tenantRoute(app, approve, async (c) => {
+      const balances = await giveAdvance(c.tx, progressCtx(c), idParam.parse(c.req.params).id, giveAdvanceSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return { balances };
+    }),
+  );
+
+  app.post(
+    '/api/subcontracts/:id/retention-releases',
+    tenantRoute(app, approve, async (c) => {
+      const balances = await releaseRetention(c.tx, progressCtx(c), idParam.parse(c.req.params).id, releaseRetentionSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return { balances };
     }),
   );
 };

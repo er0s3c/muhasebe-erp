@@ -63,6 +63,11 @@ export const ACCOUNT_MAPPING_KEYS = [
   'opening_offset',
   'fx_gain',
   'fx_loss',
+  // Taşeron hakedişi (B2c); varsayılanlar doğrulanmamıştır
+  'subcontract_cost',
+  'retention_payable',
+  'withholding_payable',
+  'subcontract_advance',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -85,6 +90,11 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     // Kambiyo kârı/zararı (gerçekleşen kur farkı). Varsayılanlar doğrulanmamıştır.
     fx_gain: '646',
     fx_loss: '656',
+    // Taşeron hakedişi: hizmet üretim maliyeti, alınan depozito/teminat, ödenecek vergi, verilen sipariş avansı
+    subcontract_cost: '740',
+    retention_payable: '326',
+    withholding_payable: '360',
+    subcontract_advance: '159',
   };
 }
 

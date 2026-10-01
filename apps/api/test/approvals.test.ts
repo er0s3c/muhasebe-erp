@@ -8,6 +8,8 @@ import { addMember, asDb, client, createCompany, day, execAsOwner, expectDbError
 
 describe('inşaat parametreleri ve onay motoru (B2a)', async () => {
   const { app, handle } = await makeApp();
+  // Gerçek hakediş işleyicisi yerine etkisiz işleyici: bu testler yalnızca motoru sınar (uydurma belge kimlikleri)
+  registerApprovalHandler('progress_payment', { onResolved: async () => undefined });
 
   async function setup(name: string) {
     const s = await registerUser(app, name);
