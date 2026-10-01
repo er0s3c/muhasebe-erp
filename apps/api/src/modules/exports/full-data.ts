@@ -355,15 +355,15 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     const prRows = await query(
       'Hakedişler',
       sql`select p.number, p.payment_no, s.code as contract, p.direction, p.status, p.period_end::text as period_end, p.currency_code,
-                 p.gross, p.vat, p.retention, p.advance, p.withholding, p.other_deductions, p.net
+                 p.gross, p.vat, p.vat_withholding, p.retention, p.advance, p.withholding, p.material, p.other_deductions, p.net
             from progress_payments p join subcontracts s on s.id = p.subcontract_id order by s.code, p.payment_no`,
     );
     tables.push(
       table(
         'Hakedişler',
         'Hakedişler',
-        [col('number', 'Belge no', 'text', 16), col('no', 'Sıra', 'int'), col('contract', 'Sözleşme', 'text', 12), col('direction', 'Yön', 'text', 12), col('status', 'Durum', 'text', 12), col('period', 'Dönem sonu', 'date'), col('currency', 'Para birimi', 'text', 8), col('gross', 'Brüt', 'money'), col('vat', 'KDV', 'money'), col('retention', 'Teminat', 'money'), col('advance', 'Avans mahsubu', 'money'), col('withholding', 'Stopaj', 'money'), col('other', 'Diğer kesinti', 'money'), col('net', 'Net', 'money')],
-        prRows.map((r) => ({ number: s(r.number), no: Number(r.payment_no), contract: s(r.contract), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', status: s(r.status), period: s(r.period_end), currency: s(r.currency_code), gross: s(r.gross), vat: s(r.vat), retention: s(r.retention), advance: s(r.advance), withholding: s(r.withholding), other: s(r.other_deductions), net: s(r.net) })),
+        [col('number', 'Belge no', 'text', 16), col('no', 'Sıra', 'int'), col('contract', 'Sözleşme', 'text', 12), col('direction', 'Yön', 'text', 12), col('status', 'Durum', 'text', 12), col('period', 'Dönem sonu', 'date'), col('currency', 'Para birimi', 'text', 8), col('gross', 'Brüt', 'money'), col('vat', 'KDV', 'money'), col('vatWithholding', 'KDV tevkifatı', 'money'), col('retention', 'Teminat', 'money'), col('advance', 'Avans mahsubu', 'money'), col('withholding', 'Stopaj', 'money'), col('material', 'Malzeme mahsubu', 'money'), col('other', 'Diğer kesinti', 'money'), col('net', 'Net', 'money')],
+        prRows.map((r) => ({ number: s(r.number), no: Number(r.payment_no), contract: s(r.contract), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', status: s(r.status), period: s(r.period_end), currency: s(r.currency_code), gross: s(r.gross), vat: s(r.vat), vatWithholding: s(r.vat_withholding), retention: s(r.retention), advance: s(r.advance), withholding: s(r.withholding), material: s(r.material), other: s(r.other_deductions), net: s(r.net) })),
         'Taşeron hakedişleri',
       ),
     );
@@ -381,6 +381,25 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
         [col('code', 'DE no', 'text', 10), col('title', 'Konu', 'text', 32), col('contract', 'Sözleşme', 'text', 12), col('direction', 'Yön', 'text', 10), col('reason', 'Gerekçe', 'text', 16), col('status', 'Durum', 'text', 14), col('rev', 'Revizyon', 'int'), col('days', 'Süre uzatımı (gün)', 'int'), col('before', 'Önceki bedel', 'money'), col('after', 'Yeni bedel', 'money'), col('delta', 'Fark', 'money'), col('prevEnd', 'Önceki bitiş', 'date'), col('newEnd', 'Yeni bitiş', 'date'), col('accepted', 'İşveren kabulü', 'date'), col('reference', 'İşveren yazısı', 'text', 16)],
         voRows.map((r) => ({ code: s(r.code), title: s(r.title), contract: s(r.contract), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', reason: s(r.reason), status: s(r.status), rev: r.revision_no == null ? null : Number(r.revision_no), days: Number(r.time_extension_days), before: s(r.amount_before), after: s(r.amount_after), delta: s(r.amount_delta), prevEnd: s(r.previous_end), newEnd: s(r.new_end), accepted: s(r.client_accepted), reference: s(r.client_reference) })),
         'Sözleşme değişiklik emirleri (süre uzatımı dahil)',
+      ),
+    );
+  }
+
+  // Personel (kişisel veri: yalnızca maskeli kimlik/IBAN; açık metin ayrı, gerekçeli ve günlüklü uçla alınır)
+  const empRows = await query(
+    'Personel',
+    sql`select e.code, e.full_name, e.nationality, e.id_kind, e.id_last4, e.iban_last4, e.phone, e.email, e.status, e.department, e.job_title,
+               e.hire_date::text as hire_date, e.leave_date::text as leave_date, p.code as project
+          from employees e left join projects p on p.id = e.project_id order by e.code`,
+  );
+  if (empRows.length > 0) {
+    tables.push(
+      table(
+        'Personel',
+        'Personel',
+        [col('code', 'Kod', 'text', 10), col('name', 'Ad soyad', 'text', 28), col('nat', 'Uyruk', 'text', 14), col('kind', 'Kimlik türü', 'text', 12), col('id', 'Kimlik (maskeli)', 'text', 14), col('iban', 'IBAN (maskeli)', 'text', 14), col('phone', 'Telefon', 'text', 16), col('email', 'E-posta', 'text', 24), col('status', 'Durum', 'text', 10), col('dept', 'Departman', 'text', 16), col('title', 'Unvan', 'text', 16), col('hire', 'İşe giriş', 'date'), col('leave', 'Çıkış', 'date'), col('project', 'Proje', 'text', 12)],
+        empRows.map((r) => ({ code: s(r.code), name: s(r.full_name), nat: s(r.nationality), kind: s(r.id_kind), id: r.id_last4 ? `••••${r.id_last4}` : null, iban: r.iban_last4 ? `••••${r.iban_last4}` : null, phone: s(r.phone), email: s(r.email), status: r.status === 'left' ? 'Ayrıldı' : 'Aktif', dept: s(r.department), title: s(r.job_title), hire: s(r.hire_date), leave: s(r.leave_date), project: s(r.project) })),
+        'Kişisel veri içerir; kimlik ve IBAN maskelidir',
       ),
     );
   }

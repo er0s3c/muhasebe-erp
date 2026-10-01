@@ -505,7 +505,7 @@ export const constructionParams = pgTable(
     companyId: uuid()
       .notNull()
       .references(() => companies.id),
-    /** retention_pct | withholding_pct | advance_recoup_pct */
+    /** retention_pct | withholding_pct | advance_recoup_pct | vat_withholding_pct (KDV'nin tevkif edilen yüzdesi) */
     kind: text().notNull(),
     /** Yüzde, örn. 5.0000 */
     value: numeric({ precision: 7, scale: 4 }).notNull(),
@@ -518,7 +518,7 @@ export const constructionParams = pgTable(
   },
   (t) => [
     unique('construction_params_uq').on(t.companyId, t.kind, t.validFrom),
-    check('construction_params_kind_ck', sql`${t.kind} in ('retention_pct','withholding_pct','advance_recoup_pct')`),
+    check('construction_params_kind_ck', sql`${t.kind} in ('retention_pct','withholding_pct','advance_recoup_pct','vat_withholding_pct')`),
     check('construction_params_value_ck', sql`${t.value} >= 0 and ${t.value} <= 100`),
     check('construction_params_range_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
   ],
@@ -696,6 +696,8 @@ export const subcontracts = pgTable(
     retentionPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     advanceRecoupPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     withholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    /** KDV'nin tevkif edilen yüzdesi (anlık görüntü; 0 = tevkifat yok). */
+    vatWithholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     penaltyNote: text(),
     /** payable: taşeron sözleşmesi (tedarikçi cari, 320); receivable: işveren sözleşmesi (müşteri cari, 120). */
     direction: text().notNull().default('payable'),
@@ -887,6 +889,148 @@ export const variationOrders = pgTable(
     check('variation_orders_reason_ck', sql`${t.reason} in ('client_request','design_change','site_condition','omission_error','other')`),
     check('variation_orders_direction_ck', sql`${t.direction} in ('payable','receivable')`),
     check('variation_orders_days_ck', sql`${t.timeExtensionDays} between 0 and 3650`),
+  ],
+);
+
+// --- İnsan kaynakları ve kişisel veri (Faz D1) ----------------------------------------------------
+
+/**
+ * Personel kartı. Kimlik/pasaport no, doğum tarihi ve IBAN **uygulama düzeyinde şifreli** saklanır (AES-256-GCM); ekranda
+ * maskelidir (son 4 hane). Açık okuma `hr.sensitive` izni + gerekçe ister ve `personal_data_access_log`'a yazılır.
+ */
+export const employees = pgTable(
+  'employees',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** PRS-0001 (boşluksuz, şirket geneli). */
+    code: text().notNull(),
+    fullName: text().notNull(),
+    nationality: text(),
+    /** national_id | passport */
+    idKind: text(),
+    idEnc: text(),
+    /** Aynı kimliğin ikinci kez girilmesini yakalamak için HMAC özeti (şifresiz kimlik aranamaz). */
+    idHash: text(),
+    idLast4: text(),
+    birthDateEnc: text(),
+    ibanEnc: text(),
+    ibanLast4: text(),
+    phone: text(),
+    email: text(),
+    address: text(),
+    hireDate: date({ mode: 'string' }),
+    leaveDate: date({ mode: 'string' }),
+    /** active | left */
+    status: text().notNull().default('active'),
+    department: text(),
+    jobTitle: text(),
+    projectId: uuid(),
+    /** İleride personel cari/avans (X5) için isteğe bağlı cari bağlantısı. */
+    partyId: uuid(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('employees_company_code_uq').on(t.companyId, t.code),
+    unique('employees_id_company_uq').on(t.id, t.companyId),
+    unique('employees_id_hash_uq').on(t.companyId, t.idHash),
+    foreignKey({ name: 'employees_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    foreignKey({ name: 'employees_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    index('employees_status_idx').on(t.companyId, t.status),
+    check('employees_status_ck', sql`${t.status} in ('active','left')`),
+    check('employees_id_kind_ck', sql`${t.idKind} is null or ${t.idKind} in ('national_id','passport')`),
+    check('employees_dates_ck', sql`${t.leaveDate} is null or ${t.hireDate} is null or ${t.leaveDate} >= ${t.hireDate}`),
+    check('employees_id_complete_ck', sql`(${t.idEnc} is null) = (${t.idKind} is null) and (${t.idEnc} is null) = (${t.idHash} is null)`),
+  ],
+);
+
+/** Kişisel veri işleme envanteri: hangi alan hangi amaçla ve hangi dayanakla tutulur (89/2007; hiçbiri doğrulanmamıştır). */
+export const personalDataInventory = pgTable(
+  'personal_data_inventory',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** employees.id_number gibi kararlı anahtar; başlangıç kayıtları kodla tohumlanır. */
+    key: text().notNull(),
+    tableName: text().notNull(),
+    fieldName: text().notNull(),
+    /** identity | contact | financial | employment | other */
+    category: text().notNull(),
+    purpose: text().notNull(),
+    legalBasis: text().notNull(),
+    retention: text(),
+    isSensitive: boolean().notNull().default(false),
+    transferAbroad: boolean().notNull().default(false),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    note: text(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('personal_data_inventory_key_uq').on(t.companyId, t.key),
+    check('personal_data_inventory_category_ck', sql`${t.category} in ('identity','contact','financial','employment','other')`),
+  ],
+);
+
+/** İlgili kişi talebi (erişim, dışa aktarma, düzeltme, silme). Silme yalnızca kayda alınır; yasal saklama nedeniyle otomatik silinmez. */
+export const dataSubjectRequests = pgTable(
+  'data_subject_requests',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid(),
+    requesterName: text().notNull(),
+    /** access | export | correction | erasure */
+    kind: text().notNull(),
+    /** open | completed | rejected */
+    status: text().notNull().default('open'),
+    description: text(),
+    resolutionNote: text(),
+    openedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp({ withTimezone: true }),
+    createdBy: uuid().references(() => users.id),
+    resolvedBy: uuid().references(() => users.id),
+  },
+  (t) => [
+    foreignKey({ name: 'data_subject_requests_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    index('data_subject_requests_status_idx').on(t.companyId, t.status),
+    check('data_subject_requests_kind_ck', sql`${t.kind} in ('access','export','correction','erasure')`),
+    check('data_subject_requests_status_ck', sql`${t.status} in ('open','completed','rejected')`),
+    check('data_subject_requests_resolved_ck', sql`(${t.status} = 'open') = (${t.resolvedAt} is null)`),
+  ],
+);
+
+/** Hassas kişisel verinin açık okunması / dışa aktarılması: salt-eklenir denetim günlüğü. */
+export const personalDataAccessLog = pgTable(
+  'personal_data_access_log',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    /** id_number | birth_date | iban | export */
+    field: text().notNull(),
+    reason: text().notNull(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ name: 'personal_data_access_log_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    index('personal_data_access_log_emp_idx').on(t.companyId, t.employeeId, t.createdAt),
+    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export')`),
+    check('personal_data_access_log_reason_ck', sql`length(btrim(${t.reason})) >= 3`),
   ],
 );
 
@@ -1559,7 +1703,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable')`,
     ),
   ],
 );
@@ -2259,11 +2403,16 @@ export const progressPayments = pgTable(
     retentionPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     advancePct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     withholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    vatWithholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     gross: money().notNull().default('0'),
     vat: money().notNull().default('0'),
+    /** Tevkif edilen KDV (KDV'nin bir yüzdesi): taşeronda idareye ödenecek, işverende işverence tevkif edilen. */
+    vatWithholding: money().notNull().default('0'),
     retention: money().notNull().default('0'),
     advance: money().notNull().default('0'),
     withholding: money().notNull().default('0'),
+    /** Taşerona verilen malzemenin bedeli mahsubu (yalnızca taşeron hakedişi). */
+    material: money().notNull().default('0'),
     otherDeductions: money().notNull().default('0'),
     net: money().notNull().default('0'),
     note: text(),
@@ -2301,13 +2450,15 @@ export const progressPayments = pgTable(
     check('progress_payments_direction_ck', sql`${t.direction} in ('payable','receivable')`),
     check(
       'progress_payments_amounts_ck',
-      sql`${t.gross} >= 0 and ${t.vat} >= 0 and ${t.retention} >= 0 and ${t.advance} >= 0 and ${t.withholding} >= 0 and ${t.otherDeductions} >= 0 and ${t.net} >= 0`,
+      sql`${t.gross} >= 0 and ${t.vat} >= 0 and ${t.vatWithholding} >= 0 and ${t.vatWithholding} <= ${t.vat} and ${t.retention} >= 0 and ${t.advance} >= 0 and ${t.withholding} >= 0 and ${t.material} >= 0 and ${t.otherDeductions} >= 0 and ${t.net} >= 0`,
     ),
-    // Net = brüt + KDV − teminat − avans − stopaj − diğer kesinti (her satırda doğrulanır)
+    // Net = brüt + KDV − KDV tevkifatı − teminat − avans − stopaj − malzeme − diğer kesinti (her satırda doğrulanır)
     check(
       'progress_payments_net_ck',
-      sql`${t.net} = ${t.gross} + ${t.vat} - ${t.retention} - ${t.advance} - ${t.withholding} - ${t.otherDeductions}`,
+      sql`${t.net} = ${t.gross} + ${t.vat} - ${t.vatWithholding} - ${t.retention} - ${t.advance} - ${t.withholding} - ${t.material} - ${t.otherDeductions}`,
     ),
+    // Malzeme mahsubu yalnızca taşeron (verilen) hakedişinde
+    check('progress_payments_material_ck', sql`${t.direction} = 'payable' or ${t.material} = 0`),
     check(
       'progress_payments_posted_ck',
       sql`(${t.status} in ('posted','cancelled')) = (${t.number} is not null and ${t.entryId} is not null and ${t.fxRate} is not null and ${t.postedAt} is not null)`,
@@ -2415,6 +2566,45 @@ export const subcontractAdvances = pgTable(
       foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId],
     }),
     check('subcontract_advances_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+/**
+ * Taşerona verilen malzeme: stoktan proje + iş kalemi etiketli sarf (stok belgesi) olarak çıkar; bedel stok çıkış maliyetidir.
+ * Hakedişte `material` ile bakiye kadar mahsup edilir. Kayıt değişmez; bağlı stok belgesi ters çevrilemez.
+ */
+export const subcontractMaterialIssues = pgTable(
+  'subcontract_material_issues',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    issueDate: date({ mode: 'string' }).notNull(),
+    stockDocumentId: uuid().notNull(),
+    /** Mahsup bedeli, sözleşme para biriminde (stok çıkış maliyetinin verildiği günkü kurla çevrilmiş hâli). */
+    amount: money().notNull(),
+    /** Stok çıkış maliyeti, defter para biriminde. */
+    amountBase: money().notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('subcontract_material_issues_doc_uq').on(t.stockDocumentId),
+    foreignKey({
+      name: 'subcontract_material_issues_subcontract_fk',
+      columns: [t.subcontractId, t.companyId],
+      foreignColumns: [subcontracts.id, subcontracts.companyId],
+    }),
+    foreignKey({
+      name: 'subcontract_material_issues_doc_fk',
+      columns: [t.stockDocumentId, t.companyId],
+      foreignColumns: [stockDocuments.id, stockDocuments.companyId],
+    }),
+    index('subcontract_material_issues_sc_idx').on(t.companyId, t.subcontractId),
+    check('subcontract_material_issues_amount_ck', sql`${t.amount} > 0 and ${t.amountBase} > 0`),
   ],
 );
 

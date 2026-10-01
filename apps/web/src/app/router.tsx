@@ -119,6 +119,14 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="hr.core" />,
+                children: [
+                  { path: 'hr/employees', ...page(() => import('../features/hr/EmployeesPage'), 'EmployeesPage') },
+                  { path: 'hr/employees/:id', ...page(() => import('../features/hr/EmployeePage'), 'EmployeePage') },
+                  { path: 'hr/privacy', ...page(() => import('../features/hr/PrivacyPage'), 'PrivacyPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="construction.subcontracts" />,
                 children: [
                   { path: 'subcontracts', ...page(() => import('../features/subcontracts/SubcontractsPage'), 'SubcontractsPage') },

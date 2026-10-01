@@ -81,6 +81,15 @@ export const MODULES: readonly ModuleDef[] = [
     requires: ['core.ledger', 'core.parties', 'construction.projects'],
   },
   {
+    key: 'hr.core',
+    labelKey: 'modules.hrCore',
+    label: 'Personel ve kişisel veri',
+    sectors: 'all',
+    status: 'available',
+    // Personel kartı, kişisel veri envanteri ve erişim günlüğü; muhasebe/stoktan bağımsızdır
+    requires: [],
+  },
+  {
     key: 'retail.pos',
     labelKey: 'modules.retailPos',
     label: 'Hızlı satış (POS)',
@@ -96,6 +105,7 @@ export type NavGroupKey =
   | 'treasury'
   | 'stock'
   | 'construction'
+  | 'hr'
   | 'accounting'
   | 'reports'
   | 'settings';
@@ -118,6 +128,7 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
   { key: 'treasury', labelKey: 'nav.groups.treasury' },
   { key: 'stock', labelKey: 'nav.groups.stock' },
   { key: 'construction', labelKey: 'nav.groups.construction' },
+  { key: 'hr', labelKey: 'nav.groups.hr' },
   { key: 'accounting', labelKey: 'nav.groups.accounting' },
   { key: 'reports', labelKey: 'nav.groups.reports' },
   { key: 'settings', labelKey: 'nav.groups.settings' },
@@ -383,6 +394,24 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'construction',
     module: 'construction.subcontracts',
     permission: 'subcontracts.read',
+  },
+  {
+    key: 'employees',
+    labelKey: 'nav.employees',
+    path: '/hr/employees',
+    icon: 'users',
+    group: 'hr',
+    module: 'hr.core',
+    permission: 'hr.read',
+  },
+  {
+    key: 'privacy',
+    labelKey: 'nav.privacy',
+    path: '/hr/privacy',
+    icon: 'shield-check',
+    group: 'hr',
+    module: 'hr.core',
+    permission: 'privacy.manage',
   },
   {
     key: 'approvals',

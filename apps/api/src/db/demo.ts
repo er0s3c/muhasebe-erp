@@ -70,6 +70,7 @@ import { createParam } from '../modules/subcontracts/params';
 import { createProgress, giveAdvance, submitProgress, type ProgressCtx } from '../modules/subcontracts/progress';
 import { approveRevision, createSubcontract, getRevision, putBoqLines } from '../modules/subcontracts/service';
 import { createVariation, submitVariation } from '../modules/subcontracts/variations';
+import { giveMaterial } from '../modules/subcontracts/materials';
 import { decide } from '../modules/approvals/service';
 
 export const DEMO_EMAIL = 'demo@ornek.local';
@@ -493,9 +494,14 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
   });
   const submitted = await submitProgress(tx, pgctx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' }, hk1.payment.id as string);
   await decide(tx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' }, submitted.approvals[0]!.id, { decision: 'approve' });
+  // Taşerona malzeme: depodan 100 m kablo verilir (stok sarfı, projeye etiketli); ikinci hakedişte bakiye kadar mahsup edilir
+  const givenMaterial = await giveMaterial(tx, stockCtx, sub.id, {
+    date: date(9, 26), warehouseId: main.id, note: 'Kat tesisatı kablosu (demo)', lines: [{ itemId: await itemId('NYY kablo 3x2,5 mm²'), quantity: '100', wbsId: w.elektrik }],
+  });
+  const materialBalance = givenMaterial.balances.materialBalance;
   // İkinci hakediş taslak kalır (arayüzde düzenlenebilir ve onaya gönderilebilir)
   await createProgress(tx, pgctx, {
-    subcontractId: sub.id, periodEnd: date(9, 30), vatCode: 'KDV-16',
+    subcontractId: sub.id, periodEnd: date(9, 30), vatCode: 'KDV-16', materialRecoup: materialBalance,
     lines: [{ lineKey: keyOf('1.1'), cumulativeQty: '12000' }, { lineKey: keyOf('1.2'), cumulativeQty: '9' }, { lineKey: keyOf('1.3'), cumulativeQty: '180' }],
     deductions: [{ description: 'Gecikme cezası (demo)', amount: '500' }],
   });

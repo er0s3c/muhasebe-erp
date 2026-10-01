@@ -115,6 +115,9 @@ describe('demo aracı', () => {
       expect((await q(`select count(*)::int as n from journal_entries where source_type = 'progress_payment'`))[0].n).toBe(2);
       expect((await q(`select count(*)::int as n from journal_lines jl join cost_codes c on c.id = jl.cost_code_id where c.kind = 'subcontract' and jl.project_id is not null`))[0].n).toBeGreaterThan(0);
       expect((await q(`select coalesce(sum(amount), 0)::int as n from subcontract_advances`))[0].n).toBe(160000);
+      // Taşerona malzeme: bir verme kaydı; ikinci (taslak) hakedişte bakiye kadar mahsup önerilir
+      expect((await q(`select count(*)::int as n from subcontract_material_issues`))[0].n).toBe(1);
+      expect(Number((await q(`select coalesce(sum(material), 0)::text as m from progress_payments where status = 'draft'`))[0].m)).toBeGreaterThan(0);
       // Değişiklik emirleri: taşeronda uygulanmış (+15.000, +15 gün), işverende işveren kabulü bekleyen
       expect(await q(`select direction, status, amount_delta::int as delta, time_extension_days as days from variation_orders order by direction`)).toEqual([
         { direction: 'payable', status: 'applied', delta: 15000, days: 15 },

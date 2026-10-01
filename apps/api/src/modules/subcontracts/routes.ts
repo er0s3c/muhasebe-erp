@@ -11,6 +11,8 @@ import {
   createVariationSchema,
   decideApprovalSchema,
   giveAdvanceSchema,
+  giveMaterialSchema,
+  hasPermission,
   idParam,
   progressPaymentListQuerySchema,
   putBoqLinesSchema,
@@ -25,6 +27,7 @@ import {
 } from '@erp/shared';
 import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { forbidden } from '../../http/errors';
 import {
   cancelRequest,
   createRule,
@@ -67,6 +70,8 @@ import {
   type ProgressCtx,
 } from './progress';
 import { createParam, deleteParam, listParams, verifyParam } from './params';
+import { giveMaterial, listMaterialIssues } from './materials';
+import type { StockCtx } from '../inventory/documents';
 import {
   acceptByClient,
   cancelVariation,
@@ -84,6 +89,13 @@ const progressCtx = ({ company, user }: TenantCtx): ProgressCtx => ({
   userId: user.id,
   baseCurrency: company.baseCurrency,
   reportingCurrency: company.reportingCurrency,
+});
+const stockCtx = ({ company, user }: TenantCtx): StockCtx => ({
+  companyId: company.id,
+  userId: user.id,
+  baseCurrency: company.baseCurrency,
+  reportingCurrency: company.reportingCurrency,
+  allowNegativeStock: company.allowNegativeStock,
 });
 const approvalCtx = ({ company, user, role }: TenantCtx): ApprovalCtx => ({ companyId: company.id, userId: user.id, role });
 
@@ -236,6 +248,19 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
       void reply.code(204);
     }),
   );
+
+  // --- Taşerona verilen malzeme (hakedişte mahsup edilir) ---------------------------------------------
+  app.post(
+    '/api/subcontracts/:id/material-issues',
+    tenantRoute(app, manage, async (c) => {
+      // Stok çıkışı yapıldığı için stok hareketi izni de gerekir (sözleşme yönetimi tek başına yetmez)
+      if (!hasPermission(c.role, 'inventory.move')) throw forbidden();
+      const out = await giveMaterial(c.tx, stockCtx(c), idParam.parse(c.req.params).id, giveMaterialSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return out;
+    }),
+  );
+  app.get('/api/subcontracts/:id/material-issues', tenantRoute(app, read, async ({ tx, req }) => listMaterialIssues(tx, idParam.parse(req.params).id)));
 
   // --- Değişiklik emri ------------------------------------------------------------------------------
   app.post(

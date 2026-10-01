@@ -145,6 +145,13 @@ export function errorHandler(
       .send({ error: { code: 'PROCUREMENT_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP13') {
+    // İnsan kaynakları/kişisel veri kuralları (personel silinmez, erişim günlüğü değişmez, sonuçlanmış talep)
+    void reply
+      .status(422)
+      .send({ error: { code: 'HR_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

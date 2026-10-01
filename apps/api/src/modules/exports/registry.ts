@@ -37,6 +37,7 @@ import {
   projectCostReportTable,
   progressPaymentsTable,
   variationOrderTable,
+  employeesTable,
   variationOrdersTable,
   subcontractRegisterTable,
   projectsSummaryTable,
@@ -197,6 +198,15 @@ export const EXPORTS: readonly ExportDef[] = [
     schema: z.object({ projectId: uuid.optional(), subcontractId: uuid.optional(), direction: z.enum(['payable', 'receivable']).optional() }),
     build: progressPaymentsTable,
     file: () => `hakedisler-${todayIso()}`,
+  }),
+  def({
+    key: 'employees',
+    module: 'hr.core',
+    permission: 'hr.read',
+    schema: z.object({ status: z.enum(['active', 'left']).optional() }),
+    build: employeesTable,
+    file: () => `personel-${todayIso()}`,
+    formats: ['xlsx', 'csv'],
   }),
   def({
     key: 'variation-orders',

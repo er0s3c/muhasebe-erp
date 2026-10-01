@@ -8,7 +8,9 @@ import { dec, roundMoney, type MoneyValue } from './money';
  * avans       = min(brüt × avans mahsup %, kalan avans bakiyesi)
  * stopaj      = brüt × stopaj %
  * KDV         = brüt × KDV oranı
- * net         = brüt + KDV − teminat − avans − stopaj − diğer kesintiler
+ * tevkifat    = KDV × KDV tevkifat % (taşeronda idareye ödenecek, işverende işverence tevkif edilen)
+ * malzeme     = taşerona verilen malzeme bedelinin mahsubu (girilen tutar; bakiye denetimi çağıranda)
+ * net         = brüt + KDV − tevkifat − teminat − avans − stopaj − malzeme − diğer kesintiler
  *
  * Yüzde tabanlarının (KDV hariç/dahil) KKTC'de doğruluğu mali müşavirce teyit edilmemiştir (LEGAL-NOTES §12).
  */
@@ -22,15 +24,21 @@ export interface ProgressCalcInput {
   /** Verilen − mahsup edilen avans (hakediş para biriminde, ≥ 0). */
   advanceBalance: string;
   deductions: readonly string[];
+  /** KDV'nin tevkif edilen yüzdesi (varsayılan 0 = tevkifat yok). */
+  vatWithholdingPct?: string;
+  /** Malzeme mahsubu tutarı (varsayılan 0). */
+  material?: string;
 }
 
 export interface ProgressCalcResult {
   lineAmounts: MoneyValue[];
   gross: MoneyValue;
   vat: MoneyValue;
+  vatWithholding: MoneyValue;
   retention: MoneyValue;
   advance: MoneyValue;
   withholding: MoneyValue;
+  material: MoneyValue;
   otherDeductions: MoneyValue;
   net: MoneyValue;
 }
@@ -46,9 +54,11 @@ export function computeProgress(i: ProgressCalcInput): ProgressCalcResult {
   const advance = advanceWanted.lt(balance) ? advanceWanted : balance;
   const withholding = pct(gross, i.withholdingPct);
   const vat = pct(gross, i.vatRate);
+  const vatWithholding = pct(vat, i.vatWithholdingPct ?? '0');
+  const material = roundMoney(i.material ?? '0');
   const otherDeductions = i.deductions.reduce((s, d) => s.plus(roundMoney(d)), dec(0));
-  const net = gross.plus(vat).minus(retention).minus(advance).minus(withholding).minus(otherDeductions);
-  return { lineAmounts, gross, vat, retention, advance, withholding, otherDeductions, net };
+  const net = gross.plus(vat).minus(vatWithholding).minus(retention).minus(advance).minus(withholding).minus(material).minus(otherDeductions);
+  return { lineAmounts, gross, vat, vatWithholding, retention, advance, withholding, material, otherDeductions, net };
 }
 
 /**
