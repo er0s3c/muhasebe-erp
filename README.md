@@ -115,4 +115,4 @@ e2e/            Playwright senaryoları
 
 ## Önemli uyarı
 
-Hesap planı şablonu, KDV oranları ve kapsam belgesindeki tüm yasal parametreler **resmi kaynaktan doğrulanmamıştır**. Uygulama bunları sabit kodlamaz; mali müşavir/avukat onayıyla girilir. Ayrıntı: [docs/LEGAL-NOTES.md](docs/LEGAL-NOTES.md).
+Hesap planı şablonu, KDV oranları ve diğer yasal parametreler **resmî kaynaktan doğrulanmamıştır**. Uygulama bunları sabit kodlamaz; tarihli ve kaynaklı veri olarak, mali müşavir/avukat onayıyla girilir. 1 Ekim 2026 mevzuat incelemesinde bazı maddeler güncellendi: e-Fatura API'si için kaynak bulundu, KDV oran kümesi %0/5/10/16/20 oldu, yabancı taşınmaz için eski kota modeli yerine 89/2026 YGK esas alındı, D3 bordro eklendi. Bazı maddeler de çıkarıldı (KIB-TEK katkı payı, “15:30” kur saati). Ayrıntı: [docs/LEGAL-NOTES.md](docs/LEGAL-NOTES.md) §3.

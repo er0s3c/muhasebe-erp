@@ -76,7 +76,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Excel ile fatura/irsaliye içe aktarma | ⏳ |
 | Gider kartları ve gider raporları | ⏳ |
 | İthalat maliyet dağıtımı (navlun, gümrük, liman) | ⏳ Faz B |
-| e-Fatura entegrasyonu | ⏳ Faz C ⚠️ |
+| e-Fatura entegrasyonu (resmî REST API v1.2.3; iç faturadan ayrı gönderim durumu) | ⏳ Faz C ⚠️ yetkilendirme/test erişimi gerekir |
 
 ## Kasa ve banka
 
@@ -97,7 +97,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Kurdan eksik raporlama tutarlarını sonradan doldurma | ✅ |
 | Merkez Bankası kurlarını resmî adresten getir veya XML dosyası yükle (elle tetiklenir) | ✅ ⚠️ kullanım şartı doğrulanmadı |
 | Kurların zamanlanmış otomatik çekimi | ⏳ ⚠️ |
-| Tarih aralıklı KDV oranları, doğrulama işareti | ✅ ⚠️ oranlar doğrulanmadı |
+| Tarih aralıklı KDV oranları (%0/5/10/16/20 tohumu), doğrulama işareti | ✅ ⚠️ oranlar doğrulanmadı; vergi kategorisi modeli ⏳ |
 | KDV/stopaj/BSİV beyannameleri | ⏳ Faz C ⚠️ |
 
 ## Sektör paketleri
@@ -112,7 +112,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | **İnşaat:** işveren sözleşmesi, revizyonlu BOQ, alınan hakediş (kümülatif), teminat/avans/stopaj, tahsilat, işveren özeti | ✅ (B2e) ⚠️ hesap kodları ve gelir tanıma doğrulanmadı |
 | **İnşaat:** satın alma talebi, onay, RFQ/teklif karşılaştırma, sipariş (taahhüt), mal kabul (stoğa giriş) | ✅ (B2p) ⚠️ hesap kodu eklenmedi: mal kabul mevcut alış irsaliyesi muhasebesini kullanır |
 | **İnşaat:** variation order, malzeme mahsubu, KDV tevkifatı, faturanın siparişe bağlanması | ⏳ sonraki fazlar ⚠️ |
-| **İnşaat:** yabancılara satış kotaları ve yasal süre takibi | ⏳ Faz C ⚠️ |
+| **İnşaat:** yabancılara satış sınırları ve yasal süre takibi (89/2026 YGK ve sonrası) | ⏳ Faz C ⚠️ |
 | **İnşaat:** altyapı fonları ve harçlar (elektrik/su/belediye): tarihli, doğrulama alanlı tarifeler; alıcıdan tahsil edilen fon (satış sözleşmesine ek satır, 329 yükümlülük, fesihte iade); projenin ödediği fon tahmini | ✅ (B4) ⚠️ tutar/oranlar, 329 hesabı ve fonların vergi/hukuki niteliği doğrulanmadı |
 | **İnşaat:** yabancı işçi belge/teminat takibi, bordro | ⏳ Faz D ⚠️ |
 | **İnşaat:** müteahhitlik sınıf karnesi ve kapasite kontrolü | ⏳ Faz C ⚠️ |
@@ -145,4 +145,4 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Lisanslama: sektör/cihaz/şirket sınırlı, imzalı kiralı lisans; satıcı lisans sunucusu ve web paneli (parola + zorunlu TOTP); salt-okunur mod | ✅ ⚠️ EULA/sözleşme ve veri işleme doğrulanmadı |
 | Cihaz koltukları (kayıtlı tarayıcı/bilgisayar, yönetici kaldırır, boşta cihaz düşer) | ✅ |
 | Uygulama kullanıcıları için iki adımlı doğrulama (TOTP/MFA) | ⏳ |
-| Kişisel veri silme/dışa aktarma talebi süreci | ⏳ ⚠️ |
+| Kişisel veri envanteri, saklama/imha, ilgili kişi dışa aktarma/düzeltme/anonimleştirme, aktarım kaydı (89/2007) | ⏳ ⚠️ |
