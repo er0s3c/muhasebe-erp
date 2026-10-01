@@ -447,6 +447,159 @@ export const accounts = pgTable(
   ],
 );
 
+/**
+ * İnşaat parametreleri (teminat, stopaj, avans mahsup yüzdesi): tarih aralıklı, kaynak notlu, doğrulama alanlı.
+ * Hukuki değerler kod sabiti değildir (LEGAL-NOTES §12); belgeler değeri kayıt anında kopyalar.
+ */
+export const constructionParams = pgTable(
+  'construction_params',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** retention_pct | withholding_pct | advance_recoup_pct */
+    kind: text().notNull(),
+    /** Yüzde, örn. 5.0000 */
+    value: numeric({ precision: 7, scale: 4 }).notNull(),
+    validFrom: date({ mode: 'string' }).notNull(),
+    validTo: date({ mode: 'string' }),
+    sourceNote: text(),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('construction_params_uq').on(t.companyId, t.kind, t.validFrom),
+    check('construction_params_kind_ck', sql`${t.kind} in ('retention_pct','withholding_pct','advance_recoup_pct')`),
+    check('construction_params_value_ck', sql`${t.value} >= 0 and ${t.value} <= 100`),
+    check('construction_params_range_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
+/** Onay kuralı: belge türü + (isteğe bağlı) proje + tutar aralığı → sıralı adımlar. */
+export const approvalRules = pgTable(
+  'approval_rules',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    docType: text().notNull(),
+    projectId: uuid(),
+    /** Defter para biriminde, alt sınır dahil. */
+    minAmount: money().notNull().default('0'),
+    /** Üst sınır hariç; null = sınırsız. */
+    maxAmount: money(),
+    /** true: belgeyi gönderen kendi belgesini onaylayamaz. */
+    separateRequester: boolean().notNull().default(true),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('approval_rules_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'approval_rules_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    check('approval_rules_doc_type_ck', sql`${t.docType} in ('progress_payment')`),
+    check('approval_rules_range_ck', sql`${t.minAmount} >= 0 and (${t.maxAmount} is null or ${t.maxAmount} > ${t.minAmount})`),
+  ],
+);
+
+export const approvalRuleSteps = pgTable(
+  'approval_rule_steps',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    ruleId: uuid().notNull(),
+    stepNo: integer().notNull(),
+    /** Rol VEYA kullanıcı (ikisinden tam biri). */
+    approverRole: text(),
+    approverUserId: uuid().references(() => users.id),
+    label: text(),
+  },
+  (t) => [
+    unique('approval_rule_steps_uq').on(t.ruleId, t.stepNo),
+    foreignKey({
+      name: 'approval_rule_steps_rule_fk',
+      columns: [t.ruleId, t.companyId],
+      foreignColumns: [approvalRules.id, approvalRules.companyId],
+    }).onDelete('cascade'),
+    check('approval_rule_steps_no_ck', sql`${t.stepNo} >= 1`),
+    check(
+      'approval_rule_steps_approver_ck',
+      sql`(${t.approverRole} is not null) <> (${t.approverUserId} is not null)`,
+    ),
+  ],
+);
+
+/** Bir belgenin onay talebi; gönderildiği anda kural adımları `approval_steps`e kopyalanır. */
+export const approvalRequests = pgTable(
+  'approval_requests',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    docType: text().notNull(),
+    docId: uuid().notNull(),
+    projectId: uuid(),
+    amount: money().notNull(),
+    /** pending | approved | rejected | cancelled */
+    status: text().notNull().default('pending'),
+    separateRequester: boolean().notNull().default(true),
+    requestedBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    requestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    unique('approval_requests_id_company_uq').on(t.id, t.companyId),
+    // Bir belgenin aynı anda tek bekleyen talebi olur
+    uniqueIndex('approval_requests_pending_uq')
+      .on(t.companyId, t.docType, t.docId)
+      .where(sql`${t.status} = 'pending'`),
+    index('approval_requests_status_idx').on(t.companyId, t.status),
+    check('approval_requests_status_ck', sql`${t.status} in ('pending','approved','rejected','cancelled')`),
+  ],
+);
+
+export const approvalSteps = pgTable(
+  'approval_steps',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    requestId: uuid().notNull(),
+    stepNo: integer().notNull(),
+    /** İkisi de boşsa varsayılan adım: `subcontracts.approve` izni olan herkes. */
+    approverRole: text(),
+    approverUserId: uuid().references(() => users.id),
+    label: text(),
+    /** pending | approved | rejected */
+    status: text().notNull().default('pending'),
+    decidedBy: uuid().references(() => users.id),
+    decidedAt: timestamp({ withTimezone: true }),
+    note: text(),
+  },
+  (t) => [
+    unique('approval_steps_uq').on(t.requestId, t.stepNo),
+    foreignKey({
+      name: 'approval_steps_request_fk',
+      columns: [t.requestId, t.companyId],
+      foreignColumns: [approvalRequests.id, approvalRequests.companyId],
+    }),
+    check('approval_steps_status_ck', sql`${t.status} in ('pending','approved','rejected')`),
+    check('approval_steps_approver_ck', sql`not (${t.approverRole} is not null and ${t.approverUserId} is not null)`),
+  ],
+);
+
 /** Maliyet kodu (maliyet türü): iş kaleminden (WBS) bağımsız üçüncü boyut; malzeme, işçilik, taşeron vb. */
 export const costCodes = pgTable(
   'cost_codes',

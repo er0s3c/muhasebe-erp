@@ -124,6 +124,13 @@ export function errorHandler(
       .send({ error: { code: 'PROJECT_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP10') {
+    // Taşeron/onay kuralları (değiştirilemez karar, kaydedilmiş hakediş vb.)
+    void reply
+      .status(422)
+      .send({ error: { code: 'SUBCONTRACT_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

@@ -53,6 +53,16 @@ export const MODULES: readonly ModuleDef[] = [
     requires: ['core.ledger'],
   },
   {
+    key: 'construction.subcontracts',
+    labelKey: 'modules.constructionSubcontracts',
+    label: 'Taşeron ve hakediş',
+    sectors: ['CONSTRUCTION'],
+    status: 'available',
+    // Hakediş yevmiye yazar ve taşeron cari hesaba bağlıdır; ödeme kasa/banka modülünden bağımsız yapılır
+    // (avans ve ödeme eylemleri kasa/banka kapalıysa çalışmaz, hakediş kaydı etkilenmez)
+    requires: ['core.ledger', 'core.parties', 'construction.projects'],
+  },
+  {
     key: 'retail.pos',
     labelKey: 'modules.retailPos',
     label: 'Hızlı satış (POS)',
