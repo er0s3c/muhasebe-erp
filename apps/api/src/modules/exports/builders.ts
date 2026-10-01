@@ -868,7 +868,7 @@ export async function salesContractsTable(ctx: BuildCtx, q: { projectId?: string
 /** Tek sözleşmenin ödeme planı (ödenen/kalan/gecikme ile). */
 export async function salesScheduleTable(ctx: BuildCtx, q: { contractId: string }): Promise<ReportTable[]> {
   const d = await getContract(ctx.tx, q.contractId);
-  const c = d.contract as Record<string, unknown> & { paid: string; remaining: string };
+  const c = d.contract;
   const cur = String(c.currencyCode);
   return [
     {

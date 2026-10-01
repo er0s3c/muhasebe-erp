@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { buildInstallmentPlan, dec, planTotals, todayIso } from '@erp/shared';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
+import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
@@ -140,10 +141,13 @@ export function SalesContractPage() {
           <ArrowLeft className="size-4" aria-hidden />
           {t('realEstate.contracts.title')}
         </Link>
-        <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-          {isNew ? t('realEstate.contracts.newTitle') : c?.code}
-          {!isNew && <ContractStatusBadge status={status} />}
-        </h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="flex flex-wrap items-center gap-3 text-2xl">
+            {isNew ? t('realEstate.contracts.newTitle') : c?.code}
+            {!isNew && <ContractStatusBadge status={status} />}
+          </h1>
+          {!isNew && <ExportMenu exportKey="sales-schedule" params={{ contractId: id }} />}
+        </div>
         {c && <p className="mt-1 text-sm text-muted">{c.projectCode} · {unitLabel(c)} · {c.partyName}</p>}
       </div>
 

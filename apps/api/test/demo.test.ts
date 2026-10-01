@@ -123,6 +123,23 @@ describe('demo aracı', () => {
       expect((await q(`select count(*)::int as n from rfq_offers`))[0].n).toBe(2);
       expect((await q(`select status from purchase_orders`)).map((r) => r.status)).toEqual(['issued']);
       expect((await q(`select count(*)::int as n from po_receipts where status = 'posted'`))[0].n).toBe(1);
+      // Gayrimenkul: 24 birim; sözleşmeler: yürürlükte, teslim, fesih, taslak; 380 bakiyesi yalnızca yürürlükteki sözleşmedir
+      expect((await q(`select status, count(*)::int as n from real_estate_units group by status order by status`))).toEqual([
+        { status: 'available', n: 21 },
+        { status: 'handed_over', n: 1 },
+        { status: 'reserved', n: 1 },
+        { status: 'sold', n: 1 },
+      ]);
+      expect((await q(`select status, count(*)::int as n from sales_contracts group by status order by status`))).toEqual([
+        { status: 'active', n: 1 },
+        { status: 'draft', n: 1 },
+        { status: 'handed_over', n: 1 },
+        { status: 'terminated', n: 1 },
+      ]);
+      expect((await q(`select count(*)::int as n from sales_writeoffs`))[0].n).toBe(4); // fesihte kapatılan taksitler
+      expect((await q(`select coalesce(sum(credit_base - debit_base), 0)::int as n from journal_lines jl join accounts a on a.id = jl.account_id where a.code = '380'`))[0].n).toBe(
+        Math.round(Number((await q(`select coalesce(sum(price * activation_fx), 0) as v from sales_contracts where status = 'active'`))[0].v)),
+      );
       // Kalem etiketsiz proje satırı (iş kalemine atanmamış) ve projesiz maliyet demo'da bilerek bulunur
       expect((await q(`select count(*)::int as n from journal_lines where project_id is not null and wbs_id is null and debit_base > 0`))[0].n).toBeGreaterThan(0);
       ids = (await q(`select u.id as uid, u.organization_id as oid, c.id as cid from users u join companies c on c.organization_id = u.organization_id where u.email = $1`, [DEMO_EMAIL]))[0];

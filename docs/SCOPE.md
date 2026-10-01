@@ -107,7 +107,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | **İnşaat:** proje, iş kırılımı (WBS, en çok 6 seviye), bütçe revizyonları (değişmez, yürürlükteki revizyon) | ✅ (B1) |
 | **İnşaat:** gerçekleşen maliyet (yevmiye, fatura kalemi, stok sarfı, kasa/banka ödemesi proje + iş kalemine etiketli), tamamlanma %, tahmini toplam maliyet (EAC), sapma ve CPI, projesiz maliyet mutabakatı | ✅ (B1) ⚠️ hesap sınıflandırması doğrulanmadı |
 | **İnşaat:** işverene yapılan iş (`contract` proje, işveren cari) | ✅ (B1; hakediş B2) |
-| **İnşaat:** gayrimenkul envanteri, dövizli taksit planı, tahsilat mahsubu, gelir tanıma | ⏳ Faz B3 ⚠️ |
+| **İnşaat:** gayrimenkul envanteri, satış sözleşmesi, dövizli taksit planı, tahsilat mahsubu, teslimde gelir tanıma, fesih ve iade | ✅ (B3) ⚠️ gelir tanıma yöntemi, hesap kodları (380/600/679), KDV ve tapu harcı doğrulanmadı |
 | **İnşaat:** taşeron sözleşmesi, revizyonlu BOQ, kümülatif hakediş (verilen), teminat/avans/stopaj/diğer kesinti, onay kuralları, avans ve teminat iadesi, maliyet kodu, kalan taahhüt | ✅ (B2) ⚠️ yüzdeler ve yevmiye hesapları doğrulanmadı |
 | **İnşaat:** işveren sözleşmesi, revizyonlu BOQ, alınan hakediş (kümülatif), teminat/avans/stopaj, tahsilat, işveren özeti | ✅ (B2e) ⚠️ hesap kodları ve gelir tanıma doğrulanmadı |
 | **İnşaat:** satın alma talebi, onay, RFQ/teklif karşılaştırma, sipariş (taahhüt), mal kabul (stoğa giriş) | ✅ (B2p) ⚠️ hesap kodu eklenmedi: mal kabul mevcut alış irsaliyesi muhasebesini kullanır |

@@ -179,6 +179,9 @@ export async function cancelContract(tx: Tx, ctx: SalesCtx, id: string, reason: 
 
 // --- Okuma -----------------------------------------------------------------------------------------------
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ContractHead = Record<string, any>;
+
 export async function getContract(tx: Tx, id: string) {
   const head = await tx.execute<Record<string, unknown>>(sql`
     select c.id, c.code, c.status, c.contract_date::text as "contractDate", c.planned_handover::text as "plannedHandover",
@@ -211,7 +214,8 @@ export async function getContract(tx: Tx, id: string) {
     for (const w of (await tx.execute<{ id: string; amount: string }>(sql`select charge_line_id as id, sum(amount)::text as amount from sales_writeoffs where contract_id = ${id} group by charge_line_id`)).rows) writtenOff.set(w.id, w.amount);
   }
   const rows = inst.map((i) => {
-    const open = i.journalLineId ? remainingBy.get(i.journalLineId) : undefined;
+    const raw = i.journalLineId ? remainingBy.get(i.journalLineId) : undefined;
+    const open = raw && dec(raw.remaining).gt(0) ? raw : undefined;
     const off = i.journalLineId ? writtenOff.get(i.journalLineId) : undefined;
     const closed = contract.status === 'terminated';
     const remaining = closed ? dec(0) : live ? (open ? dec(open.remaining) : dec(0)) : dec(i.amount);
@@ -234,12 +238,11 @@ export async function getContract(tx: Tx, id: string) {
            t.refund_account_id as "refundAccountId"
       from sales_terminations t where t.contract_id = ${id}`).then((r) => r.rows);
   return {
-    contract: {
-      ...contract,
+    contract: Object.assign({}, contract as ContractHead, {
       paid: paidTotal.toFixed(2),
       remaining: contract.status === 'terminated' ? '0.00' : live ? dec(String(contract.price)).minus(paidTotal).toFixed(2) : dec(String(contract.price)).toFixed(2),
-      overdue: rows.filter((r) => r.daysOverdue > 0).reduce((s, r) => s.plus(r.remaining), dec(0)).toFixed(2),
-    },
+      overdue: rows.filter((r) => r.daysOverdue > 0).reduce((sum, r) => sum.plus(r.remaining), dec(0)).toFixed(2),
+    }),
     installments: rows,
     termination: termination ?? null,
   };
@@ -286,7 +289,7 @@ export async function listInstallments(tx: Tx, q: { asOf?: string; projectId?: s
   const out = [];
   for (const r of rows.rows) {
     const o = byParty.get(r.party_id)?.get(r.journal_line_id);
-    if (!o) continue; // tamamen tahsil edilmiş
+    if (!o || dec(o.remaining).lte(0)) continue; // tamamen tahsil edilmiş (kur yuvarlaması artığı kalem sayılmaz)
     const daysOverdue = o.daysOverdue > 0 ? o.daysOverdue : 0;
     if (q.overdueOnly && daysOverdue === 0) continue;
     out.push({

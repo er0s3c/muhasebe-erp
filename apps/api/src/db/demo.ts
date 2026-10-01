@@ -7,7 +7,7 @@
  *   npm run db:seed      giriş: demo@ornek.local / Demo-Sifre-123
  */
 import { hash } from '@node-rs/argon2';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   applyRate,
   createDeliveryNoteSchema,
@@ -57,6 +57,9 @@ import { approveBudget, createBudget, putBudgetLines } from '../modules/projects
 import { recordProgress } from '../modules/projects/progress';
 import { createProject, setProjectStatus } from '../modules/projects/service';
 import { createWbs } from '../modules/projects/wbs';
+import { activateContract, createContract, getContract, handoverContract, loadSalesCtx } from '../modules/realestate/contracts';
+import { terminateContract } from '../modules/realestate/termination';
+import { bulkCreateUnits } from '../modules/realestate/units';
 import { getOrder, issueOrder } from '../modules/procurement/orders';
 import { createReceipt } from '../modules/procurement/receipts';
 import { createRequest, submitRequest } from '../modules/procurement/requests';
@@ -77,6 +80,7 @@ const addDays = (iso: string, days: number) => {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 };
+const idOfRow = (o: unknown) => (o as { id: string }).id;
 const date = (m: number, d: number) => `${year}-${pad(m)}-${pad(d)}`;
 
 /**
@@ -550,7 +554,52 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
   });
   await submitRequest(tx, prc, ctxOwner, idOf(rq2.request));
 
-  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans; işveren: 1 sözleşme, 1 onaylı + 1 taslak alınan hakediş, avans; satın alma: 2 talep, 1 RFQ (2 teklif), 1 sipariş (kısmi mal kabul)';
+  // ---- Gayrimenkul satışı (B3): Güneş Sitesi birimleri, GBP taksit planları -------------------------------------
+  const sctx = await loadSalesCtx(tx, ctx.companyId, ctx.userId);
+  await bulkCreateUnits(tx, sctx, { projectId: gunes, block: 'A', unitType: 'apartment', floorFrom: 1, floorTo: 4, perFloor: 3, grossM2: '110', rooms: '2+1', listPrice: '120000', listCurrency: 'GBP' });
+  await bulkCreateUnits(tx, sctx, { projectId: gunes, block: 'B', unitType: 'apartment', floorFrom: 1, floorTo: 3, perFloor: 4, grossM2: '95', rooms: '1+1', listPrice: '90000', listCurrency: 'GBP' });
+  const unitIdOf = async (block: string, no: string) => (await tx.execute<{ id: string }>(sql`select id from real_estate_units where project_id = ${gunes} and block = ${block} and unit_no = ${no}`)).rows[0]!.id;
+  const monthly = (first: [number, number], n: number, amount: string) => Array.from({ length: n }, (_, i) => ({ kind: 'installment' as const, dueDate: date(first[0] + i > 12 ? 12 : first[0] + i, first[1]), amount }));
+  const collect = async (contractId: string, seq: number, on: string, bankId: string) => {
+    const det = await getContract(tx, contractId);
+    const inst = det.installments.find((i) => i.seq === seq)!;
+    const rate = rateAt('GBP', on);
+    await postTreasuryTransaction(tx, ctx, createTreasuryTransactionSchema.parse({
+      type: 'receipt', date: on, accountId: bankId, amount: (Number(inst.remaining) * rate).toFixed(2), partyId: det.contract.partyId as string,
+      items: [{ lineId: inst.journalLineId!, amount: inst.remaining, settleAmount: (Number(inst.remaining) * rate).toFixed(2) }], description: `Taksit ${seq} tahsilatı (${det.contract.code})`,
+    }));
+  };
+  // 1) A-101 Sarah Thompson: yürürlükte; peşinat ve ilk taksit tahsil edildi, Eylül taksidi gecikmiş
+  const c1 = await createContract(tx, sctx, {
+    unitId: await unitIdOf('A', '101'), partyId: partyId.get('sarah')!, currencyCode: 'GBP', contractDate: date(7, 1), plannedHandover: date(12, 30), price: '105000', downPayment: '30000',
+    installments: [{ kind: 'down_payment', dueDate: date(7, 1), amount: '30000' }, ...monthly([8, 1], 5, '15000')],
+  });
+  await activateContract(tx, sctx, idOfRow(c1.contract), date(7, 1));
+  await collect(idOfRow(c1.contract), 1, date(7, 1), bankTlId);
+  await collect(idOfRow(c1.contract), 2, date(8, 1), bankTlId);
+  // 2) A-102 Ali Yılmaz: teslim edilmiş (gelir tanınmış)
+  const c2 = await createContract(tx, sctx, {
+    unitId: await unitIdOf('A', '102'), partyId: partyId.get('ali')!, currencyCode: 'GBP', contractDate: date(3, 2), price: '90000', downPayment: '90000',
+    installments: [{ kind: 'down_payment', dueDate: date(3, 2), amount: '90000' }],
+  });
+  await activateContract(tx, sctx, idOfRow(c2.contract), date(3, 2));
+  await collect(idOfRow(c2.contract), 1, date(3, 2), bankTlId);
+  await handoverContract(tx, sctx, idOfRow(c2.contract), date(9, 1));
+  // 3) B-101 Sarah Thompson: feshedildi; tahsil edilen peşinattan kesinti, kalan iade
+  const c3 = await createContract(tx, sctx, {
+    unitId: await unitIdOf('B', '101'), partyId: partyId.get('sarah')!, currencyCode: 'GBP', contractDate: date(5, 2), price: '90000', downPayment: '20000',
+    installments: [{ kind: 'down_payment', dueDate: date(5, 2), amount: '20000' }, ...monthly([6, 1], 4, '17500')],
+  });
+  await activateContract(tx, sctx, idOfRow(c3.contract), date(5, 2));
+  await collect(idOfRow(c3.contract), 1, date(5, 2), bankTlId);
+  await terminateContract(tx, sctx, idOfRow(c3.contract), { date: date(9, 22), reason: 'Alıcı vazgeçti', retained: '4000', refundAccountId: bankTlId });
+  // 4) A-103: taslak sözleşme (arayüzde düzenlenip yürürlüğe alınabilir)
+  await createContract(tx, sctx, {
+    unitId: await unitIdOf('A', '103'), partyId: partyId.get('ali')!, currencyCode: 'GBP', contractDate: date(9, 25), price: '120000', downPayment: '24000',
+    installments: [{ kind: 'down_payment', dueDate: date(9, 25), amount: '24000' }, ...monthly([10, 25], 3, '32000')],
+  });
+
+  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans; işveren: 1 sözleşme, 1 onaylı + 1 taslak alınan hakediş, avans; satın alma: 2 talep, 1 RFQ (2 teklif), 1 sipariş (kısmi mal kabul); gayrimenkul: 24 birim, 4 sözleşme (yürürlükte/geciken, teslim, fesih+iade, taslak)';
 }
 
 /**
