@@ -18,7 +18,7 @@ import type { ApprovalRequestRow, ProgressDetail, SubcontractBalances } from '..
 import { ApprovalStatusBadge, ProgressStatusBadge, SUBCONTRACT_INVALIDATE } from './common';
 
 interface Basis {
-  subcontract: { id: string; code: string; title: string; status: string; currencyCode: string; paymentDays: number; retentionPct: string; advanceRecoupPct: string; withholdingPct: string };
+  subcontract: { id: string; code: string; title: string; status: string; direction: 'payable' | 'receivable'; currencyCode: string; paymentDays: number; retentionPct: string; advanceRecoupPct: string; withholdingPct: string };
   lines: { lineKey: string; lineNo: number; itemNo: string | null; description: string; unit: string; quantity: string; unitPrice: string; prevQty: string; wbsCode: string; costCode: string | null }[];
   balances: SubcontractBalances;
 }
@@ -152,6 +152,7 @@ export function ProgressEditorPage() {
   }
 
   const p = detail?.payment;
+  const receivable = (p?.direction ?? basis.subcontract.direction) === 'receivable';
   const pending = detail?.approvals.find((a) => a.status === 'pending');
   const myTurn = !!pending && !!inbox?.requests.some((r) => r.id === pending.id);
   const money2 = (v: string | undefined) => moneyIn(v ?? '0', cur);
@@ -174,7 +175,7 @@ export function ProgressEditorPage() {
           {basis.subcontract.code} — {basis.subcontract.title}
         </Link>
         <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-          {isNew ? t('subcontracts.progress.newTitle') : t('subcontracts.progress.editTitle', { no: p?.paymentNo })}
+          {isNew ? (receivable ? t('subcontracts.employer.claimNew') : t('subcontracts.progress.newTitle')) : receivable ? t('subcontracts.employer.claimEdit', { no: p?.paymentNo }) : t('subcontracts.progress.editTitle', { no: p?.paymentNo })}
           {p?.number && <span className="font-mono text-[15px] text-muted">{p.number}</span>}
           <ProgressStatusBadge status={status} />
         </h1>
@@ -280,12 +281,12 @@ export function ProgressEditorPage() {
           <dl className="flex flex-col gap-2 p-4 text-sm">
             <Row label={t('subcontracts.progress.sum.gross')} value={money2(view.gross)} />
             <Row label={`${t('subcontracts.progress.sum.vat')}${vatCode ? ` (${vatCode})` : ''}`} value={`+ ${money2(view.vat)}`} />
-            <Row label={`${t('subcontracts.progress.sum.retention')} ${pct(p?.retentionPct ?? basis.subcontract.retentionPct)}`} value={`− ${money2(view.retention)}`} />
-            <Row label={`${t('subcontracts.progress.sum.advance')} ${pct(p?.advancePct ?? basis.subcontract.advanceRecoupPct)}`} value={`− ${money2(view.advance)}`} hint={editable ? t('subcontracts.progress.sum.advanceBalance', { balance: money2(basis.balances.advanceBalance) }) : undefined} />
-            <Row label={`${t('subcontracts.progress.sum.withholding')} ${pct(p?.withholdingPct ?? basis.subcontract.withholdingPct)}`} value={`− ${money2(view.withholding)}`} />
+            <Row label={`${receivable ? t('subcontracts.employer.sum.retention') : t('subcontracts.progress.sum.retention')} ${pct(p?.retentionPct ?? basis.subcontract.retentionPct)}`} value={`− ${money2(view.retention)}`} />
+            <Row label={`${t('subcontracts.progress.sum.advance')} ${pct(p?.advancePct ?? basis.subcontract.advanceRecoupPct)}`} value={`− ${money2(view.advance)}`} hint={editable ? (receivable ? t('subcontracts.employer.sum.advanceBalance', { balance: money2(basis.balances.advanceBalance) }) : t('subcontracts.progress.sum.advanceBalance', { balance: money2(basis.balances.advanceBalance) })) : undefined} />
+            <Row label={`${receivable ? t('subcontracts.employer.sum.withholding') : t('subcontracts.progress.sum.withholding')} ${pct(p?.withholdingPct ?? basis.subcontract.withholdingPct)}`} value={`− ${money2(view.withholding)}`} />
             <Row label={t('subcontracts.progress.sum.other')} value={`− ${money2(view.other)}`} />
             <div className="mt-1 flex items-baseline justify-between border-t border-text pt-3 text-base">
-              <dt>{t('subcontracts.progress.sum.net')}</dt>
+              <dt>{receivable ? t('subcontracts.employer.sum.net') : t('subcontracts.progress.sum.net')}</dt>
               <dd className="num">{money2(view.net)}</dd>
             </div>
             {calc?.net.isNegative() && editable && <Callout tone="danger">{t('subcontracts.progress.netNegative')}</Callout>}

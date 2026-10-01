@@ -1127,8 +1127,11 @@ export interface ProjectCostByCode {
 
 export type SubcontractStatus = 'draft' | 'active' | 'completed' | 'terminated';
 
+export type ContractDirection = 'payable' | 'receivable';
+
 export interface SubcontractRow {
   id: string;
+  direction: ContractDirection;
   code: string;
   title: string;
   status: SubcontractStatus;
@@ -1157,6 +1160,7 @@ export interface SubcontractRevisionRow {
 export interface SubcontractDetail {
   subcontract: {
     id: string;
+    direction: ContractDirection;
     code: string;
     projectId: string;
     partyId: string;
@@ -1215,6 +1219,7 @@ export type ProgressStatus = 'draft' | 'submitted' | 'posted' | 'cancelled';
 
 export interface ProgressRow {
   id: string;
+  direction: ContractDirection;
   number: string | null;
   paymentNo: number;
   status: ProgressStatus;
@@ -1243,7 +1248,7 @@ export interface ApprovalStepRow {
 
 export interface ApprovalRequestRow {
   id: string;
-  docType: 'progress_payment';
+  docType: 'progress_payment' | 'employer_claim';
   docId: string;
   amount: string;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
@@ -1255,6 +1260,7 @@ export interface ApprovalRequestRow {
 export interface ProgressDetail {
   payment: {
     id: string;
+    direction: ContractDirection;
     subcontractId: string;
     subcontractCode: string;
     subcontractTitle: string;
@@ -1303,11 +1309,30 @@ export interface ConstructionParam {
 
 export interface ApprovalRuleRow {
   id: string;
-  docType: 'progress_payment';
+  docType: 'progress_payment' | 'employer_claim';
   projectId: string | null;
   minAmount: string;
   maxAmount: string | null;
   separateRequester: boolean;
   isActive: boolean;
   steps: { id: string; stepNo: number; approverRole: string | null; approverUserId: string | null; label: string | null }[];
+}
+
+export interface EmployerSummary {
+  subcontractId: string;
+  code: string;
+  title: string;
+  status: SubcontractStatus;
+  currencyCode: string;
+  contractAmount: string;
+  claimCount: number;
+  cumulativeGross: string;
+  thisPeriodGross: string;
+  previousGross: string;
+  remainingContract: string;
+  billedNet: string;
+  collected: string;
+  outstanding: string;
+  retentionBalance: string;
+  advanceBalance: string;
 }

@@ -109,7 +109,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | **İnşaat:** işverene yapılan iş (`contract` proje, işveren cari) | ✅ (B1; hakediş B2) |
 | **İnşaat:** gayrimenkul envanteri, dövizli taksit planı, tahsilat mahsubu, gelir tanıma | ⏳ Faz B3 ⚠️ |
 | **İnşaat:** taşeron sözleşmesi, revizyonlu BOQ, kümülatif hakediş (verilen), teminat/avans/stopaj/diğer kesinti, onay kuralları, avans ve teminat iadesi, maliyet kodu, kalan taahhüt | ✅ (B2) ⚠️ yüzdeler ve yevmiye hesapları doğrulanmadı |
-| **İnşaat:** işveren hakedişi (alınan), variation order, malzeme mahsubu, KDV tevkifatı, satın alma talebi/RFQ/sipariş | ⏳ B2e ve sonrası ⚠️ |
+| **İnşaat:** işveren sözleşmesi, revizyonlu BOQ, alınan hakediş (kümülatif), teminat/avans/stopaj, tahsilat, işveren özeti | ✅ (B2e) ⚠️ hesap kodları ve gelir tanıma doğrulanmadı |
+| **İnşaat:** variation order, malzeme mahsubu, KDV tevkifatı, satın alma talebi/RFQ/sipariş | ⏳ sonraki fazlar ⚠️ |
 | **İnşaat:** yabancılara satış kotaları ve yasal süre takibi | ⏳ Faz C ⚠️ |
 | **İnşaat:** altyapı fonları (elektrik/belediye) | ⏳ Faz B4 ⚠️ |
 | **İnşaat:** yabancı işçi belge/teminat takibi, bordro | ⏳ Faz D ⚠️ |

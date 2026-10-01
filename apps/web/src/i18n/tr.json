@@ -148,7 +148,9 @@
     "subcontracts": "Taşeron sözleşmeleri",
     "progressPayments": "Hakedişler",
     "approvals": "Onay kutusu",
-    "constructionSettings": "İnşaat ayarları"
+    "constructionSettings": "İnşaat ayarları",
+    "employerContracts": "İşveren sözleşmeleri",
+    "employerClaims": "İşveren hakedişleri"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -2024,7 +2026,8 @@
       "overview": "Özet",
       "wbs": "İş kırılımı",
       "budget": "Bütçe",
-      "transactions": "Hareketler"
+      "transactions": "Hareketler",
+      "employer": "İşveren sözleşmesi"
     },
     "form": {
       "newTitle": "Yeni proje",
@@ -2236,7 +2239,8 @@
       "maxHint": "Boş: sınırsız",
       "add": "Kural ekle",
       "addStep": "Adım ekle",
-      "added": "Onay kuralı eklendi"
+      "added": "Onay kuralı eklendi",
+      "docType": "Belge türü"
     }
   },
   "subcontracts": {
@@ -2475,7 +2479,8 @@
         "amount": "Brüt ({{currency}})"
       },
       "docTypes": {
-        "progress_payment": "Taşeron hakedişi"
+        "progress_payment": "Taşeron hakedişi",
+        "employer_claim": "İşveren hakedişi"
       },
       "defaultStep": "Onay",
       "userStep": "Kullanıcı",
@@ -2504,6 +2509,43 @@
       "reject": "Reddet",
       "approvedToast": "Onaylandı",
       "rejectedToast": "Reddedildi, hakediş taslağa döndü"
+    },
+    "employer": {
+      "title": "İşveren sözleşmeleri",
+      "subtitle": "İşverene yapılan işlerde sözleşme ve BOQ (projede tek)",
+      "add": "Yeni işveren sözleşmesi",
+      "newTitle": "Yeni işveren sözleşmesi",
+      "back": "İşveren sözleşmeleri",
+      "empty": "Henüz işveren sözleşmesi yok",
+      "emptyDesc": "\"İşverene yapılan iş\" türündeki projeye işveren sözleşmesi açın, BOQ girin; alınan hakedişler bu BOQ üzerinden kümülatif hazırlanır.",
+      "party": "İşveren",
+      "partyHint": "Projenin işvereni (müşteri carisi)",
+      "claimsTitle": "İşveren hakedişleri",
+      "claimsSubtitle": "İşverene kesilen hakedişler (kümülatif)",
+      "claimNew": "Yeni işveren hakedişi",
+      "claimEdit": "İşveren hakedişi {{no}}",
+      "newClaim": "Yeni hakediş",
+      "noContract": "Bu projede işveren sözleşmesi yok",
+      "noContractDesc": "İşveren sözleşmesi açıp BOQ girin; hakedişler işverene kesilir ve 120 cari alacak olarak izlenir.",
+      "receiveAdvance": "Avans al",
+      "advanceDesc": "İşverenden sözleşme para biriminde ({{currency}}) bir kasa/banka hesabına alınır.",
+      "releaseDesc": "İşverenin tuttuğu teminatın geri ödenecek kısmı; en çok bakiye kadar: {{max}}",
+      "sum": {
+        "retention": "Teminat (işverence tutulan)",
+        "withholding": "Stopaj (işverence kesilen)",
+        "net": "Tahsil edilecek net",
+        "advanceBalance": "Alınan avans bakiyesi: {{balance}}"
+      },
+      "kpi": {
+        "contract": "Sözleşme tutarı",
+        "contractSub": "{{n}} hakediş kaydedildi",
+        "cumulative": "Kümülatif hakediş (brüt)",
+        "cumulativeSub": "Önceki {{prev}} · bu dönem {{cur}}",
+        "outstanding": "Kalan alacak",
+        "outstandingSub": "Faturalanan net {{billed}} · tahsil {{collected}}",
+        "remaining": "Kalan iş (sözleşme)",
+        "remainingSub": "Tutulan teminat {{retention}}"
+      }
     }
   }
 }

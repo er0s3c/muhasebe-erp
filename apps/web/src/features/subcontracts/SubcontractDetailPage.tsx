@@ -57,9 +57,9 @@ export function SubcontractDetailPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <Link to="/subcontracts" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
+        <Link to={sc.direction === 'receivable' ? '/employer-contracts' : '/subcontracts'} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
           <ArrowLeft className="size-4" aria-hidden />
-          {t('subcontracts.back')}
+          {sc.direction === 'receivable' ? t('subcontracts.employer.back') : t('subcontracts.back')}
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

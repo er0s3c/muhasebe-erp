@@ -121,6 +121,8 @@ export const router = createBrowserRouter([
                 children: [
                   { path: 'subcontracts', ...page(() => import('../features/subcontracts/SubcontractsPage'), 'SubcontractsPage') },
                   { path: 'subcontracts/:id', ...page(() => import('../features/subcontracts/SubcontractDetailPage'), 'SubcontractDetailPage') },
+                  { path: 'employer-contracts', ...page(() => import('../features/subcontracts/SubcontractsPage'), 'EmployerContractsPage') },
+                  { path: 'employer-claims', ...page(() => import('../features/subcontracts/ProgressList'), 'EmployerClaimsPage') },
                   { path: 'progress-payments', ...page(() => import('../features/subcontracts/ProgressList'), 'ProgressPaymentsPage') },
                   { path: 'progress-payments/new', ...page(() => import('../features/subcontracts/ProgressEditorPage'), 'ProgressEditorPage') },
                   { path: 'progress-payments/:id', ...page(() => import('../features/subcontracts/ProgressEditorPage'), 'ProgressEditorPage') },

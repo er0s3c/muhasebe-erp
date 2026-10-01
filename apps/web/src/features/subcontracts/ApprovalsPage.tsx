@@ -41,7 +41,7 @@ export function ApprovalsPage() {
                 const step = r.steps.find((s) => s.status === 'pending');
                 return (
                   <Tr key={r.id} clickable tabIndex={0} onClick={() => navigate(`/progress-payments/${r.docId}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/progress-payments/${r.docId}`)}>
-                    <Td>{t('subcontracts.approval.docTypes.progress_payment')}</Td>
+                    <Td>{t(`subcontracts.approval.docTypes.${r.docType}`)}</Td>
                     <Td className="text-muted">{formatDateTR(r.requestedAt.slice(0, 10))}</Td>
                     <Td>{step ? `${step.stepNo}/${r.steps.length} — ${step.label ?? t('subcontracts.approval.defaultStep')}` : '—'}</Td>
                     <Td num>{money(r.amount)}</Td>

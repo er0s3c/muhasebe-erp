@@ -11,16 +11,17 @@ import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR } from '../../lib/format';
-import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { ProjectDetail, ProjectStatus } from '../../lib/types';
 import { BudgetTab } from './BudgetTab';
 import { PROJECT_INVALIDATE, ProjectKindBadge, ProjectStatusBadge } from './common';
 import { OverviewTab } from './OverviewTab';
 import { ProjectFormSheet } from './ProjectFormSheet';
+import { EmployerTab } from './EmployerTab';
 import { TransactionsTab } from './TransactionsTab';
 import { WbsTab } from './WbsTab';
 
-type Tab = 'overview' | 'wbs' | 'budget' | 'transactions';
+type Tab = 'overview' | 'wbs' | 'budget' | 'transactions' | 'employer';
 
 /** Durum geçişi düğmesinin biçimi: hedef duruma göre etiket (yeniden açma ve iptal ayrı anlatılır). */
 type TransitionLabel = 'start' | 'reopen' | 'restore' | 'hold' | 'complete' | 'cancel';
@@ -33,6 +34,8 @@ export function ProjectDetailPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const canManage = useCan()('projects.manage');
+  const canReadContracts = useCan()('subcontracts.read');
+  const subcontractsOn = useModuleEnabled('construction.subcontracts');
   const { data, isPending, error } = useCQuery<{ project: ProjectDetail }>(['project', id], id ? `/api/projects/${id}` : null);
   const [tab, setTab] = useState<Tab>('overview');
   const [editing, setEditing] = useState(false);
@@ -147,6 +150,7 @@ export function ProjectDetailPage() {
           { key: 'wbs', label: t('projects.tabs.wbs') },
           { key: 'budget', label: t('projects.tabs.budget') },
           { key: 'transactions', label: t('projects.tabs.transactions') },
+          ...(p.kind === 'contract' && subcontractsOn && canReadContracts ? [{ key: 'employer' as const, label: t('projects.tabs.employer') }] : []),
         ]}
       />
 
@@ -154,6 +158,7 @@ export function ProjectDetailPage() {
       {tab === 'wbs' && <WbsTab project={p} />}
       {tab === 'budget' && <BudgetTab project={p} />}
       {tab === 'transactions' && <TransactionsTab project={p} />}
+      {tab === 'employer' && <EmployerTab project={p} />}
 
       <ProjectFormSheet open={editing} onOpenChange={setEditing} project={p} onSaved={() => undefined} />
 

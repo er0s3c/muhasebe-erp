@@ -33,6 +33,7 @@ export function BalancesTab({ detail }: { detail: SubcontractDetail }) {
   const { data } = useCQuery<{ balances: SubcontractBalances }>(['subcontract', sc.id, 'balances'], `/api/subcontracts/${sc.id}/balances`);
   const b = data?.balances;
   const active = sc.status === 'active';
+  const receivable = sc.direction === 'receivable';
 
   const [mode, setMode] = useState<'advance' | 'release' | null>(null);
   const [date, setDate] = useState(todayIso());
@@ -75,7 +76,7 @@ export function BalancesTab({ detail }: { detail: SubcontractDetail }) {
       <Card>
         <CardHeader title={t('subcontracts.balances.actionsTitle')} description={t('subcontracts.balances.actionsDesc')} />
         <div className="flex flex-wrap gap-3 p-4">
-          {can('subcontracts.approve') && active && treasuryOn && <Button onClick={() => open('advance')}>{t('subcontracts.balances.giveAdvance')}</Button>}
+          {can('subcontracts.approve') && active && treasuryOn && <Button onClick={() => open('advance')}>{receivable ? t('subcontracts.employer.receiveAdvance') : t('subcontracts.balances.giveAdvance')}</Button>}
           {can('subcontracts.approve') && Number(b?.retentionBalance ?? 0) > 0 && <Button onClick={() => open('release')}>{t('subcontracts.balances.releaseRetention')}</Button>}
           {!can('subcontracts.approve') && <p className="text-sm text-muted">{t('subcontracts.balances.noPermission')}</p>}
         </div>
@@ -84,8 +85,8 @@ export function BalancesTab({ detail }: { detail: SubcontractDetail }) {
       <Modal
         open={mode !== null}
         onOpenChange={(o) => !o && setMode(null)}
-        title={mode === 'advance' ? t('subcontracts.balances.giveAdvance') : t('subcontracts.balances.releaseRetention')}
-        description={mode === 'advance' ? t('subcontracts.balances.advanceDesc', { currency: cur }) : t('subcontracts.balances.releaseDesc', { max: moneyIn(b?.retentionBalance ?? '0', cur) })}
+        title={mode === 'advance' ? (receivable ? t('subcontracts.employer.receiveAdvance') : t('subcontracts.balances.giveAdvance')) : t('subcontracts.balances.releaseRetention')}
+        description={mode === 'advance' ? (receivable ? t('subcontracts.employer.advanceDesc', { currency: cur }) : t('subcontracts.balances.advanceDesc', { currency: cur })) : receivable ? t('subcontracts.employer.releaseDesc', { max: moneyIn(b?.retentionBalance ?? '0', cur) }) : t('subcontracts.balances.releaseDesc', { max: moneyIn(b?.retentionBalance ?? '0', cur) })}
         footer={
           <>
             <Button onClick={() => setMode(null)}>{t('common.cancel')}</Button>

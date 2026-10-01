@@ -8,9 +8,9 @@ import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { Sheet } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { useCMutation } from '../../lib/queries';
+import { useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
-import type { SubcontractDetail } from '../../lib/types';
+import type { ContractDirection, ProjectDetail, SubcontractDetail } from '../../lib/types';
 import { usePartyOptions } from '../invoices/common';
 import { useProjectOptions } from '../projects/common';
 import { SUBCONTRACT_INVALIDATE } from './common';
@@ -21,16 +21,19 @@ interface Props {
   /** Verilirse mevcut sözleşme düzenlenir (proje, taşeron, para birimi değişmez). */
   edit?: SubcontractDetail['subcontract'];
   defaultProjectId?: string;
+  /** payable: taşeron; receivable: işveren sözleşmesi (contract projesi, müşteri cari). */
+  direction?: ContractDirection;
   onSaved: (id: string) => void;
 }
 
 /** Taşeron sözleşmesi başlığı. Yüzdeler boş bırakılırsa tarihte geçerli inşaat parametresinden kopyalanır. */
-export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectId, onSaved }: Props) {
+export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectId, direction = 'payable', onSaved }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
   const base = useCompany().baseCurrency;
   const { projects } = useProjectOptions();
-  const { options: partyOptions } = usePartyOptions('supplier', open);
+  const receivable = (edit?.direction ?? direction) === 'receivable';
+  const { options: partyOptions } = usePartyOptions(receivable ? 'customer' : 'supplier', open);
 
   const [projectId, setProjectId] = useState('');
   const [partyId, setPartyId] = useState('');
@@ -61,6 +64,12 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
     setError(null);
   }, [open, edit, defaultProjectId, base]);
 
+  // İşveren sözleşmesinde cari projenin işvereni olmalıdır: proje seçilince kendiliğinden gelir
+  const { data: chosen } = useCQuery<{ project: ProjectDetail }>(['project', projectId], receivable && projectId && !edit ? `/api/projects/${projectId}` : null);
+  useEffect(() => {
+    if (receivable && !edit && chosen?.project.clientPartyId) setPartyId(chosen.project.clientPartyId);
+  }, [receivable, edit, chosen]);
+
   const pctLocked = !!edit && edit.status !== 'draft';
   const pct = (v: string) => (v.trim() === '' ? undefined : v.trim().replace(',', '.'));
 
@@ -80,7 +89,7 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
     }
     return call<SubcontractDetail>('/api/subcontracts', {
       method: 'POST',
-      body: { ...common, projectId, partyId, currencyCode, retentionPct: pct(retention), advanceRecoupPct: pct(advance), withholdingPct: pct(withholding) },
+      body: { ...common, direction, projectId, partyId, currencyCode, retentionPct: pct(retention), advanceRecoupPct: pct(advance), withholdingPct: pct(withholding) },
     });
   }, SUBCONTRACT_INVALIDATE);
 
@@ -102,7 +111,7 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title={edit ? t('subcontracts.form.editTitle') : t('subcontracts.form.newTitle')}
+      title={edit ? t('subcontracts.form.editTitle') : receivable ? t('subcontracts.employer.newTitle') : t('subcontracts.form.newTitle')}
       description={edit ? undefined : t('subcontracts.form.newDesc')}
       footer={
         <>
@@ -127,14 +136,14 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
               {(id) => (
                 <Combobox
                   id={id}
-                  options={projects.filter((p) => p.status !== 'completed' && p.status !== 'cancelled').map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: `${p.code} ${p.name}` }))}
+                  options={projects.filter((p) => p.status !== 'completed' && p.status !== 'cancelled' && (!receivable || p.kind === 'contract')).map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: `${p.code} ${p.name}` }))}
                   value={projectId || null}
                   onChange={setProjectId}
                   placeholder={t('subcontracts.form.projectPlaceholder')}
                 />
               )}
             </Field>
-            <Field label={t('subcontracts.form.party')} required hint={t('subcontracts.form.partyHint')}>
+            <Field label={receivable ? t('subcontracts.employer.party') : t('subcontracts.form.party')} required hint={receivable ? t('subcontracts.employer.partyHint') : t('subcontracts.form.partyHint')}>
               {(id) => <Combobox id={id} options={partyOptions} value={partyId || null} onChange={setPartyId} placeholder={t('subcontracts.form.partyPlaceholder')} />}
             </Field>
           </>

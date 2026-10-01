@@ -3,20 +3,21 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { ExportMenu } from '../../components/ui/ExportMenu';
 import { EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
-import type { ProgressRow } from '../../lib/types';
+import type { ContractDirection, ProgressRow } from '../../lib/types';
 import { ProgressStatusBadge } from './common';
 
 /** Sözleşmenin (ya da tüm şirketin) hakediş listesi. `subcontractId` verilirse "yeni hakediş" düğmesi çıkar. */
-export function ProgressList({ subcontractId, canCreate }: { subcontractId?: string; canCreate?: boolean }) {
+export function ProgressList({ subcontractId, canCreate, direction }: { subcontractId?: string; canCreate?: boolean; direction?: ContractDirection }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const can = useCan();
-  const qs = subcontractId ? `?subcontractId=${subcontractId}` : '';
-  const { data, isPending } = useCQuery<{ payments: ProgressRow[] }>(['progress', 'list', subcontractId ?? 'all'], `/api/progress-payments${qs}`);
+  const qs = subcontractId ? `?subcontractId=${subcontractId}` : direction ? `?direction=${direction}` : '';
+  const { data, isPending } = useCQuery<{ payments: ProgressRow[] }>(['progress', 'list', subcontractId ?? direction ?? 'all'], `/api/progress-payments${qs}`);
   const rows = data?.payments ?? [];
   const add =
     subcontractId && canCreate && can('subcontracts.manage') ? (
@@ -42,7 +43,7 @@ export function ProgressList({ subcontractId, canCreate }: { subcontractId?: str
                 <Th className="w-36">{t('subcontracts.progress.cols.number')}</Th>
                 <Th className="w-16">{t('subcontracts.progress.cols.no')}</Th>
                 {!subcontractId && <Th>{t('subcontracts.progress.cols.contract')}</Th>}
-                {!subcontractId && <Th>{t('subcontracts.progress.cols.party')}</Th>}
+                {!subcontractId && <Th>{direction === 'receivable' ? t('subcontracts.employer.party') : t('subcontracts.progress.cols.party')}</Th>}
                 <Th className="w-28">{t('subcontracts.progress.cols.period')}</Th>
                 <Th className="w-28">{t('subcontracts.progress.cols.status')}</Th>
                 <Th num>{t('subcontracts.progress.cols.gross')}</Th>
@@ -72,17 +73,22 @@ export function ProgressList({ subcontractId, canCreate }: { subcontractId?: str
   );
 }
 
-export function ProgressPaymentsPage() {
+function PaymentsPage({ direction }: { direction: ContractDirection }) {
   const { t } = useTranslation();
+  const receivable = direction === 'receivable';
   return (
     <>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl">{t('subcontracts.progress.title')}</h1>
-          <p className="mt-1 text-sm text-muted">{t('subcontracts.progress.subtitle')}</p>
+          <h1 className="text-2xl">{receivable ? t('subcontracts.employer.claimsTitle') : t('subcontracts.progress.title')}</h1>
+          <p className="mt-1 text-sm text-muted">{receivable ? t('subcontracts.employer.claimsSubtitle') : t('subcontracts.progress.subtitle')}</p>
         </div>
+        <ExportMenu exportKey="progress-payments" params={{ direction }} print={false} />
       </div>
-      <ProgressList />
+      <ProgressList direction={direction} />
     </>
   );
 }
+
+export const ProgressPaymentsPage = () => <PaymentsPage direction="payable" />;
+export const EmployerClaimsPage = () => <PaymentsPage direction="receivable" />;

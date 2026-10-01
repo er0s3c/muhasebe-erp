@@ -10,13 +10,19 @@ import { Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
-import type { SubcontractRow } from '../../lib/types';
+import type { ContractDirection, SubcontractRow } from '../../lib/types';
 import { useProjectOptions } from '../projects/common';
 import { SUBCONTRACT_STATUSES, SubcontractStatusBadge } from './common';
 import { SubcontractFormSheet } from './SubcontractFormSheet';
 
-export function SubcontractsPage() {
+/** Taşeron sözleşmeleri (yönsüz rota). */
+export const SubcontractsPage = () => <ContractsPage direction="payable" />;
+/** İşveren sözleşmeleri: proje başına tek, müşteri carisi ile. */
+export const EmployerContractsPage = () => <ContractsPage direction="receivable" />;
+
+function ContractsPage({ direction }: { direction: ContractDirection }) {
   const { t } = useTranslation();
+  const receivable = direction === 'receivable';
   const navigate = useNavigate();
   const canManage = useCan()('subcontracts.manage');
   const { projects } = useProjectOptions();
@@ -25,11 +31,11 @@ export function SubcontractsPage() {
   const [status, setStatus] = useState('');
 
   const qs = useMemo(() => {
-    const q = new URLSearchParams();
+    const q = new URLSearchParams({ direction });
     if (projectId) q.set('projectId', projectId);
     if (status) q.set('status', status);
     return q.toString();
-  }, [projectId, status]);
+  }, [direction, projectId, status]);
   const { data, isPending } = useCQuery<{ subcontracts: SubcontractRow[] }>(['subcontracts', 'list', qs], `/api/subcontracts?${qs}`);
   const rows = data?.subcontracts ?? [];
   const filtered = !!(projectId || status);
@@ -37,18 +43,18 @@ export function SubcontractsPage() {
   const addButton = canManage && (
     <Button variant="primary" onClick={() => setAdding(true)}>
       <Plus className="size-4" aria-hidden />
-      {t('subcontracts.add')}
+      {receivable ? t('subcontracts.employer.add') : t('subcontracts.add')}
     </Button>
   );
 
   return (
     <>
       <PageHeader
-        title={t('subcontracts.title')}
-        description={t('subcontracts.subtitle')}
+        title={receivable ? t('subcontracts.employer.title') : t('subcontracts.title')}
+        description={receivable ? t('subcontracts.employer.subtitle') : t('subcontracts.subtitle')}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <ExportMenu exportKey="subcontract-register" params={projectId ? { projectId } : {}} print={false} />
+            <ExportMenu exportKey="subcontract-register" params={{ direction, ...(projectId ? { projectId } : {}) }} print={false} />
             {addButton}
           </div>
         }
@@ -57,7 +63,7 @@ export function SubcontractsPage() {
         <PageLoading />
       ) : rows.length === 0 && !filtered ? (
         <Card>
-          <EmptyState icon={<FileSignature className="size-5" />} title={t('subcontracts.empty')} description={t('subcontracts.emptyDesc')} action={addButton || undefined} />
+          <EmptyState icon={<FileSignature className="size-5" />} title={receivable ? t('subcontracts.employer.empty') : t('subcontracts.empty')} description={receivable ? t('subcontracts.employer.emptyDesc') : t('subcontracts.emptyDesc')} action={addButton || undefined} />
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
@@ -90,7 +96,7 @@ export function SubcontractsPage() {
                   <tr>
                     <Th className="w-28">{t('subcontracts.cols.code')}</Th>
                     <Th>{t('subcontracts.cols.title')}</Th>
-                    <Th>{t('subcontracts.cols.party')}</Th>
+                    <Th>{receivable ? t('subcontracts.employer.party') : t('subcontracts.cols.party')}</Th>
                     <Th>{t('subcontracts.cols.project')}</Th>
                     <Th className="w-28">{t('subcontracts.cols.status')}</Th>
                     <Th num>{t('subcontracts.cols.amount')}</Th>
@@ -117,7 +123,7 @@ export function SubcontractsPage() {
           )}
         </div>
       )}
-      <SubcontractFormSheet open={adding} onOpenChange={setAdding} onSaved={(id) => navigate(`/subcontracts/${id}`)} />
+      <SubcontractFormSheet direction={direction} open={adding} onOpenChange={setAdding} onSaved={(id) => navigate(`/subcontracts/${id}`)} />
     </>
   );
 }

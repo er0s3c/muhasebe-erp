@@ -104,14 +104,17 @@ describe('demo aracı', () => {
       expect(sources).toEqual(expect.arrayContaining(['manual', 'invoice', 'treasury']));
       expect((await q(`select count(*)::int as n from stock_movements where project_id is not null`))[0].n).toBeGreaterThanOrEqual(4);
       // Taşeron (B2): 1 sözleşme (yürürlükte, onaylı revizyon), BOQ, 1 kaydedilmiş + 1 taslak hakediş, hakediş yevmiyesi maliyet kodlu
-      expect(await q(`select status, count(*)::int as n from progress_payments group by status order by status`)).toEqual([
-        { status: 'draft', n: 1 },
-        { status: 'posted', n: 1 },
+      expect(await q(`select direction, status, count(*)::int as n from progress_payments group by direction, status order by direction, status`)).toEqual([
+        { direction: 'payable', status: 'draft', n: 1 },
+        { direction: 'payable', status: 'posted', n: 1 },
+        { direction: 'receivable', status: 'draft', n: 1 },
+        { direction: 'receivable', status: 'posted', n: 1 },
       ]);
-      expect((await q(`select count(*)::int as n from subcontracts where status = 'active'`))[0].n).toBe(1);
-      expect((await q(`select count(*)::int as n from journal_entries where source_type = 'progress_payment'`))[0].n).toBe(1);
+      expect((await q(`select count(*)::int as n from subcontracts where status = 'active'`))[0].n).toBe(2);
+      expect((await q(`select count(*)::int as n from subcontracts where direction = 'receivable'`))[0].n).toBe(1);
+      expect((await q(`select count(*)::int as n from journal_entries where source_type = 'progress_payment'`))[0].n).toBe(2);
       expect((await q(`select count(*)::int as n from journal_lines jl join cost_codes c on c.id = jl.cost_code_id where c.kind = 'subcontract' and jl.project_id is not null`))[0].n).toBeGreaterThan(0);
-      expect((await q(`select coalesce(sum(amount), 0)::int as n from subcontract_advances`))[0].n).toBe(10000);
+      expect((await q(`select coalesce(sum(amount), 0)::int as n from subcontract_advances`))[0].n).toBe(160000);
       // Kalem etiketsiz proje satırı (iş kalemine atanmamış) ve projesiz maliyet demo'da bilerek bulunur
       expect((await q(`select count(*)::int as n from journal_lines where project_id is not null and wbs_id is null and debit_base > 0`))[0].n).toBeGreaterThan(0);
       ids = (await q(`select u.id as uid, u.organization_id as oid, c.id as cid from users u join companies c on c.organization_id = u.organization_id where u.email = $1`, [DEMO_EMAIL]))[0];

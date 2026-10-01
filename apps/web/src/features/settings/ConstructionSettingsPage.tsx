@@ -228,6 +228,7 @@ function RulesCard() {
   const toast = useToast();
   const canManage = useCan()('subcontracts.approve');
   const { data } = useCQuery<{ rules: ApprovalRuleRow[] }>(['approval-rules'], '/api/approval-rules');
+  const [docType, setDocType] = useState<'progress_payment' | 'employer_claim'>('progress_payment');
   const [minAmount, setMinAmount] = useState('0');
   const [maxAmount, setMaxAmount] = useState('');
   const [separate, setSeparate] = useState(true);
@@ -238,7 +239,7 @@ function RulesCard() {
     (_: void, call) =>
       call('/api/approval-rules', {
         method: 'POST',
-        body: { docType: 'progress_payment', minAmount: minAmount.replace(',', '.') || '0', maxAmount: maxAmount.trim() ? maxAmount.replace(',', '.') : null, separateRequester: separate, steps: steps.map((role) => ({ role })) },
+        body: { docType, minAmount: minAmount.replace(',', '.') || '0', maxAmount: maxAmount.trim() ? maxAmount.replace(',', '.') : null, separateRequester: separate, steps: steps.map((role) => ({ role })) },
       }),
     INV,
   );
@@ -258,6 +259,7 @@ function RulesCard() {
             <Table>
               <thead>
                 <tr>
+                  <Th className="w-44">{t('constructionSettings.rules.docType')}</Th>
                   <Th>{t('constructionSettings.rules.range')}</Th>
                   <Th>{t('constructionSettings.rules.steps')}</Th>
                   <Th className="w-40">{t('constructionSettings.rules.separate')}</Th>
@@ -268,6 +270,7 @@ function RulesCard() {
               <tbody>
                 {rules.map((r) => (
                   <Tr key={r.id} className={r.isActive ? undefined : 'opacity-60'}>
+                    <Td className="text-muted">{t(`subcontracts.approval.docTypes.${r.docType}`)}</Td>
                     <Td>{r.maxAmount ? t('constructionSettings.rules.rangeBetween', { min: money(r.minAmount), max: money(r.maxAmount) }) : t('constructionSettings.rules.rangeFrom', { min: money(r.minAmount) })}</Td>
                     <Td>{r.steps.map((s) => (s.approverRole ? t(`subcontracts.approval.roles.${s.approverRole}` as 'subcontracts.approval.roles.owner') : t('subcontracts.approval.userStep'))).join(' → ')}</Td>
                     <Td className="text-muted">{r.separateRequester ? t('common.yes') : t('common.no')}</Td>
@@ -297,6 +300,14 @@ function RulesCard() {
               add.mutate(undefined, { onSuccess: () => { toast.success(t('constructionSettings.rules.added')); setSteps(['site_manager']); setMinAmount('0'); setMaxAmount(''); }, onError: setError });
             }}
           >
+            <Field label={t('constructionSettings.rules.docType')}>
+              {(id) => (
+                <Select id={id} value={docType} onChange={(e) => setDocType(e.target.value as 'progress_payment' | 'employer_claim')} className="w-64">
+                  <option value="progress_payment">{t('subcontracts.approval.docTypes.progress_payment')}</option>
+                  <option value="employer_claim">{t('subcontracts.approval.docTypes.employer_claim')}</option>
+                </Select>
+              )}
+            </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Field label={t('constructionSettings.rules.min')}>{(id) => <Input id={id} inputMode="decimal" className="num text-right" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />}</Field>
               <Field label={t('constructionSettings.rules.max')} hint={t('constructionSettings.rules.maxHint')}>{(id) => <Input id={id} inputMode="decimal" className="num text-right" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />}</Field>

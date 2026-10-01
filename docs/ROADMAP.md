@@ -21,6 +21,7 @@
 | M9c | Modül istisnaları | Ayarlar > Modüller: bağımlılık korumalı kapatma/açma (`requires`/`locked`), panel ve bağlantı kapıları |
 | M9d | Demo, yedek, operasyon | Demo aracı + ayrı demo örneği, yedek/geri yükleme betikleri ve CI'da geri yükleme tatbikatı, operatör parola kurtarma, `OPERATIONS.md`, üçüncü taraf lisans bildirimi |
 | L1–L5 | Lisanslama | Ed25519 imzalı kiralı lisans (sektör, cihaz kotası, şirket sınırı, bitiş), satıcı **lisans sunucusu** (`apps/license-server`: etkinleştirme, kalp atışı, çevrimdışı etkinleştirme, klon şüphesi) ve **yönetim paneli** (`apps/license-admin`, parola + zorunlu TOTP) + CLI; uygulama tarafı durum makinesi (etkin/tolerans/salt-okunur), dağınık bağımsız kapılar, **cihaz koltukları**, etkinleştirme/lisans/cihaz ekranları; `LICENSING.md` |
+| B2e | İşveren hakedişi | `direction` boyutu (payable/receivable) ile taşeron altyapısının ayna kullanımı: işveren sözleşmesi (contract projesi + işveren cari, projede tek), revizyonlu BOQ, kümülatif **alınan hakediş** (B 120 / A 600 + 391; teminat 126, avans 340, stopaj 193), `employer_claim` onay türü, avans alma, teminat iadesi (B 120 / A 126), tahsilat mevcut kasa/banka akışıyla, proje işveren özeti; yönlü ERP10 korumaları |
 | B2 | Taşeron ve hakediş | Maliyet kodu boyutu (`cost_codes`, `journal_lines.cost_code_id`); tarihli inşaat parametreleri (teminat/stopaj/avans %, doğrulama alanlı); **genel onay motoru** (belge türü + proje + tutar aralığı → sıralı rol/kullanıcı adımları, kararlar değişmez); taşeron sözleşmesi + revizyonlu BOQ; kümülatif hakediş (kesintiler, onay → yevmiye), iptal (ters kayıt), avans, teminat iadesi; maliyet raporunda kalan taahhüt ve maliyet koduna göre kırılım; sözleşme/hakediş dışa aktarmaları; ERP10 koruma tetikleyicileri |
 | B1 | Şantiye projeleri | Proje (kendi / işverene yapılan iş), iş kırılımı (WBS), revizyonlu değişmez bütçe, tarihli ilerleme; gerçekleşen maliyet defterden türer (yevmiye, fatura kalemi, stok sarfı, kasa/banka ödemesi → proje + iş kalemi etiketi); tamamlanma %, tahmini toplam maliyet (EAC), sapma, CPI; projesiz maliyet mutabakatı; Excel/CSV/baskı; ERP09 koruma tetikleyicileri |
 
@@ -35,8 +36,8 @@
 
 Her faz, ilgili yasal parametrelerin resmi kaynaktan doğrulanmasına bağlıdır (bkz. [LEGAL-NOTES.md](LEGAL-NOTES.md)).
 
-- **Faz B: İnşaat.** **B1 (şantiye projesi, bütçe, gerçekleşen, tahmin) ve B2 (taşeron sözleşmesi, BOQ, verilen hakediş, onay motoru, taahhüt) tamamlandı.** Kalan alt fazlar (her biri ayrı plan ve onayla):
-  - **B2e — Alınan (işveren) hakedişi:** işveren sözleşmesine göre kümülatif hakediş (müşteri carisi 120, gelir etiketli), aynı onay motoru ve hesap fonksiyonu; **satın alma zinciri** (talep → onay → RFQ → sipariş [taahhüt] → mal kabul) onay motorunu `docType` ekleyerek kullanır; variation order sözleşme revizyonuna bağlanır; malzeme mahsubu ve KDV tevkifatı.
+- **Faz B: İnşaat.** **B1 (şantiye projesi, bütçe, gerçekleşen, tahmin), B2 (taşeron sözleşmesi, BOQ, verilen hakediş, onay motoru, taahhüt) ve B2e (işveren hakedişi) tamamlandı.** Kalan alt fazlar (her biri ayrı plan ve onayla):
+  - **Satın alma zinciri** (talep → onay → RFQ → sipariş [taahhüt] → mal kabul) onay motorunu `docType` ekleyerek kullanır; variation order sözleşme revizyonuna bağlanır; malzeme mahsubu ve KDV tevkifatı.
   - **B3 — Gayrimenkul envanteri ve taksit:** bağımsız bölüm, satış sözleşmesi, dövizli (GBP) taksit planı ve tahsilat mahsubu, gelir tanıma yöntemi (parametre).
   - **B4 — Fonlar, kârlılık, nakit:** altyapı fonları/harçlar (tarihli parametre), proje kârlılığı (GBP raporlama), nakit projeksiyonu.
 - **Faz C: Resmî uyum.** Yabancılara satış kotası ve süre motoru, e-Fatura entegrasyonu, KDV/stopaj/BSİV beyannameleri, kur otomatik çekme.

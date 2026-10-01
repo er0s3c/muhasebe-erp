@@ -489,7 +489,33 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
     deductions: [{ description: 'Gecikme cezası (demo)', amount: '500' }],
   });
 
-  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans';
+  // ---- İşveren sözleşmesi ve alınan hakediş (Faz B2e): Kuzey Villa ------------------------------------
+  const ctxOwner = { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' as const };
+  const emp = await createSubcontract(tx, pgctx, {
+    direction: 'receivable', projectId: kuzey, partyId: employer.id, title: 'Anahtar teslim villa (işveren sözleşmesi)', currencyCode: 'TRY', paymentDays: 30, startDate: date(8, 15), endDate: date(12, 15),
+  });
+  const [empRev] = await tx.select({ id: subcontractRevisions.id }).from(subcontractRevisions).where(eq(subcontractRevisions.subcontractId, emp.id));
+  const empBoq = await putBoqLines(tx, pgctx, empRev!.id, {
+    lines: [
+      { itemNo: '1', description: 'Temel ve kaba inşaat', unit: 'götürü', quantity: '1', unitPrice: '1200000', wbsId: k.kaba },
+      { itemNo: '2', description: 'İnce işler ve teslim', unit: 'götürü', quantity: '1', unitPrice: '600000', wbsId: k.ince },
+    ],
+  });
+  await approveRevision(tx, pgctx, empRev!.id);
+  const ek = (no: string) => empBoq.lines.find((l) => l.itemNo === no)!.lineKey as string;
+  await giveAdvance(tx, pgctx, emp.id, { accountId: bankTlId, date: date(8, 20), amount: '150000', note: 'Sözleşme avansı' });
+  const ac1 = await createProgress(tx, pgctx, {
+    subcontractId: emp.id, periodEnd: date(9, 28), vatCode: 'KDV-16', note: 'Eylül işveren hakedişi',
+    lines: [{ lineKey: ek('1'), cumulativeQty: '0.25' }, { lineKey: ek('2'), cumulativeQty: '0' }], deductions: [],
+  });
+  const ac1s = await submitProgress(tx, pgctx, ctxOwner, ac1.payment.id as string);
+  await decide(tx, ctxOwner, ac1s.approvals[0]!.id, { decision: 'approve' });
+  await createProgress(tx, pgctx, {
+    subcontractId: emp.id, periodEnd: date(9, 30), vatCode: 'KDV-16',
+    lines: [{ lineKey: ek('1'), cumulativeQty: '0.5' }, { lineKey: ek('2'), cumulativeQty: '0' }], deductions: [],
+  });
+
+  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans; işveren: 1 sözleşme, 1 onaylı + 1 taslak alınan hakediş, avans';
 }
 
 /**
