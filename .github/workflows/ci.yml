@@ -34,8 +34,8 @@ jobs:
       JWT_SECRET: ci-only-secret-ci-only-secret-32chars
       CORS_ORIGIN: http://localhost:5173
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -94,8 +94,8 @@ jobs:
       JWT_SECRET: ci-only-secret-ci-only-secret-32chars
       CORS_ORIGIN: http://localhost:5173
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -132,7 +132,7 @@ jobs:
             echo "::endgroup::"
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-sonuclari
@@ -146,7 +146,7 @@ jobs:
     runs-on: ubuntu-latest
     # Not: compose değişken önceliği kabuk ortamı > --env-file'dır; bu işe iş düzeyi JWT_SECRET/DATABASE_URL verilmez.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Lisans sunucusu (satıcı imajı ve compose'u; anahtar töreni, migrate, sunucu, iki lisans)
         run: scripts/ci-license-docker.sh
