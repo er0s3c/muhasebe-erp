@@ -131,8 +131,11 @@ function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggl
   return (
     <>
       <div className={cn('flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4', collapsed && 'lg:justify-center lg:px-0')}>
-        <BrandMark />
-        <span className={cn('text-base', collapsed && 'lg:hidden')}>{t('app.name')}</span>
+        {/* Logo ve ad ana sayfaya götürür (dar ekranda menüyü de kapatır) */}
+        <Link to="/" onClick={onClose} className="flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand" aria-label={t('shell.home')}>
+          <BrandMark />
+          <span className={cn('text-base', collapsed && 'lg:hidden')}>{t('app.name')}</span>
+        </Link>
         <button className="ml-auto rounded-md p-1.5 text-muted hover:bg-surface-2 lg:hidden" onClick={onClose} aria-label={t('common.close')}>
           <X className="size-5" />
         </button>
