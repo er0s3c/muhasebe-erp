@@ -130,7 +130,8 @@ KKTC'de **89/2007 sayılı Kişisel Verilerin Korunması Yasası** yürürlükte
 **Sistemin işlediği kişisel veriler:**
 
 - **Bugün:** kullanıcı adı ve e-postası; cari kartlardaki kişi adı, telefon, e-posta ve adres; IP adresi ve tarayıcı bilgisi (`security_events`, `audit_log`); cihaz çerezi (`erp_device`); lisans kurulum kimliği ve lisans sunucusunun gördüğü IP (§11).
-- **İleride:** kimlik/pasaport, bordro, yabancı işçi belgeleri, yabancı alıcı bilgileri (Faz B3, C, D).
+- **Personel kartı (D1):** ad soyad, uyruk, kimlik/pasaport no, doğum tarihi, IBAN, telefon, e-posta, adres. Kimlik no, doğum tarihi ve IBAN uygulama düzeyinde AES-256-GCM ile şifreli saklanır (anahtar `JWT_SECRET`'tan türetilir; **anahtar değişirse bu alanlar okunamaz**, bkz. OPERATIONS). Listede ve kartta yalnızca son 4 hane görünür; açık okuma `hr.sensitive` izni ve zorunlu gerekçe ister ve `personal_data_access_log` tablosuna (yalnız-ekleme) yazılır.
+- **İleride:** bordro, yabancı işçi belgeleri, yabancı alıcı bilgileri (Faz B3, C, D).
 
 **Yurt dışına aktarım değerlendirmesi:** Aşağıdaki servislerden biri kullanılırsa veri KKTC dışına çıkabilir. Her biri için aktarım ruhsatı ve işleyen sözleşmesi değerlendirilmelidir:
 
@@ -138,7 +139,9 @@ KKTC'de **89/2007 sayılı Kişisel Verilerin Korunması Yasası** yürürlükte
 - Cloudflare Tunnel ya da benzeri bir proxy (LICENSING.md'de bir dağıtım varyantıdır)
 - İleride eklenirse: hata izleme (Sentry vb.), e-posta API'si (Resend vb.), analitik, yapay zekâ API'si, bulut veritabanı (Supabase, AWS vb.)
 
-**Ürüne eklenmesi gerekenler (henüz yok):**
+**Veri koruma modülü (D1, Veri koruma sayfası):** (1) *Envanter*: tablo/alan, kategori, amaç, hukuki dayanak, saklama süresi, yurt dışı aktarım; başlangıç kayıtları kod tarafından tohumlanır ve **tüm dayanak/süre metinleri "doğrulanmadı" rozetlidir**; düzenleme doğrulamayı sıfırlar, doğrulamayı hukuk danışmanıyla yapan kullanıcı işaretler. (2) *Talepler*: erişim/dışa aktarma/düzeltme/silme talepleri kayıt altına alınır; **silme talebi yalnızca kaydedilir**, yasal saklama yükümlülükleri nedeniyle otomatik silme yoktur. (3) *Personel verisi dışa aktarma*: `privacy.manage` + `hr.sensitive` ile, gerekçeli ve erişim günlüğüne yazılır. (4) *Erişim günlüğü*. Düzeltme geçmişi `audit_log`'dadır. Bunlar hukuki uyum iddiası değil, uyumu **destekleyen** araçlardır.
+
+**Ürüne eklenmesi gerekenler (kısmen D1'de karşılandı; kalanlar henüz yok):**
 
 | Kayıt / süreç | İçerik |
 |---|---|

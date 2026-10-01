@@ -17,6 +17,7 @@ import { getContract, listContracts, listInstallments } from '../realestate/cont
 import { listUnits } from '../realestate/units';
 import { listProgress } from '../subcontracts/progress';
 import { listSubcontracts } from '../subcontracts/service';
+import { listEmployees } from '../hr/employees';
 import { getVariation, listVariations } from '../subcontracts/variations';
 import { fxDifferences } from '../treasury/fx-report';
 import { TXN_LABEL } from '../treasury/posting';
@@ -885,6 +886,45 @@ export async function variationOrderTable(ctx: BuildCtx, q: { id: string }): Pro
         newAmount: (l.newAmount as string | null) ?? null,
         delta: String(l.delta),
         change: CHANGE_LABEL[String(l.change)] ?? String(l.change),
+      })),
+    },
+  ];
+}
+
+/** Personel listesi (kişisel veri: kimlik ve IBAN maskeli). */
+export async function employeesTable(ctx: BuildCtx, q: { status?: string }): Promise<ReportTable[]> {
+  const d = await listEmployees(ctx.tx, q);
+  return [
+    {
+      key: 'personel',
+      title: 'Personel listesi',
+      sheet: 'Personel',
+      subtitle: sub(ctx, `${formatDateTR(todayIso())} · kişisel veri: kimlik ve IBAN maskelidir`),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('status', 'Durum', 'text', 10),
+        col('dept', 'Departman', 'text', 16),
+        col('title', 'Unvan', 'text', 16),
+        col('project', 'Proje', 'text', 12),
+        col('hire', 'İşe giriş', 'date'),
+        col('leave', 'Çıkış', 'date'),
+        col('phone', 'Telefon', 'text', 16),
+        col('email', 'E-posta', 'text', 24),
+        col('id', 'Kimlik (maskeli)', 'text', 14),
+      ],
+      rows: d.employees.map((x) => ({
+        code: x.code,
+        name: x.fullName,
+        status: x.status === 'left' ? 'Ayrıldı' : 'Aktif',
+        dept: x.department,
+        title: x.jobTitle,
+        project: x.projectCode,
+        hire: x.hireDate,
+        leave: x.leaveDate,
+        phone: x.phone,
+        email: x.email,
+        id: x.idMasked,
       })),
     },
   ];

@@ -27,3 +27,4 @@ export * from './schemas/subcontracts';
 export * from './schemas/procurement';
 export * from './schemas/realestate';
 export * from './schemas/cash-forecast';
+export * from './schemas/hr';

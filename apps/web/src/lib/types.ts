@@ -1113,6 +1113,7 @@ export const MODULE_LABEL_KEYS = {
   'construction.subcontracts': 'modules.constructionSubcontracts',
   'construction.procurement': 'modules.constructionProcurement',
   'construction.realestate': 'modules.constructionRealestate',
+  'hr.core': 'modules.hrCore',
   'retail.pos': 'modules.retailPos',
 } as const;
 
@@ -1793,4 +1794,77 @@ export interface FeeEstimate {
   actual: string;
   remaining: string;
   missingRate: number;
+}
+
+// --- İnsan kaynakları ve kişisel veri (Faz D1) ---
+
+export type EmployeeStatus = 'active' | 'left';
+
+export interface EmployeeRow {
+  id: string;
+  code: string;
+  fullName: string;
+  nationality: string | null;
+  idKind: 'national_id' | 'passport' | null;
+  hasId: boolean;
+  idMasked: string | null;
+  hasBirthDate: boolean;
+  birthDateMasked: string | null;
+  hasIban: boolean;
+  ibanMasked: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  hireDate: string | null;
+  leaveDate: string | null;
+  status: EmployeeStatus;
+  department: string | null;
+  jobTitle: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export type SensitiveField = 'id_number' | 'birth_date' | 'iban';
+
+export interface InventoryRow {
+  id: string;
+  key: string;
+  tableName: string;
+  fieldName: string;
+  category: 'identity' | 'contact' | 'financial' | 'employment' | 'other';
+  purpose: string;
+  legalBasis: string;
+  retention: string | null;
+  isSensitive: boolean;
+  transferAbroad: boolean;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  note: string | null;
+}
+
+export interface DsrRow {
+  id: string;
+  kind: 'access' | 'export' | 'correction' | 'erasure';
+  status: 'open' | 'completed' | 'rejected';
+  requesterName: string;
+  description: string | null;
+  resolutionNote: string | null;
+  openedAt: string;
+  resolvedAt: string | null;
+  employeeId: string | null;
+  employeeCode: string | null;
+  employeeName: string | null;
+}
+
+export interface AccessLogRow {
+  id: string;
+  field: SensitiveField | 'export';
+  reason: string;
+  at: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  by: string;
 }

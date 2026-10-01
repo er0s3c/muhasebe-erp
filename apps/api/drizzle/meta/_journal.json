@@ -372,6 +372,20 @@
       "when": 1790876222876,
       "tag": "0052_vat_withholding_material_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1790885064127,
+      "tag": "0053_hr_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1790885093177,
+      "tag": "0054_hr_core_rules",
+      "breakpoints": true
     }
   ]
 }

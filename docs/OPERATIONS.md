@@ -91,7 +91,7 @@ Geçersiz/eksik değerde uygulama başlamaz ve nedenini yazar. Boş değer "tan�
 |---|---|---|
 | `DATABASE_URL` | — (zorunlu) | **Çalışma zamanı** rolü (`erp_app`). Sahip rolü buraya konmaz |
 | `MIGRATION_DATABASE_URL` | — | Yalnızca `migrate`/`demo` kaplarında: şema sahibi rol (`erp`). Üretimde `DATABASE_URL`'e düşmez |
-| `JWT_SECRET` | — (zorunlu) | ≥ 32 karakter. Üretimde `example`, `change-me`, `secret-secret`, `password` gibi örnek kalıplar **reddedilir** |
+| `JWT_SECRET` | — (zorunlu) | ≥ 32 karakter. Üretimde `example`, `change-me`, `secret-secret`, `password` gibi örnek kalıplar **reddedilir**. Personel kimlik/doğum tarihi/IBAN alanlarının şifreleme anahtarı da bundan türetilir: **değiştirirseniz bu alanlar okunamaz**; döndürme için önce yeniden şifreleme gerekir |
 | `NODE_ENV` | `development` | İmajda `production` |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | |
 | `TRUST_PROXY` | `false` (compose: `loopback,uniquelocal`) | `false`, `true` ya da vekil adresi listesi (CIDR ya da `loopback`, `linklocal`, `uniquelocal`). Sayı (`1`) **reddedilir** |

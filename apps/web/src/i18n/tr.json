@@ -95,7 +95,8 @@
     "invoices": "Fatura ve irsaliye",
     "treasury": "Kasa ve banka",
     "constructionProcurement": "Satın alma ve sipariş",
-    "constructionRealestate": "Gayrimenkul satışı"
+    "constructionRealestate": "Gayrimenkul satışı",
+    "hrCore": "Personel ve veri koruma"
   },
   "nav": {
     "groups": {
@@ -107,7 +108,8 @@
       "invoices": "Fatura ve irsaliye",
       "treasury": "Kasa ve banka",
       "construction": "Şantiye",
-      "reports": "Raporlar"
+      "reports": "Raporlar",
+      "hr": "İnsan kaynakları"
     },
     "dashboard": "Genel bakış",
     "projects": "Projeler",
@@ -162,7 +164,9 @@
     "salesContracts": "Satış sözleşmeleri",
     "salesInstallments": "Taksitler",
     "orderMatching": "Sipariş eşleştirme",
-    "variationOrders": "Değişiklik emirleri"
+    "variationOrders": "Değişiklik emirleri",
+    "employees": "Personel",
+    "privacy": "Veri koruma"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -3369,5 +3373,159 @@
     "cancelledToast": "Değişiklik emri iptal edildi",
     "pendingProjectTitle": "{{n}} bekleyen değişiklik emri",
     "pendingProjectBody": "Taşeron maliyet farkı {{cost}}, işveren gelir farkı {{revenue}}. Onaylanıp uygulanana kadar taahhüde, EAC'ye ve gelire eklenmez."
+  },
+  "hr": {
+    "title": "Personel",
+    "subtitle": "Personel kartları; kimlik, doğum tarihi ve IBAN şifreli saklanır, yalnızca gerekçeyle açılır.",
+    "add": "Yeni personel",
+    "empty": "Personel yok",
+    "emptyDesc": "İlk personel kartını ekleyin.",
+    "privacyNote": "Kimlik, doğum tarihi ve IBAN maskeli gösterilir; açık okuma erişim günlüğüne yazılır.",
+    "search": "Ad, kod veya departman ara",
+    "allStatuses": "Tüm durumlar",
+    "status": {
+      "active": "Çalışıyor",
+      "left": "Ayrıldı"
+    },
+    "cols": {
+      "code": "Kod",
+      "name": "Ad soyad",
+      "id": "Kimlik",
+      "department": "Departman",
+      "jobTitle": "Unvan",
+      "hire": "İşe giriş",
+      "status": "Durum"
+    },
+    "form": {
+      "newTitle": "Yeni personel",
+      "editTitle": "Personeli düzenle",
+      "desc": "Personel kartı bilgileri",
+      "saved": "Personel kaydedildi",
+      "fullName": "Ad soyad",
+      "nationality": "Uyruk",
+      "hireDate": "İşe giriş tarihi",
+      "leaveDate": "Ayrılış tarihi",
+      "sensitive": "Hassas bilgiler",
+      "sensitiveHint": "Bu alanlar şifreli saklanır.",
+      "sensitiveEditHint": "Boş bırakırsanız mevcut değer korunur.",
+      "leftLocked": "Ayrılan personelin kimlik alanları değiştirilemez.",
+      "idKind": "Kimlik türü",
+      "idNumber": "Kimlik / pasaport no",
+      "birthDate": "Doğum tarihi",
+      "iban": "IBAN",
+      "phone": "Telefon",
+      "email": "E-posta",
+      "address": "Adres",
+      "department": "Departman",
+      "jobTitle": "Unvan",
+      "project": "Proje",
+      "noProject": "Proje yok",
+      "note": "Not"
+    },
+    "idKinds": {
+      "national_id": "Kimlik no",
+      "passport": "Pasaport"
+    },
+    "fields": {
+      "id_number": "Kimlik / pasaport no",
+      "birth_date": "Doğum tarihi",
+      "iban": "IBAN"
+    },
+    "card": {
+      "generalTitle": "Genel bilgiler",
+      "sensitiveTitle": "Hassas bilgiler",
+      "sensitiveDesc": "Açık okuma gerekçe ister ve kayda geçer.",
+      "noSensitive": "Hassas alanları açma yetkiniz yok."
+    },
+    "reveal": {
+      "title": "{{field}} göster",
+      "desc": "Bu okuma erişim günlüğüne kaydedilir.",
+      "reason": "Gerekçe",
+      "hint": "Örn. SGK bildirimi hazırlığı"
+    },
+    "show": "Göster",
+    "hide": "Gizle",
+    "terminate": "İşten çıkar",
+    "terminateDesc": "Ayrılış tarihini girin; kimlik alanları kilitlenir.",
+    "terminated": "Personel ayrıldı olarak işaretlendi",
+    "rehire": "Yeniden işe al",
+    "rehired": "Personel yeniden işe alındı",
+    "notFound": "Personel bulunamadı",
+    "back": "Personel listesi"
+  },
+  "privacy": {
+    "title": "Veri koruma",
+    "subtitle": "Kişisel veri envanteri, ilgili kişi talepleri ve hassas veri erişim günlüğü.",
+    "legal": "Envanterdeki hukuki dayanak ve saklama süreleri doğrulanmamış başlangıç değerleridir; hukuk danışmanınızla doğrulayıp onaylayın.",
+    "tabs": {
+      "inventory": "Envanter",
+      "requests": "Talepler",
+      "log": "Erişim günlüğü"
+    },
+    "inv": {
+      "abroad": "Yurt dışı aktarım",
+      "abroadLabel": "Yurt dışına aktarılıyor",
+      "basis": "Hukuki dayanak",
+      "editDesc": "Değişiklik doğrulamayı sıfırlar.",
+      "field": "Veri",
+      "purpose": "Amaç",
+      "retention": "Saklama süresi",
+      "saved": "Envanter güncellendi",
+      "sensitive": "Hassas",
+      "unverified": "Doğrulanmadı",
+      "verification": "Doğrulama",
+      "verified": "Doğrulandı ({{by}})",
+      "verifiedToast": "Doğrulandı",
+      "verify": "Doğrula"
+    },
+    "categories": {
+      "identity": "Kimlik",
+      "contact": "İletişim",
+      "financial": "Mali",
+      "employment": "İstihdam",
+      "other": "Diğer"
+    },
+    "req": {
+      "add": "Talep ekle",
+      "addDesc": "İlgili kişi talebini kayıt altına alın.",
+      "created": "Talep kaydedildi",
+      "date": "Tarih",
+      "description": "Açıklama",
+      "empty": "Talep yok",
+      "emptyDesc": "İlgili kişi talepleri burada izlenir.",
+      "erasureNote": "Silme talepleri yalnızca kayıt altına alınır; yasal saklama yükümlülükleri nedeniyle otomatik silme yapılmaz.",
+      "exportData": "Veriyi dışa aktar",
+      "exportDesc": "Personelin verisi JSON olarak indirilir ve erişim günlüğüne yazılır.",
+      "exportRun": "İndir",
+      "kind": "Tür",
+      "outcome": "Sonuç",
+      "person": "Kişi",
+      "requester": "Talep eden",
+      "resolutionNote": "Sonuç notu",
+      "resolve": "Sonuçlandır",
+      "resolved": "Talep sonuçlandı",
+      "status": "Durum"
+    },
+    "kinds": {
+      "access": "Erişim",
+      "export": "Dışa aktarma",
+      "correction": "Düzeltme",
+      "erasure": "Silme"
+    },
+    "reqStatus": {
+      "open": "Açık",
+      "completed": "Tamamlandı",
+      "rejected": "Reddedildi"
+    },
+    "log": {
+      "at": "Zaman",
+      "by": "Kullanıcı",
+      "empty": "Kayıt yok",
+      "emptyDesc": "Hassas veri okumaları burada görünür.",
+      "export": "Veri dışa aktarma",
+      "field": "Alan",
+      "person": "Kişi",
+      "reason": "Gerekçe"
+    }
   }
 }

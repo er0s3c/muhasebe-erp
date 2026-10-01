@@ -1,0 +1,123 @@
+import { and, eq, sql } from 'drizzle-orm';
+import type { Tx } from '../../db/client';
+import { dataSubjectRequests, personalDataInventory, users } from '../../db/schema';
+import { notFound, unprocessable } from '../../http/errors';
+
+interface Seed {
+  key: string;
+  tableName: string;
+  fieldName: string;
+  category: 'identity' | 'contact' | 'financial' | 'employment' | 'other';
+  purpose: string;
+  legalBasis: string;
+  retention: string;
+  isSensitive?: boolean;
+  transferAbroad?: boolean;
+}
+
+const BASIS_CONTRACT = 'Sözleşmenin kurulması/ifası (doğrulanmadı)';
+const BASIS_LEGAL = 'Yasal yükümlülük (doğrulanmadı)';
+const BASIS_INTEREST = 'Meşru menfaat (doğrulanmadı)';
+const RETENTION_TBD = 'Belirlenmedi (hukuki saklama süresi doğrulanmadı)';
+
+/**
+ * Başlangıç envanteri: sistemin bugün tuttuğu kişisel veri alanları. Amaç/dayanak/süre **taslaktır, hiçbiri doğrulanmamıştır**
+ * (89/2007; LEGAL-NOTES §5): işleten hukuk müşaviriyle gözden geçirip düzenler ve "doğrulandı" işaretler.
+ */
+export const INVENTORY_SEED: readonly Seed[] = [
+  { key: 'employees.full_name', tableName: 'employees', fieldName: 'full_name', category: 'identity', purpose: 'Personel kaydı, puantaj ve bordro', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
+  { key: 'employees.id_number', tableName: 'employees', fieldName: 'id_enc', category: 'identity', purpose: 'Kimlik doğrulama, sosyal güvenlik bildirimi', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'employees.birth_date', tableName: 'employees', fieldName: 'birth_date_enc', category: 'identity', purpose: 'Sosyal güvenlik bildirimi', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'employees.iban', tableName: 'employees', fieldName: 'iban_enc', category: 'financial', purpose: 'Maaş ve avans ödemesi', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'employees.contact', tableName: 'employees', fieldName: 'phone, email, address', category: 'contact', purpose: 'İletişim', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
+  { key: 'employees.employment', tableName: 'employees', fieldName: 'hire_date, leave_date, department, job_title, project_id', category: 'employment', purpose: 'İstihdam ve işçilik maliyeti takibi', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
+  { key: 'parties.contact', tableName: 'parties', fieldName: 'name, tax_number, phone, email, address', category: 'contact', purpose: 'Müşteri/tedarikçi/taşeron cari kaydı ve fatura', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
+  { key: 'users.account', tableName: 'users', fieldName: 'email, full_name', category: 'identity', purpose: 'Uygulama kullanıcı hesabı ve yetkilendirme', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
+  { key: 'security_events.ip', tableName: 'security_events', fieldName: 'ip, user_agent', category: 'other', purpose: 'Güvenlik olaylarının izlenmesi (giriş, parola, MFA)', legalBasis: BASIS_INTEREST, retention: RETENTION_TBD },
+  { key: 'audit_log.changes', tableName: 'audit_log', fieldName: 'changes', category: 'other', purpose: 'Denetim izi: kim neyi ne zaman değiştirdi', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD },
+  { key: 'real_estate.buyers', tableName: 'sales_contracts', fieldName: 'party_id', category: 'contact', purpose: 'Gayrimenkul alıcı sözleşmesi ve taksit takibi', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
+] as const;
+
+/** Envanteri şirket için tohumlar (yoksa ekler; kullanıcı düzenlemelerine dokunmaz). */
+async function seedInventory(tx: Tx, companyId: string) {
+  for (const s of INVENTORY_SEED) {
+    await tx
+      .insert(personalDataInventory)
+      .values({ companyId, key: s.key, tableName: s.tableName, fieldName: s.fieldName, category: s.category, purpose: s.purpose, legalBasis: s.legalBasis, retention: s.retention, isSensitive: s.isSensitive ?? false, transferAbroad: s.transferAbroad ?? false })
+      .onConflictDoNothing({ target: [personalDataInventory.companyId, personalDataInventory.key] });
+  }
+}
+
+export async function listInventory(tx: Tx, companyId: string) {
+  await seedInventory(tx, companyId);
+  const rows = await tx.select().from(personalDataInventory).orderBy(personalDataInventory.tableName, personalDataInventory.key);
+  return { inventory: rows };
+}
+
+export async function updateInventory(tx: Tx, id: string, input: { purpose?: string; legalBasis?: string; retention?: string | null; transferAbroad?: boolean; note?: string | null }) {
+  const [row] = await tx
+    .update(personalDataInventory)
+    .set({ ...input, verifiedBy: null, verifiedAt: null, updatedAt: new Date() }) // değişen kayıt yeniden doğrulanmalı
+    .where(eq(personalDataInventory.id, id))
+    .returning();
+  if (!row) throw notFound('Envanter kaydı');
+  return row;
+}
+
+export async function verifyInventory(tx: Tx, id: string, userId: string, note: string | null | undefined) {
+  const [u] = await tx.select({ email: users.email }).from(users).where(eq(users.id, userId));
+  const [row] = await tx
+    .update(personalDataInventory)
+    .set({ verifiedBy: u?.email ?? userId, verifiedAt: new Date(), ...(note ? { note } : {}), updatedAt: new Date() })
+    .where(eq(personalDataInventory.id, id))
+    .returning();
+  if (!row) throw notFound('Envanter kaydı');
+  return row;
+}
+
+// --- İlgili kişi talepleri -----------------------------------------------------------------------------
+
+export async function createRequest(tx: Tx, ctx: { companyId: string; userId: string }, input: { employeeId?: string | null; requesterName: string; kind: string; description?: string | null }) {
+  const [row] = await tx
+    .insert(dataSubjectRequests)
+    .values({ companyId: ctx.companyId, employeeId: input.employeeId ?? null, requesterName: input.requesterName, kind: input.kind, description: input.description ?? null, createdBy: ctx.userId })
+    .returning();
+  return row!;
+}
+
+export async function listRequests(tx: Tx, q: { status?: string }) {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    select r.id, r.kind, r.status, r.requester_name as "requesterName", r.description, r.resolution_note as "resolutionNote",
+           r.opened_at as "openedAt", r.resolved_at as "resolvedAt", r.employee_id as "employeeId", e.code as "employeeCode", e.full_name as "employeeName"
+      from data_subject_requests r left join employees e on e.id = r.employee_id
+     where (${q.status ?? null}::text is null or r.status = ${q.status ?? null}::text)
+     order by r.opened_at desc`);
+  return { requests: rows.rows };
+}
+
+export async function resolveRequest(tx: Tx, ctx: { userId: string }, id: string, input: { outcome: 'completed' | 'rejected'; resolutionNote: string }) {
+  const [cur] = await tx.select().from(dataSubjectRequests).where(eq(dataSubjectRequests.id, id)).for('update');
+  if (!cur) throw notFound('Talep');
+  if (cur.status !== 'open') throw unprocessable('Talep zaten sonuçlanmış', 'DSR_NOT_OPEN');
+  const [row] = await tx
+    .update(dataSubjectRequests)
+    .set({ status: input.outcome, resolutionNote: input.resolutionNote, resolvedAt: new Date(), resolvedBy: ctx.userId })
+    .where(and(eq(dataSubjectRequests.id, id), eq(dataSubjectRequests.status, 'open')))
+    .returning();
+  return row!;
+}
+
+// --- Erişim günlüğü ------------------------------------------------------------------------------------
+
+export async function listAccessLog(tx: Tx, q: { employeeId?: string }) {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    select l.id, l.field, l.reason, l.created_at as "at", l.employee_id as "employeeId", e.code as "employeeCode", e.full_name as "employeeName", u.email as "by"
+      from personal_data_access_log l
+      join employees e on e.id = l.employee_id
+      join users u on u.id = l.user_id
+     where (${q.employeeId ?? null}::uuid is null or l.employee_id = ${q.employeeId ?? null}::uuid)
+     order by l.created_at desc
+     limit 500`);
+  return { log: rows.rows };
+}
+

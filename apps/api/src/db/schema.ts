@@ -892,6 +892,148 @@ export const variationOrders = pgTable(
   ],
 );
 
+// --- İnsan kaynakları ve kişisel veri (Faz D1) ----------------------------------------------------
+
+/**
+ * Personel kartı. Kimlik/pasaport no, doğum tarihi ve IBAN **uygulama düzeyinde şifreli** saklanır (AES-256-GCM); ekranda
+ * maskelidir (son 4 hane). Açık okuma `hr.sensitive` izni + gerekçe ister ve `personal_data_access_log`'a yazılır.
+ */
+export const employees = pgTable(
+  'employees',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** PRS-0001 (boşluksuz, şirket geneli). */
+    code: text().notNull(),
+    fullName: text().notNull(),
+    nationality: text(),
+    /** national_id | passport */
+    idKind: text(),
+    idEnc: text(),
+    /** Aynı kimliğin ikinci kez girilmesini yakalamak için HMAC özeti (şifresiz kimlik aranamaz). */
+    idHash: text(),
+    idLast4: text(),
+    birthDateEnc: text(),
+    ibanEnc: text(),
+    ibanLast4: text(),
+    phone: text(),
+    email: text(),
+    address: text(),
+    hireDate: date({ mode: 'string' }),
+    leaveDate: date({ mode: 'string' }),
+    /** active | left */
+    status: text().notNull().default('active'),
+    department: text(),
+    jobTitle: text(),
+    projectId: uuid(),
+    /** İleride personel cari/avans (X5) için isteğe bağlı cari bağlantısı. */
+    partyId: uuid(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('employees_company_code_uq').on(t.companyId, t.code),
+    unique('employees_id_company_uq').on(t.id, t.companyId),
+    unique('employees_id_hash_uq').on(t.companyId, t.idHash),
+    foreignKey({ name: 'employees_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    foreignKey({ name: 'employees_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    index('employees_status_idx').on(t.companyId, t.status),
+    check('employees_status_ck', sql`${t.status} in ('active','left')`),
+    check('employees_id_kind_ck', sql`${t.idKind} is null or ${t.idKind} in ('national_id','passport')`),
+    check('employees_dates_ck', sql`${t.leaveDate} is null or ${t.hireDate} is null or ${t.leaveDate} >= ${t.hireDate}`),
+    check('employees_id_complete_ck', sql`(${t.idEnc} is null) = (${t.idKind} is null) and (${t.idEnc} is null) = (${t.idHash} is null)`),
+  ],
+);
+
+/** Kişisel veri işleme envanteri: hangi alan hangi amaçla ve hangi dayanakla tutulur (89/2007; hiçbiri doğrulanmamıştır). */
+export const personalDataInventory = pgTable(
+  'personal_data_inventory',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** employees.id_number gibi kararlı anahtar; başlangıç kayıtları kodla tohumlanır. */
+    key: text().notNull(),
+    tableName: text().notNull(),
+    fieldName: text().notNull(),
+    /** identity | contact | financial | employment | other */
+    category: text().notNull(),
+    purpose: text().notNull(),
+    legalBasis: text().notNull(),
+    retention: text(),
+    isSensitive: boolean().notNull().default(false),
+    transferAbroad: boolean().notNull().default(false),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    note: text(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('personal_data_inventory_key_uq').on(t.companyId, t.key),
+    check('personal_data_inventory_category_ck', sql`${t.category} in ('identity','contact','financial','employment','other')`),
+  ],
+);
+
+/** İlgili kişi talebi (erişim, dışa aktarma, düzeltme, silme). Silme yalnızca kayda alınır; yasal saklama nedeniyle otomatik silinmez. */
+export const dataSubjectRequests = pgTable(
+  'data_subject_requests',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid(),
+    requesterName: text().notNull(),
+    /** access | export | correction | erasure */
+    kind: text().notNull(),
+    /** open | completed | rejected */
+    status: text().notNull().default('open'),
+    description: text(),
+    resolutionNote: text(),
+    openedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp({ withTimezone: true }),
+    createdBy: uuid().references(() => users.id),
+    resolvedBy: uuid().references(() => users.id),
+  },
+  (t) => [
+    foreignKey({ name: 'data_subject_requests_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    index('data_subject_requests_status_idx').on(t.companyId, t.status),
+    check('data_subject_requests_kind_ck', sql`${t.kind} in ('access','export','correction','erasure')`),
+    check('data_subject_requests_status_ck', sql`${t.status} in ('open','completed','rejected')`),
+    check('data_subject_requests_resolved_ck', sql`(${t.status} = 'open') = (${t.resolvedAt} is null)`),
+  ],
+);
+
+/** Hassas kişisel verinin açık okunması / dışa aktarılması: salt-eklenir denetim günlüğü. */
+export const personalDataAccessLog = pgTable(
+  'personal_data_access_log',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    /** id_number | birth_date | iban | export */
+    field: text().notNull(),
+    reason: text().notNull(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ name: 'personal_data_access_log_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    index('personal_data_access_log_emp_idx').on(t.companyId, t.employeeId, t.createdAt),
+    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export')`),
+    check('personal_data_access_log_reason_ck', sql`length(btrim(${t.reason})) >= 3`),
+  ],
+);
+
 export const journalEntries = pgTable(
   'journal_entries',
   {

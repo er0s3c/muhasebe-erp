@@ -385,5 +385,24 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     );
   }
 
+  // Personel (kişisel veri: yalnızca maskeli kimlik/IBAN; açık metin ayrı, gerekçeli ve günlüklü uçla alınır)
+  const empRows = await query(
+    'Personel',
+    sql`select e.code, e.full_name, e.nationality, e.id_kind, e.id_last4, e.iban_last4, e.phone, e.email, e.status, e.department, e.job_title,
+               e.hire_date::text as hire_date, e.leave_date::text as leave_date, p.code as project
+          from employees e left join projects p on p.id = e.project_id order by e.code`,
+  );
+  if (empRows.length > 0) {
+    tables.push(
+      table(
+        'Personel',
+        'Personel',
+        [col('code', 'Kod', 'text', 10), col('name', 'Ad soyad', 'text', 28), col('nat', 'Uyruk', 'text', 14), col('kind', 'Kimlik türü', 'text', 12), col('id', 'Kimlik (maskeli)', 'text', 14), col('iban', 'IBAN (maskeli)', 'text', 14), col('phone', 'Telefon', 'text', 16), col('email', 'E-posta', 'text', 24), col('status', 'Durum', 'text', 10), col('dept', 'Departman', 'text', 16), col('title', 'Unvan', 'text', 16), col('hire', 'İşe giriş', 'date'), col('leave', 'Çıkış', 'date'), col('project', 'Proje', 'text', 12)],
+        empRows.map((r) => ({ code: s(r.code), name: s(r.full_name), nat: s(r.nationality), kind: s(r.id_kind), id: r.id_last4 ? `••••${r.id_last4}` : null, iban: r.iban_last4 ? `••••${r.iban_last4}` : null, phone: s(r.phone), email: s(r.email), status: r.status === 'left' ? 'Ayrıldı' : 'Aktif', dept: s(r.department), title: s(r.job_title), hire: s(r.hire_date), leave: s(r.leave_date), project: s(r.project) })),
+        'Kişisel veri içerir; kimlik ve IBAN maskelidir',
+      ),
+    );
+  }
+
   return tables;
 }

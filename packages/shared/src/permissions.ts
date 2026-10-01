@@ -36,6 +36,11 @@ export const PERMISSIONS = [
   'realestate.read',
   'realestate.manage',
   'realestate.approve',
+  // İnsan kaynakları ve kişisel veri (Faz D)
+  'hr.read',
+  'hr.manage',
+  'hr.sensitive',
+  'privacy.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -84,6 +89,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'realestate.read',
     'realestate.manage',
     'realestate.approve',
+    'hr.read',
   ],
   // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
   // Faturayı taslak olarak hazırlar; muhasebeleştirmeyi (invoices.post) muhasebeci yapar.
