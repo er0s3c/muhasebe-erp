@@ -260,6 +260,20 @@
       "when": 1790834831308,
       "tag": "0036_procurement_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790840429645,
+      "tag": "0037_real_estate",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790840430973,
+      "tag": "0038_real_estate_rules",
+      "breakpoints": true
     }
   ]
 }

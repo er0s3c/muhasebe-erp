@@ -35,6 +35,9 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   retention_receivable: 'İşveren tarafından tutulan teminat (alacak)',
   advance_received: 'İşverenden alınan avanslar',
   withholding_receivable: 'İşverenin hakedişten kestiği stopaj (peşin vergi)',
+  deferred_revenue: 'Ertelenmiş gelir (teslime kadar alıcı taksitleri)',
+  property_revenue: 'Taşınmaz satış geliri (teslimde)',
+  termination_income: 'Sözleşme fesih kesintisi geliri',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

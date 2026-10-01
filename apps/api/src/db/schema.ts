@@ -1448,7 +1448,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income')`,
     ),
   ],
 );
@@ -2671,5 +2671,214 @@ export const poReceiptLines = pgTable(
       foreignColumns: [purchaseOrderLines.id, purchaseOrderLines.companyId],
     }),
     check('po_receipt_lines_qty_ck', sql`${t.quantity} > 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Gayrimenkul satışı (Faz B3): bağımsız bölüm envanteri, satış sözleşmesi, taksit planı, fesih
+// ---------------------------------------------------------------------------
+
+/** Kendi projesindeki satılabilir bağımsız bölüm. Durum yalnızca sözleşme akışıyla değişir (tetikleyici denetler). */
+export const realEstateUnits = pgTable(
+  'real_estate_units',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    projectId: uuid().notNull(),
+    /** Blok/etap; yoksa boş metin (tekillik anahtarında yer alır). */
+    block: text().notNull().default(''),
+    floor: integer(),
+    unitNo: text().notNull(),
+    /** apartment | villa | shop | office | land | parking | storage | other */
+    unitType: text().notNull().default('apartment'),
+    grossM2: numeric({ precision: 12, scale: 2 }),
+    netM2: numeric({ precision: 12, scale: 2 }),
+    /** Oda düzeni, örn. "2+1". */
+    rooms: text(),
+    listPrice: money(),
+    listCurrency: text().references(() => currencies.code),
+    /** available | reserved | sold | handed_over */
+    status: text().notNull().default('available'),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('real_estate_units_no_uq').on(t.companyId, t.projectId, t.block, t.unitNo),
+    unique('real_estate_units_id_company_uq').on(t.id, t.companyId),
+    unique('real_estate_units_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'real_estate_units_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('real_estate_units_project_idx').on(t.companyId, t.projectId, t.status),
+    check('real_estate_units_type_ck', sql`${t.unitType} in ('apartment','villa','shop','office','land','parking','storage','other')`),
+    check('real_estate_units_status_ck', sql`${t.status} in ('available','reserved','sold','handed_over')`),
+    check('real_estate_units_price_ck', sql`(${t.listPrice} is null or (${t.listPrice} >= 0 and ${t.listCurrency} is not null))`),
+    check('real_estate_units_area_ck', sql`(${t.grossM2} is null or ${t.grossM2} > 0) and (${t.netM2} is null or ${t.netM2} > 0)`),
+  ],
+);
+
+/**
+ * Satış sözleşmesi: bir birim, bir alıcı, dövizli bedel ve taksit planı. Etkinleşince taksit başına alıcı carisine
+ * vadeli 120 satırı ve ertelenmiş gelir (380) yazılır; teslimde gelire (600) aktarılır.
+ */
+export const salesContracts = pgTable(
+  'sales_contracts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    unitId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    contractDate: date({ mode: 'string' }).notNull(),
+    plannedHandover: date({ mode: 'string' }),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    price: money().notNull(),
+    downPayment: money().notNull().default('0'),
+    /** Gelir tanıma yöntemi (veri olarak saklanır): on_handover. */
+    recognition: text().notNull().default('on_handover'),
+    /** draft | active | handed_over | terminated | cancelled */
+    status: text().notNull().default('draft'),
+    /** Etkinleşme tarihi ve kuru (sözleşme para biriminden defter para birimine). */
+    activatedOn: date({ mode: 'string' }),
+    activationFx: rate(),
+    activationEntryId: uuid(),
+    handedOverOn: date({ mode: 'string' }),
+    handoverEntryId: uuid(),
+    terminatedOn: date({ mode: 'string' }),
+    cancelledAt: timestamp({ withTimezone: true }),
+    cancelReason: text(),
+    penaltyNote: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('sales_contracts_code_uq').on(t.companyId, t.code),
+    unique('sales_contracts_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'sales_contracts_unit_fk',
+      columns: [t.unitId, t.projectId],
+      foreignColumns: [realEstateUnits.id, realEstateUnits.projectId],
+    }),
+    foreignKey({
+      name: 'sales_contracts_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'sales_contracts_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    foreignKey({
+      name: 'sales_contracts_activation_fk',
+      columns: [t.activationEntryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    foreignKey({
+      name: 'sales_contracts_handover_fk',
+      columns: [t.handoverEntryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    // Birim başına tek canlı sözleşme (taslak, etkin ya da teslim edilmiş)
+    uniqueIndex('sales_contracts_unit_live_uq')
+      .on(t.unitId)
+      .where(sql`${t.status} in ('draft','active','handed_over')`),
+    index('sales_contracts_project_idx').on(t.companyId, t.projectId, t.status),
+    index('sales_contracts_party_idx').on(t.companyId, t.partyId),
+    check('sales_contracts_status_ck', sql`${t.status} in ('draft','active','handed_over','terminated','cancelled')`),
+    check('sales_contracts_recognition_ck', sql`${t.recognition} in ('on_handover')`),
+    check('sales_contracts_amount_ck', sql`${t.price} > 0 and ${t.downPayment} >= 0 and ${t.downPayment} <= ${t.price}`),
+    check(
+      'sales_contracts_active_ck',
+      sql`${t.status} in ('draft','cancelled') or (${t.activatedOn} is not null and ${t.activationEntryId} is not null and ${t.activationFx} is not null)`,
+    ),
+    check('sales_contracts_handover_ck', sql`(${t.status} = 'handed_over') = (${t.handoverEntryId} is not null)`),
+  ],
+);
+
+/** Taksit planı satırı. Taslakta serbestçe düzenlenir; etkinleşince değişmez ve `journal_line_id` açık kalemi gösterir. */
+export const salesInstallments = pgTable(
+  'sales_installments',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    contractId: uuid().notNull(),
+    seq: integer().notNull(),
+    /** down_payment | installment | balloon */
+    kind: text().notNull().default('installment'),
+    dueDate: date({ mode: 'string' }).notNull(),
+    /** Sözleşme para biriminde. */
+    amount: money().notNull(),
+    journalLineId: uuid(),
+  },
+  (t) => [
+    unique('sales_installments_seq_uq').on(t.contractId, t.seq),
+    unique('sales_installments_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'sales_installments_contract_fk',
+      columns: [t.contractId, t.companyId],
+      foreignColumns: [salesContracts.id, salesContracts.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'sales_installments_line_fk',
+      columns: [t.journalLineId, t.companyId],
+      foreignColumns: [journalLines.id, journalLines.companyId],
+    }),
+    index('sales_installments_due_idx').on(t.companyId, t.dueDate),
+    check('sales_installments_kind_ck', sql`${t.kind} in ('down_payment','installment','balloon')`),
+    check('sales_installments_amount_ck', sql`${t.amount} > 0 and ${t.seq} >= 1`),
+  ],
+);
+
+/** Teslim öncesi fesih: tahsil edilen tutardan kesinti ve iade; ödenmemiş taksitler kapatılır. Değişmez. */
+export const salesTerminations = pgTable(
+  'sales_terminations',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    contractId: uuid().notNull(),
+    terminationDate: date({ mode: 'string' }).notNull(),
+    reason: text().notNull(),
+    /** Sözleşme para biriminde. */
+    collected: money().notNull(),
+    retained: money().notNull(),
+    refund: money().notNull(),
+    entryId: uuid().notNull(),
+    refundTransactionId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('sales_terminations_contract_uq').on(t.contractId),
+    foreignKey({
+      name: 'sales_terminations_contract_fk',
+      columns: [t.contractId, t.companyId],
+      foreignColumns: [salesContracts.id, salesContracts.companyId],
+    }),
+    foreignKey({
+      name: 'sales_terminations_entry_fk',
+      columns: [t.entryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    foreignKey({
+      name: 'sales_terminations_refund_fk',
+      columns: [t.refundTransactionId, t.companyId],
+      foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId],
+    }),
+    check('sales_terminations_amount_ck', sql`${t.collected} >= 0 and ${t.retained} >= 0 and ${t.refund} >= 0 and ${t.retained} + ${t.refund} = ${t.collected}`),
   ],
 );

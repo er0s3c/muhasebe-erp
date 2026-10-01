@@ -73,6 +73,10 @@ export const ACCOUNT_MAPPING_KEYS = [
   'retention_receivable',
   'advance_received',
   'withholding_receivable',
+  // Gayrimenkul satışı (B3); varsayılanlar doğrulanmamıştır
+  'deferred_revenue',
+  'property_revenue',
+  'termination_income',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -105,6 +109,10 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     retention_receivable: '126',
     advance_received: '340',
     withholding_receivable: '193',
+    // Gayrimenkul satışı: ertelenmiş gelir (teslime kadar), taşınmaz satış geliri, fesih kesintisi geliri
+    deferred_revenue: '380',
+    property_revenue: '600',
+    termination_income: '679',
   };
 }
 

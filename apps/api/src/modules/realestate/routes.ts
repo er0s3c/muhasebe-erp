@@ -1,0 +1,71 @@
+import type { FastifyPluginAsync } from 'fastify';
+import {
+  activateContractSchema,
+  bulkUnitsSchema,
+  cancelContractSchema,
+  createSalesContractSchema,
+  createUnitSchema,
+  handoverContractSchema,
+  idParam,
+  salesContractListQuerySchema,
+  unitListQuerySchema,
+  updateSalesContractSchema,
+  updateUnitSchema,
+} from '@erp/shared';
+import { tenantRoute, type TenantCtx } from '../../http/context';
+import { activateContract, cancelContract, createContract, getContract, handoverContract, listContracts, loadSalesCtx, updateContract } from './contracts';
+import { bulkCreateUnits, createUnit, deleteUnit, getUnit, listUnits, updateUnit, type RealEstateCtx } from './units';
+
+const rctx = ({ company, user }: TenantCtx): RealEstateCtx => ({ companyId: company.id, userId: user.id, baseCurrency: company.baseCurrency });
+const sctx = (c: TenantCtx) => loadSalesCtx(c.tx, c.company.id, c.user.id);
+
+export const realEstateRoutes: FastifyPluginAsync = async (app) => {
+  const MODULE = 'construction.realestate';
+  const read = { module: MODULE, permission: 'realestate.read' } as const;
+  const manage = { module: MODULE, permission: 'realestate.manage' } as const;
+  const approve = { module: MODULE, permission: 'realestate.approve' } as const;
+
+  // --- Birimler ---------------------------------------------------------------------------------
+  app.get('/api/real-estate/units', tenantRoute(app, read, async ({ tx, req }) => listUnits(tx, unitListQuerySchema.parse(req.query))));
+  app.post(
+    '/api/real-estate/units',
+    tenantRoute(app, manage, async (c) => {
+      const out = await createUnit(c.tx, rctx(c), createUnitSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return out;
+    }),
+  );
+  app.post(
+    '/api/real-estate/units/bulk',
+    tenantRoute(app, manage, async (c) => {
+      const out = await bulkCreateUnits(c.tx, rctx(c), bulkUnitsSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return out;
+    }),
+  );
+  app.get('/api/real-estate/units/:id', tenantRoute(app, read, async ({ tx, req }) => getUnit(tx, idParam.parse(req.params).id)));
+  app.put('/api/real-estate/units/:id', tenantRoute(app, manage, async ({ tx, req }) => updateUnit(tx, idParam.parse(req.params).id, updateUnitSchema.parse(req.body))));
+  app.delete(
+    '/api/real-estate/units/:id',
+    tenantRoute(app, manage, async ({ tx, req, reply }) => {
+      await deleteUnit(tx, idParam.parse(req.params).id);
+      void reply.code(204);
+    }),
+  );
+
+  // --- Satış sözleşmeleri -----------------------------------------------------------------------------
+  app.get('/api/sales-contracts', tenantRoute(app, read, async ({ tx, req }) => listContracts(tx, salesContractListQuerySchema.parse(req.query))));
+  app.post(
+    '/api/sales-contracts',
+    tenantRoute(app, manage, async (c) => {
+      const out = await createContract(c.tx, await sctx(c), createSalesContractSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return out;
+    }),
+  );
+  app.get('/api/sales-contracts/:id', tenantRoute(app, read, async ({ tx, req }) => getContract(tx, idParam.parse(req.params).id)));
+  app.put('/api/sales-contracts/:id', tenantRoute(app, manage, async (c) => updateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, updateSalesContractSchema.parse(c.req.body))));
+  app.post('/api/sales-contracts/:id/activate', tenantRoute(app, approve, async (c) => activateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, activateContractSchema.parse(c.req.body ?? {}).date)));
+  app.post('/api/sales-contracts/:id/handover', tenantRoute(app, approve, async (c) => handoverContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, handoverContractSchema.parse(c.req.body ?? {}).date)));
+  app.post('/api/sales-contracts/:id/cancel', tenantRoute(app, approve, async (c) => cancelContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, cancelContractSchema.parse(c.req.body).reason)));
+};
