@@ -22,7 +22,7 @@ import { tenantRoute, type TenantCtx } from '../../http/context';
 import { approveBudget, createBudget, deleteBudget, getBudget, listBudgets, putBudgetLines } from './budgets';
 import { createCostCode, deleteCostCode, listCostCodes, updateCostCode } from './cost-codes';
 import { progressOverview, recordProgress } from './progress';
-import { projectCostReport, projectOptions, projectTransactions, projectsSummary } from './reports';
+import { projectCostByCode, projectCostReport, projectOptions, projectTransactions, projectsSummary } from './reports';
 import { createProject, deleteProject, getProject, listProjects, setProjectStatus, updateProject, type ProjectCtx } from './service';
 import { createWbs, deleteWbs, listWbs, updateWbs } from './wbs';
 
@@ -45,6 +45,13 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     '/api/projects/:id/cost-report',
     tenantRoute(app, read, async ({ tx, req }) =>
       projectCostReport(tx, idParam.parse(req.params).id, projectCostReportQuerySchema.parse(req.query).asOf ?? todayIso()),
+    ),
+  );
+
+  app.get(
+    '/api/projects/:id/cost-by-code',
+    tenantRoute(app, read, async ({ tx, req }) =>
+      projectCostByCode(tx, idParam.parse(req.params).id, projectCostReportQuerySchema.parse(req.query).asOf ?? todayIso()),
     ),
   );
 

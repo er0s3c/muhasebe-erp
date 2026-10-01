@@ -302,4 +302,63 @@ describe('taşeron hakedişi (B2c): kümülatif hakediş, kesintiler, onay, yevm
     expect(still.payment.status).toBe('submitted');
     expect(still.approvals[0].status).toBe('pending');
   });
+
+  it('maliyet raporu: kalan taahhüt (BOQ − hakediş brütü), EAC/CPI değişmez; maliyet koduna göre kırılım ve dışa aktarma', async () => {
+    const w = await world('HakedisRapor', { retention: '0', advance: '0' });
+    // Bütçe: iş kalemine 100.000
+    const b = (await w.c.post(`/api/projects/${w.project.id}/budgets`, { copyFromCurrent: false })).json().budget as { id: string };
+    await w.c.put(`/api/project-budgets/${b.id}/lines`, { lines: [{ wbsId: w.wbs.id, amount: '100000' }] });
+    await w.c.post(`/api/project-budgets/${b.id}/approve`, {});
+
+    const report = async () => (await w.c.get(`/api/projects/${w.project.id}/cost-report?asOf=${day(12, 31)}`)).json();
+    let r = await report();
+    const row = () => r.rows.find((x: { wbsId: string }) => x.wbsId === w.wbs.id);
+    // Sözleşme 60.000, hakediş yok → taahhüt 60.000, gerçekleşen 0
+    expect(row()).toMatchObject({ committed: '60000.00', actual: '0.00', actualPlusCommitted: '60000.00' });
+    expect(r.totals).toMatchObject({ committed: '60000.00' });
+    expect(r.commitments).toMatchObject({ contracts: 1, missingRate: 0 });
+    const eacBefore = row().eac;
+    const cpiBefore = row().cpi;
+
+    // 40.000 brüt hakediş (kesintisiz) kaydedilir → taahhüt 20.000, gerçekleşen 40.000
+    const p = await w.c.post('/api/progress-payments', w.payload('10000', '20'));
+    await w.approveFlow(p.json().payment.id);
+    r = await report();
+    expect(row()).toMatchObject({ committed: '20000.00', actual: '40000.00', actualPlusCommitted: '60000.00' });
+    expect(r.totals.committed).toBe('20000.00');
+    // Taahhüt EAC'ye girmez: BAC 100.000, ilerleme yok → ETC = BAC − AC; EAC = AC + ETC = 100.000 (gerçekleşen artsa da aynı)
+    expect(row().eac).toBe(eacBefore);
+    expect(row().eac).toBe('100000.00');
+    expect(row().cpi).toBe(cpiBefore);
+
+    // Tarih öncesi görünüm: hakediş dönem sonundan önce taahhüt tam
+    const early = (await w.c.get(`/api/projects/${w.project.id}/cost-report?asOf=${day(3, 1)}`)).json();
+    expect(early.rows.find((x: { wbsId: string }) => x.wbsId === w.wbs.id).committed).toBe('60000.00');
+
+    // İptal edilen hakediş taahhütten düşmez (geri yüklenir)
+    await w.c.post(`/api/progress-payments/${p.json().payment.id}/cancel`, { reason: 'Deneme iptali' });
+    r = await report();
+    expect(row()).toMatchObject({ committed: '60000.00', actual: '0.00' });
+
+    // Maliyet koduna göre kırılım
+    const p2 = await w.c.post('/api/progress-payments', w.payload('10000', '20'));
+    await w.approveFlow(p2.json().payment.id);
+    const byCode = (await w.c.get(`/api/projects/${w.project.id}/cost-by-code?asOf=${day(12, 31)}`)).json();
+    expect(byCode.rows).toEqual([{ costCodeId: w.tsr.id, code: 'TSR', name: 'Taşeron', actual: '40000.00', share: '100.00' }]);
+    expect(byCode.total).toBe('40000.00');
+
+    // Dışa aktarma uçları (xlsx/csv) ve yetki
+    for (const key of ['subcontract-register', 'progress-payments']) {
+      const res = await w.c.get(`/api/exports/${key}?format=csv`);
+      expect(res.statusCode, `${key}: ${res.body}`).toBe(200);
+    }
+    const csv = await w.c.get(`/api/exports/subcontract-register?format=csv`);
+    expect(csv.body).toContain('TSZ-');
+    const cc = await w.c.get(`/api/exports/project-cost-by-code?format=csv&projectId=${w.project.id}&asOf=${day(12, 31)}`);
+    expect(cc.statusCode, cc.body).toBe(200);
+    const costCsv = await w.c.get(`/api/exports/project-cost-report?format=csv&projectId=${w.project.id}&asOf=${day(12, 31)}`);
+    expect(costCsv.body).toContain('Kalan taahhüt');
+    const sales = await addMember(app, w.c, w.company.id, 'sales');
+    expect((await sales.client.get(`/api/exports/progress-payments?format=csv`)).statusCode).toBe(403);
+  });
 });
