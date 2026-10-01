@@ -305,7 +305,16 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
     where a.control = ${type} and t.txn_date <= ${asOf}::date
       and (t.status = 'posted' or cj.entry_date > ${asOf}::date)
       ${partyId ? sql`and a.party_id = ${partyId}` : sql``}`);
-  for (const a of allocs.rows) {
+  // Kasasız kalem kapatma (gayrimenkul fesih yevmiyesi): fesih tarihinde geçerlidir
+  const writeoffs = type === 'receivable'
+    ? await tx.execute<{ party_id: string; charge_line_id: string; settle_line_id: string; amount: string; amount_base: string }>(sql`
+        select w.party_id, w.charge_line_id, w.settle_line_id, w.amount, w.amount_base
+        from sales_writeoffs w
+        join journal_entries e on e.id = w.entry_id
+        where e.entry_date <= ${asOf}::date
+          ${partyId ? sql`and w.party_id = ${partyId}` : sql``}`)
+    : { rows: [] as { party_id: string; charge_line_id: string; settle_line_id: string; amount: string; amount_base: string }[] };
+  for (const a of [...allocs.rows, ...writeoffs.rows]) {
     byParty.get(a.party_id)?.allocations.push({
       chargeLineId: a.charge_line_id,
       settleLineId: a.settle_line_id,

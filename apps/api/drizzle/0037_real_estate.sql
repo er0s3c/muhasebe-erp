@@ -83,11 +83,27 @@ CREATE TABLE "sales_terminations" (
 	"retained" numeric(19, 4) NOT NULL,
 	"refund" numeric(19, 4) NOT NULL,
 	"entry_id" uuid NOT NULL,
-	"refund_transaction_id" uuid,
+	"refund_account_id" uuid,
 	"created_by" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "sales_terminations_contract_uq" UNIQUE("contract_id"),
-	CONSTRAINT "sales_terminations_amount_ck" CHECK ("sales_terminations"."collected" >= 0 and "sales_terminations"."retained" >= 0 and "sales_terminations"."refund" >= 0 and "sales_terminations"."retained" + "sales_terminations"."refund" = "sales_terminations"."collected")
+	CONSTRAINT "sales_terminations_amount_ck" CHECK ("sales_terminations"."collected" >= 0 and "sales_terminations"."retained" >= 0 and "sales_terminations"."refund" >= 0 and "sales_terminations"."retained" + "sales_terminations"."refund" = "sales_terminations"."collected"),
+	CONSTRAINT "sales_terminations_refund_ck" CHECK ("sales_terminations"."refund" = 0 or "sales_terminations"."refund_account_id" is not null)
+);
+--> statement-breakpoint
+CREATE TABLE "sales_writeoffs" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"company_id" uuid NOT NULL,
+	"contract_id" uuid NOT NULL,
+	"party_id" uuid NOT NULL,
+	"charge_line_id" uuid NOT NULL,
+	"settle_line_id" uuid NOT NULL,
+	"entry_id" uuid NOT NULL,
+	"amount" numeric(19, 4) NOT NULL,
+	"amount_base" numeric(19, 4) NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "sales_writeoffs_settle_uq" UNIQUE("settle_line_id"),
+	CONSTRAINT "sales_writeoffs_amount_ck" CHECK ("sales_writeoffs"."amount" > 0 and "sales_writeoffs"."amount_base" > 0)
 );
 --> statement-breakpoint
 ALTER TABLE "account_mappings" DROP CONSTRAINT "account_mappings_key_ck";--> statement-breakpoint
@@ -110,10 +126,18 @@ ALTER TABLE "sales_terminations" ADD CONSTRAINT "sales_terminations_company_id_c
 ALTER TABLE "sales_terminations" ADD CONSTRAINT "sales_terminations_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sales_terminations" ADD CONSTRAINT "sales_terminations_contract_fk" FOREIGN KEY ("contract_id","company_id") REFERENCES "public"."sales_contracts"("id","company_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sales_terminations" ADD CONSTRAINT "sales_terminations_entry_fk" FOREIGN KEY ("entry_id","company_id") REFERENCES "public"."journal_entries"("id","company_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "sales_terminations" ADD CONSTRAINT "sales_terminations_refund_fk" FOREIGN KEY ("refund_transaction_id","company_id") REFERENCES "public"."treasury_transactions"("id","company_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sales_terminations" ADD CONSTRAINT "sales_terminations_account_fk" FOREIGN KEY ("refund_account_id","company_id") REFERENCES "public"."treasury_accounts"("id","company_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sales_writeoffs" ADD CONSTRAINT "sales_writeoffs_company_id_companies_id_fk" FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sales_writeoffs" ADD CONSTRAINT "sales_writeoffs_contract_fk" FOREIGN KEY ("contract_id","company_id") REFERENCES "public"."sales_contracts"("id","company_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sales_writeoffs" ADD CONSTRAINT "sales_writeoffs_party_fk" FOREIGN KEY ("party_id","company_id") REFERENCES "public"."parties"("id","company_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sales_writeoffs" ADD CONSTRAINT "sales_writeoffs_charge_fk" FOREIGN KEY ("charge_line_id","company_id") REFERENCES "public"."journal_lines"("id","company_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sales_writeoffs" ADD CONSTRAINT "sales_writeoffs_settle_fk" FOREIGN KEY ("settle_line_id","company_id") REFERENCES "public"."journal_lines"("id","company_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sales_writeoffs" ADD CONSTRAINT "sales_writeoffs_entry_fk" FOREIGN KEY ("entry_id","company_id") REFERENCES "public"."journal_entries"("id","company_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "real_estate_units_project_idx" ON "real_estate_units" USING btree ("company_id","project_id","status");--> statement-breakpoint
 CREATE UNIQUE INDEX "sales_contracts_unit_live_uq" ON "sales_contracts" USING btree ("unit_id") WHERE "sales_contracts"."status" in ('draft','active','handed_over');--> statement-breakpoint
 CREATE INDEX "sales_contracts_project_idx" ON "sales_contracts" USING btree ("company_id","project_id","status");--> statement-breakpoint
 CREATE INDEX "sales_contracts_party_idx" ON "sales_contracts" USING btree ("company_id","party_id");--> statement-breakpoint
 CREATE INDEX "sales_installments_due_idx" ON "sales_installments" USING btree ("company_id","due_date");--> statement-breakpoint
+CREATE INDEX "sales_writeoffs_charge_idx" ON "sales_writeoffs" USING btree ("charge_line_id");--> statement-breakpoint
+CREATE INDEX "sales_writeoffs_party_idx" ON "sales_writeoffs" USING btree ("company_id","party_id");--> statement-breakpoint
 ALTER TABLE "account_mappings" ADD CONSTRAINT "account_mappings_key_ck" CHECK ("account_mappings"."key" in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income'));

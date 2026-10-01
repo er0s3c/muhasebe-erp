@@ -8,12 +8,14 @@ import {
   handoverContractSchema,
   idParam,
   salesContractListQuerySchema,
+  terminateContractSchema,
   unitListQuerySchema,
   updateSalesContractSchema,
   updateUnitSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { activateContract, cancelContract, createContract, getContract, handoverContract, listContracts, loadSalesCtx, updateContract } from './contracts';
+import { terminateContract } from './termination';
 import { bulkCreateUnits, createUnit, deleteUnit, getUnit, listUnits, updateUnit, type RealEstateCtx } from './units';
 
 const rctx = ({ company, user }: TenantCtx): RealEstateCtx => ({ companyId: company.id, userId: user.id, baseCurrency: company.baseCurrency });
@@ -67,5 +69,5 @@ export const realEstateRoutes: FastifyPluginAsync = async (app) => {
   app.put('/api/sales-contracts/:id', tenantRoute(app, manage, async (c) => updateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, updateSalesContractSchema.parse(c.req.body))));
   app.post('/api/sales-contracts/:id/activate', tenantRoute(app, approve, async (c) => activateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, activateContractSchema.parse(c.req.body ?? {}).date)));
   app.post('/api/sales-contracts/:id/handover', tenantRoute(app, approve, async (c) => handoverContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, handoverContractSchema.parse(c.req.body ?? {}).date)));
-  app.post('/api/sales-contracts/:id/cancel', tenantRoute(app, approve, async (c) => cancelContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, cancelContractSchema.parse(c.req.body).reason)));
+  app.post('/api/sales-contracts/:id/cancel', tenantRoute(app, approve, async (c) => cancelContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, cancelContractSchema.parse(c.req.body).reason)));  app.post('/api/sales-contracts/:id/terminate', tenantRoute(app, approve, async (c) => terminateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, terminateContractSchema.parse(c.req.body))));
 };

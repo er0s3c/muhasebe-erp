@@ -1,6 +1,6 @@
 {
-  "id": "948ac578-5dc5-40df-8b86-270db131d1d4",
-  "prevId": "b1bed9a2-36d9-4bcf-acae-89b92743ddb9",
+  "id": "9aacc1d7-7619-4a80-9c89-cf556632e90d",
+  "prevId": "2ec00871-3c30-4ebc-ab74-c02e63a050d5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -9724,8 +9724,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "refund_transaction_id": {
-          "name": "refund_transaction_id",
+        "refund_account_id": {
+          "name": "refund_account_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -9802,14 +9802,14 @@
           "onUpdate": "no action",
           "onDelete": "no action"
         },
-        "sales_terminations_refund_fk": {
-          "name": "sales_terminations_refund_fk",
+        "sales_terminations_account_fk": {
+          "name": "sales_terminations_account_fk",
           "tableFrom": "sales_terminations",
           "columnsFrom": [
-            "refund_transaction_id",
+            "refund_account_id",
             "company_id"
           ],
-          "tableTo": "treasury_transactions",
+          "tableTo": "treasury_accounts",
           "columnsTo": [
             "id",
             "company_id"
@@ -9833,6 +9833,223 @@
         "sales_terminations_amount_ck": {
           "name": "sales_terminations_amount_ck",
           "value": "\"sales_terminations\".\"collected\" >= 0 and \"sales_terminations\".\"retained\" >= 0 and \"sales_terminations\".\"refund\" >= 0 and \"sales_terminations\".\"retained\" + \"sales_terminations\".\"refund\" = \"sales_terminations\".\"collected\""
+        },
+        "sales_terminations_refund_ck": {
+          "name": "sales_terminations_refund_ck",
+          "value": "\"sales_terminations\".\"refund\" = 0 or \"sales_terminations\".\"refund_account_id\" is not null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.sales_writeoffs": {
+      "name": "sales_writeoffs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contract_id": {
+          "name": "contract_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "party_id": {
+          "name": "party_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "charge_line_id": {
+          "name": "charge_line_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settle_line_id": {
+          "name": "settle_line_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entry_id": {
+          "name": "entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(19, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_base": {
+          "name": "amount_base",
+          "type": "numeric(19, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "sales_writeoffs_charge_idx": {
+          "name": "sales_writeoffs_charge_idx",
+          "columns": [
+            {
+              "expression": "charge_line_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "sales_writeoffs_party_idx": {
+          "name": "sales_writeoffs_party_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "party_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "sales_writeoffs_company_id_companies_id_fk": {
+          "name": "sales_writeoffs_company_id_companies_id_fk",
+          "tableFrom": "sales_writeoffs",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "tableTo": "companies",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "sales_writeoffs_contract_fk": {
+          "name": "sales_writeoffs_contract_fk",
+          "tableFrom": "sales_writeoffs",
+          "columnsFrom": [
+            "contract_id",
+            "company_id"
+          ],
+          "tableTo": "sales_contracts",
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "sales_writeoffs_party_fk": {
+          "name": "sales_writeoffs_party_fk",
+          "tableFrom": "sales_writeoffs",
+          "columnsFrom": [
+            "party_id",
+            "company_id"
+          ],
+          "tableTo": "parties",
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "sales_writeoffs_charge_fk": {
+          "name": "sales_writeoffs_charge_fk",
+          "tableFrom": "sales_writeoffs",
+          "columnsFrom": [
+            "charge_line_id",
+            "company_id"
+          ],
+          "tableTo": "journal_lines",
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "sales_writeoffs_settle_fk": {
+          "name": "sales_writeoffs_settle_fk",
+          "tableFrom": "sales_writeoffs",
+          "columnsFrom": [
+            "settle_line_id",
+            "company_id"
+          ],
+          "tableTo": "journal_lines",
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "sales_writeoffs_entry_fk": {
+          "name": "sales_writeoffs_entry_fk",
+          "tableFrom": "sales_writeoffs",
+          "columnsFrom": [
+            "entry_id",
+            "company_id"
+          ],
+          "tableTo": "journal_entries",
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "sales_writeoffs_settle_uq": {
+          "name": "sales_writeoffs_settle_uq",
+          "columns": [
+            "settle_line_id"
+          ],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "sales_writeoffs_amount_ck": {
+          "name": "sales_writeoffs_amount_ck",
+          "value": "\"sales_writeoffs\".\"amount\" > 0 and \"sales_writeoffs\".\"amount_base\" > 0"
         }
       },
       "isRLSEnabled": false

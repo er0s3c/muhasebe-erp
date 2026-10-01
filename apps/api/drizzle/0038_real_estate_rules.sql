@@ -19,7 +19,7 @@ ON CONFLICT (company_id, key) DO NOTHING;
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['real_estate_units', 'sales_contracts', 'sales_installments', 'sales_terminations'] LOOP
+  FOREACH t IN ARRAY ARRAY['real_estate_units', 'sales_contracts', 'sales_installments', 'sales_terminations', 'sales_writeoffs'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format(
       'CREATE POLICY tenant_isolation ON %I USING (company_id = app_company_id()) WITH CHECK (company_id = app_company_id())',
@@ -36,7 +36,8 @@ DO $$
 BEGIN
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'erp_app') THEN
     GRANT SELECT, INSERT, UPDATE, DELETE ON real_estate_units, sales_installments TO erp_app;
-    GRANT SELECT, INSERT, UPDATE ON sales_contracts, sales_terminations TO erp_app;
+    GRANT SELECT, INSERT, UPDATE ON sales_contracts TO erp_app;
+    GRANT SELECT, INSERT ON sales_terminations, sales_writeoffs TO erp_app;
   END IF;
 END
 $$;
@@ -216,25 +217,18 @@ CREATE TRIGGER sales_installments_guard
   FOR EACH ROW EXECUTE FUNCTION sales_installments_guard();
 --> statement-breakpoint
 
--- 4) Fesih kaydı: yalnızca etkin sözleşme için eklenir; iade hareketi sonradan bir kez bağlanır
+-- 4) Fesih kaydı ve kasasız kalem kapatma: yalnızca etkin sözleşme için eklenir; değişmez
 CREATE FUNCTION sales_terminations_guard() RETURNS trigger LANGUAGE plpgsql AS
 $$
 DECLARE
   c sales_contracts%ROWTYPE;
 BEGIN
-  IF TG_OP = 'DELETE' THEN
-    RAISE EXCEPTION 'Fesih kaydı silinemez' USING ERRCODE = 'ERP12';
+  IF TG_OP <> 'INSERT' THEN
+    RAISE EXCEPTION 'Fesih kaydı değiştirilemez veya silinemez' USING ERRCODE = 'ERP12';
   END IF;
-  IF TG_OP = 'INSERT' THEN
-    SELECT * INTO c FROM sales_contracts WHERE id = NEW.contract_id AND company_id = NEW.company_id FOR UPDATE;
-    IF NOT FOUND OR c.status <> 'active' THEN
-      RAISE EXCEPTION 'Yalnızca etkin sözleşme feshedilir (teslimden sonra fesih desteklenmez)' USING ERRCODE = 'ERP12';
-    END IF;
-    RETURN NEW;
-  END IF;
-  IF (to_jsonb(NEW) - 'refund_transaction_id') IS DISTINCT FROM (to_jsonb(OLD) - 'refund_transaction_id')
-     OR (OLD.refund_transaction_id IS NOT NULL AND NEW.refund_transaction_id IS DISTINCT FROM OLD.refund_transaction_id) THEN
-    RAISE EXCEPTION 'Fesih kaydı değiştirilemez' USING ERRCODE = 'ERP12';
+  SELECT * INTO c FROM sales_contracts WHERE id = NEW.contract_id AND company_id = NEW.company_id FOR UPDATE;
+  IF NOT FOUND OR c.status <> 'active' THEN
+    RAISE EXCEPTION 'Yalnızca etkin sözleşme feshedilir (teslimden sonra fesih desteklenmez)' USING ERRCODE = 'ERP12';
   END IF;
   RETURN NEW;
 END
@@ -242,4 +236,8 @@ $$;
 --> statement-breakpoint
 CREATE TRIGGER sales_terminations_guard
   BEFORE INSERT OR UPDATE OR DELETE ON sales_terminations
+  FOR EACH ROW EXECUTE FUNCTION sales_terminations_guard();
+--> statement-breakpoint
+CREATE TRIGGER sales_writeoffs_guard
+  BEFORE INSERT OR UPDATE OR DELETE ON sales_writeoffs
   FOR EACH ROW EXECUTE FUNCTION sales_terminations_guard();

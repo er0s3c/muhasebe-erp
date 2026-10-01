@@ -1,5 +1,5 @@
 {
-  "id": "b1bed9a2-36d9-4bcf-acae-89b92743ddb9",
+  "id": "2ec00871-3c30-4ebc-ab74-c02e63a050d5",
   "prevId": "12ba87d1-5f07-4927-8832-6cdf134a4524",
   "version": "7",
   "dialect": "postgresql",
@@ -9724,8 +9724,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "refund_transaction_id": {
-          "name": "refund_transaction_id",
+        "refund_account_id": {
+          "name": "refund_account_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -9802,12 +9802,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "sales_terminations_refund_fk": {
-          "name": "sales_terminations_refund_fk",
+        "sales_terminations_account_fk": {
+          "name": "sales_terminations_account_fk",
           "tableFrom": "sales_terminations",
-          "tableTo": "treasury_transactions",
+          "tableTo": "treasury_accounts",
           "columnsFrom": [
-            "refund_transaction_id",
+            "refund_account_id",
             "company_id"
           ],
           "columnsTo": [
@@ -9833,6 +9833,223 @@
         "sales_terminations_amount_ck": {
           "name": "sales_terminations_amount_ck",
           "value": "\"sales_terminations\".\"collected\" >= 0 and \"sales_terminations\".\"retained\" >= 0 and \"sales_terminations\".\"refund\" >= 0 and \"sales_terminations\".\"retained\" + \"sales_terminations\".\"refund\" = \"sales_terminations\".\"collected\""
+        },
+        "sales_terminations_refund_ck": {
+          "name": "sales_terminations_refund_ck",
+          "value": "\"sales_terminations\".\"refund\" = 0 or \"sales_terminations\".\"refund_account_id\" is not null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.sales_writeoffs": {
+      "name": "sales_writeoffs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contract_id": {
+          "name": "contract_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "party_id": {
+          "name": "party_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "charge_line_id": {
+          "name": "charge_line_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settle_line_id": {
+          "name": "settle_line_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entry_id": {
+          "name": "entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(19, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_base": {
+          "name": "amount_base",
+          "type": "numeric(19, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "sales_writeoffs_charge_idx": {
+          "name": "sales_writeoffs_charge_idx",
+          "columns": [
+            {
+              "expression": "charge_line_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sales_writeoffs_party_idx": {
+          "name": "sales_writeoffs_party_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "party_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "sales_writeoffs_company_id_companies_id_fk": {
+          "name": "sales_writeoffs_company_id_companies_id_fk",
+          "tableFrom": "sales_writeoffs",
+          "tableTo": "companies",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "sales_writeoffs_contract_fk": {
+          "name": "sales_writeoffs_contract_fk",
+          "tableFrom": "sales_writeoffs",
+          "tableTo": "sales_contracts",
+          "columnsFrom": [
+            "contract_id",
+            "company_id"
+          ],
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "sales_writeoffs_party_fk": {
+          "name": "sales_writeoffs_party_fk",
+          "tableFrom": "sales_writeoffs",
+          "tableTo": "parties",
+          "columnsFrom": [
+            "party_id",
+            "company_id"
+          ],
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "sales_writeoffs_charge_fk": {
+          "name": "sales_writeoffs_charge_fk",
+          "tableFrom": "sales_writeoffs",
+          "tableTo": "journal_lines",
+          "columnsFrom": [
+            "charge_line_id",
+            "company_id"
+          ],
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "sales_writeoffs_settle_fk": {
+          "name": "sales_writeoffs_settle_fk",
+          "tableFrom": "sales_writeoffs",
+          "tableTo": "journal_lines",
+          "columnsFrom": [
+            "settle_line_id",
+            "company_id"
+          ],
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "sales_writeoffs_entry_fk": {
+          "name": "sales_writeoffs_entry_fk",
+          "tableFrom": "sales_writeoffs",
+          "tableTo": "journal_entries",
+          "columnsFrom": [
+            "entry_id",
+            "company_id"
+          ],
+          "columnsTo": [
+            "id",
+            "company_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "sales_writeoffs_settle_uq": {
+          "name": "sales_writeoffs_settle_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "settle_line_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "sales_writeoffs_amount_ck": {
+          "name": "sales_writeoffs_amount_ck",
+          "value": "\"sales_writeoffs\".\"amount\" > 0 and \"sales_writeoffs\".\"amount_base\" > 0"
         }
       },
       "isRLSEnabled": false

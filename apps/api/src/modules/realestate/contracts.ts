@@ -205,10 +205,17 @@ export async function getContract(tx: Tx, id: string) {
     remainingBy = new Map(open.items.map((o) => [o.lineId, { remaining: o.remaining, daysOverdue: o.daysOverdue }]));
   }
   const live = contract.status === 'active' || contract.status === 'handed_over';
+  // Feshedilmiş sözleşmede ödenmemiş kısım kasasız kapatılmıştır
+  const writtenOff = new Map<string, string>();
+  if (contract.status === 'terminated') {
+    for (const w of (await tx.execute<{ id: string; amount: string }>(sql`select charge_line_id as id, sum(amount)::text as amount from sales_writeoffs where contract_id = ${id} group by charge_line_id`)).rows) writtenOff.set(w.id, w.amount);
+  }
   const rows = inst.map((i) => {
     const open = i.journalLineId ? remainingBy.get(i.journalLineId) : undefined;
-    const remaining = live ? (open ? dec(open.remaining) : dec(0)) : dec(i.amount);
-    const paid = live ? dec(i.amount).minus(remaining) : dec(0);
+    const off = i.journalLineId ? writtenOff.get(i.journalLineId) : undefined;
+    const closed = contract.status === 'terminated';
+    const remaining = closed ? dec(0) : live ? (open ? dec(open.remaining) : dec(0)) : dec(i.amount);
+    const paid = closed ? dec(i.amount).minus(off ?? 0) : live ? dec(i.amount).minus(remaining) : dec(0);
     return {
       id: i.id,
       seq: i.seq,
@@ -224,13 +231,13 @@ export async function getContract(tx: Tx, id: string) {
   const paidTotal = rows.reduce((s, r) => s.plus(r.paid), dec(0));
   const [termination] = await tx.execute<Record<string, unknown>>(sql`
     select t.termination_date::text as "terminationDate", t.reason, t.collected::text as collected, t.retained::text as retained, t.refund::text as refund,
-           t.refund_transaction_id as "refundTransactionId"
+           t.refund_account_id as "refundAccountId"
       from sales_terminations t where t.contract_id = ${id}`).then((r) => r.rows);
   return {
     contract: {
       ...contract,
       paid: paidTotal.toFixed(2),
-      remaining: live ? dec(String(contract.price)).minus(paidTotal).toFixed(2) : dec(String(contract.price)).toFixed(2),
+      remaining: contract.status === 'terminated' ? '0.00' : live ? dec(String(contract.price)).minus(paidTotal).toFixed(2) : dec(String(contract.price)).toFixed(2),
       overdue: rows.filter((r) => r.daysOverdue > 0).reduce((s, r) => s.plus(r.remaining), dec(0)).toFixed(2),
     },
     installments: rows,

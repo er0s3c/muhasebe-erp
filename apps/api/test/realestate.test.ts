@@ -170,6 +170,72 @@ describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat �
     expect((await w.c.post('/api/sales-contracts', w.planBody(d2.unit.id))).statusCode).toBe(201);
   });
 
+  it('fesih + iade: ödenmemiş taksitler kalem bazında kapanır, kesinti gelire, iade kasadan; başka kalemler etkilenmez', async () => {
+    const w = await world('Fesih');
+    // Aynı alıcının başka (eski vadeli) alacağı: FIFO havuzu fesih kapatmasını yutmamalı
+    await w.c.post('/api/invoices', { post: true, type: 'sales', partyId: w.buyer.id, invoiceDate: day(1, 5), dueDate: day(1, 20), currency: 'TRY', lines: [{ description: 'Hizmet', quantity: '1', unitPrice: '1000' }] });
+    const d = await w.draft('F1');
+    const act = await w.c.post(`/api/sales-contracts/${d.contract.id}/activate`, {});
+    expect(act.statusCode, act.body).toBe(200);
+    // GBP banka hesabına 52 kurla peşinat (30.000) tahsil edilir
+    const bank = (await w.c.post('/api/treasury/accounts', { kind: 'bank', name: 'KTB GBP', currency: 'GBP' })).json().account as { id: string };
+    await w.c.put('/api/exchange-rates', { rateDate: day(3, 2), currencyCode: 'GBP', quoteCode: 'TRY', buy: '52' });
+    const line = (await w.c.get(`/api/sales-contracts/${d.contract.id}`)).json().installments[0].journalLineId as string;
+    const rec = await w.c.post('/api/treasury/transactions', { type: 'receipt', date: day(3, 2), accountId: bank.id, amount: '30000', fxRate: '52', partyId: w.buyer.id, items: [{ lineId: line, amount: '30000', settleAmount: '30000' }] });
+    expect(rec.statusCode, rec.body).toBe(201);
+
+    await w.c.put('/api/exchange-rates', { rateDate: day(3, 10), currencyCode: 'GBP', quoteCode: 'TRY', buy: '54' });
+    // Kesinti tahsilatı aşamaz; iade için hesap şart
+    expect((await w.c.post(`/api/sales-contracts/${d.contract.id}/terminate`, { date: day(3, 10), reason: 'Alıcı vazgeçti', retained: '30001', refundAccountId: bank.id })).json().error.code).toBe('TERMINATION_RETAIN_TOO_HIGH');
+    expect((await w.c.post(`/api/sales-contracts/${d.contract.id}/terminate`, { date: day(3, 10), reason: 'Alıcı vazgeçti', retained: '3000' })).json().error.code).toBe('REFUND_ACCOUNT_REQUIRED');
+
+    const term = await w.c.post(`/api/sales-contracts/${d.contract.id}/terminate`, { date: day(3, 10), reason: 'Alıcı vazgeçti', retained: '3000', refundAccountId: bank.id });
+    expect(term.statusCode, term.body).toBe(200);
+    const t = term.json();
+    expect(t.contract).toMatchObject({ status: 'terminated', paid: '30000.00', remaining: '0.00' });
+    expect(t.termination).toMatchObject({ collected: '30000.0000', retained: '3000.0000', refund: '27000.0000' });
+    expect(t.installments.map((i: any) => [i.paid, i.remaining])).toEqual([['30000.00', '0.00'], ['0.00', '0.00'], ['0.00', '0.00']]);
+
+    // Yevmiye: 380 borç (hepsi) / 120 ödenmemiş 90.000 / 679 kesinti / banka iade; fiş dengeli
+    const entryId = (await asDb(handle, { userId: w.s.userId, orgId: w.orgId, companyId: w.company.id }, async (q) => (await q(`select entry_id from sales_terminations where contract_id = $1`, [d.contract.id])).rows[0].entry_id)) as string;
+    const j = await w.jr(entryId);
+    expect(j.of('380')).toEqual([{ code: '380', d: 120000, c: 0, db: 6_000_000, cb: 0, project: null }]);
+    expect(j.of('120').map((l) => [l.c, l.cb])).toEqual([[45000, 2_250_000], [45000, 2_250_000]]);
+    expect(j.of('679')).toEqual([{ code: '679', d: 0, c: 3000, db: 0, cb: 162_000, project: w.project.id }]);
+    expect(j.of('102.001').map((l) => l.c)).toEqual([27000]);
+    const totalD = j.lines.reduce((s, l) => s + l.db, 0);
+    const totalC = j.lines.reduce((s, l) => s + l.cb, 0);
+    expect(totalD).toBeCloseTo(totalC, 2);
+
+    // Cari: sözleşmenin açık kalemi kalmadı; yalnızca başka fatura açık (yaşlandırma/ekstre bozulmadı)
+    const open = (await w.c.get(`/api/parties/${w.buyer.id}/open-items?asOf=${day(12, 31)}&type=receivable`)).json().receivable;
+    expect(open.items.map((o: any) => [o.currencyCode, o.remaining])).toEqual([['TRY', '1000.00']]);
+    expect(open.unapplied).toBe('0.00');
+    // Birim yeniden satışa açık; ikinci fesih/iptal yok
+    expect((await w.c.get(`/api/real-estate/units/${d.unit.id}`)).json().unit.status).toBe('available');
+    expect((await w.c.post(`/api/sales-contracts/${d.contract.id}/terminate`, { reason: 'Tekrar', retained: '0' })).json().error.code).toBe('CONTRACT_NOT_ACTIVE');
+    // Fesih kaydı değiştirilemez
+    await asDb(handle, { userId: w.s.userId, orgId: w.orgId, companyId: w.company.id }, async (q) => {
+      expect((await expectDbError(q, `update sales_terminations set retained = 0, refund = collected`)).code).toBe('42501');
+    });
+  });
+
+  it('tahsilatsız fesih: yalnızca ödenmemiş kalemler kapanır, iade yok', async () => {
+    const w = await world('FesihTahsilatsiz');
+    const d = await w.draft('F2');
+    await w.c.post(`/api/sales-contracts/${d.contract.id}/activate`, {});
+    await w.c.put('/api/exchange-rates', { rateDate: day(3, 10), currencyCode: 'GBP', quoteCode: 'TRY', buy: '54' });
+    const term = await w.c.post(`/api/sales-contracts/${d.contract.id}/terminate`, { date: day(3, 10), reason: 'Sözleşme sona erdi' });
+    expect(term.statusCode, term.body).toBe(200);
+    expect(term.json().termination).toMatchObject({ collected: '0.0000', retained: '0.0000', refund: '0.0000' });
+    const open = (await w.c.get(`/api/parties/${w.buyer.id}/open-items?asOf=${day(12, 31)}&type=receivable`)).json().receivable;
+    expect(open.items).toEqual([]);
+    const tb = (await w.c.get(`/api/reports/trial-balance?from=${day(1, 1)}&to=${day(12, 31)}`)).json();
+    const closing = (code: string) => Number(Object.fromEntries(tb.rows.map((r: any) => [r.code, r.closing]))[code] ?? 0);
+    expect(closing('380')).toBe(0);
+    expect(closing('120')).toBe(0);
+  });
+
   it('kur yoksa etkinleştirme anlaşılır hata verir; kapalı dönem ve izinler', async () => {
     const w = await world('KurYok');
     const u = await w.unit('K1');

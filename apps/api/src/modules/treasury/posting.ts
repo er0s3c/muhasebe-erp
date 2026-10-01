@@ -63,7 +63,7 @@ async function rateOf(tx: Tx, ctx: LedgerCtx, currency: string, date: string, ex
  * Yabancı para biriminden çıkan tutarın defter değeri: hesabın ortalama maliyeti (tüm bakiye çıkıyorsa
  * kalan defter tutarının tamamı: kuruş artığı kalmaz). Bakiye yetersizse (banka eksiye düşüyorsa) piyasa kuru.
  */
-async function releaseCost(tx: Tx, ctx: LedgerCtx, ta: TreasuryAccountRow, x: MoneyValue, date: string): Promise<MoneyValue> {
+export async function releaseCost(tx: Tx, ctx: LedgerCtx, ta: TreasuryAccountRow, x: MoneyValue, date: string): Promise<MoneyValue> {
   if (ta.currencyCode === ctx.baseCurrency) return x;
   const bal = await glBalance(tx, ta.accountId, date);
   if (bal.doc.gt(0) && bal.doc.gte(x) && bal.base.gt(0)) {

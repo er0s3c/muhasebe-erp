@@ -2858,7 +2858,8 @@ export const salesTerminations = pgTable(
     retained: money().notNull(),
     refund: money().notNull(),
     entryId: uuid().notNull(),
-    refundTransactionId: uuid(),
+    /** İadenin ödendiği kasa/banka hesabı (iade varsa). */
+    refundAccountId: uuid(),
     createdBy: uuid().references(() => users.id),
     createdAt: createdAt(),
   },
@@ -2875,10 +2876,66 @@ export const salesTerminations = pgTable(
       foreignColumns: [journalEntries.id, journalEntries.companyId],
     }),
     foreignKey({
-      name: 'sales_terminations_refund_fk',
-      columns: [t.refundTransactionId, t.companyId],
-      foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId],
+      name: 'sales_terminations_account_fk',
+      columns: [t.refundAccountId, t.companyId],
+      foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId],
     }),
     check('sales_terminations_amount_ck', sql`${t.collected} >= 0 and ${t.retained} >= 0 and ${t.refund} >= 0 and ${t.retained} + ${t.refund} = ${t.collected}`),
+    check('sales_terminations_refund_ck', sql`${t.refund} = 0 or ${t.refundAccountId} is not null`),
+  ],
+);
+
+/**
+ * Kasasız açık kalem kapatma: fesihte ödenmemiş taksit kalemi, fesih yevmiyesinin cari alacak satırıyla kalem bazında
+ * kapatılır (`party_allocations`'ın kasa/banka hareketsiz karşılığı). Cari açık kalem hesabı bunları okur; FIFO havuzuna girmez.
+ */
+export const salesWriteoffs = pgTable(
+  'sales_writeoffs',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    contractId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    /** Kapatılan taksit satırı ve kapatan (fesih yevmiyesi) cari satırı. */
+    chargeLineId: uuid().notNull(),
+    settleLineId: uuid().notNull(),
+    entryId: uuid().notNull(),
+    /** Kalemin para biriminde ve defter tutarında kapatılan pay. */
+    amount: money().notNull(),
+    amountBase: money().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('sales_writeoffs_settle_uq').on(t.settleLineId),
+    index('sales_writeoffs_charge_idx').on(t.chargeLineId),
+    index('sales_writeoffs_party_idx').on(t.companyId, t.partyId),
+    foreignKey({
+      name: 'sales_writeoffs_contract_fk',
+      columns: [t.contractId, t.companyId],
+      foreignColumns: [salesContracts.id, salesContracts.companyId],
+    }),
+    foreignKey({
+      name: 'sales_writeoffs_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    foreignKey({
+      name: 'sales_writeoffs_charge_fk',
+      columns: [t.chargeLineId, t.companyId],
+      foreignColumns: [journalLines.id, journalLines.companyId],
+    }),
+    foreignKey({
+      name: 'sales_writeoffs_settle_fk',
+      columns: [t.settleLineId, t.companyId],
+      foreignColumns: [journalLines.id, journalLines.companyId],
+    }),
+    foreignKey({
+      name: 'sales_writeoffs_entry_fk',
+      columns: [t.entryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    check('sales_writeoffs_amount_ck', sql`${t.amount} > 0 and ${t.amountBase} > 0`),
   ],
 );

@@ -508,6 +508,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
     expect((await x.c.put('/api/company/modules/construction.projects', { enabled: false })).statusCode).toBe(422);
     expect((await x.c.put('/api/company/modules/construction.subcontracts', { enabled: false })).statusCode).toBe(200);
     expect((await x.c.put('/api/company/modules/construction.procurement', { enabled: false })).statusCode).toBe(200);
+    expect((await x.c.put('/api/company/modules/construction.realestate', { enabled: false })).statusCode).toBe(200);
     const off = await x.c.put('/api/company/modules/construction.projects', { enabled: false });
     expect(off.statusCode).toBe(200);
     const res = await entry(x.c, x.ids, day(3, 10), '770', '100', { projectId: p.id });
@@ -519,6 +520,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
     expect((await x.c.put('/api/company/modules/construction.projects', { enabled: true })).statusCode).toBe(200);
     expect((await x.c.put('/api/company/modules/construction.subcontracts', { enabled: true })).statusCode).toBe(200);
     expect((await x.c.put('/api/company/modules/construction.procurement', { enabled: true })).statusCode).toBe(200);
+    expect((await x.c.put('/api/company/modules/construction.realestate', { enabled: true })).statusCode).toBe(200);
     expect((await entry(x.c, x.ids, day(3, 10), '770', '100', { projectId: p.id })).statusCode).toBe(201);
   });
 
