@@ -424,7 +424,7 @@ function Install-Dev {
   if ($script:Path -eq 'docker') {
     Info "PostgreSQL Docker'da başlatılıyor…"
     Invoke-Native 'docker' @('compose', 'up', '-d', 'db') 'docker compose up'
-    for ($i = 0; $i -lt 60; $i++) { & docker compose exec -T db pg_isready -U postgres *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep 1 }
+    for ($i = 0; $i -lt 60; $i++) { & docker compose exec -T db pg_isready -h 127.0.0.1 -U postgres *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep 1 }
     Get-Content -Raw (Join-Path $Root 'infra\postgres\init.sql') | & docker compose exec -T db psql -U postgres -v ON_ERROR_STOP=1 -q | Out-Null
     if ($LASTEXITCODE -ne 0) { Die 'Geliştirme rolleri oluşturulamadı' }
     Ok 'Veritabanı hazır (Docker, port 5432)'
@@ -745,7 +745,7 @@ function Restore-DbDocker([string]$file) {
   $dc = @('compose', '-f', 'deploy/docker-compose.prod.yml', '--env-file', 'deploy/.env')
   & docker @dc stop app *> $null
   Invoke-Native 'docker' ($dc + @('up', '-d', 'db')) 'docker compose up db'
-  for ($i = 0; $i -lt 60; $i++) { & docker @dc exec -T db pg_isready -U postgres *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep 1 }
+  for ($i = 0; $i -lt 60; $i++) { & docker @dc exec -T db pg_isready -h 127.0.0.1 -U postgres *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep 1 }
   Invoke-Native 'docker' ($dc + @('exec', '-T', 'db', 'psql', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '-c', "drop database if exists $DbName with (force)", '-c', "create database $DbName owner erp", '-c', "revoke all on database $DbName from public", '-c', "grant connect on database $DbName to erp_app")) 'Veritabanı yeniden oluşturma'
   # Döküm ikilidir: PowerShell borusu yerine cmd yönlendirmesiyle aktarılır (bayt bayt)
   $argLine = ($dc + @('exec', '-T', 'db', 'pg_restore', '-U', 'postgres', '--exit-on-error', '--single-transaction', '--no-owner', '--role=erp', '-d', $DbName)) -join ' '
