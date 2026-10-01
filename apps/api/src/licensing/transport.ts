@@ -23,7 +23,8 @@ export class LicenseUnreachableError extends Error {
 /** Satıcı sunucusuyla konuşan taşıma katmanı. Testler bellek içi bir uygulamasını enjekte eder. */
 export interface LicenseTransport {
   activate(body: Envelope & { pub: string }): Promise<{ lease: string }>;
-  heartbeat(envelope: Envelope): Promise<{ lease: string }>;
+  /** `update`: satıcı bu kuruluma bir sürüm gönderdiyse güncelleme teklifi (doğrulanmamış ham veri). */
+  heartbeat(envelope: Envelope): Promise<{ lease: string; update?: unknown }>;
   deactivate(envelope: Envelope): Promise<{ ok: true }>;
 }
 
@@ -80,7 +81,10 @@ export function httpTransport(baseUrl: string, opts: { fetchImpl?: typeof fetch;
 
   return {
     activate: async (body) => leaseOf(await post('/v1/activate', body)),
-    heartbeat: async (envelope) => leaseOf(await post('/v1/heartbeat', envelope)),
+    heartbeat: async (envelope) => {
+      const r = await post<{ lease?: unknown; update?: unknown }>('/v1/heartbeat', envelope);
+      return { ...leaseOf(r), ...(r.update !== undefined ? { update: r.update } : {}) };
+    },
     deactivate: async (envelope) => {
       await post('/v1/deactivate', envelope);
       return { ok: true };

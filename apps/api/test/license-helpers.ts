@@ -28,6 +28,7 @@ import { resetSchema } from '../src/db/reset';
 import { LicenseService } from '../src/licensing/service';
 import { LicenseServerError, LicenseUnreachableError, type LicenseTransport } from '../src/licensing/transport';
 import type { Mailer } from '../src/modules/mail/mailer';
+import { storeUpdateOffer } from '../src/modules/system/update-store';
 
 export { DAY_MS };
 
@@ -113,6 +114,10 @@ export class FakeVendor {
   failNext: Error | null = null;
   /** Doğruysa tüm çağrılar ağa ulaşılamıyor gibi başarısız olur. */
   offline = false;
+  /** Kalp atışı yanıtına eklenecek güncelleme teklifi (uzaktan güncelleme testleri). */
+  update: unknown = undefined;
+  /** Kalp atışlarında bildirilen platformlar. */
+  readonly platforms: (string | undefined)[] = [];
 
   constructor(readonly clock: { t: number }) {}
 
@@ -215,8 +220,9 @@ export class FakeVendor {
       if (payload.ts <= act.lastTs) throw new LicenseServerError(409, 'REPLAY', 'İstek yeniden oynatılmış ya da eski');
       act.lastTs = payload.ts;
       act.stats = payload.stats;
+      this.platforms.push(payload.platform);
       const license = [...this.licenses.values()].find((l) => l.licenseId === act.licenseId)!;
-      return { lease: this.sign('lease', license, payload, payload.nonce) };
+      return { lease: this.sign('lease', license, payload, payload.nonce), ...(this.update !== undefined ? { update: this.update } : {}) };
     },
     deactivate: async (env: Envelope) => {
       this.calls.deactivate++;
@@ -310,6 +316,8 @@ async function createLicensedApp(opts: LicensedAppOptions): Promise<LicensedApp>
     reloadMs: 0,
     heartbeatIntervalMs: opts.heartbeatIntervalMs,
     fingerprint: async () => ({ fingerprint: fingerprint.value, strength: fingerprint.strength }),
+    platform: config.ERP_KIT_TARGET,
+    onUpdateOffer: (offer) => storeUpdateOffer(handle.db, vendor.keyring, offer),
   });
   const app = await buildApp({ db: handle.db, config, logger: false, mailer: opts.mailer, license: { service } });
   await app.ready();

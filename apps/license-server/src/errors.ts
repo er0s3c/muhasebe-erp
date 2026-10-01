@@ -25,6 +25,12 @@ export function errorHandler(err: FastifyError | Error, req: FastifyRequest, rep
   if (err instanceof ZodError) {
     return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: 'İstek geçersiz', details: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) } });
   }
+  // Veritabanı koruma tetikleyicileri (LIC0x) iş kuralı ihlalidir
+  const pgCode = (err as { cause?: { code?: unknown } }).cause?.code ?? (err as { code?: unknown }).code;
+  if (typeof pgCode === 'string' && /^LIC\d\d$/.test(pgCode)) {
+    const msg = (err as { cause?: { message?: string } }).cause?.message ?? err.message;
+    return reply.code(422).send({ error: { code: 'RULE_VIOLATION', message: msg } });
+  }
   const fe = err as FastifyError;
   if (fe.statusCode && fe.statusCode >= 400 && fe.statusCode < 500) {
     return reply.code(fe.statusCode).send({ error: { code: fe.code ?? 'BAD_REQUEST', message: fe.message } });

@@ -34,6 +34,8 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
   if (isPending || !data) return <PageLoading />;
   const { totals, rows, budget } = data;
   const hasRows = rows.length > 0;
+  const commitCount = data.commitments.contracts + data.commitments.orders;
+  const showCommitted = commitCount > 0;
   const shown = hideEmpty ? rows.filter((r) => r.isActive || Number(r.budget) !== 0 || Number(r.actual) !== 0 || !r.isLeaf) : rows;
 
   return (
@@ -85,7 +87,24 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
         <Stat label={t('projects.overview.revenue')} sub={t('projects.overview.revenueSub')}>
           {moneyIn(totals.revenue, base)}
         </Stat>
+        {showCommitted && (
+          <Stat label={t('projects.overview.committed')} sub={t('projects.overview.committedSub', { n: commitCount })}>
+            {moneyIn(totals.committed, base)}
+          </Stat>
+        )}
       </div>
+
+      {data.pendingVariations.count > 0 && (
+        <Callout tone="info" title={t('variations.pendingProjectTitle', { n: data.pendingVariations.count })}>
+          {t('variations.pendingProjectBody', { cost: moneyIn(data.pendingVariations.cost, base), revenue: moneyIn(data.pendingVariations.revenue, base) })}
+        </Callout>
+      )}
+
+      {data.commitments.missingRate > 0 && (
+        <Callout tone="warning" title={t('projects.overview.committedMissingRateTitle')}>
+          {t('projects.overview.committedMissingRate', { n: data.commitments.missingRate })}
+        </Callout>
+      )}
 
       <Card>
         <CardHeader
@@ -112,6 +131,7 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
                   <Th>{t('projects.cols.wbs')}</Th>
                   <Th num>{t('projects.cols.budget')}</Th>
                   <Th num>{t('projects.cols.actual')}</Th>
+                  {showCommitted && <Th num>{t('projects.cols.committed')}</Th>}
                   <Th num className="w-20">
                     {t('projects.cols.spent')}
                   </Th>
@@ -135,6 +155,7 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
                     </Td>
                     <Td num>{money(r.budget)}</Td>
                     <Td num>{money(r.actual)}</Td>
+                    {showCommitted && <Td num className="text-muted">{money(r.committed)}</Td>}
                     <Td num className="text-muted">
                       {r.spentPct ? `%${money(r.spentPct, 0)}` : '—'}
                     </Td>
@@ -152,6 +173,7 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
                   <Td>{t('common.total')}</Td>
                   <Td num>{money(totals.budget)}</Td>
                   <Td num>{money(totals.actual)}</Td>
+                  {showCommitted && <Td num className="text-muted">{money(totals.committed)}</Td>}
                   <Td num className="text-muted">
                     {totals.spentPct ? `%${money(totals.spentPct, 0)}` : '—'}
                   </Td>

@@ -151,7 +151,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
 
   return (
     <>
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text">
+      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
         {t(`deliveries.${side}.title`)}
       </Link>

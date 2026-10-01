@@ -86,6 +86,10 @@ const envSchema = z
     LICENSE_ALLOW_INSECURE_URL: flag(false),
     /** Ana makine kimliği dosyası (compose, ana makinenin /etc/machine-id dosyasını salt-okunur bağlar). */
     LICENSE_HOST_ID_FILE: z.string().optional(),
+    /** Kurulum kitinin hedefi (sihirbaz yazar): uzaktan güncellemede hangi arşivin teklif edileceğini belirler. */
+    ERP_KIT_TARGET: z.enum(['linux-x64', 'win-x64']).optional(),
+    /** Ana makinedeki güncelleyicinin uygulamayla konuştuğu paylaşılan gizli belirteç (sihirbaz üretir); yoksa uzaktan güncelleme kapalı. */
+    ERP_UPDATER_TOKEN: z.string().min(32).optional(),
     /** YALNIZCA geliştirme/test: üretim dışı ortamda lisans denetimini açar (üretim paketinde zaten her zaman açıktır). */
     LICENSE_ENFORCEMENT_DEV: flag(false),
     /** YALNIZCA geliştirme/test: pakete gömülü halka yokken kullanılacak açık anahtar halkası (JSON). Üretimde yok sayılır/reddedilir. */

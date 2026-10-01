@@ -13,7 +13,7 @@ export function CardHeader({ title, description, action }: { title: string; desc
         <h2 className="text-base">{title}</h2>
         {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
       </div>
-      {action}
+      {action && <div className="print:hidden">{action}</div>}
     </div>
   );
 }
@@ -25,7 +25,7 @@ export function PageHeader({ title, description, actions }: { title: string; des
         <h1 className="text-heading">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-sm text-muted">{description}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 print:hidden">{actions}</div>}
     </div>
   );
 }

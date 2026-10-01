@@ -58,6 +58,8 @@ services:
     volumes:
       # Mühürlü imza anahtarı dosyası (ana makinede yalnızca root okuyabilmeli): <LICENSE_KEY_DIR>/signing-key.json
       - ${LICENSE_KEY_DIR:?LICENSE_KEY_DIR gerekli}:/run/keys:ro
+      # Uzaktan güncelleme kit arşivleri (panelden yüklenir; yedeklenmesi gerekmez, npm run release ile yeniden üretilebilir)
+      - releases:/var/lib/erp-license/releases
     depends_on:
       db:
         condition: service_healthy
@@ -83,5 +85,6 @@ services:
 
 volumes:
   licensedata:
+  releases:
   caddy_data:
   caddy_config:

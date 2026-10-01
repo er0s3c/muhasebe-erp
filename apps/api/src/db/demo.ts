@@ -7,7 +7,7 @@
  *   npm run db:seed      giriş: demo@ornek.local / Demo-Sifre-123
  */
 import { hash } from '@node-rs/argon2';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   applyRate,
   createDeliveryNoteSchema,
@@ -29,7 +29,7 @@ import {
 } from '@erp/shared';
 import type { CompanyInfo } from '../http/context';
 import { withContext, type Db, type Tx } from './client';
-import { customCodes, exchangeRates, items as itemsTable, memberships, organizations, users, warehouses } from './schema';
+import { customCodes, exchangeRates, items as itemsTable, memberships, organizations, subcontractRevisions, users, warehouses } from './schema';
 import { createParty } from '../modules/parties/service';
 import { createAccount, listAccounts } from '../modules/ledger/accounts';
 import {
@@ -57,6 +57,20 @@ import { approveBudget, createBudget, putBudgetLines } from '../modules/projects
 import { recordProgress } from '../modules/projects/progress';
 import { createProject, setProjectStatus } from '../modules/projects/service';
 import { createWbs } from '../modules/projects/wbs';
+import { activateContract, createContract, getContract, handoverContract, loadSalesCtx } from '../modules/realestate/contracts';
+import { terminateContract } from '../modules/realestate/termination';
+import { createFeeSchedule, verifyFeeSchedule } from '../modules/realestate/fees';
+import { bulkCreateUnits } from '../modules/realestate/units';
+import { createForecastItem } from '../modules/cash/forecast';
+import { getOrder, issueOrder } from '../modules/procurement/orders';
+import { createReceipt } from '../modules/procurement/receipts';
+import { createRequest, submitRequest } from '../modules/procurement/requests';
+import { awardRfq, createRfq, getRfq, upsertOffer } from '../modules/procurement/rfq';
+import { createParam } from '../modules/subcontracts/params';
+import { createProgress, giveAdvance, submitProgress, type ProgressCtx } from '../modules/subcontracts/progress';
+import { approveRevision, createSubcontract, getRevision, putBoqLines } from '../modules/subcontracts/service';
+import { createVariation, submitVariation } from '../modules/subcontracts/variations';
+import { decide } from '../modules/approvals/service';
 
 export const DEMO_EMAIL = 'demo@ornek.local';
 export const DEMO_PASSWORD = 'Demo-Sifre-123';
@@ -69,6 +83,7 @@ const addDays = (iso: string, days: number) => {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 };
+const idOfRow = (o: unknown) => (o as { id: string }).id;
 const date = (m: number, d: number) => `${year}-${pad(m)}-${pad(d)}`;
 
 /**
@@ -324,7 +339,7 @@ async function seedTreasury(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
  * kasadan küçük gider; bir iş kalemi bütçeyi aşar, biri "iş kalemine atanmamış" düşer. Önceki demo hareketleri
  * (etiketsiz sarf, kira, personel) bilerek etiketsiz kalır: proje raporu "projesiz maliyet" ve defter mutabakatını gösterir.
  */
-async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string, cashId: string): Promise<string> {
+async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string, cashId: string, bankTlId: string): Promise<string> {
   const pctx = { companyId: ctx.companyId, userId: ctx.userId };
   const stockCtx: StockCtx = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: 'TRY', reportingCurrency: ctx.reportingCurrency, allowNegativeStock: false };
   const invCtx: InvoiceCtx = { ...stockCtx };
@@ -451,7 +466,178 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
   ]);
   await progress(kuzey, date(9, 28), [[k.kaba, '20']]);
 
-  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa)';
+  // ---- Taşeron sözleşmesi ve hakediş (Faz B2): Güneş Sitesi elektrik tesisatı -------------------------
+  // Teminat/avans yüzdeleri bu şirkete elle girilmiş, DOĞRULANMAMIŞ örnek parametrelerdir (yasal değer değildir).
+  await createParam(tx, ctx.companyId, { kind: 'retention_pct', value: '5', validFrom: date(1, 1), sourceNote: 'Demo: sözleşme şartı (doğrulanmadı)' });
+  await createParam(tx, ctx.companyId, { kind: 'advance_recoup_pct', value: '10', validFrom: date(1, 1), sourceNote: 'Demo: sözleşme şartı (doğrulanmadı)' });
+  const pgctx: ProgressCtx = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: ctx.baseCurrency, reportingCurrency: ctx.reportingCurrency };
+  const sub = await createSubcontract(tx, pgctx, {
+    direction: 'payable', projectId: gunes, partyId: partyId.get('usta')!, title: 'Elektrik tesisatı', currencyCode: 'TRY', paymentDays: 30, startDate: date(9, 1), endDate: date(12, 15),
+    penaltyNote: 'Gecikmede günlük %0,1 (demo notu).',
+  });
+  const [rev] = await tx.select({ id: subcontractRevisions.id }).from(subcontractRevisions).where(eq(subcontractRevisions.subcontractId, sub.id));
+  const boq = await putBoqLines(tx, pgctx, rev!.id, {
+    lines: [
+      { itemNo: '1.1', description: 'Kat tesisatı kablo çekimi', unit: 'm', quantity: '20000', unitPrice: '4', wbsId: w.elektrik },
+      { itemNo: '1.2', description: 'Pano kurulumu', unit: 'adet', quantity: '24', unitPrice: '1500', wbsId: w.elektrik },
+      { itemNo: '1.3', description: 'Aydınlatma montajı', unit: 'adet', quantity: '480', unitPrice: '90', wbsId: w.elektrik },
+    ],
+  });
+  await approveRevision(tx, pgctx, rev!.id);
+  const keyOf = (no: string) => boq.lines.find((l) => l.itemNo === no)!.lineKey as string;
+  await giveAdvance(tx, pgctx, sub.id, { accountId: bankTlId, date: date(9, 5), amount: '10000', note: 'Mobilizasyon avansı' });
+  const hk1 = await createProgress(tx, pgctx, {
+    subcontractId: sub.id, periodEnd: date(9, 28), vatCode: 'KDV-16', note: 'Eylül hakedişi',
+    lines: [{ lineKey: keyOf('1.1'), cumulativeQty: '8000' }, { lineKey: keyOf('1.2'), cumulativeQty: '6' }, { lineKey: keyOf('1.3'), cumulativeQty: '100' }],
+    deductions: [],
+  });
+  const submitted = await submitProgress(tx, pgctx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' }, hk1.payment.id as string);
+  await decide(tx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' }, submitted.approvals[0]!.id, { decision: 'approve' });
+  // İkinci hakediş taslak kalır (arayüzde düzenlenebilir ve onaya gönderilebilir)
+  await createProgress(tx, pgctx, {
+    subcontractId: sub.id, periodEnd: date(9, 30), vatCode: 'KDV-16',
+    lines: [{ lineKey: keyOf('1.1'), cumulativeQty: '12000' }, { lineKey: keyOf('1.2'), cumulativeQty: '9' }, { lineKey: keyOf('1.3'), cumulativeQty: '180' }],
+    deductions: [{ description: 'Gecikme cezası (demo)', amount: '500' }],
+  });
+
+  // ---- İşveren sözleşmesi ve alınan hakediş (Faz B2e): Kuzey Villa ------------------------------------
+  const ctxOwner = { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' as const };
+  const emp = await createSubcontract(tx, pgctx, {
+    direction: 'receivable', projectId: kuzey, partyId: employer.id, title: 'Anahtar teslim villa (işveren sözleşmesi)', currencyCode: 'TRY', paymentDays: 30, startDate: date(8, 15), endDate: date(12, 15),
+  });
+  const [empRev] = await tx.select({ id: subcontractRevisions.id }).from(subcontractRevisions).where(eq(subcontractRevisions.subcontractId, emp.id));
+  const empBoq = await putBoqLines(tx, pgctx, empRev!.id, {
+    lines: [
+      { itemNo: '1', description: 'Temel ve kaba inşaat', unit: 'götürü', quantity: '1', unitPrice: '1200000', wbsId: k.kaba },
+      { itemNo: '2', description: 'İnce işler ve teslim', unit: 'götürü', quantity: '1', unitPrice: '600000', wbsId: k.ince },
+    ],
+  });
+  await approveRevision(tx, pgctx, empRev!.id);
+  const ek = (no: string) => empBoq.lines.find((l) => l.itemNo === no)!.lineKey as string;
+  await giveAdvance(tx, pgctx, emp.id, { accountId: bankTlId, date: date(8, 20), amount: '150000', note: 'Sözleşme avansı' });
+  const ac1 = await createProgress(tx, pgctx, {
+    subcontractId: emp.id, periodEnd: date(9, 28), vatCode: 'KDV-16', note: 'Eylül işveren hakedişi',
+    lines: [{ lineKey: ek('1'), cumulativeQty: '0.25' }, { lineKey: ek('2'), cumulativeQty: '0' }], deductions: [],
+  });
+  const ac1s = await submitProgress(tx, pgctx, ctxOwner, ac1.payment.id as string);
+  await decide(tx, ctxOwner, ac1s.approvals[0]!.id, { decision: 'approve' });
+  await createProgress(tx, pgctx, {
+    subcontractId: emp.id, periodEnd: date(9, 30), vatCode: 'KDV-16',
+    lines: [{ lineKey: ek('1'), cumulativeQty: '0.5' }, { lineKey: ek('2'), cumulativeQty: '0' }], deductions: [],
+  });
+
+  // ---- Değişiklik emirleri: taşeronda uygulanmış ek iş + süre uzatımı; işverende işveren kabulü bekleyen ek iş ----------
+  /** DE açar, yürürlükteki BOQ'ya kalem ekler, onaya gönderir ve (varsayılan tek adım) onaylar. */
+  const variation = async (contractId: string, input: { title: string; reason: 'client_request' | 'design_change'; description: string; days: number }, extra: { itemNo: string; description: string; unit: string; quantity: string; unitPrice: string; wbsId: string }) => {
+    const vo = await createVariation(tx, pgctx, contractId, { title: input.title, reason: input.reason, description: input.description, timeExtensionDays: input.days });
+    const revisionId = vo.variation.revisionId as string;
+    const cur = await getRevision(tx, revisionId);
+    await putBoqLines(tx, pgctx, revisionId, {
+      lines: [
+        ...cur.lines.map((l) => ({ lineKey: l.lineKey as string, itemNo: l.itemNo as string, description: l.description as string, unit: l.unit as string, quantity: l.quantity as string, unitPrice: l.unitPrice as string, wbsId: l.wbsId as string, costCodeId: (l.costCodeId as string | null) ?? undefined })),
+        extra,
+      ],
+    });
+    const submittedVo = await submitVariation(tx, ctxOwner, vo.variation.id as string);
+    await decide(tx, ctxOwner, submittedVo.approvals[0]!.id, { decision: 'approve' });
+  };
+  await variation(
+    sub.id,
+    { title: 'Bahçe aydınlatması ek işi', reason: 'client_request', description: 'Site bahçesine 60 adet direk tipi aydınlatma eklendi; işveren talebi.', days: 15 },
+    { itemNo: '1.4', description: 'Bahçe aydınlatma direği montajı', unit: 'adet', quantity: '60', unitPrice: '250', wbsId: w.elektrik },
+  );
+  await variation(
+    emp.id,
+    { title: 'Havuz ve çevre düzenlemesi', reason: 'design_change', description: 'İşverenin proje değişikliğiyle 8×4 m havuz eklendi.', days: 20 },
+    { itemNo: '3', description: 'Havuz ve çevre düzenlemesi', unit: 'götürü', quantity: '1', unitPrice: '180000', wbsId: k.ince },
+  );
+
+  // ---- Satın alma zinciri: Güneş Sitesi betonarme malzemesi ------------------------------------------
+  const idOf = (o: unknown) => (o as { id: string }).id;
+  const prc = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: ctx.baseCurrency };
+  const rq1 = await createRequest(tx, prc, {
+    projectId: gunes, title: 'Karkas betonu ve kalıp malzemesi', needDate: date(10, 15), note: 'C Blok 3. kat döşeme için.',
+    lines: [
+      { description: 'C30 hazır beton', unit: 'm³', quantity: '120', estUnitPrice: '3200', wbsId: w.betonarme },
+      { description: 'Kalıp tahtası 4 m', unit: 'adet', quantity: '400', estUnitPrice: '180', wbsId: w.betonarme },
+    ],
+  });
+  const rq1s = await submitRequest(tx, prc, ctxOwner, idOf(rq1.request));
+  await decide(tx, ctxOwner, rq1s.approvals[0]!.id, { decision: 'approve' });
+  const rfq1 = await createRfq(tx, prc, { requestId: idOf(rq1.request), dueDate: date(9, 20) });
+  const rfqId = rfq1.rfq.id as string;
+  const lineIds = rq1.lines.map(idOf);
+  await upsertOffer(tx, prc, rfqId, { partyId: partyId.get('beton')!, currencyCode: 'TRY', deliveryDays: 3, paymentDays: 30, lines: [{ requestLineId: lineIds[0]!, unitPrice: '3150' }, { requestLineId: lineIds[1]!, unitPrice: '190' }] });
+  await upsertOffer(tx, prc, rfqId, { partyId: partyId.get('demir')!, currencyCode: 'TRY', deliveryDays: 7, paymentDays: 60, lines: [{ requestLineId: lineIds[0]!, unitPrice: '3250' }, { requestLineId: lineIds[1]!, unitPrice: '170' }] });
+  const rfqView = await getRfq(tx, rfqId);
+  const awarded = await awardRfq(tx, prc, rfqId, rfqView.offers.find((o) => o.partyName.startsWith('Hazır Beton'))!.id);
+  const poId = idOf(awarded.order.order);
+  await issueOrder(tx, poId);
+  const po = await getOrder(tx, poId);
+  // İlk parti beton geldi; kalan miktar taahhütte kalır
+  await createReceipt(tx, prc, poId, { receiptDate: date(9, 29), note: 'İlk parti', lines: [{ orderLineId: idOf(po.lines[0]), quantity: '40' }] });
+  // İkinci talep onayda bekler (arayüzde onay kutusunda görünür)
+  const rq2 = await createRequest(tx, prc, {
+    projectId: kuzey, title: 'Villa seramik ve fayans', needDate: date(11, 5),
+    lines: [{ description: 'Porselen seramik 60x60', unit: 'm²', quantity: '320', estUnitPrice: '420', wbsId: k.ince }],
+  });
+  await submitRequest(tx, prc, ctxOwner, idOf(rq2.request));
+
+  // ---- Gayrimenkul satışı (B3): Güneş Sitesi birimleri, GBP taksit planları -------------------------------------
+  const sctx = await loadSalesCtx(tx, ctx.companyId, ctx.userId);
+  await bulkCreateUnits(tx, sctx, { projectId: gunes, block: 'A', unitType: 'apartment', floorFrom: 1, floorTo: 4, perFloor: 3, grossM2: '110', rooms: '2+1', listPrice: '120000', listCurrency: 'GBP' });
+  await bulkCreateUnits(tx, sctx, { projectId: gunes, block: 'B', unitType: 'apartment', floorFrom: 1, floorTo: 3, perFloor: 4, grossM2: '95', rooms: '1+1', listPrice: '90000', listCurrency: 'GBP' });
+  const unitIdOf = async (block: string, no: string) => (await tx.execute<{ id: string }>(sql`select id from real_estate_units where project_id = ${gunes} and block = ${block} and unit_no = ${no}`)).rows[0]!.id;
+  const monthly = (first: [number, number], n: number, amount: string) => Array.from({ length: n }, (_, i) => ({ kind: 'installment' as const, dueDate: date(first[0] + i > 12 ? 12 : first[0] + i, first[1]), amount }));
+  const collect = async (contractId: string, seq: number, on: string, bankId: string) => {
+    const det = await getContract(tx, contractId);
+    const inst = det.installments.find((i) => i.seq === seq)!;
+    const rate = rateAt('GBP', on);
+    await postTreasuryTransaction(tx, ctx, createTreasuryTransactionSchema.parse({
+      type: 'receipt', date: on, accountId: bankId, amount: (Number(inst.remaining) * rate).toFixed(2), partyId: det.contract.partyId as string,
+      items: [{ lineId: inst.journalLineId!, amount: inst.remaining, settleAmount: (Number(inst.remaining) * rate).toFixed(2) }], description: `Taksit ${seq} tahsilatı (${det.contract.code})`,
+    }));
+  };
+  // Fon/harç tarifeleri (tarihli, kaynak notlu; biri doğrulanmış örnek, hepsi demo değeridir)
+  const elk = await createFeeSchedule(tx, ctx.companyId, { code: 'ELK', name: 'Elektrik altyapı fonu', side: 'buyer', basis: 'per_unit', amount: '1500', currencyCode: 'GBP', validFrom: date(1, 1), sourceNote: 'Demo değeri (doğrulanmadı)' });
+  await createFeeSchedule(tx, ctx.companyId, { code: 'SU', name: 'Su ve kanalizasyon fonu', side: 'buyer', basis: 'per_m2', amount: '4', currencyCode: 'GBP', validFrom: date(1, 1), sourceNote: 'Demo değeri (doğrulanmadı)' });
+  const bld = await createFeeSchedule(tx, ctx.companyId, { code: 'BLD', name: 'Belediye harcı', side: 'project', basis: 'per_unit', amount: '2500', currencyCode: 'TRY', validFrom: date(1, 1), sourceNote: 'Demo değeri (doğrulanmadı)' });
+  await verifyFeeSchedule(tx, idOfRow(bld), 'Demo kullanıcı', 'Örnek doğrulama');
+  void elk;
+  // 1) A-101 Sarah Thompson: yürürlükte; peşinat ve ilk taksit tahsil edildi, Eylül taksidi gecikmiş
+  const c1 = await createContract(tx, sctx, {
+    unitId: await unitIdOf('A', '101'), partyId: partyId.get('sarah')!, currencyCode: 'GBP', contractDate: date(7, 1), plannedHandover: date(12, 30), price: '105000', downPayment: '30000',
+    installments: [{ kind: 'down_payment', dueDate: date(7, 1), amount: '30000' }, ...monthly([8, 1], 5, '15000'), { kind: 'fee', dueDate: date(9, 1), amount: '1500', feeScheduleId: idOfRow(elk), label: 'Elektrik altyapı fonu' }],
+  });
+  await activateContract(tx, sctx, idOfRow(c1.contract), date(7, 1));
+  await collect(idOfRow(c1.contract), 1, date(7, 1), bankTlId);
+  await collect(idOfRow(c1.contract), 2, date(8, 1), bankTlId);
+  // 2) A-102 Ali Yılmaz: teslim edilmiş (gelir tanınmış)
+  const c2 = await createContract(tx, sctx, {
+    unitId: await unitIdOf('A', '102'), partyId: partyId.get('ali')!, currencyCode: 'GBP', contractDate: date(3, 2), price: '90000', downPayment: '90000',
+    installments: [{ kind: 'down_payment', dueDate: date(3, 2), amount: '90000' }],
+  });
+  await activateContract(tx, sctx, idOfRow(c2.contract), date(3, 2));
+  await collect(idOfRow(c2.contract), 1, date(3, 2), bankTlId);
+  await handoverContract(tx, sctx, idOfRow(c2.contract), date(9, 1));
+  // 3) B-101 Sarah Thompson: feshedildi; tahsil edilen peşinattan kesinti, kalan iade
+  const c3 = await createContract(tx, sctx, {
+    unitId: await unitIdOf('B', '101'), partyId: partyId.get('sarah')!, currencyCode: 'GBP', contractDate: date(5, 2), price: '90000', downPayment: '20000',
+    installments: [{ kind: 'down_payment', dueDate: date(5, 2), amount: '20000' }, ...monthly([6, 1], 4, '17500')],
+  });
+  await activateContract(tx, sctx, idOfRow(c3.contract), date(5, 2));
+  await collect(idOfRow(c3.contract), 1, date(5, 2), bankTlId);
+  await terminateContract(tx, sctx, idOfRow(c3.contract), { date: date(9, 22), reason: 'Alıcı vazgeçti', retained: '4000', refundAccountId: bankTlId });
+  // Nakit projeksiyonu: elle girilen ek kalemler
+  await createForecastItem(tx, { companyId: ctx.companyId, userId: ctx.userId }, { itemDate: date(10, 5), direction: 'out', description: 'Ofis kirası', amount: '45000', currencyCode: 'TRY' });
+  await createForecastItem(tx, { companyId: ctx.companyId, userId: ctx.userId }, { itemDate: date(10, 20), direction: 'out', description: 'Maaş ve SGK ödemeleri', amount: '180000', currencyCode: 'TRY' });
+  // 4) A-103: taslak sözleşme (arayüzde düzenlenip yürürlüğe alınabilir)
+  await createContract(tx, sctx, {
+    unitId: await unitIdOf('A', '103'), partyId: partyId.get('ali')!, currencyCode: 'GBP', contractDate: date(9, 25), price: '120000', downPayment: '24000',
+    installments: [{ kind: 'down_payment', dueDate: date(9, 25), amount: '24000' }, ...monthly([10, 25], 3, '32000')],
+  });
+
+  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans; işveren: 1 sözleşme, 1 onaylı + 1 taslak alınan hakediş, avans; satın alma: 2 talep, 1 RFQ (2 teklif), 1 sipariş (kısmi mal kabul); gayrimenkul: 24 birim, 4 sözleşme (yürürlükte/geciken + fon, teslim, fesih+iade, taslak), 3 fon tarifesi; 2 nakit projeksiyonu kalemi';
 }
 
 /**
@@ -657,7 +843,7 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
     const stockSummary = await seedInventory(tx, ctx, partyId, acc);
     const treasury = await seedTreasury(tx, ctx, partyId, acc);
     const treasurySummary = `${treasury.summary}; ${await seedBankStatement(tx, ctx, { ...company, sector: company.sector as Sector }, treasury.bankTlId)}`;
-    const projectSummary = await seedProjects(tx, ctx, partyId, acc, treasury.cashId);
+    const projectSummary = await seedProjects(tx, ctx, partyId, acc, treasury.cashId, treasury.bankTlId);
 
     // Geçmiş aylar kapansın (yılın ilk yarısı)
     for (let m = 1; m <= 6; m++) {

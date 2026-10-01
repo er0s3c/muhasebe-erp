@@ -26,7 +26,9 @@ interface Session {
   companies: CompanySummary[];
   activeCompany: CompanySummary | null;
   setActiveCompanyId: (id: string) => void;
-  login: (input: LoginInput) => Promise<void>;
+  /** İki adımlı doğrulama açıksa oturum açılmaz; dönen `mfaToken` ile `verifyMfa` çağrılır. */
+  login: (input: LoginInput) => Promise<{ mfaToken: string } | null>;
+  verifyMfa: (mfaToken: string, code: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
   createCompany: (input: CreateCompanyInput) => Promise<CompanySummary>;
@@ -94,9 +96,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const authenticate = useCallback(
     async (path: string, body: unknown) => {
-      const res = await api<{ accessToken: string }>(path, { method: 'POST', body });
-      setAccessToken(res.accessToken);
+      const res = await api<{ accessToken?: string; mfaRequired?: boolean; mfaToken?: string }>(path, { method: 'POST', body });
+      if (res.mfaRequired && res.mfaToken) return { mfaToken: res.mfaToken };
+      setAccessToken(res.accessToken!);
       await loadMe();
+      return null;
     },
     [loadMe],
   );
@@ -110,7 +114,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       activeCompany,
       setActiveCompanyId,
       login: (input) => authenticate('/api/auth/login', input),
-      register: (input) => authenticate('/api/auth/register', input),
+      verifyMfa: async (mfaToken, code) => {
+        await authenticate('/api/auth/mfa/verify', { mfaToken, code });
+      },
+      register: async (input) => {
+        await authenticate('/api/auth/register', input);
+      },
       logout: async () => {
         try {
           await api('/api/auth/logout', { method: 'POST' });

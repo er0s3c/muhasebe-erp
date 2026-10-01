@@ -12,6 +12,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LicenseDetailPage } from './pages/LicenseDetailPage';
 import { LicensesPage } from './pages/LicensesPage';
 import { LoginPage } from './pages/LoginPage';
+import { ReleasesPage } from './pages/ReleasesPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { SetupPage } from './pages/SetupPage';
 
@@ -23,6 +24,7 @@ const links = [
   { to: '/', label: 'Özet', end: true },
   { to: '/customers', label: 'Müşteriler' },
   { to: '/licenses', label: 'Lisanslar' },
+  { to: '/releases', label: 'Sürümler' },
   { to: '/audit', label: 'Denetim kaydı' },
   { to: '/security', label: 'Güvenlik' },
 ];
@@ -106,6 +108,7 @@ export function App() {
         <Route path="customers" element={<CustomersPage />} />
         <Route path="licenses" element={<LicensesPage />} />
         <Route path="licenses/:id" element={<LicenseDetailPage />} />
+        <Route path="releases" element={<ReleasesPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="security" element={<SecurityPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

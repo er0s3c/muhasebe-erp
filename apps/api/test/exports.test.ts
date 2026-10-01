@@ -198,7 +198,7 @@ describe('raporlar ve dışa aktarma', async () => {
     expect(rows[3]).toEqual(['Kod', 'Hesap', 'Açılış (B-A)', 'Dönem Borç', 'Dönem Alacak', 'Bakiye (B-A)']);
     // Tutar sütunları defter para biriminin (TRY) simgeli hücre biçimini taşır; hücreler yine sayıdır
     const tbStyles = new TextDecoder().decode(unzipSync(new Uint8Array(res.rawPayload))['xl/styles.xml']);
-    expect(tbStyles).toContain('formatCode="&quot;₺&quot;#,##0.00;-&quot;₺&quot;#,##0.00"');
+    expect(tbStyles).toContain('formatCode="&quot;₺&quot;#,##0.00;[Red]-&quot;₺&quot;#,##0.00"');
     const { by } = await tbRows(c);
     const r120 = rows.find((r) => r[0] === '120')!;
     expect(Number(r120[3])).toBe(Number(by['120']!.debit));

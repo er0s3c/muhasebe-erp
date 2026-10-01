@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
-import { WEAK_PASSWORD_MESSAGE, changePasswordSchema, isWeakPassword, loginSchema, registerSchema } from '@erp/shared';
+import { WEAK_PASSWORD_MESSAGE, changePasswordSchema, isWeakPassword, loginSchema, mfaVerifySchema, registerSchema } from '@erp/shared';
 import type { Queryable } from '../../db/client';
 import { organizations, refreshTokens, users } from '../../db/schema';
 import { authedRoute } from '../../http/context';
@@ -11,6 +11,7 @@ import { assertSameOrigin } from '../../http/origin';
 import { queueMail } from '../mail/queue';
 import { verifyEmailMail } from '../mail/templates';
 import { recordSecurityEvent } from './events';
+import { MFA_MAX_FAILS, MFA_WINDOW_MS, checkMfaCode, mfaEnabled } from './mfa';
 import { issueUserToken } from './tokens';
 
 const REFRESH_COOKIE = 'refresh_token';
@@ -185,6 +186,15 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
     app.limiter.reset(ipEmailKey);
 
+    // İki adımlı doğrulama açıksa oturum VERİLMEZ; kısa ömürlü, yalnızca /api/auth/mfa/verify için geçerli belirteç döner.
+    if (await mfaEnabled(app.db, user.id)) {
+      const mfaToken = app.jwt.sign({ sub: user.id, org: user.organizationId, purpose: 'mfa' }, { expiresIn: 300 });
+      return { mfaRequired: true, mfaToken };
+    }
+    return completeLogin(req, reply, user);
+  });
+
+  async function completeLogin(req: FastifyRequest, reply: FastifyReply, user: typeof users.$inferSelect) {
     // Kayıtlı cihaz (lisans koltuğu): bilinmeyen tarayıcı boş koltuk ister (DEVICE_LIMIT_REACHED).
     const device = await app.devices.ensureForRequest(req, reply, user.id);
     await app.db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
@@ -192,6 +202,37 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     await purgeOldTokens(app, user.id);
     await recordSecurityEvent(app.db, app.log, req, { event: 'login_succeeded', organizationId: user.organizationId, userId: user.id, email: user.email });
     return { accessToken, user: publicUser(user) };
+  }
+
+  app.post('/api/auth/mfa/verify', { config: limit }, async (req, reply) => {
+    assertSameOrigin(req, app.config);
+    const input = mfaVerifySchema.parse(req.body);
+    let payload: { sub: string; purpose?: string };
+    try {
+      payload = app.jwt.verify(input.mfaToken);
+    } catch {
+      throw new AppError(401, 'MFA_TOKEN_INVALID', 'Doğrulama süresi doldu; yeniden giriş yapın');
+    }
+    if (payload.purpose !== 'mfa') throw new AppError(401, 'MFA_TOKEN_INVALID', 'Doğrulama süresi doldu; yeniden giriş yapın');
+    const failKey = `mfa-fail:${payload.sub}`;
+    const wait = app.limiter.blocked(failKey, MFA_MAX_FAILS);
+    if (wait > 0) {
+      void reply.header('retry-after', String(wait));
+      throw new AppError(429, 'RATE_LIMITED', 'Çok fazla hatalı doğrulama kodu; lütfen biraz sonra tekrar deneyin');
+    }
+    const [user] = await app.db.select().from(users).where(eq(users.id, payload.sub));
+    if (!user?.isActive) throw unauthorized();
+    const used = await checkMfaCode(app.db, app.config.JWT_SECRET, user.id, input.code);
+    if (!used) {
+      app.limiter.hit(failKey, MFA_WINDOW_MS);
+      await recordSecurityEvent(app.db, app.log, req, { event: 'mfa_failed', organizationId: user.organizationId, userId: user.id, email: user.email });
+      throw new AppError(401, 'MFA_CODE_INVALID', 'Doğrulama kodu hatalı');
+    }
+    app.limiter.reset(failKey);
+    if (used === 'recovery') {
+      await recordSecurityEvent(app.db, app.log, req, { event: 'mfa_recovery_used', organizationId: user.organizationId, userId: user.id, email: user.email });
+    }
+    return completeLogin(req, reply, user);
   });
 
   app.post('/api/auth/refresh', { config: limit }, async (req, reply) => {

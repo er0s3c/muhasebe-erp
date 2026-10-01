@@ -33,7 +33,7 @@ Uygulama yalnızca **açık anahtarınızı** bilir (imaja gömülür); özel an
 ## 3. Uygulamadan lisans sunucusuna giden bilgiler
 
 Yalnızca: kurulum kimliği, kurulum açık anahtarı, sunucu parmak izi (özet), uygulama sürümü, etkinleştirme kodu (etkinleştirmede), ve kalp atışında
-**kayıtlı etkin cihaz sayısı ile şirket sayısı**. Kullanıcı, müşteri, fatura, stok, tutar gibi hiçbir muhasebe verisi gönderilmez. Sunucu IP adresini
+**kayıtlı etkin cihaz sayısı ile şirket sayısı**, kurulum sihirbazıyla kurulmuşsa **kit hedefi** (`linux-x64`/`win-x64`; uzaktan güncelleme arşivini seçer). Kullanıcı, müşteri, fatura, stok, tutar gibi hiçbir muhasebe verisi gönderilmez. Sunucu IP adresini
 TCP bağlantısı gereği görür (klon şüphesi tespitinde kullanılır; `docs/LEGAL-NOTES.md` §11). Bu açıklama uygulamada da (Lisans sayfası) vardır.
 
 ## 4. Satıcı kurulumu (lisans sunucusu, VPS)
@@ -188,6 +188,17 @@ docker build -t registry.ornek.com/muhasebe-erp:1.0.0 --build-arg APP_VERSION=1.
 - Üretim kipi denetimsiz paketle başlamaz (`server.ts`). API kaynak haritası üretilmez, paket küçültülür.
 - Müşterilere imaj kayıt defteriniz (özel registry) ya da `docker save` dosyasıyla iletilir; müşteri kurulum belgesi `docs/OPERATIONS.md`'dir.
 
+### 5.1 Sürüm kiti ve uzaktan güncelleme (tek tıkla gönderme)
+
+Sihirbazla kurulan müşteriler (Docker'lı ya da Docker'sız) **sürüm kiti** kullanır: `npm run release -- --version=1.2.0` (aynı `LICENSE_PUBLIC_KEYS_JSON` / `LICENSE_SERVER_URL` ortamıyla derleyin; kit bu anahtarı gömer). Yeni sürümü müşterilere göndermek:
+
+1. Panel **Sürümler** → **Yeni sürüm** (sürüm numarası = kitin sürümü; notu müşteri görür) → **Kit arşivi seç** (`muhasebe-erp-1.2.0-linux-x64.tar.gz`, `…-win-x64.zip`; 8 MB'lık parçalarla yüklenir, kopan yükleme kaldığı yerden sürer) → **Yayımla (imzala)**: dosya özetleriyle manifesto satıcı anahtarınızla imzalanır; yayımlanan sürümün dosyaları ve özetleri artık değişmez (veritabanı tetikleyicisi, `LIC03`).
+2. Aynı ekranda müşteri lisanslarını seçip **Seçilenlere gönder** ya da **Tüm etkin lisanslara gönder**. Kurulumlar bir sonraki kalp atışında teklifi alır (müşteri "Güncellemeleri denetle" ile hemen). Kurulumun sürümü ve platformu tabloda görünür; platformu olmayanlar elle kurulumdur, onlara teklif gitmez.
+3. Müşteride kurulum sahibi onaylar; güncelleyici yedek alır, uygular, sorun çıkarsa önceki sürüme ve yedeğe döner (`docs/OPERATIONS.md` §5). Durum müşteride görünür; panelde "Bu sürümde kurulum" sayısı sonraki kalp atışıyla artar.
+4. Sorunlu sürüm: **Sürümü geri çek** (yeni teklif kesilir, gönderilmiş hedefler temizlenir; kurulmuş olanlar etkilenmez). Seçili lisanslardan göndermeyi geri almak için **Seçilenlerden geri al**.
+
+Güvenlik: kit indirmesi `/v1/releases/<sürüm>/<dosya>?t=<belirteç>` ile yapılır; belirteç kalp atışında kuruluma özel verilir (HMAC, `LICENSE_DATA_KEY`'den türetilen anahtar, 24 saat), etkin olmayan kuruluma dosya verilmez. Bütünlüğü belirteç değil, **imzalı manifesto + SHA-256** sağlar: lisans sunucusu ele geçirilse bile satıcı anahtarı olmadan kurulumlara kabul edilecek bir kit gönderilemez. Kit arşivleri `RELEASES_DIR` altında saklanır (compose: `releases` birimi; yedek gerektirmez, yeniden üretilebilir).
+
 ## 6. Lisans verme, yenileme, taşıma (adım adım)
 
 **Yeni müşteri.** Panel › Müşteriler › *Yeni müşteri* → *Lisans ver*: sektörleri seçin, cihaz kotası/şirket sınırı/bitiş tarihini girin → **kodu** müşteriye güvenli
@@ -319,5 +330,5 @@ Panel/CLI kullanıcı bilgileri de sızdıysa: `admin:reset`, `LICENSE_DATA_KEY`
 
 ## 14. Kapsam dışı (şimdilik)
 
-Ödeme/fatura entegrasyonu, eklenti (modül) bazlı lisans, çok kiracılı barındırmada kiracı başına lisans, kurulum bazında uzaktan "kill switch" dışında uzaktan müdahale, çerez kopyalama tespiti.
+Ödeme/fatura entegrasyonu, eklenti (modül) bazlı lisans, çok kiracılı barındırmada kiracı başına lisans, kurulum bazında uzaktan "kill switch" ve sahip onaylı uzaktan güncelleme dışında uzaktan müdahale, sahip onayı olmadan otomatik güncelleme, çerez kopyalama tespiti.
 Lisans metni/EULA ve sözleşme hukuki belgedir: avukata yazdırılmalıdır (`docs/LEGAL-NOTES.md` §11).

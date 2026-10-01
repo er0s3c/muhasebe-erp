@@ -1,0 +1,99 @@
+import { sql } from 'drizzle-orm';
+import { dec, roundMoney, type MoneyValue } from '@erp/shared';
+import type { Tx } from '../../db/client';
+import { companies } from '../../db/schema';
+import { findRate } from '../settings/rates';
+
+export interface CommittedResult {
+  /** İş kalemi (yaprak) → kalan taahhüt (defter para birimi). */
+  byWbs: Map<string, MoneyValue>;
+  /** Kuru bulunamadığı için hesaba katılamayan sözleşme sayısı (tutar eksik olabilir). */
+  missingRate: number;
+  /** Yürürlükteki taşeron sözleşme sayısı. */
+  contracts: number;
+}
+
+/**
+ * Kalan taahhüt (yalnızca yürürlükteki sözleşmeler): yürürlükteki revizyonun BOQ tutarı − kaydedilmiş hakedişlerdeki
+ * brüt (asOf tarihine kadar). İptal edilmiş hakediş sayılmaz. Hakediş para biriminden defter para birimine asOf
+ * tarihindeki kurla çevrilir; kur yoksa o sözleşme hesaba katılmaz ve `missingRate` artar (sessiz yanlış değer yok).
+ * Türetilir, depolanmaz: gerçekleşen maliyet gibi tek kaynaktan beslenir.
+ */
+export async function loadCommitted(tx: Tx, projectId: string, asOf: string): Promise<CommittedResult> {
+  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies);
+  const base = company!.base;
+  const rows = await tx.execute<{ wbsId: string; currency: string; remaining: string; subcontractId: string }>(sql`
+    with cur as (
+      select distinct on (r.subcontract_id) r.id, r.subcontract_id
+        from subcontract_revisions r where r.status = 'approved'
+       order by r.subcontract_id, r.revision_no desc
+    )
+    select l.wbs_id as "wbsId", s.currency_code as currency, s.id as "subcontractId",
+           greatest(
+             round(l.quantity * l.unit_price, 2)
+             - coalesce((select sum(pl.amount)
+                           from progress_payment_lines pl join progress_payments pp on pp.id = pl.payment_id
+                          where pp.subcontract_id = l.subcontract_id and pp.status = 'posted'
+                            and pp.period_end <= ${asOf}::date and pl.line_key = l.line_key), 0),
+             0)::text as remaining
+      from cur
+      join subcontract_boq_lines l on l.revision_id = cur.id
+      join subcontracts s on s.id = l.subcontract_id
+     where s.project_id = ${projectId} and s.status = 'active' and s.direction = 'payable'`);
+
+  const byWbs = new Map<string, MoneyValue>();
+  const rateByCurrency = new Map<string, MoneyValue | null>();
+  const missing = new Set<string>();
+  const contracts = new Set<string>();
+  for (const r of rows.rows) {
+    contracts.add(r.subcontractId);
+    let rate: MoneyValue | null;
+    if (r.currency === base) rate = dec(1);
+    else {
+      if (!rateByCurrency.has(r.currency)) rateByCurrency.set(r.currency, await findRate(tx, r.currency, base, asOf, base));
+      rate = rateByCurrency.get(r.currency) ?? null;
+    }
+    if (!rate) {
+      missing.add(r.subcontractId);
+      continue;
+    }
+    byWbs.set(r.wbsId, (byWbs.get(r.wbsId) ?? dec(0)).plus(roundMoney(dec(r.remaining).times(rate))));
+  }
+  return { byWbs, missingRate: missing.size, contracts: contracts.size };
+}
+
+export interface PendingVariations {
+  /** Taşeron sözleşmelerinde bekleyen değişiklik emri farkı (onayda), defter para birimi; taahhüde/EAC'ye girmez. */
+  cost: string;
+  /** İşveren sözleşmesinde bekleyen DE farkı (onayda ya da işveren kabulü bekleyen); sözleşmeli gelire girmez. */
+  revenue: string;
+  count: number;
+  missingRate: number;
+}
+
+/** Bekleyen (gönderilmiş / işveren kabulü bekleyen) değişiklik emirleri: bilgi amaçlı ayrı sütun, tahmine girmez. */
+export async function loadPendingVariations(tx: Tx, projectId: string, asOf: string): Promise<PendingVariations> {
+  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies);
+  const base = company!.base;
+  const rows = await tx.execute<{ direction: string; currency: string; delta: string; n: number }>(sql`
+    select v.direction, s.currency_code as currency, coalesce(sum(v.amount_delta), 0)::text as delta, count(*)::int as n
+      from variation_orders v join subcontracts s on s.id = v.subcontract_id
+     where v.project_id = ${projectId} and v.status in ('submitted', 'awaiting_client')
+     group by v.direction, s.currency_code`);
+  let cost = dec(0);
+  let revenue = dec(0);
+  let count = 0;
+  let missingRate = 0;
+  for (const r of rows.rows) {
+    count += r.n;
+    const rate = r.currency === base ? dec(1) : await findRate(tx, r.currency, base, asOf, base);
+    if (!rate) {
+      missingRate += r.n;
+      continue;
+    }
+    const v = roundMoney(dec(r.delta).times(rate));
+    if (r.direction === 'payable') cost = cost.plus(v);
+    else revenue = revenue.plus(v);
+  }
+  return { cost: cost.toFixed(2), revenue: revenue.toFixed(2), count, missingRate };
+}

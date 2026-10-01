@@ -15,7 +15,7 @@ import {
   type MoneyValue,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { accounts, fiscalPeriods, journalEntries, journalLines, parties, projects, projectWbs } from '../../db/schema';
+import { accounts, costCodes, fiscalPeriods, journalEntries, journalLines, parties, projects, projectWbs } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { validateDimensions, type DimensionLine } from '../projects/dimension';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
@@ -57,6 +57,7 @@ interface PreparedLine {
   dueDate: string | null;
   projectId: string | null;
   wbsId: string | null;
+  costCodeId: string | null;
 }
 
 export interface ReportingLine {
@@ -202,8 +203,9 @@ async function prepareLines(
       dueDate: line.dueDate ?? null,
       projectId: line.projectId ?? null,
       wbsId: line.wbsId ?? null,
+      costCodeId: line.costCodeId ?? null,
     });
-    dimensions.push({ label, projectId: line.projectId, wbsId: line.wbsId, accountType: account.type });
+    dimensions.push({ label, projectId: line.projectId, wbsId: line.wbsId, costCodeId: line.costCodeId, accountType: account.type });
   }
   // Proje/iş kalemi etiketleri (yalnızca etiketli satır varsa sorgu yapar)
   await validateDimensions(tx, ctx.companyId, dimensions);
@@ -230,6 +232,7 @@ function toRows(entryId: string, companyId: string, lines: PreparedLine[]) {
     dueDate: l.dueDate,
     projectId: l.projectId,
     wbsId: l.wbsId,
+    costCodeId: l.costCodeId,
   }));
 }
 
@@ -394,6 +397,7 @@ export async function reverseJournalEntry(
       // Ters kayıt önceki etiketi nötrler: proje/iş kalemi aynen kopyalanır (kapalı projeye de yazılabilir)
       projectId: l.projectId,
       wbsId: l.wbsId,
+      costCodeId: l.costCodeId,
     })),
   );
 
@@ -453,12 +457,16 @@ export async function getJournalEntry(tx: Tx, id: string) {
       wbsId: journalLines.wbsId,
       wbsCode: projectWbs.code,
       wbsName: projectWbs.name,
+      costCodeId: journalLines.costCodeId,
+      costCode: costCodes.code,
+      costCodeName: costCodes.name,
     })
     .from(journalLines)
     .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
     .leftJoin(parties, eq(parties.id, journalLines.partyId))
     .leftJoin(projects, eq(projects.id, journalLines.projectId))
     .leftJoin(projectWbs, eq(projectWbs.id, journalLines.wbsId))
+    .leftJoin(costCodes, eq(costCodes.id, journalLines.costCodeId))
     .where(eq(journalLines.entryId, id))
     .orderBy(asc(journalLines.lineNo));
   return { ...entry, lines };

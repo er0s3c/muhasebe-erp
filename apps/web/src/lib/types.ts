@@ -58,6 +58,7 @@ export interface Member {
   fullName: string;
   isActive: boolean;
   role: string;
+  mfaEnabled: boolean;
 }
 
 export interface JournalListItem {
@@ -547,6 +548,8 @@ export interface InvoiceLineRow {
   deliveryNoteId: string | null;
   deliveryNoteNo: string | null;
   deliveryLineNo: number | null;
+  poLineId: string | null;
+  orderCode: string | null;
   projectId: string | null;
   projectCode: string | null;
   projectName: string | null;
@@ -572,6 +575,7 @@ export interface InvoiceDetail {
     postedAt: string | null;
     cancelledAt: string | null;
     cancelReason: string | null;
+    matchOverrideReason: string | null;
     cancelJournalEntryId: string | null;
     cancelJournalEntryNo: string | null;
     cancelStockDocumentId: string | null;
@@ -1015,6 +1019,9 @@ export interface ProjectCostRow extends ProjectMetrics {
   unassigned: boolean;
   progress: { percent: string; etcOverride: string | null; asOfDate: string; note: string | null } | null;
   revenue: string;
+  /** Kalan taahhüt (yürürlükteki taşeron sözleşmeleri); EAC/CPI'ya girmez. */
+  committed: string;
+  actualPlusCommitted: string;
 }
 
 export interface ProjectCostReport {
@@ -1022,7 +1029,10 @@ export interface ProjectCostReport {
   asOf: string;
   budget: { id: string; revisionNo: number; approvedAt: string } | null;
   rows: ProjectCostRow[];
-  totals: ProjectMetrics & { revenue: string };
+  totals: ProjectMetrics & { revenue: string; committed: string; actualPlusCommitted: string };
+  commitments: { contracts: number; orders: number; missingRate: number };
+  /** Bekleyen değişiklik emirleri: bilgi amaçlı, taahhüde/EAC'ye/gelire girmez. */
+  pendingVariations: { cost: string; revenue: string; count: number; missingRate: number };
 }
 
 export interface ProjectBudgetRow {
@@ -1100,5 +1110,668 @@ export const MODULE_LABEL_KEYS = {
   'core.invoices': 'modules.invoices',
   'core.treasury': 'modules.treasury',
   'construction.projects': 'modules.constructionProjects',
+  'construction.subcontracts': 'modules.constructionSubcontracts',
+  'construction.procurement': 'modules.constructionProcurement',
+  'construction.realestate': 'modules.constructionRealestate',
   'retail.pos': 'modules.retailPos',
 } as const;
+
+// --- Taşeron ve hakediş (B2) ---------------------------------------------------------------
+
+export interface CostCode {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'material' | 'labor' | 'subcontract' | 'equipment' | 'transport' | 'overhead' | 'fee' | 'other';
+  isActive: boolean;
+}
+
+export interface ProjectCostByCode {
+  project: { id: string; code: string; name: string };
+  asOf: string;
+  rows: { costCodeId: string | null; code: string | null; name: string; actual: string; share: string }[];
+  total: string;
+}
+
+export type SubcontractStatus = 'draft' | 'active' | 'completed' | 'terminated';
+
+export type ContractDirection = 'payable' | 'receivable';
+
+export interface SubcontractRow {
+  id: string;
+  direction: ContractDirection;
+  code: string;
+  title: string;
+  status: SubcontractStatus;
+  currencyCode: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  partyId: string;
+  partyName: string;
+  startDate: string | null;
+  endDate: string | null;
+  contractAmount: string;
+}
+
+export interface SubcontractRevisionRow {
+  id: string;
+  revisionNo: number;
+  status: 'draft' | 'approved' | 'superseded';
+  title: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  total: string;
+  isCurrent: boolean;
+  variationId: string | null;
+  variationCode: string | null;
+  variationStatus: VariationStatus | null;
+}
+
+export interface SubcontractDetail {
+  subcontract: {
+    id: string;
+    direction: ContractDirection;
+    code: string;
+    projectId: string;
+    partyId: string;
+    title: string;
+    currencyCode: string;
+    startDate: string | null;
+    endDate: string | null;
+    paymentDays: number;
+    retentionPct: string;
+    advanceRecoupPct: string;
+    withholdingPct: string;
+    penaltyNote: string | null;
+    status: SubcontractStatus;
+    projectCode: string;
+    projectName: string;
+    partyCode: string;
+    partyName: string;
+    contractAmount: string;
+    /** İlk onaylı revizyonun bedeli; uygulanan ve bekleyen değişiklik emri farkları; uygulanan süre uzatımı. */
+    originalAmount: string;
+    appliedVariations: string;
+    pendingVariations: string;
+    pendingCount: number;
+    extensionDays: number;
+  };
+  revisions: SubcontractRevisionRow[];
+}
+
+export type VariationStatus = 'draft' | 'submitted' | 'awaiting_client' | 'applied' | 'rejected' | 'cancelled';
+export type VariationReason = 'client_request' | 'design_change' | 'site_condition' | 'omission_error' | 'other';
+
+export interface VariationRow {
+  id: string;
+  code: string;
+  title: string;
+  reason: VariationReason;
+  status: VariationStatus;
+  direction: ContractDirection;
+  subcontractId: string;
+  subcontractCode: string;
+  currencyCode: string;
+  partyName: string;
+  projectId: string;
+  projectCode: string;
+  timeExtensionDays: number;
+  amountDelta: string | null;
+  createdAt: string;
+  appliedAt: string | null;
+  clientReference: string | null;
+}
+
+export interface VariationLine {
+  lineKey: string;
+  lineNo: number;
+  itemNo: string | null;
+  description: string;
+  unit: string;
+  oldQty: string | null;
+  oldPrice: string | null;
+  oldAmount: string | null;
+  newQty: string | null;
+  newPrice: string | null;
+  newAmount: string | null;
+  delta: string;
+  change: 'added' | 'removed' | 'changed' | 'same';
+}
+
+export interface VariationDetail {
+  variation: {
+    id: string;
+    code: string;
+    title: string;
+    reason: VariationReason;
+    description: string | null;
+    status: VariationStatus;
+    direction: ContractDirection;
+    subcontractId: string;
+    projectId: string;
+    revisionId: string | null;
+    baseRevisionId: string;
+    timeExtensionDays: number;
+    previousEndDate: string | null;
+    newEndDate: string | null;
+    projectedEndDate: string | null;
+    amountBefore: string;
+    amountAfter: string;
+    amountDelta: string;
+    submittedAt: string | null;
+    approvedAt: string | null;
+    clientAcceptedAt: string | null;
+    clientReference: string | null;
+    appliedAt: string | null;
+    rejectionNote: string | null;
+    createdAt: string;
+    subcontractCode: string;
+    subcontractTitle: string;
+    currencyCode: string;
+    contractEndDate: string | null;
+    subcontractStatus: SubcontractStatus;
+    partyName: string;
+    projectCode: string;
+    projectName: string;
+    revisionNo: number | null;
+    baseRevisionNo: number;
+  };
+  lines: VariationLine[];
+  approvals: ApprovalRequestRow[];
+}
+
+export interface BoqLineRow {
+  id: string;
+  lineKey: string;
+  lineNo: number;
+  itemNo: string | null;
+  description: string;
+  unit: string;
+  quantity: string;
+  unitPrice: string;
+  amount: string;
+  wbsId: string;
+  wbsCode: string;
+  wbsName: string;
+  costCodeId: string | null;
+  costCode: string | null;
+}
+
+export interface SubcontractRevisionDetail {
+  revision: { id: string; subcontractId: string; revisionNo: number; status: 'draft' | 'approved' | 'superseded'; title: string | null; approvedAt: string | null; total: string };
+  lines: BoqLineRow[];
+}
+
+export interface SubcontractBalances {
+  advanceGiven: string;
+  advanceRecouped: string;
+  advanceBalance: string;
+  retentionHeld: string;
+  retentionReleased: string;
+  retentionBalance: string;
+  certifiedGross: string;
+}
+
+export type ProgressStatus = 'draft' | 'submitted' | 'posted' | 'cancelled';
+
+export interface ProgressRow {
+  id: string;
+  direction: ContractDirection;
+  number: string | null;
+  paymentNo: number;
+  status: ProgressStatus;
+  periodEnd: string;
+  subcontractId: string;
+  subcontractCode: string;
+  partyName: string;
+  projectId: string;
+  projectCode: string;
+  currencyCode: string;
+  gross: string;
+  net: string;
+}
+
+export interface ApprovalStepRow {
+  id: string;
+  stepNo: number;
+  approverRole: string | null;
+  approverUserId: string | null;
+  label: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  decidedBy: string | null;
+  decidedAt: string | null;
+  note: string | null;
+}
+
+export interface ApprovalRequestRow {
+  id: string;
+  docType: 'progress_payment' | 'employer_claim' | 'purchase_request' | 'variation_order';
+  docId: string;
+  amount: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  requestedAt: string;
+  completedAt: string | null;
+  steps: ApprovalStepRow[];
+}
+
+export interface ProgressDetail {
+  payment: {
+    id: string;
+    direction: ContractDirection;
+    subcontractId: string;
+    subcontractCode: string;
+    subcontractTitle: string;
+    projectId: string;
+    projectCode: string;
+    partyId: string;
+    partyName: string;
+    paymentNo: number;
+    number: string | null;
+    periodEnd: string;
+    status: ProgressStatus;
+    currencyCode: string;
+    fxRate: string | null;
+    vatCode: string | null;
+    vatRate: string;
+    retentionPct: string;
+    advancePct: string;
+    withholdingPct: string;
+    gross: string;
+    vat: string;
+    retention: string;
+    advance: string;
+    withholding: string;
+    otherDeductions: string;
+    net: string;
+    note: string | null;
+    rejectionNote: string | null;
+    entryId: string | null;
+    cancelReason: string | null;
+  };
+  lines: { id: string; lineKey: string; lineNo: number; itemNo: string | null; description: string; unit: string; unitPrice: string; prevQty: string; cumQty: string; thisQty: string; amount: string; wbsCode: string; costCode: string | null }[];
+  deductions: { id: string; description: string; amount: string }[];
+  approvals: ApprovalRequestRow[];
+}
+
+export interface ConstructionParam {
+  id: string;
+  kind: 'retention_pct' | 'withholding_pct' | 'advance_recoup_pct';
+  value: string;
+  validFrom: string;
+  validTo: string | null;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface ApprovalRuleRow {
+  id: string;
+  docType: 'progress_payment' | 'employer_claim' | 'purchase_request';
+  projectId: string | null;
+  minAmount: string;
+  maxAmount: string | null;
+  separateRequester: boolean;
+  isActive: boolean;
+  steps: { id: string; stepNo: number; approverRole: string | null; approverUserId: string | null; label: string | null }[];
+}
+
+export interface EmployerSummary {
+  subcontractId: string;
+  code: string;
+  title: string;
+  status: SubcontractStatus;
+  currencyCode: string;
+  contractAmount: string;
+  claimCount: number;
+  cumulativeGross: string;
+  thisPeriodGross: string;
+  previousGross: string;
+  remainingContract: string;
+  billedNet: string;
+  collected: string;
+  outstanding: string;
+  retentionBalance: string;
+  advanceBalance: string;
+}
+
+// --- Satın alma zinciri ---------------------------------------------------------------------------------
+
+export type PurchaseRequestStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'ordered' | 'cancelled';
+export type PurchaseOrderStatus = 'draft' | 'issued' | 'closed' | 'cancelled';
+export type RfqStatus = 'open' | 'awarded' | 'cancelled';
+
+export interface PurchaseRequestRow {
+  id: string;
+  code: string;
+  title: string;
+  status: PurchaseRequestStatus;
+  needDate: string | null;
+  projectId: string;
+  projectCode: string;
+  lineCount: number;
+  estimatedTotal: string;
+}
+
+export interface PurchaseRequestLine {
+  id: string;
+  lineNo: number;
+  itemId: string | null;
+  itemCode: string | null;
+  description: string;
+  unit: string;
+  quantity: string;
+  estUnitPrice: string | null;
+  wbsId: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
+}
+
+export interface PurchaseRequestDetail {
+  request: {
+    id: string;
+    code: string;
+    title: string;
+    status: PurchaseRequestStatus;
+    needDate: string | null;
+    note: string | null;
+    rejectionNote: string | null;
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    estimatedTotal: string;
+  };
+  lines: PurchaseRequestLine[];
+  approvals: ApprovalRequestRow[];
+  rfq: { id: string; code: string; status: RfqStatus } | null;
+  orders: { id: string; code: string; status: PurchaseOrderStatus }[];
+}
+
+export interface RfqListRow {
+  id: string;
+  code: string;
+  status: RfqStatus;
+  dueDate: string | null;
+  requestId: string;
+  requestCode: string;
+  title: string;
+  projectCode: string;
+  offerCount: number;
+}
+
+export interface RfqOfferRow {
+  id: string;
+  partyId: string;
+  partyName: string;
+  currencyCode: string;
+  deliveryDays: number | null;
+  paymentDays: number;
+  note: string | null;
+  complete: boolean;
+  pricedCount: number;
+  total: string;
+  totalBase: string | null;
+  prices: Record<string, string | null>;
+  awarded: boolean;
+}
+
+export interface RfqDetail {
+  rfq: { id: string; code: string; status: RfqStatus; dueDate: string | null; note: string | null; requestId: string; requestCode: string; requestTitle: string; projectId: string; projectCode: string; awardedOfferId: string | null };
+  lines: { id: string; lineNo: number; description: string; unit: string; quantity: string; estUnitPrice: string | null }[];
+  offers: RfqOfferRow[];
+  cheapestOfferId: string | null;
+  fastestOfferId: string | null;
+  baseCurrency: string;
+}
+
+export interface PurchaseOrderRow {
+  id: string;
+  code: string;
+  status: PurchaseOrderStatus;
+  projectId: string;
+  projectCode: string;
+  partyId: string;
+  partyName: string;
+  currencyCode: string;
+  net: string;
+  orderedQty: string;
+  receivedQty: string;
+}
+
+export interface PurchaseOrderLine {
+  id: string;
+  lineNo: number;
+  itemId: string | null;
+  itemCode: string | null;
+  itemKind: string | null;
+  description: string;
+  unit: string;
+  quantity: string;
+  unitPrice: string;
+  amount: string;
+  wbsId: string | null;
+  wbsCode: string | null;
+  receivedQty: string;
+  invoicedQty: string;
+  remainingQty: string;
+}
+
+export interface PurchaseOrderDetail {
+  order: {
+    id: string;
+    code: string;
+    status: PurchaseOrderStatus;
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    partyId: string;
+    partyName: string;
+    requestId: string | null;
+    requestCode: string | null;
+    currencyCode: string;
+    vatCode: string | null;
+    vatRate: string;
+    paymentDays: number;
+    deliveryLocation: string | null;
+    note: string | null;
+    cancelReason: string | null;
+    net: string;
+    vat: string;
+    gross: string;
+    receiptState: 'none' | 'partial' | 'complete';
+  };
+  lines: PurchaseOrderLine[];
+  receipts: { id: string; receiptNo: string; receiptDate: string; status: 'posted' | 'cancelled'; note: string | null; deliveryNoteId: string | null; cancelReason: string | null }[];
+  invoices: { id: string; invoiceNo: string | null; externalNo: string | null; invoiceDate: string; status: string; grossTotal: string }[];
+}
+
+export type MatchFlag = 'over_received' | 'over_ordered' | 'price_variance';
+export interface MatchRow {
+  lineNo: number;
+  poLineId: string;
+  orderCode: string;
+  orderLineNo: number;
+  description: string;
+  orderedQty: string;
+  receivedQty: string;
+  invoicedBeforeQty: string;
+  invoiceQty: string;
+  orderPrice: string;
+  invoicePrice: string;
+  priceDiffPct: string | null;
+  flags: MatchFlag[];
+}
+export interface InvoiceableOrderLine {
+  lineId: string;
+  orderId: string;
+  orderCode: string;
+  orderDate: string;
+  projectId: string;
+  lineNo: number;
+  itemId: string | null;
+  description: string;
+  unit: string;
+  wbsId: string | null;
+  vatCode: string | null;
+  orderedQty: string;
+  unitPrice: string;
+  receivedQty: string;
+  invoicedQty: string;
+}
+export interface OrderMatchRow {
+  id: string;
+  code: string;
+  status: string;
+  projectCode: string;
+  partyName: string;
+  currencyCode: string;
+  orderedAmount: string;
+  receivedAmount: string;
+  invoicedAtOrderPrice: string;
+  uninvoicedReceiptAmount: string;
+  hasExcess: boolean;
+}
+
+// --- Gayrimenkul satışı (B3) ----------------------------------------------------------------------------
+
+export type UnitStatus = 'available' | 'reserved' | 'sold' | 'handed_over';
+export type SalesContractStatus = 'draft' | 'active' | 'handed_over' | 'terminated' | 'cancelled';
+export type UnitType = 'apartment' | 'villa' | 'shop' | 'office' | 'land' | 'parking' | 'storage' | 'other';
+
+export interface UnitRow {
+  id: string;
+  projectId: string;
+  projectCode: string;
+  block: string;
+  floor: number | null;
+  unitNo: string;
+  unitType: UnitType;
+  grossM2: string | null;
+  netM2: string | null;
+  rooms: string | null;
+  listPrice: string | null;
+  listCurrency: string | null;
+  status: UnitStatus;
+  note: string | null;
+  contractId: string | null;
+  contractCode: string | null;
+  contractStatus: SalesContractStatus | null;
+  buyerName: string | null;
+}
+
+export interface SalesContractRow {
+  id: string;
+  code: string;
+  status: SalesContractStatus;
+  contractDate: string;
+  currencyCode: string;
+  price: string;
+  projectCode: string;
+  block: string;
+  unitNo: string;
+  partyName: string;
+  installmentCount: number;
+}
+
+export interface SalesInstallmentRow {
+  id: string;
+  seq: number;
+  kind: 'down_payment' | 'installment' | 'balloon' | 'fee';
+  label?: string | null;
+  feeScheduleId?: string | null;
+  dueDate: string;
+  amount: string;
+  journalLineId: string | null;
+  paid: string;
+  remaining: string;
+  daysOverdue: number;
+}
+
+export interface SalesContractDetail {
+  contract: {
+    id: string;
+    code: string;
+    status: SalesContractStatus;
+    contractDate: string;
+    plannedHandover: string | null;
+    currencyCode: string;
+    price: string;
+    downPayment: string;
+    activatedOn: string | null;
+    activationFx: string | null;
+    handedOverOn: string | null;
+    terminatedOn: string | null;
+    cancelReason: string | null;
+    penaltyNote: string | null;
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    unitId: string;
+    block: string;
+    floor: number | null;
+    unitNo: string;
+    unitType: UnitType;
+    grossM2: string | null;
+    partyId: string;
+    partyName: string;
+    paid: string;
+    remaining: string;
+    overdue: string;
+    feesTotal: string;
+    feesPaid: string;
+    feesRemaining: string;
+    activationEntryId: string | null;
+    handoverEntryId: string | null;
+  };
+  installments: SalesInstallmentRow[];
+  termination: { terminationDate: string; reason: string; collected: string; retained: string; refund: string; refundAccountId: string | null } | null;
+}
+
+export interface DueInstallmentRow {
+  id: string;
+  contractId: string;
+  contractCode: string;
+  partyName: string;
+  projectCode: string;
+  block: string;
+  unitNo: string;
+  currencyCode: string;
+  seq: number;
+  kind: string;
+  dueDate: string;
+  amount: string;
+  remaining: string;
+  daysOverdue: number;
+}
+
+export interface SalesSummary {
+  units: Record<UnitStatus, { count: number; grossM2: string }>;
+  byCurrency: { currencyCode: string; contracts: number; price: string; collected: string; remaining: string; overdue: string }[];
+}
+
+export interface FeeSchedule {
+  id: string;
+  code: string;
+  name: string;
+  side: 'buyer' | 'project';
+  basis: 'per_unit' | 'per_m2' | 'pct_of_price' | 'fixed';
+  amount: string;
+  currencyCode: string | null;
+  validFrom: string;
+  validTo: string | null;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface FeeEstimate {
+  asOf: string;
+  baseCurrency: string;
+  units: number;
+  grossM2: string;
+  rows: { id: string; code: string; name: string; basis: FeeSchedule['basis']; rate: string; currencyCode: string | null; basisValue: string; estimate: string; verified: boolean }[];
+  estimate: string;
+  actual: string;
+  remaining: string;
+  missingRate: number;
+}

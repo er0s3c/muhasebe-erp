@@ -4,3 +4,4 @@ package-lock.json
 apps/api/drizzle
 playwright-report
 test-results
+release

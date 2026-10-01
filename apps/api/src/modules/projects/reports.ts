@@ -16,6 +16,8 @@ import { currentBudget } from './budgets';
 import { latestProgress } from './progress';
 import { getProjectRow } from './service';
 import { listWbs } from './wbs';
+import { loadOrderCommitted } from '../procurement/commitments';
+import { loadCommitted, loadPendingVariations } from '../subcontracts/commitments';
 
 /** Hesap kodu ön eki regex'i: gelir tarafı (60, 61, 64); diğer tüm etiketli hesaplar maliyet tarafıdır. */
 const REVENUE_RE = `^(${PROJECT_REVENUE_PREFIXES.join('|')})`;
@@ -84,6 +86,10 @@ export interface CostReportRow extends MetricsOut {
   /** Yaprakta: asOf tarihindeki geçerli ilerleme kaydı. */
   progress: { percent: string; etcOverride: string | null; asOfDate: string; note: string | null } | null;
   revenue: string;
+  /** Kalan taahhüt (yürürlükteki taşeron sözleşmeleri: BOQ − kaydedilmiş hakediş brütü); EAC/CPI'ya girmez. */
+  committed: string;
+  /** Gerçekleşen + kalan taahhüt. */
+  actualPlusCommitted: string;
 }
 
 /**
@@ -140,6 +146,19 @@ export async function projectCostReport(tx: Tx, projectId: string, asOf: string)
     }
   }
 
+  // Taahhüt: yaprak bazında; üst düğümler toplanır. Proje taşeron modülü kapalıysa/sözleşme yoksa 0.
+  const subCommit = await loadCommitted(tx, projectId, asOf);
+  const poCommit = await loadOrderCommitted(tx, projectId, asOf);
+  // Taahhüt = yürürlükteki taşeron sözleşmelerinin kalanı + verilmiş siparişlerin kalan (kabul edilmemiş) tutarı
+  const mergedByWbs = new Map(subCommit.byWbs);
+  for (const [k, v] of poCommit.byWbs) mergedByWbs.set(k, (mergedByWbs.get(k) ?? dec(0)).plus(v));
+  const commit = { byWbs: mergedByWbs, contracts: subCommit.contracts, orders: poCommit.orders, missingRate: subCommit.missingRate + poCommit.missingRate };
+  const committedOf = new Map<string, ReturnType<typeof dec>>();
+  for (const n of [...nodes].reverse()) {
+    if (n.isLeaf) committedOf.set(n.id, commit.byWbs.get(n.id) ?? dec(0));
+    else committedOf.set(n.id, (children.get(n.id) ?? []).reduce((acc, k) => acc.plus(committedOf.get(k.id)!), dec(0)));
+  }
+
   const rows: CostReportRow[] = nodes.map((n) => {
     const p = n.isLeaf ? progress.get(n.id) : undefined;
     return {
@@ -153,6 +172,8 @@ export async function projectCostReport(tx: Tx, projectId: string, asOf: string)
       unassigned: false,
       progress: p ? { percent: dec(p.percent).toFixed(2), etcOverride: p.etcOverride, asOfDate: p.asOfDate, note: p.note } : null,
       revenue: revenueOf.get(n.id)!.toFixed(2),
+      committed: committedOf.get(n.id)!.toFixed(2),
+      actualPlusCommitted: metrics.get(n.id)!.actual.plus(committedOf.get(n.id)!).toFixed(2),
       ...serializeMetrics(metrics.get(n.id)!),
     };
   });
@@ -172,12 +193,15 @@ export async function projectCostReport(tx: Tx, projectId: string, asOf: string)
       unassigned: true,
       progress: null,
       revenue: unassignedAct.revenue.toFixed(2),
+      committed: '0.00',
+      actualPlusCommitted: unassignedMetrics.actual.toFixed(2),
       ...serializeMetrics(unassignedMetrics),
     });
   }
 
   const leafMetrics = [...nodes.filter((n) => n.isLeaf).map((n) => metrics.get(n.id)!), ...(unassignedMetrics ? [unassignedMetrics] : [])];
   const totals = combineMetrics(leafMetrics);
+  const totalCommitted = [...commit.byWbs.values()].reduce((a, v) => a.plus(v), dec(0));
   const revenue = [...actuals.values()].reduce((s, a) => s.plus(a.revenue), dec(0));
 
   return {
@@ -185,7 +209,15 @@ export async function projectCostReport(tx: Tx, projectId: string, asOf: string)
     asOf,
     budget: budget ? { id: budget.id, revisionNo: budget.revisionNo, approvedAt: budget.approvedAt } : null,
     rows,
-    totals: { ...serializeMetrics(totals), revenue: roundMoney(revenue).toFixed(2) },
+    totals: {
+      ...serializeMetrics(totals),
+      revenue: roundMoney(revenue).toFixed(2),
+      committed: totalCommitted.toFixed(2),
+      actualPlusCommitted: totals.actual.plus(totalCommitted).toFixed(2),
+    },
+    commitments: { contracts: commit.contracts, orders: commit.orders, missingRate: commit.missingRate },
+    // Bekleyen değişiklik emirleri ayrı gösterilir; taahhüde, EAC'ye ve gelire eklenmez
+    pendingVariations: await loadPendingVariations(tx, projectId, asOf),
   };
 }
 
@@ -294,4 +326,34 @@ export async function projectOptions(tx: Tx) {
   const byProject = new Map<string, { id: string; code: string; name: string }[]>();
   for (const w of leaves.rows) byProject.set(w.projectId, [...(byProject.get(w.projectId) ?? []), { id: w.id, code: w.code, name: w.name }]);
   return { projects: projects.rows.map((p) => ({ ...p, wbs: byProject.get(p.id) ?? [] })) };
+}
+
+/** Maliyet koduna göre proje maliyeti (etiketli, kaydedilmiş satırların net borcu; gelir hesapları hariç). */
+export async function projectCostByCode(tx: Tx, projectId: string, asOf: string) {
+  const project = await getProjectRow(tx, projectId);
+  const rows = await tx.execute<{ id: string | null; code: string | null; name: string | null; actual: string }>(sql`
+    select cc.id, cc.code, cc.name,
+           coalesce(sum(jl.debit_base - jl.credit_base) filter (where a.code !~ ${REVENUE_RE}), 0)::text as actual
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      left join cost_codes cc on cc.id = jl.cost_code_id
+     where jl.project_id = ${projectId} and je.status = 'posted' and je.entry_date <= ${asOf}::date
+     group by cc.id, cc.code, cc.name
+     order by cc.code nulls last`);
+  const total = rows.rows.reduce((s, r) => s.plus(dec(r.actual)), dec(0));
+  return {
+    project: { id: project.id, code: project.code, name: project.name },
+    asOf,
+    rows: rows.rows
+      .filter((r) => !dec(r.actual).isZero())
+      .map((r) => ({
+        costCodeId: r.id,
+        code: r.code,
+        name: r.name ?? 'Maliyet kodu atanmamış',
+        actual: dec(r.actual).toFixed(2),
+        share: total.isZero() ? '0.00' : dec(r.actual).div(total).times(100).toFixed(2),
+      })),
+    total: total.toFixed(2),
+  };
 }

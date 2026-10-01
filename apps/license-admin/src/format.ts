@@ -41,4 +41,11 @@ export const AUDIT_LABELS: Record<string, string> = {
   'activation.reactivate': 'Kurulum yeniden etkinleştirildi',
   'activation.deactivate': 'Kurulum devre dışı bırakıldı',
   'activation.clear_flag': 'Klon şüphesi bayrağı kaldırıldı',
+  'release.create': 'Sürüm taslağı oluşturuldu',
+  'release.file': 'Sürüm kiti yüklendi',
+  'release.publish': 'Sürüm yayımlandı (imzalandı)',
+  'release.withdraw': 'Sürüm geri çekildi',
+  'release.delete': 'Sürüm taslağı silindi',
+  'release.send': 'Güncelleme müşterilere gönderildi',
+  'release.cancel': 'Güncelleme gönderimi geri alındı',
 };

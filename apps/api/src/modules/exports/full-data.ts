@@ -316,5 +316,74 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     );
   }
 
+  // Taşeron sözleşmeleri, BOQ ve hakedişler (yalnızca sözleşmesi olan şirketlerde)
+  const scRows = await query(
+    'Taşeron sözleşmeleri',
+    sql`select s.code, s.title, s.status, s.direction, s.currency_code, p.code as project, pa.name as party, s.payment_days,
+               s.retention_pct, s.advance_recoup_pct, s.withholding_pct, s.start_date::text as start_date, s.end_date::text as end_date
+          from subcontracts s join projects p on p.id = s.project_id join parties pa on pa.id = s.party_id order by s.code`,
+  );
+  if (scRows.length > 0) {
+    tables.push(
+      table(
+        'Taşeron sözleşmeleri',
+        'Taşeron sözleşmeleri',
+        [col('code', 'Sözleşme', 'text', 12), col('title', 'İş', 'text', 32), col('project', 'Proje', 'text', 12), col('party', 'Taşeron', 'text', 28), col('status', 'Durum', 'text', 12), col('direction', 'Yön', 'text', 12), col('currency', 'Para birimi', 'text', 8), col('days', 'Vade (gün)', 'int'), col('retention', 'Teminat %', 'money'), col('advance', 'Avans mahsup %', 'money'), col('withholding', 'Stopaj %', 'money'), col('start', 'Başlangıç', 'date'), col('end', 'Bitiş', 'date')],
+        scRows.map((r) => ({ code: s(r.code), title: s(r.title), project: s(r.project), party: s(r.party), status: s(r.status), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', currency: s(r.currency_code), days: Number(r.payment_days), retention: s(r.retention_pct), advance: s(r.advance_recoup_pct), withholding: s(r.withholding_pct), start: s(r.start_date), end: s(r.end_date) })),
+        'Sözleşme başlıkları',
+      ),
+    );
+    const boqRows = await query(
+      'BOQ',
+      sql`select s.code as contract, r.revision_no, r.status, l.item_no, l.description, l.unit, l.quantity, l.unit_price, w.code as wbs, c.code as cost_code
+            from subcontract_boq_lines l
+            join subcontract_revisions r on r.id = l.revision_id
+            join subcontracts s on s.id = l.subcontract_id
+            join project_wbs w on w.id = l.wbs_id
+            left join cost_codes c on c.id = l.cost_code_id
+           order by s.code, r.revision_no, l.line_no`,
+    );
+    tables.push(
+      table(
+        'BOQ',
+        'BOQ',
+        [col('contract', 'Sözleşme', 'text', 12), col('rev', 'Revizyon', 'int'), col('status', 'Durum', 'text', 12), col('item', 'Poz', 'text', 10), col('desc', 'Tanım', 'text', 36), col('unit', 'Birim', 'text', 8), col('qty', 'Miktar', 'qty'), col('price', 'Birim fiyat', 'money'), col('wbs', 'İş kalemi', 'text', 12), col('code', 'Maliyet kodu', 'text', 10)],
+        boqRows.map((r) => ({ contract: s(r.contract), rev: Number(r.revision_no), status: s(r.status), item: s(r.item_no), desc: s(r.description), unit: s(r.unit), qty: s(r.quantity), price: s(r.unit_price), wbs: s(r.wbs), code: s(r.cost_code) })),
+        'Tüm sözleşme revizyonlarının BOQ satırları',
+      ),
+    );
+    const prRows = await query(
+      'Hakedişler',
+      sql`select p.number, p.payment_no, s.code as contract, p.direction, p.status, p.period_end::text as period_end, p.currency_code,
+                 p.gross, p.vat, p.retention, p.advance, p.withholding, p.other_deductions, p.net
+            from progress_payments p join subcontracts s on s.id = p.subcontract_id order by s.code, p.payment_no`,
+    );
+    tables.push(
+      table(
+        'Hakedişler',
+        'Hakedişler',
+        [col('number', 'Belge no', 'text', 16), col('no', 'Sıra', 'int'), col('contract', 'Sözleşme', 'text', 12), col('direction', 'Yön', 'text', 12), col('status', 'Durum', 'text', 12), col('period', 'Dönem sonu', 'date'), col('currency', 'Para birimi', 'text', 8), col('gross', 'Brüt', 'money'), col('vat', 'KDV', 'money'), col('retention', 'Teminat', 'money'), col('advance', 'Avans mahsubu', 'money'), col('withholding', 'Stopaj', 'money'), col('other', 'Diğer kesinti', 'money'), col('net', 'Net', 'money')],
+        prRows.map((r) => ({ number: s(r.number), no: Number(r.payment_no), contract: s(r.contract), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', status: s(r.status), period: s(r.period_end), currency: s(r.currency_code), gross: s(r.gross), vat: s(r.vat), retention: s(r.retention), advance: s(r.advance), withholding: s(r.withholding), other: s(r.other_deductions), net: s(r.net) })),
+        'Taşeron hakedişleri',
+      ),
+    );
+    const voRows = await query(
+      'Değişiklik emirleri',
+      sql`select v.code, v.title, s.code as contract, v.direction, v.reason, v.status, v.time_extension_days, v.amount_before, v.amount_after, v.amount_delta,
+                 v.previous_end_date::text as previous_end, v.new_end_date::text as new_end, v.client_accepted_at::text as client_accepted, v.client_reference, r.revision_no
+            from variation_orders v join subcontracts s on s.id = v.subcontract_id left join subcontract_revisions r on r.id = v.revision_id
+           order by v.code`,
+    );
+    tables.push(
+      table(
+        'Değişiklik emirleri',
+        'Değişiklik emirleri',
+        [col('code', 'DE no', 'text', 10), col('title', 'Konu', 'text', 32), col('contract', 'Sözleşme', 'text', 12), col('direction', 'Yön', 'text', 10), col('reason', 'Gerekçe', 'text', 16), col('status', 'Durum', 'text', 14), col('rev', 'Revizyon', 'int'), col('days', 'Süre uzatımı (gün)', 'int'), col('before', 'Önceki bedel', 'money'), col('after', 'Yeni bedel', 'money'), col('delta', 'Fark', 'money'), col('prevEnd', 'Önceki bitiş', 'date'), col('newEnd', 'Yeni bitiş', 'date'), col('accepted', 'İşveren kabulü', 'date'), col('reference', 'İşveren yazısı', 'text', 16)],
+        voRows.map((r) => ({ code: s(r.code), title: s(r.title), contract: s(r.contract), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', reason: s(r.reason), status: s(r.status), rev: r.revision_no == null ? null : Number(r.revision_no), days: Number(r.time_extension_days), before: s(r.amount_before), after: s(r.amount_after), delta: s(r.amount_delta), prevEnd: s(r.previous_end), newEnd: s(r.new_end), accepted: s(r.client_accepted), reference: s(r.client_reference) })),
+        'Sözleşme değişiklik emirleri (süre uzatımı dahil)',
+      ),
+    );
+  }
+
   return tables;
 }

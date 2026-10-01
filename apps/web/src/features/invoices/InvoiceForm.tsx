@@ -1,8 +1,8 @@
-import { ArrowLeft, Plus, Trash2, Truck, X } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Plus, Trash2, Truck, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, calcInvoice, dec, formatTR, todayIso } from '@erp/shared';
+import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, ITEM_UNITS, calcInvoice, dec, formatTR, todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
@@ -16,11 +16,12 @@ import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCompanyApi, useCQuery } from '../../lib/queries';
-import type { AccountMapping, DeliveryNoteDetail, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
+import type { AccountMapping, DeliveryNoteDetail, InvoiceableOrderLine, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
 import { useUnitLabel, useWarehouses } from '../inventory/common';
 import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../projects/common';
 import { INVOICE_INVALIDATE, useLineAccountOptions, usePartyOptions, useTaxRates, vatRateFor } from './common';
 import { DeliveryPicker } from './DeliveryPicker';
+import { OrderLinePicker } from './OrderLinePicker';
 
 interface LineState {
   key: number;
@@ -44,6 +45,9 @@ interface LineState {
   /** Proje boyutu (inşaat): yalnızca alış/gider/alış iadesi faturasının stoksuz satırında */
   projectId: string;
   wbsId: string;
+  /** Alış faturasında bağlı sipariş satırı (üçlü eşleştirme) ve görünen sipariş kodu */
+  orderLineId: string;
+  orderCode: string;
 }
 
 let lineKey = 1;
@@ -66,6 +70,8 @@ const emptyLine = (vatCode = ''): LineState => ({
   deliveryRemaining: null,
   projectId: '',
   wbsId: '',
+  orderLineId: '',
+  orderCode: '',
 });
 
 interface DeliverySource {
@@ -105,6 +111,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const can = useCan();
   const canPost = can('invoices.post');
   const canDelivery = can('deliveries.read');
+  const canOrders = can('procurement.read') && type === 'purchase';
+  const canOverride = can('procurement.approve');
 
   const { options: partyOptions, byId: partyById } = usePartyOptions(salesSide ? 'customer' : 'supplier');
   const { data: taxData } = useTaxRates();
@@ -153,6 +161,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         deliveryRemaining: null,
         projectId: l.projectId ?? '',
         wbsId: l.wbsId ?? '',
+        orderLineId: l.poLineId ?? '',
+        orderCode: l.orderCode ?? '',
       }));
     }
     if (original) {
@@ -178,6 +188,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           deliveryRemaining: null,
           projectId: '',
           wbsId: '',
+          orderLineId: '',
+          orderCode: '',
         }));
     }
     return [emptyLine()];
@@ -185,6 +197,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const [error, setError] = useState<Error | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [overrideReason, setOverrideReason] = useState(initial?.invoice.matchOverrideReason ?? '');
+  const [orderPickerOpen, setOrderPickerOpen] = useState(false);
 
   // Cari seçilince para birimi ve vadeyi cari kartından al (yalnızca yeni faturada)
   const party = partyById.get(partyId);
@@ -285,6 +299,34 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       ];
     });
 
+  // --- Siparişten satır (üçlü eşleştirme) ---
+  const takenFromOrder = new Map<string, string>();
+  for (const l of lines) {
+    if (l.orderLineId) takenFromOrder.set(l.orderLineId, dec(takenFromOrder.get(l.orderLineId) ?? 0).plus(l.quantity || 0).toString());
+  }
+  const addFromOrder = (picked: (InvoiceableOrderLine & { suggested: string })[]) =>
+    setLines((cur) => {
+      const keep = cur.length === 1 && !cur[0]!.itemId && !cur[0]!.description ? [] : cur;
+      return [
+        ...keep,
+        ...picked.map(
+          (p): LineState => ({
+            ...emptyLine(p.vatCode ?? ''),
+            itemId: p.itemId && itemById.has(p.itemId) ? p.itemId : '',
+            description: p.description,
+            quantity: trim(p.suggested),
+            // Sipariş birimi serbest metindir; faturada yalnızca tanımlı birim kodları kullanılır
+            unit: (ITEM_UNITS as readonly string[]).includes(p.unit) ? p.unit : '',
+            unitPrice: trim(p.unitPrice),
+            projectId: p.projectId,
+            wbsId: p.wbsId ?? '',
+            orderLineId: p.lineId,
+            orderCode: p.orderCode,
+          }),
+        ),
+      ];
+    });
+
   const pickItem = (key: number, itemId: string) => {
     const it = itemById.get(itemId);
     if (!it) return;
@@ -314,6 +356,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     warehouseId: hasStock ? warehouseId || null : null,
     returnOfId,
     description: description.trim() || undefined,
+    ...(overrideReason.trim() && lines.some((l) => l.orderLineId) ? { matchOverrideReason: overrideReason.trim() } : {}),
     post,
     lines: lines.map((l) => ({
       itemId: l.itemId || null,
@@ -326,6 +369,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       accountId: l.itemId && itemById.get(l.itemId)?.kind === 'goods' && !salesSide ? null : l.accountId || null,
       sourceLineId: l.sourceLineId || null,
       deliveryLineId: l.deliveryLineId || null,
+      orderLineId: l.orderLineId || null,
       // Proje yalnızca stoksuz (serbest/hizmet) satırda ve alış tarafında gönderilir
       ...(projectAllowed && (!l.itemId || itemById.get(l.itemId)?.kind === 'service') ? projectFields(l.projectId, l.wbsId) : {}),
     })),
@@ -366,7 +410,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
 
   return (
     <>
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text">
+      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
         {t(`invoices.${meta.side}.title`)}
       </Link>
@@ -526,7 +570,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         onChange={(v) => patch(l.key, v)}
                       />
                     )}
-                    {free || l.returnable || l.deliveryLineId ? (
+                    {free || l.returnable || l.deliveryLineId || l.orderLineId ? (
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 pl-1 text-[13px] text-muted">
                         {free && (
                           <span className="flex items-center gap-2">
@@ -541,6 +585,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                             />
                           </span>
                         )}
+                        {l.orderLineId && <span>{t('procurement.match.fromOrder', { code: l.orderCode })}</span>}
                         {l.returnable && <span>{t('invoices.form.returnable', { qty: l.returnable })}</span>}
                         {l.deliveryLineId && (
                           <span>
@@ -559,6 +604,12 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                 <Plus className="size-3.5" aria-hidden />
                 {t('invoices.form.addLine')}
               </Button>
+              {canOrders && !returnOfId && (
+                <Button size="sm" disabled={!partyId} onClick={() => setOrderPickerOpen(true)}>
+                  <ClipboardList className="size-3.5" aria-hidden />
+                  {t('procurement.match.pickerButton')}
+                </Button>
+              )}
               {(type === 'sales' || type === 'purchase') && canDelivery && !returnOfId && (
                 <Button size="sm" disabled={!partyId} onClick={() => setPickerOpen(true)}>
                   <Truck className="size-3.5" aria-hidden />
@@ -586,6 +637,11 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
               </div>
             </dl>
           </div>
+          {canOverride && lines.some((l) => l.orderLineId) && (
+            <Field label={t('procurement.match.overrideLabel')} hint={t('procurement.match.overrideHint')} className="mt-4">
+              {(id) => <Input id={id} value={overrideReason} maxLength={500} onChange={(e) => setOverrideReason(e.target.value)} />}
+            </Field>
+          )}
           {unverified && (
             <p className="mt-3 text-[13px] text-warning">
               {t('invoices.form.vatUnverified')}{' '}
@@ -618,6 +674,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           </div>
         </div>
       </div>
+
+      {canOrders && <OrderLinePicker open={orderPickerOpen} onOpenChange={setOrderPickerOpen} partyId={partyId} currency={currency} taken={takenFromOrder} onAdd={addFromOrder} />}
 
       {(type === 'sales' || type === 'purchase') && (
         <DeliveryPicker open={pickerOpen} onOpenChange={setPickerOpen} type={type} partyId={partyId} taken={takenFromDelivery} onAdd={addFromPicker} />

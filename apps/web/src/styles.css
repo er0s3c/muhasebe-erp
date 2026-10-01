@@ -220,25 +220,59 @@
   }
 }
 
-/* Baskı: raporlar tarayıcıdan "Yazdır / PDF olarak kaydet" ile alınır (A4, başlık her sayfada tekrarlanır) */
+/*
+ * Baskı (tarayıcıdan "Yazdır / PDF olarak kaydet"): kabuk gizlenir, her zaman açık tema, kurumsal antet (PrintLetterhead),
+ * koyu başlıklı bantlı tablolar, imza blokları. Sayfa yönü ve alt bilgi (şirket, "Sayfa X / Y", tarih) yazdırmadan hemen önce
+ * `usePrintSetup` ile eklenir; aşağıdaki @page kuralı yalnızca varsayılandır.
+ */
 @page {
   size: A4;
-  margin: 12mm;
-}
-@page wide {
-  size: A4 landscape;
-  margin: 10mm;
+  margin: 14mm 12mm 16mm;
+  @bottom-center {
+    content: 'Sayfa ' counter(page) ' / ' counter(pages);
+    font: 8pt 'Inter Variable', Arial, sans-serif;
+    color: #6d6c6b;
+  }
 }
 @media print {
+  :root,
+  .dark {
+    --bg: #fff;
+    --surface: #fff;
+    --surface-2: #f4f2f0;
+    --border: #d9d7d5;
+    --border-strong: #b8b6b4;
+    --text: #0c0a08;
+    --muted: #55534f;
+    --success: #1f5a2d;
+    --warning: #7a4f0e;
+    --danger: #a3312b;
+    color-scheme: light;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    box-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
   html,
   body,
   #root {
     height: auto;
     background: #fff;
-    color: #000;
+    color: #0c0a08;
   }
-  .print-wide {
-    page: wide;
+  body {
+    font-size: 9.5pt;
+    line-height: 1.4;
+  }
+  main {
+    overflow: visible !important;
+  }
+  main > div {
+    max-width: none !important;
+    padding: 0 !important;
   }
   .overflow-auto,
   .overflow-y-auto,
@@ -246,13 +280,84 @@
     overflow: visible !important;
     max-height: none !important;
   }
-  table {
+
+  /* Ekran araçları basılmaz: düğmeler, sekme çubukları, açılır kutu okları, bildirimler */
+  button:not([data-print]),
+  [role='alertdialog'],
+  .lucide-chevrons-up-down,
+  [aria-live] {
+    display: none !important;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Başlık */
+  main h1 {
+    font-size: 17pt;
+    line-height: 1.2;
+    margin: 0;
+    padding-bottom: 4pt;
+  }
+  main h1 + p,
+  main h1 ~ p {
+    color: #55534f;
     font-size: 9pt;
   }
-  th,
-  td {
-    padding: 3px 6px;
-    position: static;
+  h2 {
+    font-size: 11pt;
+  }
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  /* Kartlar: gölgesiz, ince çerçeveli bloklar */
+  [class*='rounded-2xl'],
+  [class*='rounded-xl'] {
+    border-radius: 3px !important;
+    border-color: #c9c7c5 !important;
+    background: #fff !important;
+  }
+  [class*='rounded-2xl'] > [class*='border-b'] {
+    padding: 6pt 10pt !important;
+    background: #f4f2f0 !important;
+  }
+  [class*='rounded-2xl'] {
+    margin-bottom: 8pt;
+  }
+
+  /* Girdiler düz metin gibi basılır */
+  input,
+  select,
+  textarea {
+    border: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    appearance: none;
+    -webkit-appearance: none;
+    color: #0c0a08 !important;
+    opacity: 1 !important;
+    resize: none;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    appearance: auto;
+  }
+  label {
+    color: #55534f;
+    font-size: 8pt;
+  }
+
+  /* Tablolar */
+  table {
+    width: 100%;
+    font-size: 8.5pt;
+    border-collapse: collapse;
   }
   thead {
     display: table-header-group;
@@ -260,12 +365,105 @@
   tfoot {
     display: table-footer-group;
   }
+  th {
+    position: static !important;
+    background: #1a1919 !important;
+    color: #fff !important;
+    font-size: 7.5pt;
+    letter-spacing: 0.04em;
+    padding: 5pt 6pt !important;
+    border: 0 !important;
+    border-bottom: 2pt solid #e4f222 !important;
+  }
+  td {
+    padding: 4pt 6pt !important;
+    border-bottom: 0.5pt solid #dcdad8 !important;
+    position: static;
+  }
+  tbody tr:nth-child(even) > td {
+    background: #f4f2f0 !important;
+  }
+  tfoot td,
+  tr.print-total > td {
+    background: #f1f6b4 !important;
+    border-top: 1.2pt double #1a1919 !important;
+    border-bottom: 0.75pt solid #1a1919 !important;
+  }
   tr {
     break-inside: avoid;
   }
-  h1,
-  h2,
-  h3 {
+  .num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  /* Rozetler çerçeveli ve sade */
+  [class*='rounded-full'],
+  [class*='rounded-md'][class*='px-2'] {
+    border: 0.5pt solid #8a8886;
+    background: transparent !important;
+    color: #0c0a08 !important;
+  }
+}
+
+/* Sekme/segment çubuğunda yalnızca seçili öğe, bölüm başlığı gibi basılır */
+@media print {
+  button[role='tab'][aria-selected='true'] {
+    display: block !important;
+    border: 0 !important;
+    background: none !important;
+    padding: 0 0 4pt !important;
+    font-size: 11.5pt;
+    color: #0c0a08 !important;
     break-after: avoid;
+  }
+  [role='tablist'] {
+    border: 0 !important;
+    padding: 0 !important;
+    margin-bottom: 4pt;
+  }
+  th [class*='rounded'][class][class] {
+    color: #fff !important;
+    border-color: #fff !important;
+  }
+}
+
+/* Antet ve imza blokları yalnızca basılı çıktıda görünür */
+.print-letterhead,
+.print-only {
+  display: none;
+}
+@media print {
+  .print-only {
+    display: block;
+  }
+  .print-letterhead {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16pt;
+    margin-bottom: 10pt;
+    padding-bottom: 6pt;
+    border-bottom: 2pt solid #1a1919;
+    box-shadow: 0 3pt 0 -0.5pt #e4f222 !important;
+  }
+  .print-signatures {
+    display: grid;
+    grid-template-columns: repeat(var(--cols, 3), 1fr);
+    gap: 18pt;
+    margin-top: 28pt;
+    break-inside: avoid;
+  }
+  .print-signatures > div {
+    border-top: 0.75pt solid #0c0a08;
+    padding-top: 3pt;
+    min-height: 44pt;
+    font-size: 8pt;
+    color: #55534f;
+  }
+}
+@media print {
+  label span[aria-hidden] {
+    display: none;
   }
 }

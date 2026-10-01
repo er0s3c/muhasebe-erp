@@ -38,8 +38,11 @@ ENV NODE_ENV=production \
     APP_VERSION=${APP_VERSION} \
     PORT=4000 \
     MIGRATIONS_DIR=/app/dist/drizzle \
-    PANEL_DIST_DIR=/app/panel
+    PANEL_DIST_DIR=/app/panel \
+    RELEASES_DIR=/var/lib/erp-license/releases
 WORKDIR /app
+# Uzaktan güncelleme kit arşivleri (kalıcı birim bağlanır; sahibi uygulama kullanıcısı)
+RUN mkdir -p /var/lib/erp-license/releases && chown -R node:node /var/lib/erp-license
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/apps/license-server/dist ./dist
 COPY --from=build /app/apps/license-admin/dist ./panel

@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Trash2, Users } from 'lucide-react';
+import { Plus, ShieldOff, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -46,6 +46,7 @@ export function MembersPage() {
     (v: { userId: string; role: string }, call) => call(`/api/company/members/${v.userId}`, { method: 'PATCH', body: { role: v.role } }),
     [['members']],
   );
+  const resetMfa = useCMutation((userId: string, call) => call(`/api/company/members/${userId}/mfa`, { method: 'DELETE' }), [['members']]);
   const remove = useCMutation((userId: string, call) => call(`/api/company/members/${userId}`, { method: 'DELETE' }), [['members']]);
 
   const onSubmit = handleSubmit((values) => {
@@ -88,6 +89,7 @@ export function MembersPage() {
                 <Th>{t('settings.members.fullName')}</Th>
                 <Th>{t('settings.members.email')}</Th>
                 <Th>{t('settings.members.role')}</Th>
+                <Th className="w-28">{t('settings.members.mfa')}</Th>
                 <Th className="w-16" />
               </tr>
             </thead>
@@ -120,6 +122,30 @@ export function MembersPage() {
                         </option>
                       ))}
                     </Select>
+                  </Td>
+                  <Td>
+                    {m.mfaEnabled ? (
+                      <span className="flex items-center gap-1">
+                        <Badge tone="success">{t('settings.members.mfaOn')}</Badge>
+                        <button
+                          className="rounded-md p-1.5 text-muted hover:bg-danger-soft hover:text-danger"
+                          onClick={() => {
+                            if (window.confirm(t('settings.members.mfaResetConfirm', { name: m.fullName }))) {
+                              resetMfa.mutate(m.userId, {
+                                onSuccess: () => toast.success(t('settings.members.mfaReset')),
+                                onError: (err) => toast.error(errorMessage(err)),
+                              });
+                            }
+                          }}
+                          aria-label={t('settings.members.mfaResetAction')}
+                          title={t('settings.members.mfaResetAction')}
+                        >
+                          <ShieldOff className="size-4" />
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
                   </Td>
                   <Td>
                     <button
