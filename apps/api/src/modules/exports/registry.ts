@@ -38,6 +38,7 @@ import {
   progressPaymentsTable,
   subcontractRegisterTable,
   projectsSummaryTable,
+  projectProfitabilityTable,
   overdueInstallmentsTable,
   realEstateUnitsTable,
   salesContractsTable,
@@ -137,6 +138,14 @@ export const EXPORTS: readonly ExportDef[] = [
     schema: z.object({ projectId: uuid.optional(), direction: z.enum(['payable', 'receivable']).optional() }),
     build: subcontractRegisterTable,
     file: () => `tasaron-sozlesmeleri-${todayIso()}`,
+  }),
+  def({
+    key: 'project-profitability',
+    module: 'construction.projects',
+    permission: 'projects.read',
+    schema: z.object({ asOf: isoDate.optional() }),
+    build: projectProfitabilityTable,
+    file: (q: { asOf?: string }) => `proje-karliligi-${q.asOf ?? todayIso()}`,
   }),
   def({
     key: 'real-estate-units',

@@ -22,6 +22,7 @@ import { tenantRoute, type TenantCtx } from '../../http/context';
 import { approveBudget, createBudget, deleteBudget, getBudget, listBudgets, putBudgetLines } from './budgets';
 import { createCostCode, deleteCostCode, listCostCodes, updateCostCode } from './cost-codes';
 import { progressOverview, recordProgress } from './progress';
+import { projectProfitability } from './profitability';
 import { projectCostByCode, projectCostReport, projectOptions, projectTransactions, projectsSummary } from './reports';
 import { createProject, deleteProject, getProject, listProjects, setProjectStatus, updateProject, type ProjectCtx } from './service';
 import { createWbs, deleteWbs, listWbs, updateWbs } from './wbs';
@@ -37,6 +38,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
   // --- Raporlar ve seçiciler (sabit yollar :id'den önce eşleşir) -------------
 
+  app.get('/api/projects/profitability', tenantRoute(app, read, async ({ tx, req, company }) => projectProfitability(tx, projectsSummaryQuerySchema.parse(req.query).asOf ?? todayIso(), company.baseCurrency, company.reportingCurrency ?? null)));
   app.get('/api/projects/summary', tenantRoute(app, read, async ({ tx, req }) => projectsSummary(tx, projectsSummaryQuerySchema.parse(req.query).asOf ?? todayIso())));
 
   app.get('/api/projects/options', tenantRoute(app, read, async ({ tx }) => projectOptions(tx)));

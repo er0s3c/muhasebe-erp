@@ -367,6 +367,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'subcontracts.read',
   },
   {
+    key: 'project-profitability',
+    labelKey: 'nav.projectProfitability',
+    path: '/reports/project-profitability',
+    icon: 'trending-up',
+    group: 'reports',
+    module: 'construction.projects',
+    permission: 'projects.read',
+  },
+  {
     key: 'journal',
     labelKey: 'nav.journal',
     path: '/accounting/journal',

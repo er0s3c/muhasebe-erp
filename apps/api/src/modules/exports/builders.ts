@@ -10,6 +10,7 @@ import { itemProfitability, salesReport } from '../invoices/analytics';
 import { vatSummary } from '../invoices/reports';
 import { reconciliation } from '../bank-statements/service';
 import { partyAging, partyOpenItems, partyStatement } from '../parties/service';
+import { projectProfitability } from '../projects/profitability';
 import { projectCostByCode, projectCostReport, projectsSummary } from '../projects/reports';
 import { getContract, listContracts, listInstallments } from '../realestate/contracts';
 import { listUnits } from '../realestate/units';
@@ -924,6 +925,57 @@ export async function overdueInstallmentsTable(ctx: BuildCtx, q: { projectId?: s
         remaining: i.remaining,
         days: i.daysOverdue || null,
       })),
+    },
+  ];
+}
+
+/** Proje kârlılığı: sözleşmeli gelir, tanınmış gelir/maliyet, EAC ve tahmini kâr; defter ve yönetim para biriminde. */
+export async function projectProfitabilityTable(ctx: BuildCtx, q: { asOf?: string }): Promise<ReportTable[]> {
+  const asOf = q.asOf ?? todayIso();
+  const d = await projectProfitability(ctx.tx, asOf, ctx.company.baseCurrency, ctx.company.reportingCurrency);
+  const b = ctx.company.baseCurrency;
+  const rc = ctx.company.reportingCurrency;
+  const withRep = !!rc && rc !== b && d.rows.every((r) => r.reporting);
+  const columns = [
+    col('code', 'Proje', 'text', 12),
+    col('name', 'Ad', 'text', 30),
+    col('kind', 'Tür', 'text', 16),
+    col('contracted', `Sözleşmeli gelir (${b})`, 'money'),
+    col('revenue', `Tanınmış gelir (${b})`, 'money'),
+    col('actual', `Gerçekleşen maliyet (${b})`, 'money'),
+    col('eac', `Tahmini toplam maliyet (${b})`, 'money'),
+    col('projected', `Tahmini kâr (${b})`, 'money'),
+    col('margin', 'Marj %', 'money'),
+    ...(withRep ? [col('rContracted', `Sözleşmeli gelir (${rc})`, 'money'), col('rActual', `Gerçekleşen maliyet (${rc})`, 'money'), col('rProjected', `Tahmini kâr (${rc})`, 'money')] : []),
+  ];
+  const toRow = (r: (typeof d.rows)[number]) => ({
+    code: r.code,
+    name: r.name,
+    kind: r.kind === 'contract' ? 'İşverene yapılan iş' : 'Kendi projesi',
+    contracted: r.contractedRevenue,
+    revenue: r.revenue,
+    actual: r.actual,
+    eac: r.eac,
+    projected: r.projectedProfit,
+    margin: r.marginPct,
+    ...(withRep && r.reporting ? { rContracted: r.reporting.contractedRevenue, rActual: r.reporting.actual, rProjected: r.reporting.projectedProfit } : {}),
+  });
+  return [
+    {
+      key: 'proje-karliligi',
+      title: 'Proje kârlılığı',
+      sheet: 'Kârlılık',
+      subtitle: sub(ctx, `${formatDateTR(asOf)} itibarıyla`, withRep ? `${b} ve ${rc}` : `${b} cinsinden`),
+      columns,
+      rows: d.rows.map(toRow),
+      totals: {
+        contracted: d.totals.contractedRevenue,
+        revenue: d.totals.revenue,
+        actual: d.totals.actual,
+        eac: d.totals.eac,
+        projected: d.totals.projectedProfit,
+        ...(withRep && d.totals.reporting ? { rContracted: d.totals.reporting.contractedRevenue, rActual: d.totals.reporting.actual, rProjected: d.totals.reporting.projectedProfit } : {}),
+      },
     },
   ];
 }

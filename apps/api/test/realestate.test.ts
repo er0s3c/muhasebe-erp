@@ -269,6 +269,40 @@ describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat �
     expect((await book('/api/exports/overdue-installments?format=xlsx&overdue=true'))[0]![0]).toBe('Geciken taksitler');
   });
 
+  it('proje kârlılığı: sözleşmeli gelir, tanınmış gelir/maliyet, tahmini kâr; defter ve raporlama (GBP) para birimi', async () => {
+    const s = await registerUser(app, 'Karlilik');
+    const company = await createCompany(app, s.token, { reportingCurrency: 'GBP' });
+    const c = client(app, s.token, company.id);
+    const ids = await accountIds(app, s.token, company.id);
+    const project = (await c.post('/api/projects', { name: 'Güneş Sitesi', kind: 'own' })).json().project as { id: string };
+    const buyer = (await c.post('/api/parties', { name: 'Alıcı', kind: 'customer' })).json().party as { id: string };
+    await c.put('/api/exchange-rates', { rateDate: day(3, 1), currencyCode: 'GBP', quoteCode: 'TRY', buy: '50' });
+    const todayRate = new Date().toISOString().slice(0, 10);
+    await c.put('/api/exchange-rates', { rateDate: todayRate, currencyCode: 'GBP', quoteCode: 'TRY', buy: '50' });
+    const mk = async (unitNo: string, listPrice?: string) => (await c.post('/api/real-estate/units', { projectId: project.id, unitNo, ...(listPrice ? { listPrice, listCurrency: 'GBP' } : {}) })).json().unit.id as string;
+    const u1 = await mk('1');
+    await mk('2', '100000'); // satılmamış
+    const contract = (await c.post('/api/sales-contracts', { unitId: u1, partyId: buyer.id, currencyCode: 'GBP', contractDate: day(3, 1), price: '120000', downPayment: '0', installments: [{ kind: 'installment', dueDate: day(6, 1), amount: '120000' }] })).json().contract.id as string;
+    await c.post(`/api/sales-contracts/${contract}/activate`, {});
+    await c.post(`/api/sales-contracts/${contract}/handover`, { date: day(3, 5) });
+    // Maliyet: 1.000.000 TL, projeye etiketli (770 gider / 100 kasa)
+    const e = await c.post('/api/journal-entries', { entryDate: day(3, 6), description: 'Proje gideri', post: true, lines: [{ accountId: ids['770'], currency: 'TRY', debit: '1000000', projectId: project.id }, { accountId: ids['100'], currency: 'TRY', credit: '1000000' }] });
+    expect(e.statusCode, e.body).toBe(201);
+
+    const res = (await c.get('/api/projects/profitability')).json();
+    expect(res).toMatchObject({ baseCurrency: 'TRY', reportingCurrency: 'GBP' });
+    const row = res.rows.find((r: any) => r.id === project.id);
+    expect(row).toMatchObject({ contractedRevenue: '6000000.00', unsoldValue: '5000000.00', revenue: '6000000.00', actual: '1000000.00', recognizedProfit: '5000000.00' });
+    expect(row.projectedProfit).toBe('5000000.00'); // EAC yok: gerçekleşen maliyet kullanılır
+    expect(row.marginPct).toBe('83.3');
+    // Raporlama (GBP): gelir 120.000 (tarihsel), maliyet 1.000.000 / 50 = 20.000
+    expect(row.reporting).toMatchObject({ revenue: '120000.00', actual: '20000.00', recognizedProfit: '100000.00', contractedRevenue: '120000.00' });
+    expect(res.totals.reporting.projectedProfit).toBe('100000.00');
+    const book = readXlsx(new Uint8Array((await c.get('/api/exports/project-profitability?format=xlsx')).rawPayload))[0]!.rows;
+    expect(book[0]![0]).toBe('Proje kârlılığı');
+    expect(book[3]).toContain('Tahmini kâr (GBP)');
+  });
+
   it('kur yoksa etkinleştirme anlaşılır hata verir; kapalı dönem ve izinler', async () => {
     const w = await world('KurYok');
     const u = await w.unit('K1');

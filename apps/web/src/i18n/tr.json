@@ -156,6 +156,7 @@
     "purchaseRequests": "Satın alma talepleri",
     "rfqs": "Teklif karşılaştırma",
     "purchaseOrders": "Siparişler",
+    "projectProfitability": "Proje kârlılığı",
     "realEstateUnits": "Birimler",
     "salesContracts": "Satış sözleşmeleri",
     "salesInstallments": "Taksitler"
@@ -2262,6 +2263,20 @@
     "employer": "İşveren (kaşe / imza)",
     "delivered": "Teslim eden",
     "receiver": "Teslim alan"
+  },
+  "profitability": {
+    "title": "Proje kârlılığı",
+    "subtitle": "Sözleşmeli gelir ile tahmini toplam maliyet (EAC) arasındaki kâr; tanınmış gelir ve gerçekleşen maliyetle birlikte.",
+    "asOf": "Tarih itibarıyla",
+    "view": {"base": "Defter ({{cur}})", "reporting": "Yönetim ({{cur}})"},
+    "cols": {"project": "Proje", "kind": "Tür", "contracted": "Sözleşmeli gelir", "revenue": "Tanınmış gelir", "actual": "Gerçekleşen maliyet", "eac": "Tahmini maliyet (EAC)", "projected": "Tahmini kâr", "recognized": "Tanınmış kâr", "margin": "Marj"},
+    "kinds": {"own": "Kendi projesi", "contract": "İşverene yapılan iş"},
+    "total": "Genel toplam",
+    "unsold": "Satılmamış birimlerin liste değeri: {{value}}",
+    "noRate": "{{n}} tutar için kur bulunamadı; bu tutarlar sıfır sayıldı. Kur girin.",
+    "noReporting": "Yönetim para birimi karşılığı için şirkette raporlama para birimi tanımlı ve kur kayıtlı olmalı.",
+    "note": "Tahmini kâr = sözleşmeli gelir − EAC (bütçe ve ilerleme yoksa gerçekleşen maliyet). Yönetim para biriminde tanınmış tutarlar tarihsel, diğerleri bugünkü kurla çevrilir. İç raporlama; yasal kâr hesabı değildir.",
+    "empty": "Henüz proje yok."
   },
   "realEstate": {
     "unitStatus": {
