@@ -1,4 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
+import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -118,7 +119,7 @@ export function PurchaseOrderEditorPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <Link to="/purchasing/orders" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
+        <Link to="/purchasing/orders" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
           <ArrowLeft className="size-4" aria-hidden />
           {t('procurement.orders.title')}
         </Link>
@@ -172,7 +173,7 @@ export function PurchaseOrderEditorPage() {
                   <Th>{t('procurement.lines.description')}</Th>
                   <Th className="w-28">{t('procurement.lines.wbs')}</Th>
                   <Th num className="w-24">{t('procurement.lines.quantity')}</Th>
-                  <Th num className="w-24">{t('procurement.orders.received')}</Th>
+                  <Th num className="w-24">{t('procurement.orders.receivedCol')}</Th>
                   <Th num className="w-24">{t('procurement.orders.remaining')}</Th>
                   <Th num className="w-28">{t('procurement.orders.unitPrice')}</Th>
                   <Th num className="w-32">{t('common.amount')}</Th>
@@ -269,6 +270,9 @@ export function PurchaseOrderEditorPage() {
           <Button variant="primary" loading={act.isPending} onClick={() => go((o) => act.mutate('issue', o), () => toast.success(t('procurement.orders.issued')))}>{t('procurement.orders.issue')}</Button>
         )}
       </div>
+
+      <PrintSignatures labels={[t('printDoc.prepared'), t('printDoc.approved'), t('printDoc.supplier')]} />
+      <PrintNote />
 
       <Modal
         open={cancelOpen}

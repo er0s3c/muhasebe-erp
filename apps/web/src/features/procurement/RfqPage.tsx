@@ -1,4 +1,5 @@
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -45,7 +46,7 @@ export function RfqPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <Link to="/purchasing/rfqs" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
+        <Link to="/purchasing/rfqs" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
           <ArrowLeft className="size-4" aria-hidden />
           {t('procurement.rfqs.title')}
         </Link>
@@ -156,6 +157,9 @@ export function RfqPage() {
           <Button variant="danger" loading={cancel.isPending} onClick={() => { setError(null); cancel.mutate(undefined, { onSuccess: () => toast.success(t('procurement.rfqs.cancelled')), onError: setError }); }}>{t('procurement.rfqs.cancel')}</Button>
         </div>
       )}
+
+      <PrintSignatures labels={[t('printDoc.prepared'), t('printDoc.approved')]} />
+      <PrintNote />
 
       <OfferSheet rfqId={rfq.id} data={data} offer={editing} open={offerOpen} onOpenChange={setOfferOpen} />
     </div>

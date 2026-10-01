@@ -17,6 +17,8 @@ import { useToast } from '../ui/Toast';
 import { BrandMark } from './Brand';
 import { CommandPalette } from './CommandPalette';
 import { navIcon } from './icons';
+import { PrintLetterhead } from '../print/PrintLetterhead';
+import { usePrintSetup } from '../print/usePrintSetup';
 import { useTheme } from './theme';
 
 const COLLAPSE_KEY = 'sidebarCollapsed';
@@ -37,6 +39,7 @@ export function AppShell() {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
+  usePrintSetup(useSession().activeCompany?.name ?? '');
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -107,6 +110,7 @@ export function AppShell() {
 
         <main id="main" className="flex-1 overflow-y-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-8 sm:py-8">
+            <PrintLetterhead />
             <LicenseBanner />
             <VerifyEmailBanner />
             <Outlet />

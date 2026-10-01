@@ -1,4 +1,5 @@
 import { ArrowLeft, Ban, Printer, Undo2 } from 'lucide-react';
+import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -279,6 +280,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
         </div>
 
         <p className="text-xs text-muted">{t('invoices.view.internalNote')}</p>
+        <PrintSignatures labels={[t('printDoc.prepared'), t('printDoc.approved')]} />
       </div>
 
       <Modal

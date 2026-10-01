@@ -1,4 +1,5 @@
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -170,7 +171,7 @@ export function ProgressEditorPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <Link to={`/subcontracts/${basis.subcontract.id}`} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
+        <Link to={`/subcontracts/${basis.subcontract.id}`} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
           <ArrowLeft className="size-4" aria-hidden />
           {basis.subcontract.code} — {basis.subcontract.title}
         </Link>
@@ -352,6 +353,9 @@ export function ProgressEditorPage() {
           </>
         )}
       </div>
+
+      <PrintSignatures labels={[t('printDoc.prepared'), t('printDoc.siteChief'), t('printDoc.approved'), receivable ? t('printDoc.employer') : t('printDoc.subcontractor')]} />
+      <PrintNote />
 
       <Modal
         open={cancelOpen}

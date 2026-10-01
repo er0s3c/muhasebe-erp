@@ -1,4 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
+import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -94,7 +95,7 @@ export function PurchaseRequestEditorPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <Link to="/purchasing/requests" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
+        <Link to="/purchasing/requests" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
           <ArrowLeft className="size-4" aria-hidden />
           {t('procurement.requests.title')}
         </Link>
@@ -208,6 +209,9 @@ export function PurchaseRequestEditorPage() {
           </>
         )}
       </div>
+
+      <PrintSignatures labels={[t('printDoc.requester'), t('printDoc.siteChief'), t('printDoc.approved')]} />
+      <PrintNote />
 
       <Modal
         open={rfqOpen}

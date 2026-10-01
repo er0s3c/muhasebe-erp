@@ -1,4 +1,5 @@
 import { ArrowLeft, Pencil, Trash2 } from 'lucide-react';
+import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -57,7 +58,7 @@ export function SubcontractDetailPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <Link to={sc.direction === 'receivable' ? '/employer-contracts' : '/subcontracts'} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
+        <Link to={sc.direction === 'receivable' ? '/employer-contracts' : '/subcontracts'} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
           <ArrowLeft className="size-4" aria-hidden />
           {sc.direction === 'receivable' ? t('subcontracts.employer.back') : t('subcontracts.back')}
         </Link>
@@ -119,6 +120,8 @@ export function SubcontractDetailPage() {
       {tab === 'progress' && <ProgressList subcontractId={sc.id} canCreate={sc.status === 'active'} />}
       {tab === 'balances' && <BalancesTab detail={data} />}
 
+      <PrintSignatures labels={[t('printDoc.prepared'), t('printDoc.approved'), sc.direction === 'receivable' ? t('printDoc.employer') : t('printDoc.subcontractor')]} />
+      <PrintNote />
       <SubcontractFormSheet open={editing} onOpenChange={setEditing} edit={sc} onSaved={() => undefined} />
       <Modal
         open={confirm !== null}

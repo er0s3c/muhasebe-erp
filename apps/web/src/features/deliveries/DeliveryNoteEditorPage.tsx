@@ -1,4 +1,5 @@
 import { ArrowLeft, Ban, FileText, Printer } from 'lucide-react';
+import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -219,6 +220,7 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
 
         <p className="text-xs text-muted print:hidden">{t('deliveries.view.noStockNote')}</p>
         <p className="text-xs text-muted">{t('deliveries.view.internalNote')}</p>
+        <PrintSignatures labels={[t('printDoc.delivered'), t('printDoc.receiver')]} />
       </div>
 
       <Modal

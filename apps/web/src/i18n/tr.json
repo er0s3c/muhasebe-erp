@@ -1540,7 +1540,7 @@
       "button": "Dışa aktar",
       "xlsx": "Excel (.xlsx)",
       "csv": "CSV (Excel'de açılır)",
-      "print": "Yazdır / PDF olarak kaydet"
+      "print": "PDF olarak kaydet / Yazdır"
     },
     "print": {
       "printedAt": "Yazdırma tarihi: {{date}}",
@@ -2247,6 +2247,17 @@
       "docType": "Belge türü"
     }
   },
+  "printDoc": {
+    "prepared": "Hazırlayan",
+    "requester": "Talep eden",
+    "siteChief": "Şantiye şefi / kontrol",
+    "approved": "Onaylayan",
+    "supplier": "Tedarikçi (kaşe / imza)",
+    "subcontractor": "Taşeron (kaşe / imza)",
+    "employer": "İşveren (kaşe / imza)",
+    "delivered": "Teslim eden",
+    "receiver": "Teslim alan"
+  },
   "procurement": {
     "requestStatus": {
       "draft": "Taslak",
@@ -2388,6 +2399,7 @@
       "vatAmount": "KDV",
       "gross": "Brüt tutar",
       "received": "Mal kabul kaydedildi",
+      "receivedCol": "Gelen",
       "remaining": "Kalan",
       "issue": "Siparişi ver",
       "issued": "Sipariş verildi",
