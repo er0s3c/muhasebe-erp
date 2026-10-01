@@ -414,6 +414,20 @@
       "when": 1790895411336,
       "tag": "0058_payroll_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1790897648689,
+      "tag": "0059_social_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1790897652971,
+      "tag": "0060_social_security_rules",
+      "breakpoints": true
     }
   ]
 }

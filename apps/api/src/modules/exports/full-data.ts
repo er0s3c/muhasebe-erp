@@ -461,5 +461,26 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     );
   }
 
+  // Sosyal güvenlik bildirimi: yalnızca bildirim düzeyi toplamlar; personel bazında prim/numara ayrıntısı bu dosyada YOKTUR (maskelenir).
+  const socRows = await query(
+    'Sosyal güvenlik',
+    sql`select number, month, status, employee_count, employee_premium_total::text as emp, employer_premium_total::text as er,
+               support_employee_total::text as se, support_employer_total::text as sr
+          from social_declarations
+         where true ${q.from ? sql`and month >= ${q.from.slice(0, 7)}` : sql``} ${q.to ? sql`and month <= ${q.to.slice(0, 7)}` : sql``}
+         order by month`,
+  );
+  if (socRows.length > 0) {
+    tables.push(
+      table(
+        'Sosyal güvenlik',
+        'Sosyal güvenlik',
+        [col('number', 'Numara', 'text', 16), col('month', 'Ay', 'text', 10), col('status', 'Durum', 'text', 12), col('count', 'Personel', 'int'), col('emp', `İşçi primi (${b})`, 'money'), col('er', `İşveren primi (${b})`, 'money'), col('se', `İşçi prim desteği (${b})`, 'money'), col('sr', `İşveren prim desteği (${b})`, 'money')],
+        socRows.map((r) => ({ number: s(r.number), month: s(r.month), status: r.status === 'finalized' ? 'Kesinleşmiş' : 'Taslak', count: Number(r.employee_count), emp: s(r.emp), er: s(r.er), se: s(r.se), sr: s(r.sr) })),
+        'Genel düzen — resmî bildirim formatı değildir, doğrulanmadı · personel bazında ayrıntı ve sosyal güvenlik no maskelenir (dahil değil)',
+      ),
+    );
+  }
+
   return tables;
 }

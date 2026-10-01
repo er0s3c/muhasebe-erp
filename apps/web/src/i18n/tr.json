@@ -97,7 +97,8 @@
     "constructionProcurement": "Satın alma ve sipariş",
     "constructionRealestate": "Gayrimenkul satışı",
     "hrCore": "Personel, puantaj ve veri koruma",
-    "hrPayroll": "Bordro"
+    "hrPayroll": "Bordro",
+    "hrSocialSecurity": "Sosyal güvenlik çıktıları"
   },
   "nav": {
     "groups": {
@@ -170,6 +171,8 @@
     "attendance": "Puantaj",
     "payroll": "Bordro",
     "payrollSettings": "Bordro ayarları",
+    "socialSecurity": "Sosyal güvenlik",
+    "socialSettings": "Sosyal güvenlik ayarları",
     "privacy": "Veri koruma"
   },
   "shell": {
@@ -3530,6 +3533,176 @@
       "field": "Alan",
       "person": "Kişi",
       "reason": "Gerekçe"
+    }
+  },
+  "social": {
+    "title": "Sosyal güvenlik çıktıları",
+    "subtitle": "Onaylı ya da ödenmiş bordrodan aylık bildirim üretir; personel başına prim matrahı, prim ve (varsa) destek tutarları. GENEL bir düzendir.",
+    "notice": "Genel düzen — resmî bildirim formatı değildir, doğrulanmadı. Hiçbir kurumun dosya biçimini taklit etmez; prim tutarları bordro parametrelerinden, prim desteği yalnızca sizin girdiğiniz tarihli kurallardan gelir. Resmî bildirimi ilgili kurumun kendi sisteminden yapın.",
+    "unverifiedBadge": "Doğrulanmadı",
+    "tabs": {
+      "declarations": "Aylık bildirimler",
+      "summary": "Prim özeti"
+    },
+    "status": {
+      "draft": "Taslak",
+      "finalized": "Kesinleşmiş"
+    },
+    "cols": {
+      "number": "Bildirim",
+      "month": "Ay",
+      "status": "Durum",
+      "employees": "Personel",
+      "base": "Prime esas kazanç",
+      "employeePremium": "İşçi primi",
+      "employerPremium": "İşveren primi",
+      "supportEmployee": "İşçi prim desteği",
+      "supportEmployer": "İşveren prim desteği",
+      "employeeDue": "İşçi ödenecek",
+      "employerDue": "İşveren ödenecek",
+      "run": "Kaynak bordro"
+    },
+    "empty": "Henüz sosyal güvenlik bildirimi yok",
+    "emptyDesc": "Bildirim, ayın onaylı ya da ödenmiş bordrosundan üretilir.",
+    "newDeclaration": "Yeni bildirim",
+    "newDeclarationDesc": "Seçilen ayın onaylı/ödenmiş bordrosundan taslak bildirim üretilir. Taslak istediğiniz kadar yeniden üretilebilir; kesinleşince değişmez.",
+    "createDeclaration": "Bildirim üret",
+    "month": "Ay",
+    "created": "Bildirim taslağı üretildi",
+    "summary": {
+      "from": "Başlangıç ayı",
+      "to": "Bitiş ayı",
+      "invalid": "Başlangıç ayı bitişten sonra olamaz",
+      "hint": "Ay tablosu tüm bildirimleri, proje tablosu ve toplamlar yalnızca kesinleşmiş bildirimleri sayar. Proje dağılımı bordro etiket dağılımının brüt ağırlığına göredir.",
+      "unverified": "Doğrulanmamış oran/kural kullanıldı: toplamlar ⚠ taşır.",
+      "byMonth": "Aya göre",
+      "byProject": "Projeye göre",
+      "project": "Proje",
+      "untagged": "Etiketsiz",
+      "empty": "Bu aralıkta bildirim yok",
+      "emptyDesc": "Aralığı genişletin ya da bildirim üretin.",
+      "total": "Toplam (kesinleşmiş)"
+    },
+    "detail": {
+      "title": "Aylık sosyal güvenlik bildirimi — {{month}}",
+      "back": "Sosyal güvenlik",
+      "unverifiedWarn": "Bu bildirimde doğrulanmamış bordro oranı ya da destek kuralı kullanıldı; doğrulanana kadar \"doğrulanmadı\" olarak değerlendirin.",
+      "draftInfo": "Taslak: yeniden üretebilir, silebilir ya da kesinleştirebilirsiniz. Kesinleştirme güncel verilerle yeniden üretir.",
+      "finalizedInfo": "Kesinleşti: içerik değişmez; bu ay için bordro iptal edilemez ve puantaj ayı açılamaz. Düzeltmek için önce yeniden açın.",
+      "reopenedInfo": "Bu bildirim {{count}} kez yeniden açıldı. Son gerekçe: {{reason}}",
+      "noSupport": "Prim desteği uygulanmadı (açık ve uygunluğu beyan edilmiş kural yok).",
+      "supportApplied": "Uygulanan destek kuralları (kullanıcı girişi, doğrulanmamış olabilir)",
+      "rebuild": "Yeniden üret",
+      "rebuilt": "Bildirim yeniden üretildi",
+      "finalize": "Kesinleştir",
+      "finalizeTitle": "Bildirimi kesinleştir",
+      "finalizeDesc": "Güncel profil ve kurallarla yeniden üretilir, sonra kilitlenir.",
+      "finalizeNote": "Not (isteğe bağlı)",
+      "finalized": "Bildirim kesinleşti",
+      "reopen": "Yeniden aç",
+      "reopenTitle": "Bildirimi yeniden aç",
+      "reopenDesc": "Kesinleşmiş bildirim gerekçeyle taslağa döner; gerekçe kayıt altına alınır.",
+      "reason": "Gerekçe",
+      "reopened": "Bildirim yeniden açıldı",
+      "deleteTitle": "Taslak bildirimi sil",
+      "deleteDesc": "Taslak bildirim ve satırları silinir. Bordro etkilenmez.",
+      "deleted": "Bildirim silindi",
+      "linesTitle": "Personel satırları",
+      "printTitle": "Aylık sosyal güvenlik bildirimi (genel düzen)",
+      "printNote": "Genel düzen — resmî bildirim formatı değildir, doğrulanmadı. Sosyal güvenlik numarası maskelidir. İç kullanım içindir.",
+      "sourceRun": "Kaynak bordro",
+      "lockOpen": "Puantaj ayı açık görünüyor."
+    },
+    "line": {
+      "employee": "Personel",
+      "type": "Bordro tipi",
+      "insurance": "Sigorta dönemi",
+      "ssn": "Sosyal güvenlik no",
+      "days": "Çalışılan gün",
+      "leave": "İzin / devamsızlık",
+      "warnings": "Uyarılar",
+      "support": "Destek",
+      "noType": "—"
+    },
+    "warnings": {
+      "no_profile": "Sosyal güvenlik profili yok",
+      "no_ssn": "Sosyal güvenlik numarası girilmemiş",
+      "no_payroll_type": "Bordro tipi kodu girilmemiş",
+      "insurance_outside_month": "Sigorta dönemi bu ayı kapsamıyor",
+      "zero_base": "Prime esas kazanç sıfır (bordroda sosyal güvenlik parametresi kapalı olabilir)",
+      "support_rule_off": "Uygunluk beyanı var ama destek kuralı kapalı ya da ay dışı",
+      "no_days": "Çalışılan gün yok"
+    },
+    "settings": {
+      "title": "Sosyal güvenlik ayarları",
+      "subtitle": "Tarihli personel profili (bordro tipi kodu, sigorta dönemi, numara) ve prim desteği kuralları. Hiçbir yasal değer kodlanmış değildir.",
+      "legal": "Bordro tipi kodları serbest veridir; prim desteği oranları, tutarları ve koşulları yalnızca sizin girdiğiniz, tarihli, kaynak notlu ve doğrulanmamış (varsayılan kapalı) kurallardır. Sistem uygunluk koşulunu denetlemez; uygunluk sizin beyanınızdır."
+    },
+    "profiles": {
+      "title": "Personel profilleri",
+      "desc": "Tarihli: bordro tipi kodu, sigorta başlangıç/bitiş ve sosyal güvenlik numarası. Numara şifreli saklanır, maskeli görünür.",
+      "privacy": "Numara kişisel veridir: açık görüntüleme gerekçe ve hr.sensitive izni ister, erişim günlüğüne yazılır. Bu liste okunduğunda da günlüğe kayıt düşer.",
+      "empty": "Henüz profil yok",
+      "employee": "Personel",
+      "from": "Başlangıç",
+      "type": "Bordro tipi kodu",
+      "typeHint": "Serbest metin (kurumun verdiği kodu siz girersiniz)",
+      "insStart": "Sigorta başlangıç",
+      "insEnd": "Sigorta bitiş",
+      "ssn": "Sosyal güvenlik no",
+      "note": "Not",
+      "added": "Profil eklendi",
+      "pick": "Personel seçin",
+      "show": "Numarayı göster",
+      "hide": "Gizle",
+      "revealTitle": "Sosyal güvenlik numarasını göster",
+      "revealDesc": "Gerekçe zorunludur ve erişim günlüğüne yazılır.",
+      "reason": "Gerekçe",
+      "reasonHint": "En az 3 karakter"
+    },
+    "rules": {
+      "title": "Prim desteği kuralları",
+      "desc": "Tarihli, kaynak notlu, doğrulama alanlı ve varsayılan KAPALI. Destek yalnızca kural açıkken ve personelin uygunluk beyanı varken uygulanır.",
+      "empty": "Henüz kural yok: prim desteği uygulanmaz",
+      "code": "Kod",
+      "name": "Ad",
+      "from": "Başlangıç",
+      "to": "Bitiş (boş = süresiz)",
+      "target": "Hedef prim",
+      "mode": "Kip",
+      "value": "Değer",
+      "source": "Kaynak notu",
+      "enabled": "Açık",
+      "verification": "Doğrulama",
+      "verify": "Doğrula",
+      "verifiedBy": "Doğrulayan: {{by}}",
+      "verifyTitle": "Kuralı doğrula",
+      "verifyDesc": "Kuralın dayanağını kontrol ettiğinizi onaylarsınız; doğrulayan ve zaman kaydedilir.",
+      "verifyHint": "Kaynak notu (isteğe bağlı)",
+      "verifiedToast": "Kural doğrulandı",
+      "added": "Kural eklendi",
+      "enableLabel": "{{code}} kuralını aç/kapat",
+      "targets": {
+        "employer": "İşveren primi",
+        "employee": "İşçi primi"
+      },
+      "modes": {
+        "percent_of_premium": "Primin yüzdesi",
+        "fixed_amount": "Sabit tutar"
+      },
+      "valueHintPercent": "yüzde",
+      "valueHintAmount": "tutar"
+    },
+    "eligibility": {
+      "title": "Destek uygunluğu (beyan)",
+      "desc": "Personelin bir destek kuralına tarihli uygunluğu. Aylık bildirimde ay ile çakışan beyanlar kullanılır (ay bazında tam/kısmi ayrımı yoktur).",
+      "empty": "Henüz beyan yok",
+      "employee": "Personel",
+      "rule": "Kural kodu",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "pick": "Kural seçin",
+      "added": "Beyan eklendi"
     }
   },
   "payroll": {

@@ -10,6 +10,7 @@ import { notFound, unprocessable } from '../../http/errors';
 import { nextNumber } from '../settings/numbering';
 import { employeeAttendanceRows } from './attendance';
 import { employeePayrollRows } from '../payroll/export-subject';
+import { employeeSocialRows } from '../socialsecurity/export-subject';
 import { decryptField, encryptField, hashId, lastFour, maskTail } from './crypto';
 
 export interface HrCtx {
@@ -215,6 +216,7 @@ export async function exportEmployeeData(tx: Tx, ctx: HrCtx, id: string, reason:
     },
     attendance: await employeeAttendanceRows(tx, id),
     payroll: await employeePayrollRows(tx, id),
+    socialSecurity: await employeeSocialRows(tx, id, ctx.secret),
     accessLog: accessLog.rows,
     requests: requests.rows,
   };

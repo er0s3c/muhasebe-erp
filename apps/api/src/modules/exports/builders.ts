@@ -22,6 +22,9 @@ import { listEmployees } from '../hr/employees';
 import { logPayrollAccess } from '../payroll/config';
 import { payrollCostByProject } from '../payroll/reports';
 import { getRun } from '../payroll/runs';
+import { logSocialAccess } from '../socialsecurity/config';
+import { getDeclaration } from '../socialsecurity/declarations';
+import { premiumSummary } from '../socialsecurity/reports';
 import { getVariation, listVariations } from '../subcontracts/variations';
 import { fxDifferences } from '../treasury/fx-report';
 import { TXN_LABEL } from '../treasury/posting';
@@ -1106,6 +1109,152 @@ export async function payrollCostTable(ctx: BuildCtx, q: { from: string; to: str
         total: r.total,
       })),
       totals: { hours: d.totals.hours, gross: d.totals.gross, employer: d.totals.employer, total: d.totals.total },
+    },
+  ];
+}
+
+// --- Sosyal güvenlik çıktıları (D4) -----------------------------------------------------------------------
+
+/**
+ * Her sosyal güvenlik çıktısının değişmez uyarısı. Sütun düzeni sistemin GENEL düzenidir (sabit; yapılandırılamaz): hiçbir resmî
+ * kurumun dosya biçimini taklit etmez ya da iddia etmez; biçim doğrulanmamıştır.
+ */
+const SOCIAL_NOTE = 'Genel düzen — resmî bildirim formatı değildir, doğrulanmadı';
+const SOCIAL_STATUS_LABEL: Record<string, string> = { draft: 'Taslak', finalized: 'Kesinleşmiş' };
+
+/** Aylık sosyal güvenlik bildirimi (tek ay, personel başına). Sosyal güvenlik numarası maskelidir (son 4 hane); okuma günlüğe yazılır. */
+export async function socialDeclarationTable(ctx: BuildCtx, q: { id: string }): Promise<ReportTable[]> {
+  const d = await getDeclaration(ctx.tx, q.id, { log: false });
+  await logSocialAccess(ctx.tx, d.lines.map((l) => l.employeeId), 'Sosyal güvenlik bildirimi dışa aktarma');
+  const x = d.declaration;
+  const b = ctx.company.baseCurrency;
+  const warn = x.hasUnverifiedParams ? '⚠ doğrulanmamış oran/kural kullanıldı' : x.supportSnapshot.length === 0 ? 'prim desteği uygulanmadı' : 'parametreler doğrulanmış';
+  return [
+    {
+      key: 'sosyal-guvenlik-bildirimi',
+      title: `Aylık sosyal güvenlik bildirimi — ${x.number} (${monthLabelTR(x.month)})`,
+      sheet: 'Aylık bildirim',
+      subtitle: sub(ctx, SOCIAL_NOTE, SOCIAL_STATUS_LABEL[x.status] ?? x.status, `Kaynak bordro ${x.payrollRunNumber}`, warn, 'kişisel veri: sosyal güvenlik no maskeli'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('type', 'Bordro tipi', 'text', 14),
+        col('insStart', 'Sigorta başlangıç', 'date'),
+        col('insEnd', 'Sigorta bitiş', 'date'),
+        col('ssn', 'Sosyal güvenlik no (maskeli)', 'text', 18),
+        col('days', 'Çalışılan gün', 'int'),
+        col('annual', 'Yıllık izin günü', 'int'),
+        col('sick', 'Hastalık izni günü', 'int'),
+        col('unpaid', 'Ücretsiz izin günü', 'int'),
+        col('absent', 'Devamsızlık günü', 'int'),
+        col('base', `Prime esas kazanç (${b})`, 'money'),
+        col('empPrem', `İşçi primi (${b})`, 'money'),
+        col('erPrem', `İşveren primi (${b})`, 'money'),
+        col('supEmp', `İşçi prim desteği (${b})`, 'money'),
+        col('supEr', `İşveren prim desteği (${b})`, 'money'),
+        col('empDue', `İşçi ödenecek (${b})`, 'money'),
+        col('erDue', `İşveren ödenecek (${b})`, 'money'),
+        col('supCodes', 'Destek kuralı', 'text', 14),
+        col('warnings', 'Uyarı', 'int'),
+      ],
+      rows: d.lines.map((l) => ({
+        code: l.employeeCode,
+        name: l.employeeName,
+        type: l.payrollTypeCode,
+        insStart: l.insuranceStart,
+        insEnd: l.insuranceEnd,
+        ssn: l.ssnMasked,
+        days: l.daysWorked,
+        annual: l.annualLeaveDays,
+        sick: l.sickLeaveDays,
+        unpaid: l.unpaidLeaveDays,
+        absent: l.absentDays,
+        base: l.premiumBase,
+        empPrem: l.employeePremium,
+        erPrem: l.employerPremium,
+        supEmp: l.supportEmployee,
+        supEr: l.supportEmployer,
+        empDue: l.employeeDue,
+        erDue: l.employerDue,
+        supCodes: l.supportCodes,
+        warnings: l.warnings.length,
+      })),
+      totals: {
+        base: d.totals.premiumBase,
+        empPrem: d.totals.employeePremium,
+        erPrem: d.totals.employerPremium,
+        supEmp: d.totals.supportEmployee,
+        supEr: d.totals.supportEmployer,
+        empDue: d.totals.employeeDue,
+        erDue: d.totals.employerDue,
+      },
+    },
+  ];
+}
+
+/** Prim özeti: aya ve projeye göre. Toplamlara yalnızca kesinleşmiş bildirimler girer. */
+export async function socialPremiumSummaryTable(ctx: BuildCtx, q: { from: string; to: string }): Promise<ReportTable[]> {
+  const d = await premiumSummary(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  const subtitle = sub(ctx, `${monthLabelTR(q.from)} – ${monthLabelTR(q.to)}`, SOCIAL_NOTE, d.unverified ? '⚠ doğrulanmamış oran/kural kullanıldı' : 'toplamlar kesinleşmiş bildirimlerdendir');
+  return [
+    {
+      key: 'prim-ozeti-ay',
+      title: 'Sosyal güvenlik prim özeti (aya göre)',
+      sheet: 'Aya göre',
+      subtitle,
+      columns: [
+        col('month', 'Ay', 'text', 10),
+        col('number', 'Bildirim', 'text', 16),
+        col('status', 'Durum', 'text', 12),
+        col('emps', 'Personel', 'int'),
+        col('empPrem', `İşçi primi (${b})`, 'money'),
+        col('erPrem', `İşveren primi (${b})`, 'money'),
+        col('supEmp', `İşçi prim desteği (${b})`, 'money'),
+        col('supEr', `İşveren prim desteği (${b})`, 'money'),
+        col('empDue', `İşçi ödenecek (${b})`, 'money'),
+        col('erDue', `İşveren ödenecek (${b})`, 'money'),
+      ],
+      rows: d.months.map((m) => ({
+        month: m.month,
+        number: m.number,
+        status: SOCIAL_STATUS_LABEL[m.status] ?? m.status,
+        emps: m.employeeCount,
+        empPrem: m.employeePremium,
+        erPrem: m.employerPremium,
+        supEmp: m.supportEmployee,
+        supEr: m.supportEmployer,
+        empDue: m.employeeDue,
+        erDue: m.employerDue,
+      })),
+      totals: { empPrem: d.totals.employeePremium, erPrem: d.totals.employerPremium, supEmp: d.totals.supportEmployee, supEr: d.totals.supportEmployer, empDue: d.totals.employeeDue, erDue: d.totals.employerDue },
+    },
+    {
+      key: 'prim-ozeti-proje',
+      title: 'Sosyal güvenlik prim özeti (projeye göre, kesinleşmiş bildirimler)',
+      sheet: 'Projeye göre',
+      subtitle,
+      columns: [
+        col('project', 'Proje', 'text', 28),
+        col('emps', 'Personel', 'int'),
+        col('empPrem', `İşçi primi (${b})`, 'money'),
+        col('erPrem', `İşveren primi (${b})`, 'money'),
+        col('supEmp', `İşçi prim desteği (${b})`, 'money'),
+        col('supEr', `İşveren prim desteği (${b})`, 'money'),
+        col('empDue', `İşçi ödenecek (${b})`, 'money'),
+        col('erDue', `İşveren ödenecek (${b})`, 'money'),
+      ],
+      rows: d.projects.map((p) => ({
+        project: p.projectCode ? `${p.projectCode} — ${p.projectName}` : 'Etiketsiz',
+        emps: p.employees,
+        empPrem: p.employeePremium,
+        erPrem: p.employerPremium,
+        supEmp: p.supportEmployee,
+        supEr: p.supportEmployer,
+        empDue: p.employeeDue,
+        erDue: p.employerDue,
+      })),
+      totals: { empPrem: d.totals.employeePremium, erPrem: d.totals.employerPremium, supEmp: d.totals.supportEmployee, supEr: d.totals.supportEmployer, empDue: d.totals.employeeDue, erDue: d.totals.employerDue },
     },
   ];
 }

@@ -424,6 +424,9 @@ describe('bordro motoru (Faz D3)', async () => {
     // Modül bağımlılığı: hr.core kapatılamaz; bordro kapatılınca uçlar 403 MODULE_DISABLED
     expect((await w.c.put('/api/company/modules/hr.core', { enabled: false })).statusCode).toBe(422);
     expect((await w.c.put('/api/company/modules/core.ledger', { enabled: false })).statusCode).toBe(422);
+    // Sosyal güvenlik çıktıları (D4) bordroya bağlıdır: önce o kapatılır
+    expect((await w.c.put('/api/company/modules/hr.payroll', { enabled: false })).statusCode).toBe(422);
+    expect((await w.c.put('/api/company/modules/hr.socialsecurity', { enabled: false })).statusCode).toBe(200);
     expect((await w.c.put('/api/company/modules/hr.payroll', { enabled: false })).statusCode).toBe(200);
     const off = await w.c.get('/api/payroll/runs');
     expect(off.statusCode).toBe(403);

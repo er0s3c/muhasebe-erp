@@ -100,6 +100,15 @@ export const MODULES: readonly ModuleDef[] = [
     requires: ['core.ledger', 'hr.core'],
   },
   {
+    key: 'hr.socialsecurity',
+    labelKey: 'modules.hrSocialSecurity',
+    label: 'Sosyal güvenlik çıktıları',
+    sectors: 'all',
+    status: 'available',
+    // Aylık bildirim onaylı/ödenmiş bordrodan üretilir (hr.payroll). Çıktı genel düzendir; resmî biçim doğrulanmamıştır.
+    requires: ['hr.payroll'],
+  },
+  {
     key: 'retail.pos',
     labelKey: 'modules.retailPos',
     label: 'Hızlı satış (POS)',
@@ -439,6 +448,24 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     icon: 'sliders-horizontal',
     group: 'hr',
     module: 'hr.payroll',
+    permission: 'hr.payroll',
+  },
+  {
+    key: 'social-security',
+    labelKey: 'nav.socialSecurity',
+    path: '/hr/social-security',
+    icon: 'shield-check',
+    group: 'hr',
+    module: 'hr.socialsecurity',
+    permission: 'hr.payroll',
+  },
+  {
+    key: 'social-settings',
+    labelKey: 'nav.socialSettings',
+    path: '/hr/social-security/settings',
+    icon: 'sliders-horizontal',
+    group: 'hr',
+    module: 'hr.socialsecurity',
     permission: 'hr.payroll',
   },
   {

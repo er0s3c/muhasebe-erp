@@ -1018,7 +1018,7 @@ export const personalDataAccessLog = pgTable(
       .notNull()
       .references(() => companies.id),
     employeeId: uuid().notNull(),
-    /** id_number | birth_date | iban | export | payroll (bordro/ücret görüntüleme) */
+    /** id_number | birth_date | iban | export | payroll (bordro/ücret görüntüleme) | social_security_no (açık okuma) | social_security (bildirim/profil görüntüleme) */
     field: text().notNull(),
     reason: text().notNull(),
     userId: uuid()
@@ -1029,7 +1029,7 @@ export const personalDataAccessLog = pgTable(
   (t) => [
     foreignKey({ name: 'personal_data_access_log_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
     index('personal_data_access_log_emp_idx').on(t.companyId, t.employeeId, t.createdAt),
-    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export','payroll')`),
+    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export','payroll','social_security_no','social_security')`),
     check('personal_data_access_log_reason_ck', sql`length(btrim(${t.reason})) >= 3`),
   ],
 );
@@ -1404,6 +1404,181 @@ export const payrollLineAllocations = pgTable(
     index('payroll_allocations_project_idx').on(t.companyId, t.projectId).where(sql`${t.projectId} is not null`),
     check('payroll_allocations_tag_ck', sql`(${t.wbsId} is null or ${t.projectId} is not null) and (${t.costCodeId} is null or ${t.projectId} is not null)`),
     check('payroll_allocations_amount_ck', sql`${t.hours} >= 0 and ${t.grossAmount} >= 0 and ${t.employerAmount} >= 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Sosyal güvenlik çıktıları (Faz D4): tarihli profil, prim desteği kuralları, aylık bildirim. Yasal değer ve resmî biçim YOKTUR.
+// ---------------------------------------------------------------------------
+
+/** Tarihli sosyal güvenlik profili. Bordro tipi kodu serbest veridir; numara şifreli saklanır (D1 kimlik numarası gibi). */
+export const employeeSocialProfiles = pgTable(
+  'employee_social_profiles',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    effectiveFrom: date({ mode: 'string' }).notNull(),
+    payrollTypeCode: text(),
+    insuranceStart: date({ mode: 'string' }),
+    insuranceEnd: date({ mode: 'string' }),
+    ssnEnc: text(),
+    ssnLast4: text(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('employee_social_profiles_uq').on(t.employeeId, t.effectiveFrom),
+    foreignKey({ name: 'employee_social_profiles_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    check('employee_social_profiles_dates_ck', sql`${t.insuranceEnd} is null or ${t.insuranceStart} is null or ${t.insuranceEnd} >= ${t.insuranceStart}`),
+  ],
+);
+
+/** Prim desteği kuralı: tarihli, kaynak notlu, doğrulama alanlı, varsayılan KAPALI. Oran/koşul kullanıcı verisidir. */
+export const socialSupportRules = pgTable(
+  'social_support_rules',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    effectiveFrom: date({ mode: 'string' }).notNull(),
+    effectiveTo: date({ mode: 'string' }),
+    /** employer | employee */
+    target: text().notNull(),
+    /** percent_of_premium | fixed_amount */
+    mode: text().notNull(),
+    value: numeric({ precision: 19, scale: 6 }).notNull(),
+    enabled: boolean().notNull().default(false),
+    sourceNote: text(),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('social_support_rules_uq').on(t.companyId, t.code, t.effectiveFrom),
+    unique('social_support_rules_id_company_uq').on(t.id, t.companyId),
+    check('social_support_rules_target_ck', sql`${t.target} in ('employer','employee')`),
+    check('social_support_rules_mode_ck', sql`${t.mode} in ('percent_of_premium','fixed_amount')`),
+    check('social_support_rules_value_ck', sql`${t.value} >= 0 and (${t.mode} <> 'percent_of_premium' or ${t.value} <= 100)`),
+    check('social_support_rules_dates_ck', sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+  ],
+);
+
+/** Personelin bir destek kuralına (kod) tarihli uygunluğu: kullanıcı beyanıdır, sistem koşulu denetlemez. */
+export const employeeSupportEligibility = pgTable(
+  'employee_support_eligibility',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    ruleCode: text().notNull(),
+    validFrom: date({ mode: 'string' }).notNull(),
+    validTo: date({ mode: 'string' }),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('employee_support_eligibility_uq').on(t.employeeId, t.ruleCode, t.validFrom),
+    foreignKey({ name: 'employee_support_eligibility_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    check('employee_support_eligibility_dates_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
+/** Aylık sosyal güvenlik bildirimi (GENEL düzen; resmî biçim değildir). Onaylı/ödenmiş bordrodan üretilir. */
+export const socialDeclarations = pgTable(
+  'social_declarations',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    number: text().notNull(),
+    month: text().notNull(),
+    /** draft | finalized */
+    status: text().notNull().default('draft'),
+    payrollRunId: uuid().notNull(),
+    payrollRunNumber: text().notNull(),
+    employeeCount: integer().notNull().default(0),
+    premiumBaseTotal: money().notNull().default('0'),
+    employeePremiumTotal: money().notNull().default('0'),
+    employerPremiumTotal: money().notNull().default('0'),
+    supportEmployeeTotal: money().notNull().default('0'),
+    supportEmployerTotal: money().notNull().default('0'),
+    /** Uygulanan destek kurallarının kopyası (kod, kural kimliği, hedef, kip, değer, doğrulandı mı). */
+    supportSnapshot: jsonb().$type<{ code: string; ruleId: string; name: string; target: string; mode: string; value: string; verified: boolean }[]>().notNull().default(sql`'[]'::jsonb`),
+    hasUnverifiedParams: boolean().notNull().default(false),
+    builtAt: timestamp({ withTimezone: true }),
+    finalizedAt: timestamp({ withTimezone: true }),
+    finalizedBy: uuid().references(() => users.id),
+    finalizeNote: text(),
+    reopenedAt: timestamp({ withTimezone: true }),
+    reopenedBy: uuid().references(() => users.id),
+    reopenReason: text(),
+    reopenCount: integer().notNull().default(0),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('social_declarations_number_uq').on(t.companyId, t.number),
+    unique('social_declarations_month_uq').on(t.companyId, t.month),
+    unique('social_declarations_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'social_declarations_run_fk', columns: [t.payrollRunId, t.companyId], foreignColumns: [payrollRuns.id, payrollRuns.companyId] }),
+    check('social_declarations_status_ck', sql`${t.status} in ('draft','finalized')`),
+    check('social_declarations_month_ck', sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
+    check('social_declarations_totals_ck', sql`${t.premiumBaseTotal} >= 0 and ${t.employeePremiumTotal} >= 0 and ${t.employerPremiumTotal} >= 0 and ${t.supportEmployeeTotal} >= 0 and ${t.supportEmployerTotal} >= 0 and ${t.supportEmployeeTotal} <= ${t.employeePremiumTotal} and ${t.supportEmployerTotal} <= ${t.employerPremiumTotal}`),
+    check('social_declarations_final_ck', sql`(${t.status} = 'finalized') = (${t.finalizedAt} is not null)`),
+  ],
+);
+
+export const socialDeclarationLines = pgTable(
+  'social_declaration_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    declarationId: uuid().notNull(),
+    employeeId: uuid().notNull(),
+    payrollLineId: uuid().notNull(),
+    payrollTypeCode: text(),
+    insuranceStart: date({ mode: 'string' }),
+    insuranceEnd: date({ mode: 'string' }),
+    /** Numaranın yalnızca son 4 hanesi (açık numara bildirim satırına kopyalanmaz). */
+    ssnLast4: text(),
+    daysWorked: integer().notNull().default(0),
+    annualLeaveDays: integer().notNull().default(0),
+    sickLeaveDays: integer().notNull().default(0),
+    unpaidLeaveDays: integer().notNull().default(0),
+    absentDays: integer().notNull().default(0),
+    premiumBase: money().notNull().default('0'),
+    employeePremium: money().notNull().default('0'),
+    employerPremium: money().notNull().default('0'),
+    supportEmployee: money().notNull().default('0'),
+    supportEmployer: money().notNull().default('0'),
+    /** Uygulanan destek kuralı kodları, virgülle. */
+    supportCodes: text(),
+    warnings: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('social_declaration_lines_uq').on(t.declarationId, t.employeeId),
+    foreignKey({ name: 'social_declaration_lines_declaration_fk', columns: [t.declarationId, t.companyId], foreignColumns: [socialDeclarations.id, socialDeclarations.companyId] }),
+    foreignKey({ name: 'social_declaration_lines_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'social_declaration_lines_payroll_line_fk', columns: [t.payrollLineId, t.companyId], foreignColumns: [payrollLines.id, payrollLines.companyId] }),
+    index('social_declaration_lines_decl_idx').on(t.declarationId),
+    check('social_declaration_lines_amounts_ck', sql`${t.premiumBase} >= 0 and ${t.employeePremium} >= 0 and ${t.employerPremium} >= 0 and ${t.supportEmployee} >= 0 and ${t.supportEmployer} >= 0 and ${t.supportEmployee} <= ${t.employeePremium} and ${t.supportEmployer} <= ${t.employerPremium}`),
   ],
 );
 

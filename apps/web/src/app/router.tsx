@@ -137,6 +137,14 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="hr.socialsecurity" />,
+                children: [
+                  { path: 'hr/social-security', ...page(() => import('../features/hr/SocialSecurityPage'), 'SocialSecurityPage') },
+                  { path: 'hr/social-security/settings', ...page(() => import('../features/hr/SocialSettingsPage'), 'SocialSettingsPage') },
+                  { path: 'hr/social-security/:id', ...page(() => import('../features/hr/SocialDeclarationPage'), 'SocialDeclarationPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="construction.subcontracts" />,
                 children: [
                   { path: 'subcontracts', ...page(() => import('../features/subcontracts/SubcontractsPage'), 'SubcontractsPage') },

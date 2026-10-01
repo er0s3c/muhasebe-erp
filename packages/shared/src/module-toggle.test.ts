@@ -77,6 +77,12 @@ describe('checkModuleToggle', () => {
     expect(check('core.ledger', false, off('core.invoices', 'core.treasury', 'core.parties', 'core.inventory', 'hr.payroll'))).toEqual({ ok: true });
   });
 
+  it('sosyal güvenlik çıktıları bordroya bağlıdır: bordro, bağımlısı açıkken kapatılamaz; bordro kapalıyken sosyal güvenlik açılamaz', () => {
+    expect(check('hr.payroll', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['hr.socialsecurity'] });
+    expect(check('hr.payroll', false, off('hr.socialsecurity'))).toEqual({ ok: true });
+    expect(check('hr.socialsecurity', true, off('hr.socialsecurity', 'hr.payroll'))).toMatchObject({ ok: false });
+  });
+
   it('gereksinimi kapalı modül açılamaz', () => {
     expect(check('core.invoices', true, off('core.invoices', 'core.inventory'))).toEqual({
       ok: false,

@@ -2134,3 +2134,111 @@ export interface PayrollCostReport {
   totals: { hours: string; gross: string; employer: string; total: string };
   unverified: boolean;
 }
+
+// --- Sosyal güvenlik çıktıları (Faz D4) ---
+
+export type SocialDeclarationStatus = 'draft' | 'finalized';
+export type SocialWarningCode = 'no_profile' | 'no_ssn' | 'no_payroll_type' | 'insurance_outside_month' | 'zero_base' | 'support_rule_off' | 'no_days';
+
+export interface SocialProfileRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  effectiveFrom: string;
+  payrollTypeCode: string | null;
+  insuranceStart: string | null;
+  insuranceEnd: string | null;
+  hasSsn: boolean;
+  ssnMasked: string | null;
+  note: string | null;
+}
+
+export interface SupportRuleRow {
+  id: string;
+  code: string;
+  name: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  target: 'employer' | 'employee';
+  mode: 'percent_of_premium' | 'fixed_amount';
+  value: string;
+  enabled: boolean;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface SupportEligibilityRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  ruleCode: string;
+  validFrom: string;
+  validTo: string | null;
+  note: string | null;
+}
+
+export interface SocialDeclarationRow {
+  id: string;
+  number: string;
+  month: string;
+  status: SocialDeclarationStatus;
+  payrollRunId: string;
+  payrollRunNumber: string;
+  employeeCount: number;
+  premiumBaseTotal: string;
+  employeePremiumTotal: string;
+  employerPremiumTotal: string;
+  supportEmployeeTotal: string;
+  supportEmployerTotal: string;
+  supportSnapshot: { code: string; ruleId: string; name: string; target: string; mode: string; value: string; verified: boolean }[];
+  hasUnverifiedParams: boolean;
+  finalizedAt: string | null;
+  finalizeNote: string | null;
+  reopenReason: string | null;
+  reopenCount: number;
+  payrollRunStatus?: PayrollRunStatus | null;
+}
+
+export interface SocialDeclarationLine {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  payrollTypeCode: string | null;
+  insuranceStart: string | null;
+  insuranceEnd: string | null;
+  ssnMasked: string | null;
+  daysWorked: number;
+  annualLeaveDays: number;
+  sickLeaveDays: number;
+  unpaidLeaveDays: number;
+  absentDays: number;
+  premiumBase: string;
+  employeePremium: string;
+  employerPremium: string;
+  supportEmployee: string;
+  supportEmployer: string;
+  employeeDue: string;
+  employerDue: string;
+  supportCodes: string | null;
+  warnings: SocialWarningCode[];
+}
+
+export interface SocialDeclarationDetail {
+  declaration: SocialDeclarationRow;
+  lines: SocialDeclarationLine[];
+  totals: { count: number; premiumBase: string; employeePremium: string; employerPremium: string; supportEmployee: string; supportEmployer: string; supportTotal: string; employeeDue: string; employerDue: string };
+  lock: { closed: boolean };
+}
+
+export interface PremiumSummaryReport {
+  from: string;
+  to: string;
+  months: { id: string; number: string; month: string; status: SocialDeclarationStatus; employeeCount: number; premiumBase: string; employeePremium: string; employerPremium: string; supportEmployee: string; supportEmployer: string; employeeDue: string; employerDue: string; hasUnverifiedParams: boolean }[];
+  projects: { projectId: string | null; projectCode: string | null; projectName: string | null; employees: number; employeePremium: string; employerPremium: string; supportEmployee: string; supportEmployer: string; employeeDue: string; employerDue: string }[];
+  totals: { employeePremium: string; employerPremium: string; supportEmployee: string; supportEmployer: string; employeeDue: string; employerDue: string };
+  unverified: boolean;
+}
