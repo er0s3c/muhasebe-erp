@@ -34,7 +34,8 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
   if (isPending || !data) return <PageLoading />;
   const { totals, rows, budget } = data;
   const hasRows = rows.length > 0;
-  const showCommitted = data.commitments.contracts > 0;
+  const commitCount = data.commitments.contracts + data.commitments.orders;
+  const showCommitted = commitCount > 0;
   const shown = hideEmpty ? rows.filter((r) => r.isActive || Number(r.budget) !== 0 || Number(r.actual) !== 0 || !r.isLeaf) : rows;
 
   return (
@@ -86,8 +87,8 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
         <Stat label={t('projects.overview.revenue')} sub={t('projects.overview.revenueSub')}>
           {moneyIn(totals.revenue, base)}
         </Stat>
-        {data.commitments.contracts > 0 && (
-          <Stat label={t('projects.overview.committed')} sub={t('projects.overview.committedSub', { n: data.commitments.contracts })}>
+        {showCommitted && (
+          <Stat label={t('projects.overview.committed')} sub={t('projects.overview.committedSub', { n: commitCount })}>
             {moneyIn(totals.committed, base)}
           </Stat>
         )}

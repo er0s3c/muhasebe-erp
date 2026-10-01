@@ -131,6 +131,17 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="construction.procurement" />,
+                children: [
+                  { path: 'purchasing/requests', ...page(() => import('../features/procurement/RequestsPage'), 'PurchaseRequestsPage') },
+                  { path: 'purchasing/requests/:id', ...page(() => import('../features/procurement/RequestEditorPage'), 'PurchaseRequestEditorPage') },
+                  { path: 'purchasing/rfqs', ...page(() => import('../features/procurement/RfqsPage'), 'RfqsPage') },
+                  { path: 'purchasing/rfqs/:id', ...page(() => import('../features/procurement/RfqPage'), 'RfqPage') },
+                  { path: 'purchasing/orders', ...page(() => import('../features/procurement/OrdersPage'), 'PurchaseOrdersPage') },
+                  { path: 'purchasing/orders/:id', ...page(() => import('../features/procurement/OrderEditorPage'), 'PurchaseOrderEditorPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="core.settings" />,
                 children: [
                   { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage') },

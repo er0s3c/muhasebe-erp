@@ -39,8 +39,9 @@ export function ApprovalsPage() {
             <tbody>
               {rows.map((r) => {
                 const step = r.steps.find((s) => s.status === 'pending');
+                const href = r.docType === 'purchase_request' ? `/purchasing/requests/${r.docId}` : `/progress-payments/${r.docId}`;
                 return (
-                  <Tr key={r.id} clickable tabIndex={0} onClick={() => navigate(`/progress-payments/${r.docId}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/progress-payments/${r.docId}`)}>
+                  <Tr key={r.id} clickable tabIndex={0} onClick={() => navigate(href)} onKeyDown={(e) => e.key === 'Enter' && navigate(href)}>
                     <Td>{t(`subcontracts.approval.docTypes.${r.docType}`)}</Td>
                     <Td className="text-muted">{formatDateTR(r.requestedAt.slice(0, 10))}</Td>
                     <Td>{step ? `${step.stepNo}/${r.steps.length} — ${step.label ?? t('subcontracts.approval.defaultStep')}` : '—'}</Td>

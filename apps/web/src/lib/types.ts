@@ -1026,7 +1026,7 @@ export interface ProjectCostReport {
   budget: { id: string; revisionNo: number; approvedAt: string } | null;
   rows: ProjectCostRow[];
   totals: ProjectMetrics & { revenue: string; committed: string; actualPlusCommitted: string };
-  commitments: { contracts: number; missingRate: number };
+  commitments: { contracts: number; orders: number; missingRate: number };
 }
 
 export interface ProjectBudgetRow {
@@ -1249,7 +1249,7 @@ export interface ApprovalStepRow {
 
 export interface ApprovalRequestRow {
   id: string;
-  docType: 'progress_payment' | 'employer_claim';
+  docType: 'progress_payment' | 'employer_claim' | 'purchase_request';
   docId: string;
   amount: string;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
@@ -1310,7 +1310,7 @@ export interface ConstructionParam {
 
 export interface ApprovalRuleRow {
   id: string;
-  docType: 'progress_payment' | 'employer_claim';
+  docType: 'progress_payment' | 'employer_claim' | 'purchase_request';
   projectId: string | null;
   minAmount: string;
   maxAmount: string | null;
@@ -1336,4 +1336,152 @@ export interface EmployerSummary {
   outstanding: string;
   retentionBalance: string;
   advanceBalance: string;
+}
+
+// --- Satın alma zinciri ---------------------------------------------------------------------------------
+
+export type PurchaseRequestStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'ordered' | 'cancelled';
+export type PurchaseOrderStatus = 'draft' | 'issued' | 'closed' | 'cancelled';
+export type RfqStatus = 'open' | 'awarded' | 'cancelled';
+
+export interface PurchaseRequestRow {
+  id: string;
+  code: string;
+  title: string;
+  status: PurchaseRequestStatus;
+  needDate: string | null;
+  projectId: string;
+  projectCode: string;
+  lineCount: number;
+  estimatedTotal: string;
+}
+
+export interface PurchaseRequestLine {
+  id: string;
+  lineNo: number;
+  itemId: string | null;
+  itemCode: string | null;
+  description: string;
+  unit: string;
+  quantity: string;
+  estUnitPrice: string | null;
+  wbsId: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
+}
+
+export interface PurchaseRequestDetail {
+  request: {
+    id: string;
+    code: string;
+    title: string;
+    status: PurchaseRequestStatus;
+    needDate: string | null;
+    note: string | null;
+    rejectionNote: string | null;
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    estimatedTotal: string;
+  };
+  lines: PurchaseRequestLine[];
+  approvals: ApprovalRequestRow[];
+  rfq: { id: string; code: string; status: RfqStatus } | null;
+  orders: { id: string; code: string; status: PurchaseOrderStatus }[];
+}
+
+export interface RfqListRow {
+  id: string;
+  code: string;
+  status: RfqStatus;
+  dueDate: string | null;
+  requestId: string;
+  requestCode: string;
+  title: string;
+  projectCode: string;
+  offerCount: number;
+}
+
+export interface RfqOfferRow {
+  id: string;
+  partyId: string;
+  partyName: string;
+  currencyCode: string;
+  deliveryDays: number | null;
+  paymentDays: number;
+  note: string | null;
+  complete: boolean;
+  pricedCount: number;
+  total: string;
+  totalBase: string | null;
+  prices: Record<string, string | null>;
+  awarded: boolean;
+}
+
+export interface RfqDetail {
+  rfq: { id: string; code: string; status: RfqStatus; dueDate: string | null; note: string | null; requestId: string; requestCode: string; requestTitle: string; projectId: string; projectCode: string; awardedOfferId: string | null };
+  lines: { id: string; lineNo: number; description: string; unit: string; quantity: string; estUnitPrice: string | null }[];
+  offers: RfqOfferRow[];
+  cheapestOfferId: string | null;
+  fastestOfferId: string | null;
+  baseCurrency: string;
+}
+
+export interface PurchaseOrderRow {
+  id: string;
+  code: string;
+  status: PurchaseOrderStatus;
+  projectId: string;
+  projectCode: string;
+  partyId: string;
+  partyName: string;
+  currencyCode: string;
+  net: string;
+  orderedQty: string;
+  receivedQty: string;
+}
+
+export interface PurchaseOrderLine {
+  id: string;
+  lineNo: number;
+  itemId: string | null;
+  itemCode: string | null;
+  itemKind: string | null;
+  description: string;
+  unit: string;
+  quantity: string;
+  unitPrice: string;
+  amount: string;
+  wbsId: string | null;
+  wbsCode: string | null;
+  receivedQty: string;
+  remainingQty: string;
+}
+
+export interface PurchaseOrderDetail {
+  order: {
+    id: string;
+    code: string;
+    status: PurchaseOrderStatus;
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    partyId: string;
+    partyName: string;
+    requestId: string | null;
+    requestCode: string | null;
+    currencyCode: string;
+    vatCode: string | null;
+    vatRate: string;
+    paymentDays: number;
+    deliveryLocation: string | null;
+    note: string | null;
+    cancelReason: string | null;
+    net: string;
+    vat: string;
+    gross: string;
+    receiptState: 'none' | 'partial' | 'complete';
+  };
+  lines: PurchaseOrderLine[];
+  receipts: { id: string; receiptNo: string; receiptDate: string; status: 'posted' | 'cancelled'; note: string | null; deliveryNoteId: string | null; cancelReason: string | null }[];
 }
