@@ -503,7 +503,7 @@ export const approvalRules = pgTable(
       columns: [t.projectId, t.companyId],
       foreignColumns: [projects.id, projects.companyId],
     }),
-    check('approval_rules_doc_type_ck', sql`${t.docType} in ('progress_payment','employer_claim')`),
+    check('approval_rules_doc_type_ck', sql`${t.docType} in ('progress_payment','employer_claim','purchase_request')`),
     check('approval_rules_range_ck', sql`${t.minAmount} >= 0 and (${t.maxAmount} is null or ${t.maxAmount} > ${t.minAmount})`),
   ],
 );
@@ -2326,5 +2326,350 @@ export const retentionReleases = pgTable(
       foreignColumns: [journalEntries.id, journalEntries.companyId],
     }),
     check('retention_releases_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Satın alma zinciri (Faz B3-P): talep → RFQ/teklif → sipariş → mal kabul
+// ---------------------------------------------------------------------------
+
+/** Şantiyeden satın alma talebi. Onay motorundan (`purchase_request`) geçer. */
+export const purchaseRequests = pgTable(
+  'purchase_requests',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    projectId: uuid().notNull(),
+    title: text().notNull(),
+    needDate: date({ mode: 'string' }),
+    note: text(),
+    /** draft | submitted | approved | rejected | ordered | cancelled */
+    status: text().notNull().default('draft'),
+    rejectionNote: text(),
+    requestedBy: uuid().references(() => users.id),
+    submittedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('purchase_requests_code_uq').on(t.companyId, t.code),
+    unique('purchase_requests_id_company_uq').on(t.id, t.companyId),
+    unique('purchase_requests_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'purchase_requests_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('purchase_requests_project_idx').on(t.companyId, t.projectId, t.status),
+    check('purchase_requests_status_ck', sql`${t.status} in ('draft','submitted','approved','rejected','ordered','cancelled')`),
+  ],
+);
+
+export const purchaseRequestLines = pgTable(
+  'purchase_request_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    requestId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    lineNo: integer().notNull(),
+    itemId: uuid(),
+    description: text().notNull(),
+    unit: text().notNull(),
+    quantity: qty().notNull(),
+    /** Tahmini birim fiyat (defter para birimi); onay tutarı için. */
+    estUnitPrice: numeric({ precision: 19, scale: 4 }),
+    wbsId: uuid(),
+  },
+  (t) => [
+    unique('purchase_request_lines_no_uq').on(t.requestId, t.lineNo),
+    unique('purchase_request_lines_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'purchase_request_lines_request_fk',
+      columns: [t.requestId, t.projectId],
+      foreignColumns: [purchaseRequests.id, purchaseRequests.projectId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'purchase_request_lines_item_fk',
+      columns: [t.itemId, t.companyId],
+      foreignColumns: [items.id, items.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_request_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    check('purchase_request_lines_qty_ck', sql`${t.quantity} > 0 and (${t.estUnitPrice} is null or ${t.estUnitPrice} >= 0)`),
+  ],
+);
+
+/** Teklif isteği (talebe bağlı). */
+export const rfqs = pgTable(
+  'rfqs',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    requestId: uuid().notNull(),
+    /** open | awarded | cancelled */
+    status: text().notNull().default('open'),
+    dueDate: date({ mode: 'string' }),
+    note: text(),
+    awardedOfferId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('rfqs_code_uq').on(t.companyId, t.code),
+    unique('rfqs_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'rfqs_request_fk',
+      columns: [t.requestId, t.companyId],
+      foreignColumns: [purchaseRequests.id, purchaseRequests.companyId],
+    }),
+    // Talep başına en çok bir açık/verilmiş RFQ
+    uniqueIndex('rfqs_request_open_uq')
+      .on(t.requestId)
+      .where(sql`${t.status} <> 'cancelled'`),
+    check('rfqs_status_ck', sql`${t.status} in ('open','awarded','cancelled')`),
+  ],
+);
+
+export const rfqOffers = pgTable(
+  'rfq_offers',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    rfqId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    deliveryDays: integer(),
+    paymentDays: integer().notNull().default(0),
+    note: text(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('rfq_offers_party_uq').on(t.rfqId, t.partyId),
+    unique('rfq_offers_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'rfq_offers_rfq_fk',
+      columns: [t.rfqId, t.companyId],
+      foreignColumns: [rfqs.id, rfqs.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'rfq_offers_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    check('rfq_offers_terms_ck', sql`${t.paymentDays} between 0 and 365 and (${t.deliveryDays} is null or ${t.deliveryDays} >= 0)`),
+  ],
+);
+
+export const rfqOfferLines = pgTable(
+  'rfq_offer_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    offerId: uuid().notNull(),
+    requestLineId: uuid().notNull(),
+    unitPrice: numeric({ precision: 19, scale: 4 }).notNull(),
+  },
+  (t) => [
+    unique('rfq_offer_lines_uq').on(t.offerId, t.requestLineId),
+    foreignKey({
+      name: 'rfq_offer_lines_offer_fk',
+      columns: [t.offerId, t.companyId],
+      foreignColumns: [rfqOffers.id, rfqOffers.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'rfq_offer_lines_line_fk',
+      columns: [t.requestLineId, t.companyId],
+      foreignColumns: [purchaseRequestLines.id, purchaseRequestLines.companyId],
+    }),
+    check('rfq_offer_lines_price_ck', sql`${t.unitPrice} >= 0`),
+  ],
+);
+
+/** Satın alma siparişi. Verilmiş (issued) sipariş taahhüt yaratır; kabul edilen miktar taahhütten düşer. */
+export const purchaseOrders = pgTable(
+  'purchase_orders',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    projectId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    requestId: uuid(),
+    offerId: uuid(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    vatCode: text(),
+    vatRate: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    paymentDays: integer().notNull().default(30),
+    deliveryLocation: text(),
+    note: text(),
+    /** draft | issued | closed | cancelled */
+    status: text().notNull().default('draft'),
+    issuedAt: timestamp({ withTimezone: true }),
+    cancelReason: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('purchase_orders_code_uq').on(t.companyId, t.code),
+    unique('purchase_orders_id_company_uq').on(t.id, t.companyId),
+    unique('purchase_orders_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'purchase_orders_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_orders_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_orders_request_fk',
+      columns: [t.requestId, t.companyId],
+      foreignColumns: [purchaseRequests.id, purchaseRequests.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_orders_offer_fk',
+      columns: [t.offerId, t.companyId],
+      foreignColumns: [rfqOffers.id, rfqOffers.companyId],
+    }),
+    index('purchase_orders_project_idx').on(t.companyId, t.projectId, t.status),
+    index('purchase_orders_party_idx').on(t.companyId, t.partyId),
+    check('purchase_orders_status_ck', sql`${t.status} in ('draft','issued','closed','cancelled')`),
+    check('purchase_orders_terms_ck', sql`${t.paymentDays} between 0 and 365 and ${t.vatRate} between 0 and 100`),
+    check('purchase_orders_issued_ck', sql`(${t.status} in ('issued','closed')) = (${t.issuedAt} is not null) or ${t.status} = 'cancelled'`),
+  ],
+);
+
+export const purchaseOrderLines = pgTable(
+  'purchase_order_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    orderId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    lineNo: integer().notNull(),
+    requestLineId: uuid(),
+    itemId: uuid(),
+    description: text().notNull(),
+    unit: text().notNull(),
+    quantity: qty().notNull(),
+    unitPrice: numeric({ precision: 19, scale: 4 }).notNull(),
+    wbsId: uuid(),
+  },
+  (t) => [
+    unique('purchase_order_lines_no_uq').on(t.orderId, t.lineNo),
+    unique('purchase_order_lines_id_company_uq').on(t.id, t.companyId),
+    index('purchase_order_lines_wbs_idx').on(t.wbsId),
+    foreignKey({
+      name: 'purchase_order_lines_order_fk',
+      columns: [t.orderId, t.projectId],
+      foreignColumns: [purchaseOrders.id, purchaseOrders.projectId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'purchase_order_lines_item_fk',
+      columns: [t.itemId, t.companyId],
+      foreignColumns: [items.id, items.companyId],
+    }),
+    foreignKey({
+      name: 'purchase_order_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'purchase_order_lines_request_line_fk',
+      columns: [t.requestLineId, t.companyId],
+      foreignColumns: [purchaseRequestLines.id, purchaseRequestLines.companyId],
+    }),
+    check('purchase_order_lines_amount_ck', sql`${t.quantity} > 0 and ${t.unitPrice} >= 0`),
+  ],
+);
+
+/** Mal kabul (siparişe karşı teslim alınan miktar); stoklu satır varsa bir alış irsaliyesi de üretir. */
+export const poReceipts = pgTable(
+  'po_receipts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    orderId: uuid().notNull(),
+    receiptNo: text().notNull(),
+    receiptDate: date({ mode: 'string' }).notNull(),
+    deliveryNoteId: uuid(),
+    note: text(),
+    /** posted | cancelled */
+    status: text().notNull().default('posted'),
+    cancelReason: text(),
+    cancelledAt: timestamp({ withTimezone: true }),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('po_receipts_no_uq').on(t.companyId, t.receiptNo),
+    unique('po_receipts_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'po_receipts_order_fk',
+      columns: [t.orderId, t.companyId],
+      foreignColumns: [purchaseOrders.id, purchaseOrders.companyId],
+    }),
+    foreignKey({
+      name: 'po_receipts_note_fk',
+      columns: [t.deliveryNoteId, t.companyId],
+      foreignColumns: [deliveryNotes.id, deliveryNotes.companyId],
+    }),
+    index('po_receipts_order_idx').on(t.orderId),
+    check('po_receipts_status_ck', sql`${t.status} in ('posted','cancelled')`),
+  ],
+);
+
+export const poReceiptLines = pgTable(
+  'po_receipt_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    receiptId: uuid().notNull(),
+    orderLineId: uuid().notNull(),
+    quantity: qty().notNull(),
+  },
+  (t) => [
+    unique('po_receipt_lines_uq').on(t.receiptId, t.orderLineId),
+    index('po_receipt_lines_line_idx').on(t.orderLineId),
+    foreignKey({
+      name: 'po_receipt_lines_receipt_fk',
+      columns: [t.receiptId, t.companyId],
+      foreignColumns: [poReceipts.id, poReceipts.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'po_receipt_lines_line_fk',
+      columns: [t.orderLineId, t.companyId],
+      foreignColumns: [purchaseOrderLines.id, purchaseOrderLines.companyId],
+    }),
+    check('po_receipt_lines_qty_ck', sql`${t.quantity} > 0`),
   ],
 );

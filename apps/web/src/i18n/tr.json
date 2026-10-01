@@ -93,7 +93,8 @@
     "parties": "Cari hesaplar",
     "inventory": "Stok",
     "invoices": "Fatura ve irsaliye",
-    "treasury": "Kasa ve banka"
+    "treasury": "Kasa ve banka",
+    "constructionProcurement": "Satın alma ve sipariş"
   },
   "nav": {
     "groups": {
@@ -150,7 +151,10 @@
     "approvals": "Onay kutusu",
     "constructionSettings": "İnşaat ayarları",
     "employerContracts": "İşveren sözleşmeleri",
-    "employerClaims": "İşveren hakedişleri"
+    "employerClaims": "İşveren hakedişleri",
+    "purchaseRequests": "Satın alma talepleri",
+    "rfqs": "Teklif karşılaştırma",
+    "purchaseOrders": "Siparişler"
   },
   "shell": {
     "search": "Ara veya komut yaz…",

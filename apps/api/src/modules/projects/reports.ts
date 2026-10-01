@@ -16,6 +16,7 @@ import { currentBudget } from './budgets';
 import { latestProgress } from './progress';
 import { getProjectRow } from './service';
 import { listWbs } from './wbs';
+import { loadOrderCommitted } from '../procurement/commitments';
 import { loadCommitted } from '../subcontracts/commitments';
 
 /** Hesap kodu ön eki regex'i: gelir tarafı (60, 61, 64); diğer tüm etiketli hesaplar maliyet tarafıdır. */
@@ -146,7 +147,12 @@ export async function projectCostReport(tx: Tx, projectId: string, asOf: string)
   }
 
   // Taahhüt: yaprak bazında; üst düğümler toplanır. Proje taşeron modülü kapalıysa/sözleşme yoksa 0.
-  const commit = await loadCommitted(tx, projectId, asOf);
+  const subCommit = await loadCommitted(tx, projectId, asOf);
+  const poCommit = await loadOrderCommitted(tx, projectId, asOf);
+  // Taahhüt = yürürlükteki taşeron sözleşmelerinin kalanı + verilmiş siparişlerin kalan (kabul edilmemiş) tutarı
+  const mergedByWbs = new Map(subCommit.byWbs);
+  for (const [k, v] of poCommit.byWbs) mergedByWbs.set(k, (mergedByWbs.get(k) ?? dec(0)).plus(v));
+  const commit = { byWbs: mergedByWbs, contracts: subCommit.contracts, orders: poCommit.orders, missingRate: subCommit.missingRate + poCommit.missingRate };
   const committedOf = new Map<string, ReturnType<typeof dec>>();
   for (const n of [...nodes].reverse()) {
     if (n.isLeaf) committedOf.set(n.id, commit.byWbs.get(n.id) ?? dec(0));
@@ -209,7 +215,7 @@ export async function projectCostReport(tx: Tx, projectId: string, asOf: string)
       committed: totalCommitted.toFixed(2),
       actualPlusCommitted: totals.actual.plus(totalCommitted).toFixed(2),
     },
-    commitments: { contracts: commit.contracts, missingRate: commit.missingRate },
+    commitments: { contracts: commit.contracts, orders: commit.orders, missingRate: commit.missingRate },
   };
 }
 

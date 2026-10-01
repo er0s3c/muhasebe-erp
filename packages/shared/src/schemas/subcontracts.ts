@@ -30,7 +30,7 @@ export const verifyConstructionParamSchema = z.object({
 
 // --- Onay motoru ---------------------------------------------------------------------
 
-export const APPROVAL_DOC_TYPES = ['progress_payment', 'employer_claim'] as const;
+export const APPROVAL_DOC_TYPES = ['progress_payment', 'employer_claim', 'purchase_request'] as const;
 export type ApprovalDocType = (typeof APPROVAL_DOC_TYPES)[number];
 
 const approvalAmount = z.string().regex(/^\d{1,15}(\.\d{1,2})?$/, 'Geçersiz tutar');

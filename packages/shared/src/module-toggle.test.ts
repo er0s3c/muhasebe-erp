@@ -103,7 +103,7 @@ describe('describeModules', () => {
     expect(by['core.inventory']).toMatchObject({ enabled: true, override: null, dependents: ['core.invoices'] });
     expect(by['core.inventory']!.blocked).toEqual({ reason: 'REQUIRED_BY', modules: ['core.invoices'] });
     expect(by['core.settings']).toMatchObject({ locked: true, blocked: { reason: 'LOCKED', modules: [] } });
-    expect(by['construction.projects']).toMatchObject({ enabled: true, sectorDefault: true, blocked: { reason: 'REQUIRED_BY', modules: ['construction.subcontracts'] } });
+    expect(by['construction.projects']).toMatchObject({ enabled: true, sectorDefault: true, blocked: { reason: 'REQUIRED_BY', modules: ['construction.subcontracts', 'construction.procurement'] } });
     expect(by['construction.subcontracts']).toMatchObject({ enabled: true, sectorDefault: true, blocked: null });
     expect(by['retail.pos']).toMatchObject({ enabled: false, sectorDefault: false, blocked: { reason: 'PLANNED' } });
     expect(list).toHaveLength(MODULES.length);

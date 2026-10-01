@@ -1105,6 +1105,7 @@ export const MODULE_LABEL_KEYS = {
   'core.treasury': 'modules.treasury',
   'construction.projects': 'modules.constructionProjects',
   'construction.subcontracts': 'modules.constructionSubcontracts',
+  'construction.procurement': 'modules.constructionProcurement',
   'retail.pos': 'modules.retailPos',
 } as const;
 

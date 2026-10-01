@@ -106,12 +106,17 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
     }),
   );
 
+  // Onay uçları belge türünden bağımsızdır (taşeron hakedişi, işveren hakedişi, satın alma talebi): modül kapısı yok,
+  // yetki izin ve adımın rolü/kullanıcısıyla denetlenir.
+  const readAny = { permission: 'subcontracts.read' } as const;
+  const approveAny = { permission: 'subcontracts.approve' } as const;
+
   // --- Onay kuralları ------------------------------------------------------------------
-  app.get('/api/approval-rules', tenantRoute(app, read, async ({ tx }) => ({ rules: await listRules(tx) })));
+  app.get('/api/approval-rules', tenantRoute(app, readAny, async ({ tx }) => ({ rules: await listRules(tx) })));
 
   app.post(
     '/api/approval-rules',
-    tenantRoute(app, approve, async (c) => {
+    tenantRoute(app, approveAny, async (c) => {
       const rule = await createRule(c.tx, c.company.id, createApprovalRuleSchema.parse(c.req.body));
       void c.reply.code(201);
       return { rule };
@@ -120,7 +125,7 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch(
     '/api/approval-rules/:id',
-    tenantRoute(app, approve, async ({ tx, req }) => {
+    tenantRoute(app, approveAny, async ({ tx, req }) => {
       const { isActive } = z.object({ isActive: z.boolean() }).parse(req.body);
       await setRuleActive(tx, idParam.parse(req.params).id, isActive);
       return { rules: await listRules(tx) };
@@ -129,28 +134,28 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete(
     '/api/approval-rules/:id',
-    tenantRoute(app, approve, async ({ tx, req, reply }) => {
+    tenantRoute(app, approveAny, async ({ tx, req, reply }) => {
       await deleteRule(tx, idParam.parse(req.params).id);
       void reply.code(204);
     }),
   );
 
   // --- Onay kutusu ve karar --------------------------------------------------------------
-  app.get('/api/approvals/inbox', tenantRoute(app, read, async (c) => ({ requests: await pendingForMe(c.tx, approvalCtx(c)) })));
+  app.get('/api/approvals/inbox', tenantRoute(app, readAny, async (c) => ({ requests: await pendingForMe(c.tx, approvalCtx(c)) })));
 
-  app.get('/api/approvals/:id', tenantRoute(app, read, async ({ tx, req }) => ({ request: await getRequest(tx, idParam.parse(req.params).id) })));
+  app.get('/api/approvals/:id', tenantRoute(app, readAny, async ({ tx, req }) => ({ request: await getRequest(tx, idParam.parse(req.params).id) })));
 
   // Karar yetkisi adımdan gelir (rol/kullanıcı); uç yalnızca modülü ve okuma iznini ister
   app.post(
     '/api/approvals/:id/decide',
-    tenantRoute(app, read, async (c) => ({
+    tenantRoute(app, readAny, async (c) => ({
       request: await decide(c.tx, approvalCtx(c), idParam.parse(c.req.params).id, decideApprovalSchema.parse(c.req.body)),
     })),
   );
 
   app.post(
     '/api/approvals/:id/cancel',
-    tenantRoute(app, read, async (c) => ({ request: await cancelRequest(c.tx, approvalCtx(c), idParam.parse(c.req.params).id) })),
+    tenantRoute(app, readAny, async (c) => ({ request: await cancelRequest(c.tx, approvalCtx(c), idParam.parse(c.req.params).id) })),
   );
 
   // --- Taşeron sözleşmeleri ---------------------------------------------------------------

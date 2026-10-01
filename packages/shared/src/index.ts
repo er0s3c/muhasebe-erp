@@ -22,3 +22,4 @@ export * from './schemas/imports';
 export * from './schemas/bank-statements';
 export * from './schemas/projects';
 export * from './schemas/subcontracts';
+export * from './schemas/procurement';

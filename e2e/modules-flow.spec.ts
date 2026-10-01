@@ -36,6 +36,8 @@ test('modüller: bağımlılık korumalı kapatma, menü/panel/sayfa kapıları 
   await expect(page.getByRole('switch', { name: 'Şantiye ve projeler: Kapat' })).toBeDisabled();
   await page.getByRole('switch', { name: 'Taşeron ve hakediş: Kapat' }).click();
   await expect(page.getByText('Taşeron ve hakediş kapatıldı')).toBeVisible();
+  await page.getByRole('switch', { name: 'Satın alma ve sipariş: Kapat' }).click();
+  await expect(page.getByText('Satın alma ve sipariş kapatıldı')).toBeVisible();
   await expect(page.getByRole('switch', { name: 'Şantiye ve projeler: Kapat' })).toBeEnabled();
   await expect(nav.getByRole('link', { name: 'Projeler' })).toBeVisible();
   await page.getByRole('switch', { name: 'Şantiye ve projeler: Kapat' }).click();
@@ -46,6 +48,8 @@ test('modüller: bağımlılık korumalı kapatma, menü/panel/sayfa kapıları 
   await expect(nav.getByRole('link', { name: 'Projeler' })).toBeVisible();
   await page.getByRole('switch', { name: 'Taşeron ve hakediş: Aç' }).click();
   await expect(page.getByText('Taşeron ve hakediş açıldı')).toBeVisible();
+  await page.getByRole('switch', { name: 'Satın alma ve sipariş: Aç' }).click();
+  await expect(page.getByText('Satın alma ve sipariş açıldı')).toBeVisible();
 
   // Faturayı kapat: menü grubu, panel sayaçları ve sayfa kalkar
   await page.getByRole('switch', { name: 'Fatura ve irsaliye: Kapat' }).click();

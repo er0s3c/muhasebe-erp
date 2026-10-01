@@ -131,6 +131,13 @@ export function errorHandler(
       .send({ error: { code: 'SUBCONTRACT_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP11') {
+    // Satın alma kuralları (talep, RFQ, sipariş, mal kabul)
+    void reply
+      .status(422)
+      .send({ error: { code: 'PROCUREMENT_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

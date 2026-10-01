@@ -27,6 +27,7 @@ import { exportRoutes } from './modules/exports/routes';
 import { importRoutes } from './modules/imports/routes';
 import { bankStatementRoutes } from './modules/bank-statements/routes';
 import { projectRoutes } from './modules/projects/routes';
+import { procurementRoutes } from './modules/procurement/routes';
 import { subcontractRoutes } from './modules/subcontracts/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { partyRoutes } from './modules/parties/routes';
@@ -173,6 +174,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(bankStatementRoutes);
   await app.register(projectRoutes);
   await app.register(subcontractRoutes);
+  await app.register(procurementRoutes);
 
   // Derlenmiş web arayüzü (üretim): rotalardan SONRA kaydedilir; SPA yedeği yukarıdaki 404 işleyicisindedir.
   if (config.WEB_DIST_DIR) {

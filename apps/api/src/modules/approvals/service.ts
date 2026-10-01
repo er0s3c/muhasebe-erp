@@ -147,10 +147,11 @@ export async function requestsForDoc(tx: Tx, docType: ApprovalDocType, docId: st
   return Promise.all(rows.map((r) => getRequest(tx, r.id)));
 }
 
-function stepMatches(step: StepSpec, ctx: ApprovalCtx): boolean {
+function stepMatches(step: StepSpec, ctx: ApprovalCtx, docType: string): boolean {
   if (step.approverUserId) return step.approverUserId === ctx.userId;
   if (step.approverRole) return step.approverRole === ctx.role;
-  return hasPermission(ctx.role, 'subcontracts.approve');
+  // Varsayılan adım: belge türüne göre onaylayıcı izni
+  return hasPermission(ctx.role, docType === 'purchase_request' ? 'procurement.approve' : 'subcontracts.approve');
 }
 
 /** Bekleyen taleplerden sıradaki adımı bu kullanıcı için olanlar. */
@@ -160,7 +161,7 @@ export async function pendingForMe(tx: Tx, ctx: ApprovalCtx) {
   for (const { id } of pending) {
     const req = await getRequest(tx, id);
     const current = req.steps.find((s) => s.status === 'pending');
-    if (current && stepMatches(current, ctx) && !(req.separateRequester && req.requestedBy === ctx.userId)) out.push(req);
+    if (current && stepMatches(current, ctx, req.docType) && !(req.separateRequester && req.requestedBy === ctx.userId)) out.push(req);
   }
   return out;
 }
@@ -172,7 +173,7 @@ export async function decide(tx: Tx, ctx: ApprovalCtx, requestId: string, input:
   if (req.status !== 'pending') throw unprocessable('Bu talep zaten sonuçlanmış', 'APPROVAL_NOT_PENDING');
   const current = req.steps.find((s) => s.status === 'pending');
   if (!current) throw unprocessable('Bekleyen adım yok', 'APPROVAL_NOT_PENDING');
-  if (!stepMatches(current, ctx)) throw forbidden('Bu adımı onaylama yetkiniz yok');
+  if (!stepMatches(current, ctx, req.docType)) throw forbidden('Bu adımı onaylama yetkiniz yok');
   if (req.separateRequester && req.requestedBy === ctx.userId) {
     throw unprocessable('Kendi gönderdiğiniz belgeyi onaylayamazsınız', 'APPROVAL_SELF_DECISION');
   }
@@ -199,7 +200,7 @@ export async function cancelRequest(tx: Tx, ctx: ApprovalCtx, requestId: string)
   await tx.execute(sql`select 1 from approval_requests where id = ${requestId} for update`);
   const req = await getRequest(tx, requestId);
   if (req.status !== 'pending') throw unprocessable('Bu talep zaten sonuçlanmış', 'APPROVAL_NOT_PENDING');
-  if (req.requestedBy !== ctx.userId && !hasPermission(ctx.role, 'subcontracts.approve')) throw forbidden('Talebi yalnızca gönderen veya onaylayıcı geri çekebilir');
+  if (req.requestedBy !== ctx.userId && !hasPermission(ctx.role, req.docType === 'purchase_request' ? 'procurement.approve' : 'subcontracts.approve')) throw forbidden('Talebi yalnızca gönderen veya onaylayıcı geri çekebilir');
   await tx.update(approvalRequests).set({ status: 'cancelled', completedAt: new Date() }).where(eq(approvalRequests.id, requestId));
   return getRequest(tx, requestId);
 }

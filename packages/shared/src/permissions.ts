@@ -30,6 +30,9 @@ export const PERMISSIONS = [
   'subcontracts.read',
   'subcontracts.manage',
   'subcontracts.approve',
+  'procurement.read',
+  'procurement.manage',
+  'procurement.approve',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -72,6 +75,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'subcontracts.read',
     'subcontracts.manage',
     'subcontracts.approve',
+    'procurement.read',
+    'procurement.manage',
+    'procurement.approve',
   ],
   // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
   // Faturayı taslak olarak hazırlar; muhasebeleştirmeyi (invoices.post) muhasebeci yapar.
@@ -101,8 +107,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'projects.manage',
     'subcontracts.read',
     'subcontracts.manage',
+    'procurement.read',
+    'procurement.manage',
   ],
-  viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'deliveries.read', 'treasury.read', 'reports.read', 'projects.read', 'subcontracts.read'],
+  viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'deliveries.read', 'treasury.read', 'reports.read', 'projects.read', 'subcontracts.read', 'procurement.read'],
 };
 
 export function hasPermission(role: Role, permission: Permission): boolean {
