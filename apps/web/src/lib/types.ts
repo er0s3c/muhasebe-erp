@@ -1116,7 +1116,7 @@ export interface CostCode {
   id: string;
   code: string;
   name: string;
-  kind: 'material' | 'labor' | 'subcontract' | 'equipment' | 'transport' | 'overhead' | 'other';
+  kind: 'material' | 'labor' | 'subcontract' | 'equipment' | 'transport' | 'overhead' | 'fee' | 'other';
   isActive: boolean;
 }
 
@@ -1531,7 +1531,9 @@ export interface SalesContractRow {
 export interface SalesInstallmentRow {
   id: string;
   seq: number;
-  kind: 'down_payment' | 'installment' | 'balloon';
+  kind: 'down_payment' | 'installment' | 'balloon' | 'fee';
+  label?: string | null;
+  feeScheduleId?: string | null;
   dueDate: string;
   amount: string;
   journalLineId: string | null;
@@ -1570,6 +1572,9 @@ export interface SalesContractDetail {
     paid: string;
     remaining: string;
     overdue: string;
+    feesTotal: string;
+    feesPaid: string;
+    feesRemaining: string;
     activationEntryId: string | null;
     handoverEntryId: string | null;
   };
@@ -1597,4 +1602,31 @@ export interface DueInstallmentRow {
 export interface SalesSummary {
   units: Record<UnitStatus, { count: number; grossM2: string }>;
   byCurrency: { currencyCode: string; contracts: number; price: string; collected: string; remaining: string; overdue: string }[];
+}
+
+export interface FeeSchedule {
+  id: string;
+  code: string;
+  name: string;
+  side: 'buyer' | 'project';
+  basis: 'per_unit' | 'per_m2' | 'pct_of_price' | 'fixed';
+  amount: string;
+  currencyCode: string | null;
+  validFrom: string;
+  validTo: string | null;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface FeeEstimate {
+  asOf: string;
+  baseCurrency: string;
+  units: number;
+  grossM2: string;
+  rows: { id: string; code: string; name: string; basis: FeeSchedule['basis']; rate: string; currencyCode: string | null; basisValue: string; estimate: string; verified: boolean }[];
+  estimate: string;
+  actual: string;
+  remaining: string;
+  missingRate: number;
 }

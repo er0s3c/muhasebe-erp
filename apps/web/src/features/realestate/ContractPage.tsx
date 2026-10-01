@@ -3,7 +3,7 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { buildInstallmentPlan, dec, planTotals, todayIso } from '@erp/shared';
+import { buildInstallmentPlan, computeFeeAmount, dec, planTotals, todayIso, type FeeBasis } from '@erp/shared';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Badge } from '../../components/ui/Badge';
@@ -20,7 +20,7 @@ import { errorMessage } from '../../lib/errors';
 import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
-import type { SalesContractDetail, UnitRow } from '../../lib/types';
+import type { FeeSchedule, SalesContractDetail, UnitRow } from '../../lib/types';
 import { usePartyOptions } from '../invoices/common';
 import { TransactionSheet } from '../treasury/TransactionSheet';
 import { accountLabel, useTreasuryAccounts } from '../treasury/common';
@@ -28,9 +28,11 @@ import { ContractStatusBadge, REAL_ESTATE_INVALIDATE, unitLabel } from './common
 
 interface Row {
   key: string;
-  kind: 'down_payment' | 'installment' | 'balloon';
+  kind: 'down_payment' | 'installment' | 'balloon' | 'fee';
   dueDate: string;
   amount: string;
+  feeScheduleId?: string | null;
+  label?: string | null;
 }
 const num = (v: string) => v.trim().replace(',', '.');
 
@@ -87,7 +89,7 @@ export function SalesContractPage() {
     setPrice(String(Number(k.price)));
     setDown(String(Number(k.downPayment)));
     setPenaltyNote(k.penaltyNote ?? '');
-    setRows(detail.installments.map((i) => ({ key: i.id, kind: i.kind, dueDate: i.dueDate, amount: String(Number(i.amount)) })));
+    setRows(detail.installments.map((i) => ({ key: i.id, kind: i.kind, dueDate: i.dueDate, amount: String(Number(i.amount)), feeScheduleId: i.feeScheduleId ?? null, label: i.label ?? null })));
   }, [detail]);
   // Birim listede seçiliyse bedel ve para birimi liste fiyatından önerilir
   useEffect(() => {
@@ -96,7 +98,12 @@ export function SalesContractPage() {
     if (u?.listPrice && u.listCurrency && !price) { setPrice(String(Number(u.listPrice))); setCurrencyCode(u.listCurrency); }
   }, [isNew, unitId, unitData, price]);
 
-  const totals = useMemo(() => planTotals(rows.map((r) => ({ amount: num(r.amount) || '0' })), num(price) || '0'), [rows, price]);
+  const totals = useMemo(() => planTotals(rows.filter((r) => r.kind !== 'fee').map((r) => ({ amount: num(r.amount) || '0' })), num(price) || '0'), [rows, price]);
+  const feesSum = useMemo(() => rows.filter((r) => r.kind === 'fee').reduce((s, r) => s.plus(num(r.amount) || '0'), dec(0)), [rows]);
+  const feesQ = useCQuery<{ feeSchedules: FeeSchedule[] }>(['fee-schedules', 'buyer', contractDate], `/api/fee-schedules?side=buyer&date=${contractDate}`, { enabled: editable });
+  const unitM2 = unitData?.units.find((x) => x.id === unitId)?.grossM2 ?? detail?.contract.grossM2 ?? null;
+  const addFee = (s: FeeSchedule) =>
+    setRows((x) => [...x, { key: crypto.randomUUID(), kind: 'fee', dueDate: contractDate, amount: computeFeeAmount({ basis: s.basis as FeeBasis, amount: s.amount }, { price: num(price) || '0', grossM2: unitM2 }), feeScheduleId: s.id, label: s.name }]);
   const generate = () => {
     try {
       const plan = buildInstallmentPlan({ price: num(price), downPayment: num(down) || '0', downDue: contractDate, count: Number(count), intervalMonths: Number(interval), firstDue: firstDue || contractDate });
@@ -112,7 +119,7 @@ export function SalesContractPage() {
     price: num(price),
     downPayment: num(down) || '0',
     penaltyNote: penaltyNote.trim() || null,
-    installments: rows.map((r) => ({ kind: r.kind, dueDate: r.dueDate, amount: num(r.amount) })),
+    installments: rows.map((r) => ({ kind: r.kind, dueDate: r.dueDate, amount: num(r.amount), ...(r.kind === 'fee' ? { feeScheduleId: r.feeScheduleId ?? null, label: r.label ?? null } : {}) })),
   });
   const valid = (!!unitId || !isNew) && (!!partyId || !isNew) && Number(num(price)) > 0 && rows.length > 0 && totals.ok && rows.every((r) => r.dueDate && Number(num(r.amount)) > 0);
 
@@ -193,7 +200,14 @@ export function SalesContractPage() {
         <CardHeader
           title={t('realEstate.contracts.planTitle')}
           description={editable ? t('realEstate.contracts.planDesc') : undefined}
-          action={editable ? <Button size="sm" onClick={() => setRows((r) => [...r, { key: crypto.randomUUID(), kind: 'installment', dueDate: contractDate, amount: '' }])}><Plus className="size-4" aria-hidden />{t('realEstate.contracts.addRow')}</Button> : undefined}
+          action={editable ? (
+            <div className="flex flex-wrap gap-2">
+              {(feesQ.data?.feeSchedules ?? []).filter((s) => !s.currencyCode || s.currencyCode === currencyCode).map((s) => (
+                <Button key={s.id} size="sm" onClick={() => addFee(s)}><Plus className="size-4" aria-hidden />{t('realEstate.contracts.addFee', { name: s.name })}</Button>
+              ))}
+              <Button size="sm" onClick={() => setRows((r) => [...r, { key: crypto.randomUUID(), kind: 'installment', dueDate: contractDate, amount: '' }])}><Plus className="size-4" aria-hidden />{t('realEstate.contracts.addRow')}</Button>
+            </div>
+          ) : undefined}
         />
         {rows.length === 0 ? (
           <p className="p-4 text-sm text-muted">{t('realEstate.contracts.planEmpty')}</p>
@@ -224,8 +238,9 @@ export function SalesContractPage() {
                             <option value="down_payment">{t('realEstate.kinds.down_payment')}</option>
                             <option value="installment">{t('realEstate.kinds.installment')}</option>
                             <option value="balloon">{t('realEstate.kinds.balloon')}</option>
+                            {r.kind === 'fee' && <option value="fee">{t('realEstate.kinds.fee')}</option>}
                           </Select>
-                        ) : t(`realEstate.kinds.${r.kind}`)}
+                        ) : r.kind === 'fee' ? `${t('realEstate.kinds.fee')}: ${r.label ?? ''}` : t(`realEstate.kinds.${r.kind}`)}
                       </Td>
                       <Td>{editable ? <Input aria-label={`${t('realEstate.cols.due')} ${i + 1}`} type="date" value={r.dueDate} onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, dueDate: e.target.value } : y)))} /> : formatDateTR(r.dueDate)}</Td>
                       <Td num>{editable ? <Input aria-label={`${t('realEstate.cols.amount')} ${i + 1}`} inputMode="decimal" className="num text-right" value={r.amount} onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, amount: e.target.value } : y)))} /> : moneyIn(r.amount, cur)}</Td>
@@ -254,9 +269,11 @@ export function SalesContractPage() {
         )}
         <dl className="flex flex-col items-end gap-1 border-t border-border px-4 py-3 text-sm">
           <div className="flex gap-6"><dt className="text-muted">{t('realEstate.contracts.planTotal')}</dt><dd className="num w-40 text-right">{moneyIn(totals.total, cur)}</dd></div>
+          {feesSum.gt(0) && <div className="flex gap-6"><dt className="text-muted">{t('realEstate.contracts.feesTotal')}</dt><dd className="num w-40 text-right">{moneyIn(feesSum.toFixed(2), cur)}</dd></div>}
           {editable && !totals.ok && <div className="flex gap-6 text-danger"><dt>{t('realEstate.contracts.planDiff')}</dt><dd className="num w-40 text-right">{moneyIn(totals.diff, cur)}</dd></div>}
           {c && (status === 'active' || status === 'handed_over') && (
             <>
+              {dec(c.feesTotal).gt(0) && <div className="flex gap-6 text-muted"><dt>{t('realEstate.contracts.feesCollected')}</dt><dd className="num w-40 text-right">{moneyIn(c.feesPaid, cur)} / {moneyIn(c.feesTotal, cur)}</dd></div>}
               <div className="flex gap-6"><dt className="text-muted">{t('realEstate.cols.paid')}</dt><dd className="num w-40 text-right">{moneyIn(c.paid, cur)}</dd></div>
               <div className="flex gap-6 font-medium"><dt>{t('realEstate.cols.remaining')}</dt><dd className="num w-40 text-right">{moneyIn(c.remaining, cur)}</dd></div>
               {!dec(c.overdue).isZero() && <div className="flex gap-6 text-danger"><dt>{t('realEstate.installments.overdue')}</dt><dd className="num w-40 text-right">{moneyIn(c.overdue, cur)}</dd></div>}

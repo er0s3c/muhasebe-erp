@@ -12,7 +12,8 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, money } from '../../lib/format';
-import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
+import { FeeSchedulesCard } from './FeeSchedulesCard';
 import type { ApprovalRuleRow, ConstructionParam, CostCode } from '../../lib/types';
 
 const INV = [['cost-codes'], ['construction-params'], ['approval-rules']];
@@ -20,12 +21,16 @@ const INV = [['cost-codes'], ['construction-params'], ['approval-rules']];
 /** Ayarlar > İnşaat: maliyet kodları, tarihli parametreler (teminat, stopaj, avans) ve onay kuralları. */
 export function ConstructionSettingsPage() {
   const { t } = useTranslation();
+  const moduleOn = useModuleEnabled('construction.realestate');
+  const canReadRealEstate = useCan()('realestate.read');
+  const realEstateOn = moduleOn && canReadRealEstate;
   return (
     <>
       <PageHeader title={t('constructionSettings.title')} description={t('constructionSettings.subtitle')} />
       <div className="flex flex-col gap-6">
         <CostCodesCard />
         <ParamsCard />
+        {realEstateOn && <FeeSchedulesCard />}
         <RulesCard />
       </div>
     </>

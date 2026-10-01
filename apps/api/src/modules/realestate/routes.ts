@@ -3,7 +3,10 @@ import {
   activateContractSchema,
   bulkUnitsSchema,
   cancelContractSchema,
+  createFeeScheduleSchema,
   createSalesContractSchema,
+  feeScheduleListQuerySchema,
+  verifyFeeScheduleSchema,
   createUnitSchema,
   handoverContractSchema,
   overdueQuerySchema,
@@ -14,8 +17,10 @@ import {
   updateSalesContractSchema,
   updateUnitSchema,
 } from '@erp/shared';
+import { todayIso } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { activateContract, cancelContract, createContract, getContract, handoverContract, listContracts, listInstallments, loadSalesCtx, salesSummary, updateContract } from './contracts';
+import { createFeeSchedule, deleteFeeSchedule, feeEstimate, listFeeSchedules, verifyFeeSchedule } from './fees';
 import { terminateContract } from './termination';
 import { bulkCreateUnits, createUnit, deleteUnit, getUnit, listUnits, updateUnit, type RealEstateCtx } from './units';
 
@@ -57,6 +62,29 @@ export const realEstateRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.get('/api/projects/:id/sales-summary', tenantRoute(app, read, async ({ tx, req }) => salesSummary(tx, idParam.parse(req.params).id)));
+
+  // --- Fon ve harç tarifeleri (tarihli, doğrulama alanlı) ---------------------------------------------
+  app.get('/api/fee-schedules', tenantRoute(app, read, async ({ tx, req }) => listFeeSchedules(tx, feeScheduleListQuerySchema.parse(req.query))));
+  app.post(
+    '/api/fee-schedules',
+    tenantRoute(app, approve, async ({ tx, req, reply, company }) => {
+      const row = await createFeeSchedule(tx, company.id, createFeeScheduleSchema.parse(req.body));
+      void reply.code(201);
+      return { feeSchedule: row };
+    }),
+  );
+  app.post('/api/fee-schedules/:id/verify', tenantRoute(app, approve, async ({ tx, req }) => {
+    const input = verifyFeeScheduleSchema.parse(req.body);
+    return { feeSchedule: await verifyFeeSchedule(tx, idParam.parse(req.params).id, input.verifiedBy, input.sourceNote) };
+  }));
+  app.delete(
+    '/api/fee-schedules/:id',
+    tenantRoute(app, approve, async ({ tx, req, reply }) => {
+      await deleteFeeSchedule(tx, idParam.parse(req.params).id);
+      void reply.code(204);
+    }),
+  );
+  app.get('/api/projects/:id/fee-estimate', tenantRoute(app, read, async ({ tx, req, company }) => feeEstimate(tx, idParam.parse(req.params).id, ((req.query as { asOf?: string }).asOf) ?? todayIso(), company.baseCurrency)));
 
   // --- Satış sözleşmeleri -----------------------------------------------------------------------------
   app.get('/api/sales-contracts', tenantRoute(app, read, async ({ tx, req }) => listContracts(tx, salesContractListQuerySchema.parse(req.query))));

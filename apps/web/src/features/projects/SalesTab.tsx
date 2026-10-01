@@ -6,13 +6,15 @@ import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
-import type { ProjectDetail, SalesSummary } from '../../lib/types';
+import { Badge } from '../../components/ui/Badge';
+import type { FeeEstimate, ProjectDetail, SalesSummary } from '../../lib/types';
 import { UNIT_STATUSES } from '../realestate/common';
 
 /** Kendi projesinde satış özeti: birim durumları, para birimi bazında sözleşme, tahsil edilen, kalan ve geciken tutar. */
 export function SalesTab({ project }: { project: ProjectDetail }) {
   const { t } = useTranslation();
   const { data, isPending } = useCQuery<SalesSummary>(['sales-summary', project.id], `/api/projects/${project.id}/sales-summary`);
+  const fees = useCQuery<FeeEstimate>(['fee-estimate', project.id], `/api/projects/${project.id}/fee-estimate`);
   if (isPending || !data) return <PageLoading />;
   const total = UNIT_STATUSES.reduce((s, k) => s + data.units[k].count, 0);
   return (
@@ -58,6 +60,44 @@ export function SalesTab({ project }: { project: ProjectDetail }) {
                 </tbody>
               </Table>
             </TableWrap>
+          )}
+        </Card>
+      )}
+      {fees.data && (
+        <Card>
+          <CardHeader title={t('feeEstimate.title')} description={t('feeEstimate.desc')} />
+          {fees.data.rows.length === 0 ? (
+            <p className="p-4 text-sm text-muted">{t('feeEstimate.empty')}</p>
+          ) : (
+            <>
+              <TableWrap className="rounded-none border-0">
+                <Table>
+                  <thead>
+                    <tr>
+                      <Th>{t('feeEstimate.cols.fee')}</Th>
+                      <Th>{t('feeEstimate.cols.basis')}</Th>
+                      <Th num>{t('feeEstimate.cols.rate')}</Th>
+                      <Th num>{t('feeEstimate.cols.estimate')}</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fees.data.rows.map((r) => (
+                      <Tr key={r.id}>
+                        <Td>{r.code} — {r.name} {!r.verified && <Badge tone="warning" className="ml-1">{t('feeEstimate.unverified')}</Badge>}</Td>
+                        <Td className="text-muted">{t(`feeSchedules.bases.${r.basis}`)} · {r.basisValue}</Td>
+                        <Td num>{r.basis === 'pct_of_price' ? `%${Number(r.rate)}` : moneyIn(r.rate, r.currencyCode ?? fees.data!.baseCurrency)}</Td>
+                        <Td num>{moneyIn(r.estimate, fees.data!.baseCurrency)}</Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </TableWrap>
+              <dl className="flex flex-col items-end gap-1 border-t border-border px-4 py-3 text-sm">
+                <div className="flex gap-6"><dt className="text-muted">{t('feeEstimate.estimate')}</dt><dd className="num w-40 text-right">{moneyIn(fees.data.estimate, fees.data.baseCurrency)}</dd></div>
+                <div className="flex gap-6"><dt className="text-muted">{t('feeEstimate.actual')}</dt><dd className="num w-40 text-right">{moneyIn(fees.data.actual, fees.data.baseCurrency)}</dd></div>
+                <div className="flex gap-6 font-medium"><dt>{t('feeEstimate.remaining')}</dt><dd className="num w-40 text-right">{moneyIn(fees.data.remaining, fees.data.baseCurrency)}</dd></div>
+              </dl>
+            </>
           )}
         </Card>
       )}

@@ -41,16 +41,19 @@ export async function lockContract(tx: Tx, id: string) {
 /** Plan girdisini doğrular ve sıralar: tarih, sonra peşinat önce. Toplam bedele, peşinat satırları peşinata eşit olmalı. */
 function normalizePlan(input: { price: string; downPayment: string; installments: CreateSalesContractInput['installments'] }) {
   const rows = [...input.installments].sort((a, b) => a.dueDate.localeCompare(b.dueDate) || (a.kind === 'down_payment' ? -1 : 0) - (b.kind === 'down_payment' ? -1 : 0));
-  const t = planTotals(rows, input.price);
+  // Fon/harç satırları bedele sayılmaz
+  const priced = rows.filter((r) => r.kind !== 'fee');
+  const t = planTotals(priced, input.price);
   if (!t.ok) throw unprocessable(`Taksit toplamı (${t.total}) sözleşme bedeline (${dec(input.price).toFixed(2)}) eşit olmalı`, 'PLAN_TOTAL_MISMATCH');
   const down = rows.filter((r) => r.kind === 'down_payment').reduce((s, r) => s.plus(r.amount), dec(0));
   if (!down.eq(input.downPayment)) throw unprocessable('Peşinat satırlarının toplamı peşinata eşit olmalı', 'PLAN_DOWN_MISMATCH');
+  for (const r of rows) if (r.kind === 'fee' && !(r.label ?? '').trim()) throw unprocessable('Fon/harç satırı için ad gerekli', 'FEE_LABEL_REQUIRED');
   return rows;
 }
 
 async function writeInstallments(tx: Tx, companyId: string, contractId: string, rows: ReturnType<typeof normalizePlan>) {
   await tx.delete(salesInstallments).where(eq(salesInstallments.contractId, contractId));
-  await tx.insert(salesInstallments).values(rows.map((r, i) => ({ companyId, contractId, seq: i + 1, kind: r.kind, dueDate: r.dueDate, amount: toDbAmount(dec(r.amount)) })));
+  await tx.insert(salesInstallments).values(rows.map((r, i) => ({ companyId, contractId, seq: i + 1, kind: r.kind, dueDate: r.dueDate, amount: toDbAmount(dec(r.amount)), feeScheduleId: r.kind === 'fee' ? (r.feeScheduleId ?? null) : null, label: r.kind === 'fee' ? (r.label ?? '').trim() : null })));
 }
 
 export async function createContract(tx: Tx, ctx: SalesCtx, input: CreateSalesContractInput) {
@@ -106,10 +109,11 @@ export async function activateContract(tx: Tx, ctx: SalesCtx, id: string, date?:
   const on = date ?? c.contractDate;
   await requireOpenPeriod(tx, on);
   const inst = await tx.select().from(salesInstallments).where(eq(salesInstallments.contractId, id)).orderBy(asc(salesInstallments.seq));
-  const t = planTotals(inst, c.price);
+  const t = planTotals(inst.filter((i) => i.kind !== 'fee'), c.price);
   if (inst.length === 0 || !t.ok) throw unprocessable('Taksit toplamı sözleşme bedeline eşit olmalı', 'PLAN_TOTAL_MISMATCH');
   const fx = c.currencyCode === ctx.baseCurrency ? dec(1) : await requireRate(tx, c.currencyCode, ctx.baseCurrency, on, ctx.baseCurrency);
-  const acc = await requireMappings(tx, ['receivable', 'deferred_revenue']);
+  const hasFees = inst.some((i) => i.kind === 'fee');
+  const acc = await requireMappings(tx, ['receivable', 'deferred_revenue', ...(hasFees ? (['fee_payable'] as const) : [])]);
   const [party] = await tx.select({ name: parties.name }).from(parties).where(eq(parties.id, c.partyId));
   const text = `Gayrimenkul satışı ${c.code} — ${party?.name ?? ''}`.slice(0, 300);
 
@@ -121,7 +125,8 @@ export async function activateContract(tx: Tx, ctx: SalesCtx, id: string, date?:
     description: text,
     receivableAccountId: acc.receivable,
     deferredAccountId: acc.deferred_revenue,
-    installments: inst.map((i) => ({ dueDate: i.dueDate, amount: dec(i.amount) })),
+    feeAccountId: hasFees ? acc.fee_payable : undefined,
+    installments: inst.map((i) => ({ dueDate: i.dueDate, amount: dec(i.amount), fee: i.kind === 'fee', label: i.label })),
   });
   const entry = await createJournalEntry(tx, ledgerCtx(ctx), { entryDate: on, description: text, lines: built.lines, post: true }, { source: { type: 'sales_contract', id } });
   // Taksit → cari kalem: ilk n satır taksitlerdir (sıra korunur)
@@ -224,6 +229,8 @@ export async function getContract(tx: Tx, id: string) {
       id: i.id,
       seq: i.seq,
       kind: i.kind,
+      label: i.label,
+      feeScheduleId: i.feeScheduleId,
       dueDate: i.dueDate,
       amount: dec(i.amount).toFixed(2),
       journalLineId: i.journalLineId,
@@ -232,7 +239,11 @@ export async function getContract(tx: Tx, id: string) {
       daysOverdue: open && open.daysOverdue > 0 ? open.daysOverdue : 0,
     };
   });
-  const paidTotal = rows.reduce((s, r) => s.plus(r.paid), dec(0));
+  const priced = rows.filter((r) => r.kind !== 'fee');
+  const fees = rows.filter((r) => r.kind === 'fee');
+  const paidTotal = priced.reduce((s, r) => s.plus(r.paid), dec(0));
+  const feesTotal = fees.reduce((s, r) => s.plus(r.amount), dec(0));
+  const feesPaid = fees.reduce((s, r) => s.plus(r.paid), dec(0));
   const [termination] = await tx.execute<Record<string, unknown>>(sql`
     select t.termination_date::text as "terminationDate", t.reason, t.collected::text as collected, t.retained::text as retained, t.refund::text as refund,
            t.refund_account_id as "refundAccountId"
@@ -242,6 +253,9 @@ export async function getContract(tx: Tx, id: string) {
       paid: paidTotal.toFixed(2),
       remaining: contract.status === 'terminated' ? '0.00' : live ? dec(String(contract.price)).minus(paidTotal).toFixed(2) : dec(String(contract.price)).toFixed(2),
       overdue: rows.filter((r) => r.daysOverdue > 0).reduce((sum, r) => sum.plus(r.remaining), dec(0)).toFixed(2),
+      feesTotal: feesTotal.toFixed(2),
+      feesPaid: feesPaid.toFixed(2),
+      feesRemaining: contract.status === 'terminated' ? '0.00' : feesTotal.minus(feesPaid).toFixed(2),
     }),
     installments: rows,
     termination: termination ?? null,
@@ -327,7 +341,7 @@ export async function salesSummary(tx: Tx, projectId: string) {
   for (const c of contracts.rows) cur.set(c.currency_code, { price: dec(c.price).toFixed(2), contracts: c.n, remaining: dec(0), overdue: dec(0) });
   for (const i of installments) {
     const e = cur.get(i.currencyCode);
-    if (!e) continue;
+    if (!e || i.kind === 'fee') continue;
     e.remaining = e.remaining.plus(i.remaining);
     if (i.daysOverdue > 0) e.overdue = e.overdue.plus(i.remaining);
   }

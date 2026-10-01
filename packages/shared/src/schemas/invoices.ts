@@ -77,6 +77,7 @@ export const ACCOUNT_MAPPING_KEYS = [
   'deferred_revenue',
   'property_revenue',
   'termination_income',
+  'fee_payable',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -113,6 +114,8 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     deferred_revenue: '380',
     property_revenue: '600',
     termination_income: '679',
+    // Alıcıdan tahsil edilen altyapı fonu/harç (yükümlülük): diğer ticari borçlar
+    fee_payable: '329',
   };
 }
 

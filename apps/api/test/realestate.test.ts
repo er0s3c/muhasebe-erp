@@ -303,6 +303,89 @@ describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat �
     expect(book[3]).toContain('Tahmini kâr (GBP)');
   });
 
+  it('fon ve harç: tarifeler (tarihli, doğrulama), alıcıdan tahsil edilen fon satırı bedele sayılmaz, 329 yükümlülük, teslimde fon kalır, fesihte iade', async () => {
+    const w = await world('Fon');
+    const sched = await w.c.post('/api/fee-schedules', { code: 'ELK', name: 'Elektrik altyapı fonu', side: 'buyer', basis: 'per_unit', amount: '1500', currencyCode: 'GBP', validFrom: day(1, 1), sourceNote: 'Demo (doğrulanmadı)' });
+    expect(sched.statusCode, sched.body).toBe(201);
+    const id = sched.json().feeSchedule.id as string;
+    expect(sched.json().feeSchedule.verifiedAt).toBeNull();
+    expect((await w.c.post('/api/fee-schedules', { code: 'X', name: 'Hatalı', side: 'buyer', basis: 'per_m2', amount: '10', validFrom: day(1, 1) })).statusCode).toBe(400); // para birimi şart
+    expect((await w.c.post(`/api/fee-schedules/${id}/verify`, { verifiedBy: 'Mali müşavir', sourceNote: 'Belediye tebliği' })).json().feeSchedule.verifiedBy).toBe('Mali müşavir');
+    await w.c.post('/api/fee-schedules', { code: 'ELK', name: 'Elektrik altyapı fonu (yeni)', side: 'buyer', basis: 'per_unit', amount: '1800', currencyCode: 'GBP', validFrom: day(7, 1) });
+    expect((await w.c.get(`/api/fee-schedules?side=buyer&date=${day(3, 1)}`)).json().feeSchedules.map((f: any) => f.amount)).toEqual(['1500.0000']);
+    expect((await w.c.get(`/api/fee-schedules?side=buyer&date=${day(8, 1)}`)).json().feeSchedules.map((f: any) => f.amount)).toEqual(['1800.0000']);
+
+    // Sözleşme: bedel 120.000 + fon 1.500 (bedele sayılmaz)
+    const u = await w.unit('FN1');
+    const created = await w.c.post('/api/sales-contracts', w.planBody(u.id, {
+      installments: [
+        { kind: 'down_payment', dueDate: day(3, 1), amount: '30000' },
+        { kind: 'installment', dueDate: day(6, 1), amount: '90000' },
+        { kind: 'fee', dueDate: day(3, 1), amount: '1500', feeScheduleId: id, label: 'Elektrik altyapı fonu' },
+      ],
+    }));
+    expect(created.statusCode, created.body).toBe(201);
+    expect((await w.c.post('/api/sales-contracts', w.planBody((await w.unit('FN2')).id, { installments: [{ kind: 'down_payment', dueDate: day(3, 1), amount: '30000' }, { kind: 'installment', dueDate: day(6, 1), amount: '90000' }, { kind: 'fee', dueDate: day(3, 1), amount: '1500' }] }))).json().error.code).toBe('FEE_LABEL_REQUIRED');
+    const cid = created.json().contract.id as string;
+    const act = await w.c.post(`/api/sales-contracts/${cid}/activate`, {});
+    expect(act.statusCode, act.body).toBe(200);
+    expect(act.json().contract).toMatchObject({ price: '120000.0000', feesTotal: '1500.00', feesPaid: '0.00', feesRemaining: '1500.00', remaining: '120000.00' });
+    const j = await w.jr(act.json().contract.activationEntryId);
+    expect(j.of('120').map((l) => l.d)).toEqual([30000, 1500, 90000]); // vade sırası: peşinat, fon (aynı gün), taksit
+    expect(j.of('380')).toEqual([{ code: '380', d: 0, c: 120000, db: 0, cb: 6_000_000, project: null }]);
+    expect(j.of('329')).toEqual([{ code: '329', d: 0, c: 1500, db: 0, cb: 75_000, project: null }]);
+
+    // Peşinat ve fon tahsil edilir (TL, 50 kuru)
+    const bank = (await w.c.post('/api/treasury/accounts', { kind: 'bank', name: 'KTB TL', currency: 'TRY' })).json().account as { id: string };
+    const inst = act.json().installments as { kind: string; journalLineId: string }[];
+    for (const i of inst.filter((x) => x.kind !== 'installment')) {
+      const amount = i.kind === 'fee' ? '1500' : '30000';
+      const rec = await w.c.post('/api/treasury/transactions', { type: 'receipt', date: day(3, 1), accountId: bank.id, amount: String(Number(amount) * 50), partyId: w.buyer.id, items: [{ lineId: i.journalLineId, amount, settleAmount: String(Number(amount) * 50) }] });
+      expect(rec.statusCode, rec.body).toBe(201);
+    }
+    const mid = (await w.c.get(`/api/sales-contracts/${cid}`)).json().contract;
+    expect(mid).toMatchObject({ paid: '30000.00', remaining: '90000.00', feesPaid: '1500.00', feesRemaining: '0.00' });
+
+    // Fesih: kesinti 3.000 (bedelden), iade = 27.000 + fon 1.500 = 28.500; fon yükümlülüğü kapanır
+    await w.c.put('/api/exchange-rates', { rateDate: day(3, 10), currencyCode: 'GBP', quoteCode: 'TRY', buy: '50' });
+    expect((await w.c.post(`/api/sales-contracts/${cid}/terminate`, { date: day(3, 10), reason: 'Vazgeçti', retained: '30001', refundAccountId: bank.id })).json().error.code).toBe('TERMINATION_RETAIN_TOO_HIGH');
+    const bal0 = Number((await w.c.get(`/api/treasury/accounts/${bank.id}`)).json().account.balance);
+    const term = await w.c.post(`/api/sales-contracts/${cid}/terminate`, { date: day(3, 10), reason: 'Vazgeçti', retained: '3000', refundAccountId: bank.id });
+    expect(term.statusCode, term.body).toBe(200);
+    expect(term.json().termination).toMatchObject({ collected: '31500.0000', retained: '3000.0000', refund: '28500.0000' });
+    expect(Number((await w.c.get(`/api/treasury/accounts/${bank.id}`)).json().account.balance)).toBeCloseTo(bal0 - 28500 * 50, 0); // TL hesap: iade GBP karşılığı çıkar
+    const tb = (await w.c.get(`/api/reports/trial-balance?from=${day(1, 1)}&to=${day(12, 31)}`)).json();
+    const closing = (code: string) => Number(Object.fromEntries(tb.rows.map((r: any) => [r.code, r.closing]))[code] ?? 0);
+    expect(closing('380')).toBe(0);
+    expect(closing('329')).toBe(0);
+    expect(closing('120')).toBe(0);
+  });
+
+  it('fon: teslimde yalnızca bedel gelire geçer; proje fon tahmini ve fon maliyet kodu harcaması', async () => {
+    const w = await world('FonTahmin');
+    const u = await w.unit('T1');
+    await w.unit('T2');
+    const sc = await w.c.post('/api/sales-contracts', w.planBody(u.id, { installments: [{ kind: 'down_payment', dueDate: day(3, 1), amount: '30000' }, { kind: 'installment', dueDate: day(6, 1), amount: '90000' }, { kind: 'fee', dueDate: day(3, 1), amount: '1500', label: 'Su fonu' }] }));
+    const cid = sc.json().contract.id as string;
+    await w.c.post(`/api/sales-contracts/${cid}/activate`, {});
+    const hand = await w.c.post(`/api/sales-contracts/${cid}/handover`, { date: day(3, 5) });
+    expect(hand.statusCode, hand.body).toBe(200);
+    const j = await w.jr(hand.json().contract.handoverEntryId);
+    expect(j.of('600')).toEqual([{ code: '600', d: 0, c: 120000, db: 0, cb: 6_000_000, project: w.project.id }]);
+    expect(j.of('329')).toEqual([]);
+
+    // Proje tarifesi: birim başına 100 TL + brüt m² başına 2 TL (iki birim, her biri 120,5 m²) + bedelin %0,5'i
+    await w.c.post('/api/fee-schedules', { code: 'BLD', name: 'Belediye harcı', side: 'project', basis: 'per_unit', amount: '100', currencyCode: 'TRY', validFrom: day(1, 1) });
+    await w.c.post('/api/fee-schedules', { code: 'M2', name: 'Altyapı m²', side: 'project', basis: 'per_m2', amount: '2', currencyCode: 'TRY', validFrom: day(1, 1) });
+    await w.c.post('/api/fee-schedules', { code: 'PCT', name: 'Satış harcı', side: 'project', basis: 'pct_of_price', amount: '0.5', validFrom: day(1, 1) });
+    const cc = (await w.c.post('/api/cost-codes', { code: 'FON', name: 'Fon ve harç', kind: 'fee' })).json().costCode as { id: string };
+    const e = await w.c.post('/api/journal-entries', { entryDate: day(3, 6), description: 'Belediye harcı ödemesi', post: true, lines: [{ accountId: w.ids['770'], currency: 'TRY', debit: '150', projectId: w.project.id, costCodeId: cc.id }, { accountId: w.ids['100'], currency: 'TRY', credit: '150' }] });
+    expect(e.statusCode, e.body).toBe(201);
+    const est = (await w.c.get(`/api/projects/${w.project.id}/fee-estimate?asOf=${day(12, 31)}`)).json();
+    expect(est).toMatchObject({ units: 2, grossM2: '241.00', estimate: '30682.00', actual: '150.00', remaining: '30532.00', missingRate: 0 });
+    expect(est.rows.map((r: any) => [r.code, r.estimate])).toEqual([['BLD', '200.00'], ['M2', '482.00'], ['PCT', '30000.00']]); // %0,5 × 6.000.000
+  });
+
   it('kur yoksa etkinleştirme anlaşılır hata verir; kapalı dönem ve izinler', async () => {
     const w = await world('KurYok');
     const u = await w.unit('K1');

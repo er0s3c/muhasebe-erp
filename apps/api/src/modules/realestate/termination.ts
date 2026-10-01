@@ -47,18 +47,35 @@ export async function terminateContract(tx: Tx, ctx: SalesCtx, id: string, input
   const inst = await tx.select().from(salesInstallments).where(eq(salesInstallments.contractId, id)).orderBy(asc(salesInstallments.seq));
   const lineIds = new Set(inst.map((i) => i.journalLineId!).filter(Boolean));
   const open = (await openItemsFor(tx, c.partyId, 'receivable', on)).items.filter((o) => lineIds.has(o.lineId));
-  const unpaid = open.reduce((s, o) => s.plus(o.remaining), dec(0));
-  const collected = price.minus(unpaid);
+  const remainingOf = new Map(open.map((o) => [o.lineId, dec(o.remaining)]));
+  let collectedPrice = dec(0);
+  let collectedFees = dec(0);
+  let feesTotal = dec(0);
+  for (const i of inst) {
+    const paidI = dec(i.amount).minus(remainingOf.get(i.journalLineId!) ?? 0);
+    if (i.kind === 'fee') {
+      feesTotal = feesTotal.plus(i.amount);
+      collectedFees = collectedFees.plus(paidI);
+    } else collectedPrice = collectedPrice.plus(paidI);
+  }
+  const collected = collectedPrice.plus(collectedFees);
   const retained = dec(input.retained);
-  if (retained.gt(collected)) throw unprocessable(`Kesinti (${retained.toFixed(2)}) tahsil edilen tutarı (${collected.toFixed(2)}) aşamaz`, 'TERMINATION_RETAIN_TOO_HIGH');
-  const refund = collected.minus(retained);
+  if (retained.gt(collectedPrice)) throw unprocessable(`Kesinti (${retained.toFixed(2)}) tahsil edilen sözleşme bedelini (${collectedPrice.toFixed(2)}) aşamaz`, 'TERMINATION_RETAIN_TOO_HIGH');
+  // İade: bedelden kesinti sonrası kalan + tahsil edilen fon/harçların tamamı
+  const refund = collectedPrice.minus(retained).plus(collectedFees);
   if (refund.gt(0) && !input.refundAccountId) throw unprocessable('İade için kasa/banka hesabı seçin', 'REFUND_ACCOUNT_REQUIRED');
 
-  const map = await requireMappings(tx, ['deferred_revenue', 'receivable', ...(retained.gt(0) ? (['termination_income'] as const) : [])]);
+  const map = await requireMappings(tx, ['deferred_revenue', 'receivable', ...(retained.gt(0) ? (['termination_income'] as const) : []), ...(feesTotal.gt(0) ? (['fee_payable'] as const) : [])]);
   const [base380] = await tx.execute<{ base: string }>(sql`select credit_base::text as base from journal_lines where entry_id = ${c.activationEntryId} and account_id = ${map.deferred_revenue} limit 1`).then((r) => r.rows);
   if (!base380) throw unprocessable('Etkinleşme yevmiyesinde ertelenmiş gelir satırı bulunamadı (hesap eşlemesi değişmiş olabilir)', 'DEFERRED_LINE_MISSING');
+  const baseFee = feesTotal.gt(0)
+    ? (await tx.execute<{ base: string }>(sql`select credit_base::text as base from journal_lines where entry_id = ${c.activationEntryId} and account_id = ${map.fee_payable} limit 1`).then((r) => r.rows[0]))
+    : undefined;
+  if (feesTotal.gt(0) && !baseFee) throw unprocessable('Etkinleşme yevmiyesinde fon/harç yükümlülük satırı bulunamadı (hesap eşlemesi değişmiş olabilir)', 'FEE_LINE_MISSING');
+  const debitBase = dec(base380.base).plus(baseFee?.base ?? 0);
 
   const lines: AutoJournalLine[] = [amountLine(map.deferred_revenue, 'debit', price, dec(base380.base), c.currencyCode, dec(c.activationFx!), foreign, { description: `Fesih ${c.code}: ertelenmiş gelir iptali` })];
+  if (feesTotal.gt(0)) lines.push(amountLine(map.fee_payable, 'debit', feesTotal, dec(baseFee!.base), c.currencyCode, dec(c.activationFx!), foreign, { description: `Fesih ${c.code}: fon/harç yükümlülüğü iptali` }));
   let creditsBase = dec(0);
   for (const o of open) {
     creditsBase = creditsBase.plus(o.remainingBase);
@@ -83,7 +100,7 @@ export async function terminateContract(tx: Tx, ctx: SalesCtx, id: string, input
     lines.push(amountLine(ta.accountId, 'credit', doc, baseOut, ta.currencyCode, asBase ? dec(1) : fx, ta.currencyCode !== ctx.baseCurrency, { description: `Fesih ${c.code}: alıcıya iade` }));
   }
   // Kambiyo: tahsilat/etkinleşme kurundan fesih kuruna fark
-  const diff = dec(base380.base).minus(creditsBase);
+  const diff = debitBase.minus(creditsBase);
   if (!diff.isZero()) {
     const fxMap = await requireMappings(tx, [diff.gt(0) ? 'fx_gain' : 'fx_loss'] as const);
     const acct = Object.values(fxMap)[0]!;

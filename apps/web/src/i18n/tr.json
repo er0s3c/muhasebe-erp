@@ -2207,6 +2207,7 @@
         "equipment": "Ekipman",
         "transport": "Nakliye",
         "overhead": "Genel gider",
+        "fee": "Fon ve harç",
         "other": "Diğer"
       }
     },
@@ -2264,6 +2265,56 @@
     "employer": "İşveren (kaşe / imza)",
     "delivered": "Teslim eden",
     "receiver": "Teslim alan"
+  },
+  "feeSchedules": {
+    "title": "Altyapı fonları ve harçlar",
+    "desc": "Elektrik, su, kanalizasyon, belediye, tapu vb. fon ve harç tarifeleri: tarihli ve kaynak notludur. Alıcıdan tahsil edilenler satış sözleşmesine eklenir; projenin ödediği için tahmin hesaplanır.",
+    "legal": "Tutar ve oranlar KKTC mevzuatında doğrulanmamıştır; resmî kaynaktan teyit edip \"Doğrula\" ile işaretleyin. Kodda sabit değer yoktur.",
+    "empty": "Henüz tarife yok.",
+    "code": "Kod",
+    "name": "Ad",
+    "side": "Taraf",
+    "basis": "Hesap tabanı",
+    "amount": "Tutar",
+    "percent": "Yüzde",
+    "currency": "Para birimi",
+    "from": "Başlangıç",
+    "source": "Kaynak notu",
+    "verification": "Doğrulama",
+    "sides": {
+      "buyer": "Alıcıdan tahsil",
+      "project": "Projenin ödediği"
+    },
+    "bases": {
+      "per_unit": "Birim başına",
+      "per_m2": "Brüt m² başına",
+      "pct_of_price": "Bedel yüzdesi",
+      "fixed": "Sabit tutar"
+    },
+    "verified": "Doğrulandı: {{by}}",
+    "unverified": "Doğrulanmadı",
+    "verify": "Doğrula",
+    "verifyTitle": "Tarifeyi doğrula",
+    "verifyDesc": "Tutarı resmî kaynaktan teyit eden kişiyi yazın.",
+    "verifiedByLabel": "Doğrulayan",
+    "added": "Tarife eklendi"
+  },
+  "feeEstimate": {
+    "title": "Fon ve harç tahmini",
+    "desc": "Projenin ödeyeceği fon/harçlar: tarifeler × birim, m² ve satış bedeli. Gerçekleşen, \"Fon ve harç\" maliyet koduna yazılan harcamadır.",
+    "units": "{{n}} birim · {{m2}} m²",
+    "cols": {
+      "fee": "Tarife",
+      "basis": "Taban",
+      "rate": "Oran/tutar",
+      "estimate": "Tahmin"
+    },
+    "estimate": "Tahmini toplam",
+    "actual": "Gerçekleşen",
+    "remaining": "Kalan",
+    "empty": "Projeye uygun tarife yok (Ayarlar > İnşaat ayarları).",
+    "noRate": "{{n}} tarife için kur yok; sıfır sayıldı.",
+    "unverified": "doğrulanmadı"
   },
   "cashForecast": {
     "title": "Nakit projeksiyonu",
@@ -2336,6 +2387,7 @@
     },
     "kinds": {
       "down_payment": "Peşinat",
+      "fee": "Fon/harç",
       "installment": "Taksit",
       "balloon": "Balon ödeme"
     },
@@ -2417,7 +2469,10 @@
       "planTitle": "Taksit planı",
       "planDesc": "Toplam sözleşme bedeline eşit olmalı.",
       "addRow": "Satır ekle",
-      "planEmpty": "Plan boş: taksit sayısını girip planı oluşturun.",
+      "addFee": "Fon: {{name}}",
+    "feesTotal": "Fon/harç (bedele sayılmaz)",
+    "feesCollected": "Tahsil edilen fon/harç",
+    "planEmpty": "Plan boş: taksit sayısını girip planı oluşturun.",
       "planTotal": "Plan toplamı",
       "planDiff": "Bedelden fark",
       "saveDraft": "Taslak kaydet",

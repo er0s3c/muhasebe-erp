@@ -10,7 +10,9 @@ export interface ActivationInput {
   description: string;
   receivableAccountId: string;
   deferredAccountId: string;
-  installments: readonly { dueDate: string; amount: MoneyValue }[];
+  /** Fon/harç satırlarının yükümlülük hesabı (329); fon satırı yoksa gerekmez. */
+  feeAccountId?: string;
+  installments: readonly { dueDate: string; amount: MoneyValue; fee?: boolean; label?: string | null }[];
 }
 
 /**
@@ -18,15 +20,22 @@ export interface ActivationInput {
  * için ertelenmiş gelir alacağı (380). Taksit satırları girdi sırasıyla ilk satırlardır (cari kalem eşlemesi buna dayanır).
  * 380'in defter tutarı taksit defter tutarlarının toplamıdır: kur yuvarlaması fişi bozmaz ve teslimde aynen devredilir.
  */
-export function buildActivationJournal(i: ActivationInput): { lines: AutoJournalLine[]; totalBase: MoneyValue } {
+export function buildActivationJournal(i: ActivationInput): { lines: AutoJournalLine[]; totalBase: MoneyValue; feeBase: MoneyValue } {
   const foreign = i.currency !== i.baseCurrency;
   const lines: AutoJournalLine[] = [];
   let total = dec(0);
   let totalBase = dec(0);
+  let feeTotal = dec(0);
+  let feeBase = dec(0);
   for (const it of i.installments) {
     const base = foreign ? applyRate(it.amount, i.fx) : it.amount;
-    total = total.plus(it.amount);
-    totalBase = totalBase.plus(base);
+    if (it.fee) {
+      feeTotal = feeTotal.plus(it.amount);
+      feeBase = feeBase.plus(base);
+    } else {
+      total = total.plus(it.amount);
+      totalBase = totalBase.plus(base);
+    }
     lines.push({
       accountId: i.receivableAccountId,
       currency: i.currency,
@@ -37,20 +46,23 @@ export function buildActivationJournal(i: ActivationInput): { lines: AutoJournal
       creditBase: '0',
       partyId: i.partyId,
       dueDate: it.dueDate,
-      description: i.description,
+      description: it.fee ? `${i.description} — ${it.label ?? 'Fon/harç'}` : i.description,
     } as AutoJournalLine);
   }
-  lines.push({
-    accountId: i.deferredAccountId,
-    currency: i.currency,
-    ...(foreign ? { fxRate: toDbRate(i.fx) } : {}),
-    debit: '0',
-    credit: toDbAmount(total),
-    debitBase: '0',
-    creditBase: toDbAmount(totalBase),
-    description: 'Ertelenmiş gelir (teslimde gelire aktarılır)',
-  } as AutoJournalLine);
-  return { lines, totalBase };
+  const credit = (accountId: string, doc: MoneyValue, base: MoneyValue, description: string) =>
+    lines.push({
+      accountId,
+      currency: i.currency,
+      ...(foreign ? { fxRate: toDbRate(i.fx) } : {}),
+      debit: '0',
+      credit: toDbAmount(doc),
+      debitBase: '0',
+      creditBase: toDbAmount(base),
+      description,
+    } as AutoJournalLine);
+  if (total.gt(0)) credit(i.deferredAccountId, total, totalBase, 'Ertelenmiş gelir (teslimde gelire aktarılır)');
+  if (feeTotal.gt(0)) credit(i.feeAccountId!, feeTotal, feeBase, 'Alıcıdan tahsil edilen fon/harç (yükümlülük)');
+  return { lines, totalBase, feeBase };
 }
 
 export interface HandoverInput {

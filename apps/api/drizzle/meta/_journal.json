@@ -288,6 +288,20 @@
       "when": 1790843365818,
       "tag": "0040_cash_forecast_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790843643181,
+      "tag": "0041_fee_schedules",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1790843644598,
+      "tag": "0042_fee_schedules_rules",
+      "breakpoints": true
     }
   ]
 }

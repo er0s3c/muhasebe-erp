@@ -38,6 +38,7 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   deferred_revenue: 'Ertelenmiş gelir (teslime kadar alıcı taksitleri)',
   property_revenue: 'Taşınmaz satış geliri (teslimde)',
   termination_income: 'Sözleşme fesih kesintisi geliri',
+  fee_payable: 'Alıcıdan tahsil edilen fon ve harç yükümlülüğü',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

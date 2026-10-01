@@ -178,7 +178,7 @@ export type ProjectsSummaryQuery = z.infer<typeof projectsSummaryQuerySchema>;
 
 // --- Maliyet kodu (maliyet türü) -----------------------------------------------
 
-export const COST_CODE_KINDS = ['material', 'labor', 'subcontract', 'equipment', 'transport', 'overhead', 'other'] as const;
+export const COST_CODE_KINDS = ['material', 'labor', 'subcontract', 'equipment', 'transport', 'overhead', 'fee', 'other'] as const;
 export type CostCodeKind = (typeof COST_CODE_KINDS)[number];
 
 /** Yeni şirkete tohumlanan maliyet kodları (şirket düzenleyebilir; hukuki parametre değildir). */

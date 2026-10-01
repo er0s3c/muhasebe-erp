@@ -620,7 +620,7 @@ export const costCodes = pgTable(
     unique('cost_codes_id_company_uq').on(t.id, t.companyId),
     check(
       'cost_codes_kind_ck',
-      sql`${t.kind} in ('material','labor','subcontract','equipment','transport','overhead','other')`,
+      sql`${t.kind} in ('material','labor','subcontract','equipment','transport','overhead','fee','other')`,
     ),
   ],
 );
@@ -1448,7 +1448,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable')`,
     ),
   ],
 );
@@ -2822,6 +2822,9 @@ export const salesInstallments = pgTable(
     /** Sözleşme para biriminde. */
     amount: money().notNull(),
     journalLineId: uuid(),
+    /** Alıcıdan tahsil edilen fon/harç satırı (kind = 'fee'): kaynak tarife ve etiket. Bedele sayılmaz; 329 yükümlülüğüne yazılır. */
+    feeScheduleId: uuid(),
+    label: text(),
   },
   (t) => [
     unique('sales_installments_seq_uq').on(t.contractId, t.seq),
@@ -2837,7 +2840,13 @@ export const salesInstallments = pgTable(
       foreignColumns: [journalLines.id, journalLines.companyId],
     }),
     index('sales_installments_due_idx').on(t.companyId, t.dueDate),
-    check('sales_installments_kind_ck', sql`${t.kind} in ('down_payment','installment','balloon')`),
+    foreignKey({
+      name: 'sales_installments_fee_fk',
+      columns: [t.feeScheduleId, t.companyId],
+      foreignColumns: [feeSchedules.id, feeSchedules.companyId],
+    }),
+    check('sales_installments_kind_ck', sql`${t.kind} in ('down_payment','installment','balloon','fee')`),
+    check('sales_installments_fee_ck', sql`(${t.kind} = 'fee') or (${t.feeScheduleId} is null and ${t.label} is null)`),
     check('sales_installments_amount_ck', sql`${t.amount} > 0 and ${t.seq} >= 1`),
   ],
 );
@@ -2973,5 +2982,47 @@ export const cashForecastItems = pgTable(
     index('cash_forecast_items_date_idx').on(t.companyId, t.itemDate),
     check('cash_forecast_items_direction_ck', sql`${t.direction} in ('in','out')`),
     check('cash_forecast_items_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Altyapı fonları ve harçlar (Faz B4): tarihli, kaynak notlu, doğrulama alanlı tarifeler
+// ---------------------------------------------------------------------------
+
+/**
+ * Altyapı fonu/harç tarifesi (elektrik, su, kanalizasyon, belediye, tapu vb.). Oranlar/tutarlar kodda sabit değildir:
+ * tarihli kayıt, kaynak notu ve "doğrulandı" işareti taşır (tax_rates deseni). `side`: buyer = alıcıdan tahsil edilen fon
+ * (satış sözleşmesine eklenir), project = projenin ödediği maliyet (tahmin ve bütçe karşılaştırması).
+ * `basis`: per_unit (birim başına), per_m2 (brüt m² başına), pct_of_price (sözleşme bedeli yüzdesi), fixed (sabit).
+ */
+export const feeSchedules = pgTable(
+  'fee_schedules',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    side: text().notNull(),
+    basis: text().notNull(),
+    /** Tutar (para biriminde) ya da yüzde (pct_of_price). */
+    amount: numeric({ precision: 19, scale: 4 }).notNull(),
+    currencyCode: text().references(() => currencies.code),
+    validFrom: date({ mode: 'string' }).notNull(),
+    validTo: date({ mode: 'string' }),
+    sourceNote: text(),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('fee_schedules_uq').on(t.companyId, t.code, t.validFrom),
+    unique('fee_schedules_id_company_uq').on(t.id, t.companyId),
+    check('fee_schedules_side_ck', sql`${t.side} in ('buyer','project')`),
+    check('fee_schedules_basis_ck', sql`${t.basis} in ('per_unit','per_m2','pct_of_price','fixed')`),
+    check('fee_schedules_amount_ck', sql`${t.amount} >= 0 and (${t.basis} <> 'pct_of_price' or ${t.amount} <= 100)`),
+    check('fee_schedules_currency_ck', sql`(${t.basis} = 'pct_of_price') or ${t.currencyCode} is not null`),
+    check('fee_schedules_range_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
   ],
 );
