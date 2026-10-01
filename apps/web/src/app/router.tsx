@@ -142,6 +142,15 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="construction.realestate" />,
+                children: [
+                  { path: 'real-estate/units', ...page(() => import('../features/realestate/UnitsPage'), 'UnitsPage') },
+                  { path: 'real-estate/contracts', ...page(() => import('../features/realestate/ContractsPage'), 'SalesContractsPage') },
+                  { path: 'real-estate/contracts/:id', ...page(() => import('../features/realestate/ContractPage'), 'SalesContractPage') },
+                  { path: 'real-estate/installments', ...page(() => import('../features/realestate/InstallmentsPage'), 'SalesInstallmentsPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="core.settings" />,
                 children: [
                   { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage') },

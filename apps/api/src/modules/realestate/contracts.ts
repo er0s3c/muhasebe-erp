@@ -260,3 +260,83 @@ export async function listContracts(tx: Tx, q: { projectId?: string; partyId?: s
      order by c.code desc`);
   return { contracts: rows.rows };
 }
+
+/**
+ * Tahsil edilecek taksitler (etkin ve teslim edilmiş sözleşmeler): açık kalem hesabından kalan tutar ve gecikme günü.
+ * Vadesine göre sıralı; `overdueOnly` yalnızca gecikenleri verir.
+ */
+export async function listInstallments(tx: Tx, q: { asOf?: string; projectId?: string; overdueOnly?: boolean }) {
+  const asOf = q.asOf ?? todayIso();
+  const rows = await tx.execute<{ id: string; contract_id: string; code: string; party_id: string; party_name: string; project_code: string; block: string; unit_no: string; currency_code: string; seq: number; kind: string; due_date: string; amount: string; journal_line_id: string }>(sql`
+    select i.id, c.id as contract_id, c.code, c.party_id, pa.name as party_name, p.code as project_code, u.block, u.unit_no, c.currency_code,
+           i.seq, i.kind, i.due_date::text, i.amount::text, i.journal_line_id
+      from sales_installments i
+      join sales_contracts c on c.id = i.contract_id and c.status in ('active','handed_over')
+      join projects p on p.id = c.project_id
+      join real_estate_units u on u.id = c.unit_id
+      join parties pa on pa.id = c.party_id
+     where i.journal_line_id is not null
+       and (${q.projectId ?? null}::uuid is null or c.project_id = ${q.projectId ?? null}::uuid)
+     order by i.due_date, c.code, i.seq`);
+  const byParty = new Map<string, Map<string, { remaining: string; daysOverdue: number }>>();
+  for (const partyId of new Set(rows.rows.map((r) => r.party_id))) {
+    const open = await openItemsFor(tx, partyId, 'receivable', asOf);
+    byParty.set(partyId, new Map(open.items.map((o) => [o.lineId, { remaining: o.remaining, daysOverdue: o.daysOverdue }])));
+  }
+  const out = [];
+  for (const r of rows.rows) {
+    const o = byParty.get(r.party_id)?.get(r.journal_line_id);
+    if (!o) continue; // tamamen tahsil edilmiş
+    const daysOverdue = o.daysOverdue > 0 ? o.daysOverdue : 0;
+    if (q.overdueOnly && daysOverdue === 0) continue;
+    out.push({
+      id: r.id,
+      contractId: r.contract_id,
+      contractCode: r.code,
+      partyName: r.party_name,
+      projectCode: r.project_code,
+      block: r.block,
+      unitNo: r.unit_no,
+      currencyCode: r.currency_code,
+      seq: r.seq,
+      kind: r.kind,
+      dueDate: r.due_date,
+      amount: dec(r.amount).toFixed(2),
+      remaining: o.remaining,
+      daysOverdue,
+    });
+  }
+  return { asOf, installments: out };
+}
+
+/** Proje satış özeti: birim durumları, satılan alan, para birimi bazında sözleşme/tahsil/kalan/geciken tutar. */
+export async function salesSummary(tx: Tx, projectId: string) {
+  const units = await tx.execute<{ status: string; n: number; m2: string | null }>(sql`
+    select status, count(*)::int as n, sum(gross_m_2)::text as m2 from real_estate_units where project_id = ${projectId} group by status`);
+  const byStatus: Record<string, { count: number; grossM2: string }> = {};
+  for (const s of ['available', 'reserved', 'sold', 'handed_over']) byStatus[s] = { count: 0, grossM2: '0.00' };
+  for (const r of units.rows) byStatus[r.status] = { count: r.n, grossM2: dec(r.m2 ?? 0).toFixed(2) };
+  const contracts = await tx.execute<{ currency_code: string; price: string; n: number }>(sql`
+    select currency_code, sum(price)::text as price, count(*)::int as n from sales_contracts
+     where project_id = ${projectId} and status in ('active','handed_over') group by currency_code order by currency_code`);
+  const { installments } = await listInstallments(tx, { projectId });
+  const cur = new Map<string, { price: string; contracts: number; remaining: ReturnType<typeof dec>; overdue: ReturnType<typeof dec> }>();
+  for (const c of contracts.rows) cur.set(c.currency_code, { price: dec(c.price).toFixed(2), contracts: c.n, remaining: dec(0), overdue: dec(0) });
+  for (const i of installments) {
+    const e = cur.get(i.currencyCode);
+    if (!e) continue;
+    e.remaining = e.remaining.plus(i.remaining);
+    if (i.daysOverdue > 0) e.overdue = e.overdue.plus(i.remaining);
+  }
+  return {
+    units: byStatus,
+    byCurrency: [...cur.entries()].map(([currencyCode, e]) => ({
+      currencyCode,
+      contracts: e.contracts,
+      price: e.price,
+      remaining: e.remaining.toFixed(2),
+      collected: dec(e.price).minus(e.remaining).toFixed(2),
+      overdue: e.overdue.toFixed(2),
+    })),
+  };
+}

@@ -1106,6 +1106,7 @@ export const MODULE_LABEL_KEYS = {
   'construction.projects': 'modules.constructionProjects',
   'construction.subcontracts': 'modules.constructionSubcontracts',
   'construction.procurement': 'modules.constructionProcurement',
+  'construction.realestate': 'modules.constructionRealestate',
   'retail.pos': 'modules.retailPos',
 } as const;
 
@@ -1484,4 +1485,116 @@ export interface PurchaseOrderDetail {
   };
   lines: PurchaseOrderLine[];
   receipts: { id: string; receiptNo: string; receiptDate: string; status: 'posted' | 'cancelled'; note: string | null; deliveryNoteId: string | null; cancelReason: string | null }[];
+}
+
+// --- Gayrimenkul satışı (B3) ----------------------------------------------------------------------------
+
+export type UnitStatus = 'available' | 'reserved' | 'sold' | 'handed_over';
+export type SalesContractStatus = 'draft' | 'active' | 'handed_over' | 'terminated' | 'cancelled';
+export type UnitType = 'apartment' | 'villa' | 'shop' | 'office' | 'land' | 'parking' | 'storage' | 'other';
+
+export interface UnitRow {
+  id: string;
+  projectId: string;
+  projectCode: string;
+  block: string;
+  floor: number | null;
+  unitNo: string;
+  unitType: UnitType;
+  grossM2: string | null;
+  netM2: string | null;
+  rooms: string | null;
+  listPrice: string | null;
+  listCurrency: string | null;
+  status: UnitStatus;
+  note: string | null;
+  contractId: string | null;
+  contractCode: string | null;
+  contractStatus: SalesContractStatus | null;
+  buyerName: string | null;
+}
+
+export interface SalesContractRow {
+  id: string;
+  code: string;
+  status: SalesContractStatus;
+  contractDate: string;
+  currencyCode: string;
+  price: string;
+  projectCode: string;
+  block: string;
+  unitNo: string;
+  partyName: string;
+  installmentCount: number;
+}
+
+export interface SalesInstallmentRow {
+  id: string;
+  seq: number;
+  kind: 'down_payment' | 'installment' | 'balloon';
+  dueDate: string;
+  amount: string;
+  journalLineId: string | null;
+  paid: string;
+  remaining: string;
+  daysOverdue: number;
+}
+
+export interface SalesContractDetail {
+  contract: {
+    id: string;
+    code: string;
+    status: SalesContractStatus;
+    contractDate: string;
+    plannedHandover: string | null;
+    currencyCode: string;
+    price: string;
+    downPayment: string;
+    activatedOn: string | null;
+    activationFx: string | null;
+    handedOverOn: string | null;
+    terminatedOn: string | null;
+    cancelReason: string | null;
+    penaltyNote: string | null;
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    unitId: string;
+    block: string;
+    floor: number | null;
+    unitNo: string;
+    unitType: UnitType;
+    grossM2: string | null;
+    partyId: string;
+    partyName: string;
+    paid: string;
+    remaining: string;
+    overdue: string;
+    activationEntryId: string | null;
+    handoverEntryId: string | null;
+  };
+  installments: SalesInstallmentRow[];
+  termination: { terminationDate: string; reason: string; collected: string; retained: string; refund: string; refundAccountId: string | null } | null;
+}
+
+export interface DueInstallmentRow {
+  id: string;
+  contractId: string;
+  contractCode: string;
+  partyName: string;
+  projectCode: string;
+  block: string;
+  unitNo: string;
+  currencyCode: string;
+  seq: number;
+  kind: string;
+  dueDate: string;
+  amount: string;
+  remaining: string;
+  daysOverdue: number;
+}
+
+export interface SalesSummary {
+  units: Record<UnitStatus, { count: number; grossM2: string }>;
+  byCurrency: { currencyCode: string; contracts: number; price: string; collected: string; remaining: string; overdue: string }[];
 }

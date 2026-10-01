@@ -94,7 +94,8 @@
     "inventory": "Stok",
     "invoices": "Fatura ve irsaliye",
     "treasury": "Kasa ve banka",
-    "constructionProcurement": "Satın alma ve sipariş"
+    "constructionProcurement": "Satın alma ve sipariş",
+    "constructionRealestate": "Gayrimenkul satışı"
   },
   "nav": {
     "groups": {
@@ -154,7 +155,10 @@
     "employerClaims": "İşveren hakedişleri",
     "purchaseRequests": "Satın alma talepleri",
     "rfqs": "Teklif karşılaştırma",
-    "purchaseOrders": "Siparişler"
+    "purchaseOrders": "Siparişler",
+    "realEstateUnits": "Birimler",
+    "salesContracts": "Satış sözleşmeleri",
+    "salesInstallments": "Taksitler"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -2031,7 +2035,8 @@
       "wbs": "İş kırılımı",
       "budget": "Bütçe",
       "transactions": "Hareketler",
-      "employer": "İşveren sözleşmesi"
+      "employer": "İşveren sözleşmesi",
+        "sales": "Satış"
     },
     "form": {
       "newTitle": "Yeni proje",
@@ -2257,6 +2262,185 @@
     "employer": "İşveren (kaşe / imza)",
     "delivered": "Teslim eden",
     "receiver": "Teslim alan"
+  },
+  "realEstate": {
+    "unitStatus": {
+      "available": "Satışa açık",
+      "reserved": "Rezerve",
+      "sold": "Satıldı",
+      "handed_over": "Teslim edildi"
+    },
+    "contractStatus": {
+      "draft": "Taslak",
+      "active": "Yürürlükte",
+      "handed_over": "Teslim edildi",
+      "terminated": "Feshedildi",
+      "cancelled": "İptal"
+    },
+    "unitTypes": {
+      "apartment": "Daire",
+      "villa": "Villa",
+      "shop": "Dükkân",
+      "office": "Ofis",
+      "land": "Arsa",
+      "parking": "Otopark",
+      "storage": "Depo",
+      "other": "Diğer"
+    },
+    "kinds": {
+      "down_payment": "Peşinat",
+      "installment": "Taksit",
+      "balloon": "Balon ödeme"
+    },
+    "filters": {
+      "project": "Proje",
+      "allProjects": "Tüm projeler",
+      "status": "Durum",
+      "allStatuses": "Tüm durumlar"
+    },
+    "cols": {
+      "unit": "Birim",
+      "project": "Proje",
+      "type": "Tür",
+      "floor": "Kat",
+      "m2": "m²",
+      "listPrice": "Liste fiyatı",
+      "status": "Durum",
+      "buyer": "Alıcı",
+      "block": "Blok",
+      "code": "No",
+      "date": "Tarih",
+      "installments": "Taksit",
+      "price": "Bedel",
+      "due": "Vade",
+      "amount": "Tutar",
+      "remaining": "Kalan",
+      "paid": "Ödenen",
+      "state": "Durum",
+      "kind": "Tür"
+    },
+    "units": {
+      "title": "Birimler",
+      "subtitle": "Kendi projelerindeki satılabilir bağımsız bölümler: daire, villa, dükkân, arsa.",
+      "add": "Birim ekle",
+      "bulk": "Toplu üret",
+      "empty": "Henüz birim yok",
+      "emptyDesc": "Kendi projenize birimleri tek tek ya da blok ve kat aralığıyla toplu ekleyin.",
+      "viewTable": "Tablo",
+      "viewGrid": "Kat planı",
+      "floorN": "{{n}}. kat",
+      "addTitle": "Yeni birim",
+      "editTitle": "Birim",
+      "unitNo": "Birim no",
+      "rooms": "Oda",
+      "grossM2": "Brüt m²",
+      "netM2": "Net m²",
+      "currency": "Para birimi",
+      "note": "Not",
+      "projectPlaceholder": "Proje seçin",
+      "hasContract": "Bu birimin {{code}} numaralı sözleşmesi var; durumu sözleşmeden değişir.",
+      "bulkTitle": "Toplu birim üret",
+      "bulkDesc": "Blok ve kat aralığı için birimleri numaralandırarak ekler (3. kat 2. birim = 302). Var olan numaralar atlanır.",
+      "floorFrom": "İlk kat",
+      "floorTo": "Son kat",
+      "perFloor": "Kat başına birim",
+      "preview": "Üretilecek {{n}} birim",
+      "bulkCreate": "{{n}} birim üret",
+      "bulkDone": "{{created}} birim eklendi, {{skipped}} atlandı"
+    },
+    "contracts": {
+      "title": "Satış sözleşmeleri",
+      "subtitle": "Alıcıyla bağımsız bölüm satışı; dövizli taksit planı, tahsilat ve teslim.",
+      "add": "Yeni sözleşme",
+      "empty": "Henüz satış sözleşmesi yok",
+      "emptyDesc": "Satışa açık bir birim için alıcı ve taksit planıyla sözleşme açın.",
+      "newTitle": "Yeni satış sözleşmesi",
+      "unitPlaceholder": "Satışa açık birim seçin",
+      "buyerPlaceholder": "Alıcı seçin",
+      "fxHint": "Etkinleşme günü kayıtlı kurla {{base}} karşılığı yazılır",
+      "plannedHandover": "Planlanan teslim",
+      "downPayment": "Peşinat",
+      "penaltyNote": "Fesih / ceza şartı notu",
+      "generatorTitle": "Taksit planı oluştur",
+      "generatorDesc": "Peşinattan sonra eşit taksitler; kuruş farkı son taksitte. Sonra satırları düzenleyebilirsiniz.",
+      "count": "Taksit sayısı",
+      "interval": "Aralık (ay)",
+      "firstDue": "İlk taksit vadesi",
+      "generate": "Planı oluştur",
+      "planTitle": "Taksit planı",
+      "planDesc": "Toplam sözleşme bedeline eşit olmalı.",
+      "addRow": "Satır ekle",
+      "planEmpty": "Plan boş: taksit sayısını girip planı oluşturun.",
+      "planTotal": "Plan toplamı",
+      "planDiff": "Bedelden fark",
+      "saveDraft": "Taslak kaydet",
+      "activate": "Etkinleştir",
+      "activated": "Sözleşme yürürlüğe alındı",
+      "handover": "Teslim et",
+      "handedOver": "Birim teslim edildi, gelir tanındı",
+      "cancel": "İptal et",
+      "cancelled": "Sözleşme iptal edildi",
+      "cancelledTitle": "Sözleşme iptal edildi",
+      "cancelReason": "İptal nedeni",
+      "terminate": "Feshet",
+      "terminated": "Sözleşme feshedildi",
+      "reason": "Fesih nedeni",
+      "collected": "Tahsil edilen",
+      "retained": "Kesinti",
+      "refund": "İade",
+      "refundAccount": "İade hesabı",
+      "refundAccountHint": "İade bu kasa/banka hesabından yevmiyeyle ödenir",
+      "selectAccount": "Hesap seçin",
+      "terminationTitle": "Fesih",
+      "collect": "Tahsilat al",
+      "activatedOn": "Yürürlük: {{date}}",
+      "activationFx": "kur {{fx}} ({{cur}}/{{base}})",
+      "handedOverOn": "Teslim: {{date}}",
+      "legalNote": "Satış sözleşmesi iç kayıttır: gelir teslimde tanınır; KDV, tapu harcı ve yasal sözleşme biçimi doğrulanmamıştır (bkz. docs/LEGAL-NOTES.md)."
+    },
+    "modal": {
+      "activate": {
+        "title": "Sözleşmeyi yürürlüğe al",
+        "desc": "Taksitler alıcı carisine vadeleriyle yazılır; tutar ertelenmiş gelirde bekler. Etkinleştirmeden sonra plan değişmez."
+      },
+      "handover": {
+        "title": "Birimi teslim et",
+        "desc": "Ertelenmiş gelir, teslim tarihiyle proje gelirine aktarılır."
+      },
+      "cancel": {
+        "title": "Sözleşmeyi iptal et",
+        "desc": "Tahsilatı olmayan sözleşme ters kayıtla iptal edilir; birim yeniden satışa açılır."
+      },
+      "terminate": {
+        "title": "Sözleşmeyi feshet",
+        "desc": "Ödenmemiş taksitler kapanır. Tahsil edilen tutardan kesinti gelire yazılır, kalan alıcıya iade edilir. Teslimden sonra fesih desteklenmez."
+      }
+    },
+    "installments": {
+      "title": "Taksitler",
+      "subtitle": "Tahsil edilecek taksitler vade sırasıyla; gecikenler vurgulanır.",
+      "all": "Tümü",
+      "overdue": "Geciken",
+      "empty": "Tahsil edilecek taksit yok",
+      "emptyDesc": "Yürürlükteki sözleşmelerin açık taksitleri burada görünür.",
+      "daysOverdue": "{{n}} gün gecikti",
+      "upcoming": "Bekliyor",
+      "paid": "Ödendi"
+    },
+    "print": {
+      "seller": "Satıcı (kaşe / imza)",
+      "buyer": "Alıcı (imza)"
+    },
+    "summary": {
+      "title": "Satış",
+      "units": "Birimler",
+      "contracts": "Sözleşme",
+      "price": "Sözleşme bedeli",
+      "collected": "Tahsil edilen",
+      "remaining": "Kalan",
+      "overdue": "Geciken",
+      "empty": "Bu projede henüz birim yok."
+    }
   },
   "procurement": {
     "requestStatus": {

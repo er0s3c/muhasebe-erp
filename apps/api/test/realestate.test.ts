@@ -40,8 +40,8 @@ describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat �
     };
     const jr = async (id: string) => {
       const e = (await c.get(`/api/journal-entries/${id}`)).json().entry;
-      const lines = e.lines.map((l: any) => ({ code: l.accountCode as string, d: Number(l.debit), c: Number(l.credit), db: Number(l.debitBase), cb: Number(l.creditBase), project: l.projectId as string | null }));
-      return { lines, of: (code: string) => lines.filter((l: any) => l.code === code) as typeof lines };
+      const lines: { code: string; d: number; c: number; db: number; cb: number; project: string | null }[] = e.lines.map((l: any) => ({ code: l.accountCode as string, d: Number(l.debit), c: Number(l.credit), db: Number(l.debitBase), cb: Number(l.creditBase), project: l.projectId as string | null }));
+      return { lines, of: (code: string) => lines.filter((l) => l.code === code) };
     };
     return { s, company, c, ids, orgId, project, buyer, unit, draft, planBody, jr };
   }

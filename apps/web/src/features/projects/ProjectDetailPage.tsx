@@ -17,11 +17,12 @@ import { BudgetTab } from './BudgetTab';
 import { PROJECT_INVALIDATE, ProjectKindBadge, ProjectStatusBadge } from './common';
 import { OverviewTab } from './OverviewTab';
 import { ProjectFormSheet } from './ProjectFormSheet';
+import { SalesTab } from './SalesTab';
 import { EmployerTab } from './EmployerTab';
 import { TransactionsTab } from './TransactionsTab';
 import { WbsTab } from './WbsTab';
 
-type Tab = 'overview' | 'wbs' | 'budget' | 'transactions' | 'employer';
+type Tab = 'overview' | 'wbs' | 'budget' | 'transactions' | 'employer' | 'sales';
 
 /** Durum geçişi düğmesinin biçimi: hedef duruma göre etiket (yeniden açma ve iptal ayrı anlatılır). */
 type TransitionLabel = 'start' | 'reopen' | 'restore' | 'hold' | 'complete' | 'cancel';
@@ -36,6 +37,8 @@ export function ProjectDetailPage() {
   const canManage = useCan()('projects.manage');
   const canReadContracts = useCan()('subcontracts.read');
   const subcontractsOn = useModuleEnabled('construction.subcontracts');
+  const realEstateOn = useModuleEnabled('construction.realestate');
+  const canReadSales = useCan()('realestate.read');
   const { data, isPending, error } = useCQuery<{ project: ProjectDetail }>(['project', id], id ? `/api/projects/${id}` : null);
   const [tab, setTab] = useState<Tab>('overview');
   const [editing, setEditing] = useState(false);
@@ -151,6 +154,7 @@ export function ProjectDetailPage() {
           { key: 'budget', label: t('projects.tabs.budget') },
           { key: 'transactions', label: t('projects.tabs.transactions') },
           ...(p.kind === 'contract' && subcontractsOn && canReadContracts ? [{ key: 'employer' as const, label: t('projects.tabs.employer') }] : []),
+          ...(p.kind === 'own' && realEstateOn && canReadSales ? [{ key: 'sales' as const, label: t('projects.tabs.sales') }] : []),
         ]}
       />
 
@@ -159,6 +163,7 @@ export function ProjectDetailPage() {
       {tab === 'budget' && <BudgetTab project={p} />}
       {tab === 'transactions' && <TransactionsTab project={p} />}
       {tab === 'employer' && <EmployerTab project={p} />}
+      {tab === 'sales' && <SalesTab project={p} />}
 
       <ProjectFormSheet open={editing} onOpenChange={setEditing} project={p} onSaved={() => undefined} />
 

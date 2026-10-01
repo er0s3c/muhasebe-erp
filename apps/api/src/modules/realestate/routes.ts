@@ -6,6 +6,7 @@ import {
   createSalesContractSchema,
   createUnitSchema,
   handoverContractSchema,
+  overdueQuerySchema,
   idParam,
   salesContractListQuerySchema,
   terminateContractSchema,
@@ -14,7 +15,7 @@ import {
   updateUnitSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
-import { activateContract, cancelContract, createContract, getContract, handoverContract, listContracts, loadSalesCtx, updateContract } from './contracts';
+import { activateContract, cancelContract, createContract, getContract, handoverContract, listContracts, listInstallments, loadSalesCtx, salesSummary, updateContract } from './contracts';
 import { terminateContract } from './termination';
 import { bulkCreateUnits, createUnit, deleteUnit, getUnit, listUnits, updateUnit, type RealEstateCtx } from './units';
 
@@ -55,6 +56,8 @@ export const realEstateRoutes: FastifyPluginAsync = async (app) => {
     }),
   );
 
+  app.get('/api/projects/:id/sales-summary', tenantRoute(app, read, async ({ tx, req }) => salesSummary(tx, idParam.parse(req.params).id)));
+
   // --- Satış sözleşmeleri -----------------------------------------------------------------------------
   app.get('/api/sales-contracts', tenantRoute(app, read, async ({ tx, req }) => listContracts(tx, salesContractListQuerySchema.parse(req.query))));
   app.post(
@@ -65,6 +68,7 @@ export const realEstateRoutes: FastifyPluginAsync = async (app) => {
       return out;
     }),
   );
+  app.get('/api/real-estate/installments', tenantRoute(app, read, async ({ tx, req }) => listInstallments(tx, { ...overdueQuerySchema.parse(req.query), overdueOnly: (req.query as { overdue?: string }).overdue === 'true' })));
   app.get('/api/sales-contracts/:id', tenantRoute(app, read, async ({ tx, req }) => getContract(tx, idParam.parse(req.params).id)));
   app.put('/api/sales-contracts/:id', tenantRoute(app, manage, async (c) => updateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, updateSalesContractSchema.parse(c.req.body))));
   app.post('/api/sales-contracts/:id/activate', tenantRoute(app, approve, async (c) => activateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, activateContractSchema.parse(c.req.body ?? {}).date)));
