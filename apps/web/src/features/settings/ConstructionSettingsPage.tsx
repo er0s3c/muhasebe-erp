@@ -233,7 +233,7 @@ function RulesCard() {
   const toast = useToast();
   const canManage = useCan()('subcontracts.approve');
   const { data } = useCQuery<{ rules: ApprovalRuleRow[] }>(['approval-rules'], '/api/approval-rules');
-  const [docType, setDocType] = useState<'progress_payment' | 'employer_claim' | 'purchase_request'>('progress_payment');
+  const [docType, setDocType] = useState<'progress_payment' | 'employer_claim' | 'purchase_request' | 'variation_order'>('progress_payment');
   const [minAmount, setMinAmount] = useState('0');
   const [maxAmount, setMaxAmount] = useState('');
   const [separate, setSeparate] = useState(true);
@@ -307,10 +307,11 @@ function RulesCard() {
           >
             <Field label={t('constructionSettings.rules.docType')}>
               {(id) => (
-                <Select id={id} value={docType} onChange={(e) => setDocType(e.target.value as 'progress_payment' | 'employer_claim' | 'purchase_request')} className="w-64">
+                <Select id={id} value={docType} onChange={(e) => setDocType(e.target.value as 'progress_payment' | 'employer_claim' | 'purchase_request' | 'variation_order')} className="w-64">
                   <option value="progress_payment">{t('subcontracts.approval.docTypes.progress_payment')}</option>
                   <option value="employer_claim">{t('subcontracts.approval.docTypes.employer_claim')}</option>
                   <option value="purchase_request">{t('subcontracts.approval.docTypes.purchase_request')}</option>
+                  <option value="variation_order">{t('subcontracts.approval.docTypes.variation_order')}</option>
                 </Select>
               )}
             </Field>

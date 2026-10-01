@@ -17,7 +17,7 @@ import { latestProgress } from './progress';
 import { getProjectRow } from './service';
 import { listWbs } from './wbs';
 import { loadOrderCommitted } from '../procurement/commitments';
-import { loadCommitted } from '../subcontracts/commitments';
+import { loadCommitted, loadPendingVariations } from '../subcontracts/commitments';
 
 /** Hesap kodu ön eki regex'i: gelir tarafı (60, 61, 64); diğer tüm etiketli hesaplar maliyet tarafıdır. */
 const REVENUE_RE = `^(${PROJECT_REVENUE_PREFIXES.join('|')})`;
@@ -216,6 +216,8 @@ export async function projectCostReport(tx: Tx, projectId: string, asOf: string)
       actualPlusCommitted: totals.actual.plus(totalCommitted).toFixed(2),
     },
     commitments: { contracts: commit.contracts, orders: commit.orders, missingRate: commit.missingRate },
+    // Bekleyen değişiklik emirleri ayrı gösterilir; taahhüde, EAC'ye ve gelire eklenmez
+    pendingVariations: await loadPendingVariations(tx, projectId, asOf),
   };
 }
 

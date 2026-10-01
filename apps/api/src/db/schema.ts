@@ -550,7 +550,7 @@ export const approvalRules = pgTable(
       columns: [t.projectId, t.companyId],
       foreignColumns: [projects.id, projects.companyId],
     }),
-    check('approval_rules_doc_type_ck', sql`${t.docType} in ('progress_payment','employer_claim','purchase_request')`),
+    check('approval_rules_doc_type_ck', sql`${t.docType} in ('progress_payment','employer_claim','purchase_request','variation_order')`),
     check('approval_rules_range_ck', sql`${t.minAmount} >= 0 and (${t.maxAmount} is null or ${t.maxAmount} > ${t.minAmount})`),
   ],
 );
@@ -823,6 +823,70 @@ export const subcontractBoqLines = pgTable(
       foreignColumns: [costCodes.id, costCodes.companyId],
     }),
     check('subcontract_boq_lines_amount_ck', sql`${t.quantity} > 0 and ${t.unitPrice} >= 0`),
+  ],
+);
+
+/**
+ * Değişiklik emri (DE): yürürlükteki sözleşmenin BOQ/süre değişikliği. Kendi taslak revizyonunu taşır; onay motorundan geçer,
+ * işveren sözleşmesinde ayrıca işveren kabulü kaydedilir. Uygulanınca revizyon yürürlüğe girer ve bitiş tarihi uzar.
+ */
+export const variationOrders = pgTable(
+  'variation_orders',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    direction: text().notNull(),
+    /** DE'nin taslak/uygulanan revizyonu; iptal ya da işveren reddinde taslak silinir ve bağ boşalır. */
+    revisionId: uuid().references(() => subcontractRevisions.id, { onDelete: 'set null' }),
+    baseRevisionId: uuid().notNull(),
+    code: text().notNull(),
+    title: text().notNull(),
+    /** client_request | design_change | site_condition | omission_error | other */
+    reason: text().notNull(),
+    description: text(),
+    timeExtensionDays: integer().notNull().default(0),
+    previousEndDate: date({ mode: 'string' }),
+    newEndDate: date({ mode: 'string' }),
+    amountBefore: money(),
+    amountAfter: money(),
+    amountDelta: money(),
+    /** draft | submitted | awaiting_client | applied | rejected | cancelled */
+    status: text().notNull().default('draft'),
+    submittedAt: timestamp({ withTimezone: true }),
+    submittedBy: uuid().references(() => users.id),
+    approvedAt: timestamp({ withTimezone: true }),
+    clientAcceptedAt: date({ mode: 'string' }),
+    clientReference: text(),
+    appliedAt: timestamp({ withTimezone: true }),
+    rejectionNote: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('variation_orders_code_uq').on(t.companyId, t.code),
+    unique('variation_orders_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('variation_orders_revision_uq').on(t.revisionId),
+    index('variation_orders_subcontract_idx').on(t.subcontractId, t.status),
+    index('variation_orders_project_idx').on(t.companyId, t.projectId),
+    foreignKey({
+      name: 'variation_orders_subcontract_fk',
+      columns: [t.subcontractId, t.projectId],
+      foreignColumns: [subcontracts.id, subcontracts.projectId],
+    }),
+    foreignKey({
+      name: 'variation_orders_base_revision_fk',
+      columns: [t.baseRevisionId, t.companyId],
+      foreignColumns: [subcontractRevisions.id, subcontractRevisions.companyId],
+    }),
+    check('variation_orders_status_ck', sql`${t.status} in ('draft','submitted','awaiting_client','applied','rejected','cancelled')`),
+    check('variation_orders_reason_ck', sql`${t.reason} in ('client_request','design_change','site_condition','omission_error','other')`),
+    check('variation_orders_direction_ck', sql`${t.direction} in ('payable','receivable')`),
+    check('variation_orders_days_ck', sql`${t.timeExtensionDays} between 0 and 3650`),
   ],
 );
 

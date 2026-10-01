@@ -22,6 +22,9 @@ export interface ProfitabilityRow {
   actual: string;
   committed: string;
   eac: string;
+  /** Bekleyen değişiklik emirleri (bilgi): maliyet (taşeron) ve gelir (işveren) farkı; tahmine girmez. */
+  pendingVariationCost: string;
+  pendingVariationRevenue: string;
   /** Sözleşmeli gelir − EAC; EAC yoksa (bütçe/ilerleme yok) gerçekleşen maliyet kullanılır. */
   projectedProfit: string;
   /** Tanınmış gelir − gerçekleşen maliyet. */
@@ -103,6 +106,8 @@ export async function projectProfitability(tx: Tx, asOf: string, base: string, r
       actual: actual.toFixed(2),
       committed: r.totals.committed,
       eac: eac.toFixed(2),
+      pendingVariationCost: r.pendingVariations.cost,
+      pendingVariationRevenue: r.pendingVariations.revenue,
       projectedProfit: projected.toFixed(2),
       recognizedProfit: recognized.toFixed(2),
       marginPct: contracted.gt(0) ? projected.div(contracted).times(100).toDecimalPlaces(1).toFixed(1) : null,
@@ -117,7 +122,7 @@ export async function projectProfitability(tx: Tx, asOf: string, base: string, r
               recognizedProfit: roundMoney(repRevenue.minus(repActual)).toFixed(2),
             }
           : null,
-      missingRate: missing + r.commitments.missingRate,
+      missingRate: missing + r.commitments.missingRate + r.pendingVariations.missingRate,
     });
   }
 
@@ -137,6 +142,8 @@ export async function projectProfitability(tx: Tx, asOf: string, base: string, r
       revenue: sum((r) => r.revenue).toFixed(2),
       actual: sum((r) => r.actual).toFixed(2),
       eac: sum((r) => r.eac).toFixed(2),
+      pendingVariationCost: sum((r) => r.pendingVariationCost).toFixed(2),
+      pendingVariationRevenue: sum((r) => r.pendingVariationRevenue).toFixed(2),
       projectedProfit: projected.toFixed(2),
       recognizedProfit: sum((r) => r.recognizedProfit).toFixed(2),
       marginPct: contracted.gt(0) ? projected.div(contracted).times(100).toDecimalPlaces(1).toFixed(1) : null,

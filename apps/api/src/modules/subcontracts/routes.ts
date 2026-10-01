@@ -2,10 +2,13 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   createApprovalRuleSchema,
   cancelProgressPaymentSchema,
+  clientAcceptVariationSchema,
+  clientRejectVariationSchema,
   createConstructionParamSchema,
   createProgressPaymentSchema,
   createRevisionSchema,
   createSubcontractSchema,
+  createVariationSchema,
   decideApprovalSchema,
   giveAdvanceSchema,
   idParam,
@@ -16,6 +19,8 @@ import {
   subcontractStatusSchema,
   updateProgressPaymentSchema,
   updateSubcontractSchema,
+  updateVariationSchema,
+  variationListQuerySchema,
   verifyConstructionParamSchema,
 } from '@erp/shared';
 import { z } from 'zod';
@@ -62,6 +67,16 @@ import {
   type ProgressCtx,
 } from './progress';
 import { createParam, deleteParam, listParams, verifyParam } from './params';
+import {
+  acceptByClient,
+  cancelVariation,
+  createVariation,
+  getVariation,
+  listVariations,
+  rejectByClient,
+  submitVariation,
+  updateVariation,
+} from './variations';
 
 const subCtx = ({ company, user }: TenantCtx): SubcontractCtx => ({ companyId: company.id, userId: user.id });
 const progressCtx = ({ company, user }: TenantCtx): ProgressCtx => ({
@@ -220,6 +235,43 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
       await deleteRevision(tx, idParam.parse(req.params).id);
       void reply.code(204);
     }),
+  );
+
+  // --- Değişiklik emri ------------------------------------------------------------------------------
+  app.post(
+    '/api/subcontracts/:id/variations',
+    tenantRoute(app, manage, async (c) => {
+      const out = await createVariation(c.tx, subCtx(c), idParam.parse(c.req.params).id, createVariationSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return out;
+    }),
+  );
+  app.get(
+    '/api/subcontracts/:id/variations',
+    tenantRoute(app, read, async ({ tx, req }) => listVariations(tx, { subcontractId: idParam.parse(req.params).id })),
+  );
+  app.get('/api/variation-orders', tenantRoute(app, read, async ({ tx, req }) => listVariations(tx, variationListQuerySchema.parse(req.query))));
+  app.get('/api/variation-orders/:id', tenantRoute(app, read, async ({ tx, req }) => getVariation(tx, idParam.parse(req.params).id)));
+  app.put(
+    '/api/variation-orders/:id',
+    tenantRoute(app, manage, async ({ tx, req }) => updateVariation(tx, idParam.parse(req.params).id, updateVariationSchema.parse(req.body))),
+  );
+  // Silme yok: iptal edilir (taslak revizyon silinir, kayıt kalır)
+  app.delete(
+    '/api/variation-orders/:id',
+    tenantRoute(app, manage, async (c) => cancelVariation(c.tx, approvalCtx(c), idParam.parse(c.req.params).id)),
+  );
+  app.post(
+    '/api/variation-orders/:id/submit',
+    tenantRoute(app, manage, async (c) => submitVariation(c.tx, approvalCtx(c), idParam.parse(c.req.params).id)),
+  );
+  app.post(
+    '/api/variation-orders/:id/client-accept',
+    tenantRoute(app, manage, async (c) => acceptByClient(c.tx, subCtx(c), idParam.parse(c.req.params).id, clientAcceptVariationSchema.parse(c.req.body))),
+  );
+  app.post(
+    '/api/variation-orders/:id/client-reject',
+    tenantRoute(app, manage, async (c) => rejectByClient(c.tx, idParam.parse(c.req.params).id, clientRejectVariationSchema.parse(c.req.body).note)),
   );
 
   // --- Hakediş (verilen) -----------------------------------------------------------------------------

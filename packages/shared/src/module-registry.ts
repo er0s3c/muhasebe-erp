@@ -376,6 +376,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'subcontracts.read',
   },
   {
+    key: 'variation-orders',
+    labelKey: 'nav.variationOrders',
+    path: '/variation-orders',
+    icon: 'file-diff',
+    group: 'construction',
+    module: 'construction.subcontracts',
+    permission: 'subcontracts.read',
+  },
+  {
     key: 'approvals',
     labelKey: 'nav.approvals',
     path: '/approvals',

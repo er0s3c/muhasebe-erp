@@ -128,6 +128,8 @@ export const router = createBrowserRouter([
                   { path: 'progress-payments', ...page(() => import('../features/subcontracts/ProgressList'), 'ProgressPaymentsPage') },
                   { path: 'progress-payments/new', ...page(() => import('../features/subcontracts/ProgressEditorPage'), 'ProgressEditorPage') },
                   { path: 'progress-payments/:id', ...page(() => import('../features/subcontracts/ProgressEditorPage'), 'ProgressEditorPage') },
+                  { path: 'variation-orders', ...page(() => import('../features/subcontracts/VariationsPage'), 'VariationsPage') },
+                  { path: 'variation-orders/:id', ...page(() => import('../features/subcontracts/VariationPage'), 'VariationPage') },
                   { path: 'approvals', ...page(() => import('../features/subcontracts/ApprovalsPage'), 'ApprovalsPage') },
                   { path: 'settings/construction', ...page(() => import('../features/settings/ConstructionSettingsPage'), 'ConstructionSettingsPage') },
                 ],

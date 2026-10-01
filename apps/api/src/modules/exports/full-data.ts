@@ -367,6 +367,22 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
         'Taşeron hakedişleri',
       ),
     );
+    const voRows = await query(
+      'Değişiklik emirleri',
+      sql`select v.code, v.title, s.code as contract, v.direction, v.reason, v.status, v.time_extension_days, v.amount_before, v.amount_after, v.amount_delta,
+                 v.previous_end_date::text as previous_end, v.new_end_date::text as new_end, v.client_accepted_at::text as client_accepted, v.client_reference, r.revision_no
+            from variation_orders v join subcontracts s on s.id = v.subcontract_id left join subcontract_revisions r on r.id = v.revision_id
+           order by v.code`,
+    );
+    tables.push(
+      table(
+        'Değişiklik emirleri',
+        'Değişiklik emirleri',
+        [col('code', 'DE no', 'text', 10), col('title', 'Konu', 'text', 32), col('contract', 'Sözleşme', 'text', 12), col('direction', 'Yön', 'text', 10), col('reason', 'Gerekçe', 'text', 16), col('status', 'Durum', 'text', 14), col('rev', 'Revizyon', 'int'), col('days', 'Süre uzatımı (gün)', 'int'), col('before', 'Önceki bedel', 'money'), col('after', 'Yeni bedel', 'money'), col('delta', 'Fark', 'money'), col('prevEnd', 'Önceki bitiş', 'date'), col('newEnd', 'Yeni bitiş', 'date'), col('accepted', 'İşveren kabulü', 'date'), col('reference', 'İşveren yazısı', 'text', 16)],
+        voRows.map((r) => ({ code: s(r.code), title: s(r.title), contract: s(r.contract), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', reason: s(r.reason), status: s(r.status), rev: r.revision_no == null ? null : Number(r.revision_no), days: Number(r.time_extension_days), before: s(r.amount_before), after: s(r.amount_after), delta: s(r.amount_delta), prevEnd: s(r.previous_end), newEnd: s(r.new_end), accepted: s(r.client_accepted), reference: s(r.client_reference) })),
+        'Sözleşme değişiklik emirleri (süre uzatımı dahil)',
+      ),
+    );
   }
 
   return tables;

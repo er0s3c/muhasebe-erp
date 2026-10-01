@@ -344,6 +344,20 @@
       "when": 1790850439324,
       "tag": "0048_app_updates_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790852794730,
+      "tag": "0049_variation_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790852796817,
+      "tag": "0050_variation_orders_rules",
+      "breakpoints": true
     }
   ]
 }

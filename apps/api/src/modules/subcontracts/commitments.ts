@@ -61,3 +61,39 @@ export async function loadCommitted(tx: Tx, projectId: string, asOf: string): Pr
   }
   return { byWbs, missingRate: missing.size, contracts: contracts.size };
 }
+
+export interface PendingVariations {
+  /** Taşeron sözleşmelerinde bekleyen değişiklik emri farkı (onayda), defter para birimi; taahhüde/EAC'ye girmez. */
+  cost: string;
+  /** İşveren sözleşmesinde bekleyen DE farkı (onayda ya da işveren kabulü bekleyen); sözleşmeli gelire girmez. */
+  revenue: string;
+  count: number;
+  missingRate: number;
+}
+
+/** Bekleyen (gönderilmiş / işveren kabulü bekleyen) değişiklik emirleri: bilgi amaçlı ayrı sütun, tahmine girmez. */
+export async function loadPendingVariations(tx: Tx, projectId: string, asOf: string): Promise<PendingVariations> {
+  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies);
+  const base = company!.base;
+  const rows = await tx.execute<{ direction: string; currency: string; delta: string; n: number }>(sql`
+    select v.direction, s.currency_code as currency, coalesce(sum(v.amount_delta), 0)::text as delta, count(*)::int as n
+      from variation_orders v join subcontracts s on s.id = v.subcontract_id
+     where v.project_id = ${projectId} and v.status in ('submitted', 'awaiting_client')
+     group by v.direction, s.currency_code`);
+  let cost = dec(0);
+  let revenue = dec(0);
+  let count = 0;
+  let missingRate = 0;
+  for (const r of rows.rows) {
+    count += r.n;
+    const rate = r.currency === base ? dec(1) : await findRate(tx, r.currency, base, asOf, base);
+    if (!rate) {
+      missingRate += r.n;
+      continue;
+    }
+    const v = roundMoney(dec(r.delta).times(rate));
+    if (r.direction === 'payable') cost = cost.plus(v);
+    else revenue = revenue.plus(v);
+  }
+  return { cost: cost.toFixed(2), revenue: revenue.toFixed(2), count, missingRate };
+}

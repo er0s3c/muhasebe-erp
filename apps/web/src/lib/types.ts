@@ -1031,6 +1031,8 @@ export interface ProjectCostReport {
   rows: ProjectCostRow[];
   totals: ProjectMetrics & { revenue: string; committed: string; actualPlusCommitted: string };
   commitments: { contracts: number; orders: number; missingRate: number };
+  /** Bekleyen değişiklik emirleri: bilgi amaçlı, taahhüde/EAC'ye/gelire girmez. */
+  pendingVariations: { cost: string; revenue: string; count: number; missingRate: number };
 }
 
 export interface ProjectBudgetRow {
@@ -1161,6 +1163,9 @@ export interface SubcontractRevisionRow {
   createdAt: string;
   total: string;
   isCurrent: boolean;
+  variationId: string | null;
+  variationCode: string | null;
+  variationStatus: VariationStatus | null;
 }
 
 export interface SubcontractDetail {
@@ -1185,8 +1190,95 @@ export interface SubcontractDetail {
     partyCode: string;
     partyName: string;
     contractAmount: string;
+    /** İlk onaylı revizyonun bedeli; uygulanan ve bekleyen değişiklik emri farkları; uygulanan süre uzatımı. */
+    originalAmount: string;
+    appliedVariations: string;
+    pendingVariations: string;
+    pendingCount: number;
+    extensionDays: number;
   };
   revisions: SubcontractRevisionRow[];
+}
+
+export type VariationStatus = 'draft' | 'submitted' | 'awaiting_client' | 'applied' | 'rejected' | 'cancelled';
+export type VariationReason = 'client_request' | 'design_change' | 'site_condition' | 'omission_error' | 'other';
+
+export interface VariationRow {
+  id: string;
+  code: string;
+  title: string;
+  reason: VariationReason;
+  status: VariationStatus;
+  direction: ContractDirection;
+  subcontractId: string;
+  subcontractCode: string;
+  currencyCode: string;
+  partyName: string;
+  projectId: string;
+  projectCode: string;
+  timeExtensionDays: number;
+  amountDelta: string | null;
+  createdAt: string;
+  appliedAt: string | null;
+  clientReference: string | null;
+}
+
+export interface VariationLine {
+  lineKey: string;
+  lineNo: number;
+  itemNo: string | null;
+  description: string;
+  unit: string;
+  oldQty: string | null;
+  oldPrice: string | null;
+  oldAmount: string | null;
+  newQty: string | null;
+  newPrice: string | null;
+  newAmount: string | null;
+  delta: string;
+  change: 'added' | 'removed' | 'changed' | 'same';
+}
+
+export interface VariationDetail {
+  variation: {
+    id: string;
+    code: string;
+    title: string;
+    reason: VariationReason;
+    description: string | null;
+    status: VariationStatus;
+    direction: ContractDirection;
+    subcontractId: string;
+    projectId: string;
+    revisionId: string | null;
+    baseRevisionId: string;
+    timeExtensionDays: number;
+    previousEndDate: string | null;
+    newEndDate: string | null;
+    projectedEndDate: string | null;
+    amountBefore: string;
+    amountAfter: string;
+    amountDelta: string;
+    submittedAt: string | null;
+    approvedAt: string | null;
+    clientAcceptedAt: string | null;
+    clientReference: string | null;
+    appliedAt: string | null;
+    rejectionNote: string | null;
+    createdAt: string;
+    subcontractCode: string;
+    subcontractTitle: string;
+    currencyCode: string;
+    contractEndDate: string | null;
+    subcontractStatus: SubcontractStatus;
+    partyName: string;
+    projectCode: string;
+    projectName: string;
+    revisionNo: number | null;
+    baseRevisionNo: number;
+  };
+  lines: VariationLine[];
+  approvals: ApprovalRequestRow[];
 }
 
 export interface BoqLineRow {
@@ -1254,7 +1346,7 @@ export interface ApprovalStepRow {
 
 export interface ApprovalRequestRow {
   id: string;
-  docType: 'progress_payment' | 'employer_claim' | 'purchase_request';
+  docType: 'progress_payment' | 'employer_claim' | 'purchase_request' | 'variation_order';
   docId: string;
   amount: string;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';

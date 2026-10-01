@@ -15,10 +15,22 @@ import { useCQuery } from '../../lib/queries';
 import { cn } from '../../lib/cn';
 
 interface Rep { contractedRevenue: string; revenue: string; actual: string; eac: string; projectedProfit: string; recognizedProfit: string }
-interface Row { id: string; code: string; name: string; kind: 'own' | 'contract'; contractedRevenue: string; unsoldValue: string; revenue: string; actual: string; eac: string; projectedProfit: string; recognizedProfit: string; marginPct: string | null; reporting: Rep | null }
+interface Row { id: string; code: string; name: string; kind: 'own' | 'contract'; contractedRevenue: string; pendingVariationRevenue: string; pendingVariationCost: string; unsoldValue: string; revenue: string; actual: string; eac: string; projectedProfit: string; recognizedProfit: string; marginPct: string | null; reporting: Rep | null }
 interface Data { asOf: string; baseCurrency: string; reportingCurrency: string | null; rows: Row[]; totals: Omit<Row, 'id' | 'code' | 'name' | 'kind'>; missingRate: number }
 
 const Money = ({ v, cur, strong }: { v: string; cur: string; strong?: boolean }) => <span className={cn(strong && 'font-medium', dec(v).isNegative() && 'text-danger')}>{moneyIn(v, cur)}</span>;
+
+/** Bekleyen değişiklik emirleri: gelir (işveren) ve maliyet (taşeron) farkı; tahmine girmez. */
+function PendingCell({ revenue, cost, cur }: { revenue: string; cost: string; cur: string }) {
+  const { t } = useTranslation();
+  if (dec(revenue).isZero() && dec(cost).isZero()) return <span className="text-muted">—</span>;
+  return (
+    <span className="flex flex-col text-xs">
+      {!dec(revenue).isZero() && <span>{t('profitability.pendingRevenue', { v: moneyIn(revenue, cur) })}</span>}
+      {!dec(cost).isZero() && <span className="text-muted">{t('profitability.pendingCost', { v: moneyIn(cost, cur) })}</span>}
+    </span>
+  );
+}
 
 export function ProfitabilityPage() {
   const { t } = useTranslation();
@@ -64,6 +76,7 @@ export function ProfitabilityPage() {
                 <Th num>{t('profitability.cols.actual')}</Th>
                 <Th num>{t('profitability.cols.eac')}</Th>
                 <Th num>{t('profitability.cols.projected')}</Th>
+                {!useRep && <Th num title={t('profitability.pendingHint')}>{t('profitability.cols.pending')}</Th>}
                 <Th num className="w-20">{t('profitability.cols.margin')}</Th>
               </tr>
             </thead>
@@ -81,6 +94,7 @@ export function ProfitabilityPage() {
                     <Td num><Money v={p.actual} cur={cur} /></Td>
                     <Td num><Money v={p.eac} cur={cur} /></Td>
                     <Td num><Money v={p.projected} cur={cur} strong /></Td>
+                    {!useRep && <Td num><PendingCell revenue={r.pendingVariationRevenue} cost={r.pendingVariationCost} cur={cur} /></Td>}
                     <Td num className={r.marginPct && Number(r.marginPct) < 0 ? 'text-danger' : ''}>{r.marginPct ? `%${r.marginPct}` : '—'}</Td>
                   </Tr>
                 );
@@ -94,6 +108,7 @@ export function ProfitabilityPage() {
                 <Td num><Money v={tot.actual} cur={cur} strong /></Td>
                 <Td num><Money v={tot.eac} cur={cur} strong /></Td>
                 <Td num><Money v={tot.projected} cur={cur} strong /></Td>
+                {!useRep && <Td num><PendingCell revenue={data.totals.pendingVariationRevenue} cost={data.totals.pendingVariationCost} cur={cur} /></Td>}
                 <Td num>{data.totals.marginPct ? `%${data.totals.marginPct}` : '—'}</Td>
               </tr>
             </tfoot>

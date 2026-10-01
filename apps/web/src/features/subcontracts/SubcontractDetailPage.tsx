@@ -19,8 +19,9 @@ import { BoqTab } from './BoqTab';
 import { SUBCONTRACT_INVALIDATE, SubcontractStatusBadge } from './common';
 import { ProgressList } from './ProgressList';
 import { SubcontractFormSheet } from './SubcontractFormSheet';
+import { VariationsTab } from './VariationsTab';
 
-type Tab = 'boq' | 'progress' | 'balances';
+type Tab = 'boq' | 'variations' | 'progress' | 'balances';
 
 export function SubcontractDetailPage() {
   const { t } = useTranslation();
@@ -101,7 +102,10 @@ export function SubcontractDetailPage() {
       {actionError && <Callout tone="danger">{errorMessage(actionError)}</Callout>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label={t('subcontracts.kpi.amount')} sub={t('subcontracts.kpi.amountSub')}>{moneyIn(sc.contractAmount, sc.currencyCode)}</Stat>
+        <Stat
+          label={t('subcontracts.kpi.amount')}
+          sub={Number(sc.appliedVariations) !== 0 || sc.pendingCount > 0 ? t('variations.kpiSub', { original: moneyIn(sc.originalAmount, sc.currencyCode), n: sc.pendingCount }) : t('subcontracts.kpi.amountSub')}
+        >{moneyIn(sc.contractAmount, sc.currencyCode)}</Stat>
         <Stat label={t('subcontracts.kpi.retention')} sub={t('subcontracts.kpi.retentionSub')}>{`%${Number(sc.retentionPct)}`}</Stat>
         <Stat label={t('subcontracts.kpi.advance')} sub={t('subcontracts.kpi.advanceSub')}>{`%${Number(sc.advanceRecoupPct)}`}</Stat>
         <Stat label={t('subcontracts.kpi.terms')} sub={t('subcontracts.kpi.termsSub', { withholding: Number(sc.withholdingPct) })}>{t('subcontracts.kpi.days', { days: sc.paymentDays })}</Stat>
@@ -112,11 +116,13 @@ export function SubcontractDetailPage() {
         onChange={setTab}
         items={[
           { key: 'boq', label: t('subcontracts.tabs.boq') },
+          { key: 'variations', label: sc.pendingCount > 0 ? `${t('subcontracts.tabs.variations')} (${sc.pendingCount})` : t('subcontracts.tabs.variations') },
           { key: 'progress', label: t('subcontracts.tabs.progress') },
           { key: 'balances', label: t('subcontracts.tabs.balances') },
         ]}
       />
       {tab === 'boq' && <BoqTab detail={data} />}
+      {tab === 'variations' && <VariationsTab detail={data} />}
       {tab === 'progress' && <ProgressList subcontractId={sc.id} canCreate={sc.status === 'active'} />}
       {tab === 'balances' && <BalancesTab detail={data} />}
 

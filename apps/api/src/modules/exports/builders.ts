@@ -17,6 +17,7 @@ import { getContract, listContracts, listInstallments } from '../realestate/cont
 import { listUnits } from '../realestate/units';
 import { listProgress } from '../subcontracts/progress';
 import { listSubcontracts } from '../subcontracts/service';
+import { getVariation, listVariations } from '../subcontracts/variations';
 import { fxDifferences } from '../treasury/fx-report';
 import { TXN_LABEL } from '../treasury/posting';
 import { treasuryStatement } from '../treasury/reports';
@@ -777,6 +778,107 @@ export async function progressPaymentsTable(ctx: BuildCtx, q: { projectId?: stri
         currency: String(x.currencyCode),
         gross: String(x.gross),
         net: String(x.net),
+      })),
+    },
+  ];
+}
+
+export const VARIATION_STATUS_LABEL: Record<string, string> = {
+  draft: 'Taslak',
+  submitted: 'Onayda',
+  awaiting_client: 'İşveren kabulü bekliyor',
+  applied: 'Uygulandı',
+  rejected: 'Reddedildi',
+  cancelled: 'İptal',
+};
+export const VARIATION_REASON_LABEL: Record<string, string> = {
+  client_request: 'İşveren talebi',
+  design_change: 'Proje (tasarım) değişikliği',
+  site_condition: 'Saha koşulu',
+  omission_error: 'Eksik/hatalı keşif',
+  other: 'Diğer',
+};
+const CHANGE_LABEL: Record<string, string> = { added: 'Eklendi', removed: 'Kaldırıldı', changed: 'Değişti', same: '—' };
+
+/** Değişiklik emri kayıt defteri. */
+export async function variationOrdersTable(ctx: BuildCtx, q: { projectId?: string; subcontractId?: string; direction?: string; status?: string }): Promise<ReportTable[]> {
+  const d = await listVariations(ctx.tx, q);
+  return [
+    {
+      key: 'degisiklik-emirleri',
+      title: 'Değişiklik emirleri',
+      sheet: 'Değişiklik emirleri',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [
+        col('code', 'DE no', 'text', 10),
+        col('title', 'Konu', 'text', 32),
+        col('subcontract', 'Sözleşme', 'text', 12),
+        col('direction', 'Yön', 'text', 10),
+        col('party', 'Taşeron / işveren', 'text', 28),
+        col('project', 'Proje', 'text', 12),
+        col('reason', 'Gerekçe', 'text', 22),
+        col('status', 'Durum', 'text', 18),
+        col('currency', 'Para birimi', 'text', 8),
+        col('delta', 'Bedel farkı', 'money'),
+        col('days', 'Süre uzatımı (gün)', 'int'),
+        col('reference', 'İşveren yazısı', 'text', 16),
+      ],
+      rows: d.variations.map((x) => ({
+        code: String(x.code),
+        title: String(x.title),
+        subcontract: String(x.subcontractCode),
+        direction: x.direction === 'receivable' ? 'İşveren' : 'Taşeron',
+        party: String(x.partyName),
+        project: String(x.projectCode),
+        reason: VARIATION_REASON_LABEL[String(x.reason)] ?? String(x.reason),
+        status: VARIATION_STATUS_LABEL[String(x.status)] ?? String(x.status),
+        currency: String(x.currencyCode),
+        delta: (x.amountDelta as string | null) ?? null,
+        days: Number(x.timeExtensionDays),
+        reference: (x.clientReference as string | null) ?? null,
+      })),
+    },
+  ];
+}
+
+/** Tek değişiklik emri: önceki / yeni BOQ karşılaştırması. */
+export async function variationOrderTable(ctx: BuildCtx, q: { id: string }): Promise<ReportTable[]> {
+  const d = await getVariation(ctx.tx, q.id);
+  const v = d.variation;
+  return [
+    {
+      key: 'degisiklik-emri',
+      title: `Değişiklik emri ${String(v.code)} — ${String(v.title)}`,
+      sheet: String(v.code),
+      subtitle: sub(
+        ctx,
+        `${String(v.subcontractCode)} · ${String(v.partyName)} · ${VARIATION_STATUS_LABEL[String(v.status)] ?? String(v.status)} · süre uzatımı ${Number(v.timeExtensionDays)} gün`,
+      ),
+      columns: [
+        col('item', 'Poz', 'text', 10),
+        col('desc', 'Tanım', 'text', 36),
+        col('unit', 'Birim', 'text', 8),
+        col('oldQty', 'Önceki miktar', 'qty'),
+        col('oldPrice', 'Önceki birim fiyat', 'money'),
+        col('oldAmount', 'Önceki tutar', 'money'),
+        col('newQty', 'Yeni miktar', 'qty'),
+        col('newPrice', 'Yeni birim fiyat', 'money'),
+        col('newAmount', 'Yeni tutar', 'money'),
+        col('delta', 'Fark', 'money'),
+        col('change', 'Değişiklik', 'text', 12),
+      ],
+      rows: d.lines.map((l) => ({
+        item: (l.itemNo as string | null) ?? null,
+        desc: String(l.description),
+        unit: String(l.unit),
+        oldQty: (l.oldQty as string | null) ?? null,
+        oldPrice: (l.oldPrice as string | null) ?? null,
+        oldAmount: (l.oldAmount as string | null) ?? null,
+        newQty: (l.newQty as string | null) ?? null,
+        newPrice: (l.newPrice as string | null) ?? null,
+        newAmount: (l.newAmount as string | null) ?? null,
+        delta: String(l.delta),
+        change: CHANGE_LABEL[String(l.change)] ?? String(l.change),
       })),
     },
   ];

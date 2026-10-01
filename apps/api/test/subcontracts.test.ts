@@ -69,7 +69,7 @@ describe('taşeron sözleşmesi, revizyon ve BOQ (B2b)', async () => {
     expect((await w.c.delete(`/api/subcontracts/${sc.id}`)).statusCode).toBe(422);
   });
 
-  it('revizyon: onaylı revizyon değişmez, yeni revizyon yürürlüğü devralır, lineKey korunur', async () => {
+  it('revizyon: onaylı revizyon değişmez, değişiklik emrinin revizyonu yürürlüğü devralır, lineKey korunur', async () => {
     const w = await world('SozlesmeRev');
     const sc = (await w.create()).json();
     const rev1 = sc.revisions[0].id as string;
@@ -81,9 +81,12 @@ describe('taşeron sözleşmesi, revizyon ve BOQ (B2b)', async () => {
     expect(edit.statusCode).toBe(422);
     expect(edit.json().error.code).toBe('REVISION_NOT_DRAFT');
 
-    const r2 = await w.c.post(`/api/subcontracts/${sc.subcontract.id}/revisions`, { copyFromCurrent: true });
-    expect(r2.statusCode).toBe(201);
-    expect((await w.c.post(`/api/subcontracts/${sc.subcontract.id}/revisions`, {})).json().error.code).toBe('REVISION_DRAFT_EXISTS');
+    // Yürürlükteki sözleşmede düz revizyon açılamaz: değişiklik emri gerekir
+    expect((await w.c.post(`/api/subcontracts/${sc.subcontract.id}/revisions`, { copyFromCurrent: true })).json().error.code).toBe('USE_VARIATION_ORDER');
+    const vo = await w.c.post(`/api/subcontracts/${sc.subcontract.id}/variations`, { title: 'Ek kablo', reason: 'design_change' });
+    expect(vo.statusCode).toBe(201);
+    expect((await w.c.post(`/api/subcontracts/${sc.subcontract.id}/variations`, { title: 'İkinci', reason: 'other' })).json().error.code).toBe('REVISION_DRAFT_EXISTS');
+    const r2 = await w.c.get(`/api/subcontract-revisions/${vo.json().variation.revisionId}`);
     const copied = r2.json().lines as { lineKey: string; quantity: string }[];
     expect(copied).toHaveLength(2);
     // Miktarı artır: aynı lineKey ile
@@ -93,7 +96,11 @@ describe('taşeron sözleşmesi, revizyon ve BOQ (B2b)', async () => {
     const fake = await w.c.put(`/api/subcontract-revisions/${r2.json().revision.id}/lines`, { lines: [{ ...w.lines()[0]!, lineKey: randomUUID() }] });
     expect(fake.json().error.code).toBe('BOQ_LINE_KEY_UNKNOWN');
     await w.c.put(`/api/subcontract-revisions/${r2.json().revision.id}/lines`, { lines: bumped });
-    expect((await w.c.post(`/api/subcontract-revisions/${r2.json().revision.id}/approve`, {})).statusCode).toBe(200);
+    // DE revizyonu doğrudan onaylanamaz; DE onayıyla yürürlüğe girer
+    expect((await w.c.post(`/api/subcontract-revisions/${r2.json().revision.id}/approve`, {})).json().error.code).toBe('USE_VARIATION_ORDER');
+    const submitted = await w.c.post(`/api/variation-orders/${vo.json().variation.id}/submit`, {});
+    expect(submitted.statusCode).toBe(200);
+    expect((await w.c.post(`/api/approvals/${submitted.json().approvals[0].id}/decide`, { decision: 'approve' })).statusCode).toBe(200);
 
     const detail = (await w.c.get(`/api/subcontracts/${sc.subcontract.id}`)).json();
     expect(detail.subcontract.contractAmount).toBe('75000.00'); // 20.000×3 + 30×500

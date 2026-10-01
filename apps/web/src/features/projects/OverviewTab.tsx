@@ -94,6 +94,12 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
         )}
       </div>
 
+      {data.pendingVariations.count > 0 && (
+        <Callout tone="info" title={t('variations.pendingProjectTitle', { n: data.pendingVariations.count })}>
+          {t('variations.pendingProjectBody', { cost: moneyIn(data.pendingVariations.cost, base), revenue: moneyIn(data.pendingVariations.revenue, base) })}
+        </Callout>
+      )}
+
       {data.commitments.missingRate > 0 && (
         <Callout tone="warning" title={t('projects.overview.committedMissingRateTitle')}>
           {t('projects.overview.committedMissingRate', { n: data.commitments.missingRate })}

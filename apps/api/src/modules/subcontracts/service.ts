@@ -12,7 +12,7 @@ import {
   type UpdateSubcontractInput,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { costCodes, parties, projectWbs, projects, subcontractBoqLines, subcontractRevisions, subcontracts } from '../../db/schema';
+import { costCodes, parties, projectWbs, projects, subcontractBoqLines, subcontractRevisions, subcontracts, variationOrders } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { nextNumber } from '../settings/numbering';
 import { resolveParam } from './params';
@@ -136,10 +136,20 @@ export async function deleteSubcontract(tx: Tx, id: string) {
 
 // --- Revizyon ve BOQ ---------------------------------------------------------------------
 
-export async function createRevision(tx: Tx, ctx: SubcontractCtx, subcontractId: string, input: CreateRevisionInput) {
+export async function createRevision(
+  tx: Tx,
+  ctx: SubcontractCtx,
+  subcontractId: string,
+  input: CreateRevisionInput,
+  opts: { forVariation?: boolean } = {},
+) {
   const sc = await lockSubcontract(tx, subcontractId);
   if (sc.status === 'completed' || sc.status === 'terminated') {
     throw unprocessable('Tamamlanmış veya feshedilmiş sözleşmeye revizyon eklenemez', 'SUBCONTRACT_CLOSED');
+  }
+  // Yürürlükteki sözleşmede BOQ yalnızca değişiklik emriyle değişir (gerekçe, onay, süre etkisi izlenir)
+  if (sc.status === 'active' && !opts.forVariation) {
+    throw unprocessable('Yürürlükteki sözleşmede değişiklik, değişiklik emriyle yapılır', 'USE_VARIATION_ORDER');
   }
   const [draft] = await tx
     .select({ revisionNo: subcontractRevisions.revisionNo })
@@ -173,6 +183,11 @@ export async function putBoqLines(tx: Tx, ctx: SubcontractCtx, revisionId: strin
   const revision = await getRevisionRow(tx, revisionId);
   if (revision.status !== 'draft') throw unprocessable('Yalnızca taslak revizyon düzenlenebilir; yeni revizyon açın', 'REVISION_NOT_DRAFT');
   const sc = await lockSubcontract(tx, revision.subcontractId);
+  // Onaydaki ya da işveren kabulü bekleyen DE'nin BOQ'su değişmez (onaylanan, onaya gönderilendir)
+  const [vo] = await tx.select({ status: variationOrders.status }).from(variationOrders).where(eq(variationOrders.revisionId, revisionId));
+  if (vo && vo.status !== 'draft' && vo.status !== 'rejected') {
+    throw unprocessable('Onaydaki değişiklik emrinin BOQ\'su düzenlenemez', 'VARIATION_NOT_EDITABLE');
+  }
 
   const wbsIds = [...new Set(input.lines.map((l) => l.wbsId))];
   if (wbsIds.length > 0) {
@@ -187,8 +202,14 @@ export async function putBoqLines(tx: Tx, ctx: SubcontractCtx, revisionId: strin
 
   // Yürürlükteki revizyonda olmayan bir lineKey verilemez (kimlik uydurulamaz)
   const current = await currentRevision(tx, sc.id);
+  // (taslağın kendi satırlarının anahtarları da geçerlidir: yeniden kaydetmede kimlik korunur)
   const knownKeys = new Set(
-    current ? (await tx.select({ k: subcontractBoqLines.lineKey }).from(subcontractBoqLines).where(eq(subcontractBoqLines.revisionId, current.id))).map((r) => r.k) : [],
+    (
+      await tx
+        .select({ k: subcontractBoqLines.lineKey })
+        .from(subcontractBoqLines)
+        .where(current ? inArray(subcontractBoqLines.revisionId, [current.id, revisionId]) : eq(subcontractBoqLines.revisionId, revisionId))
+    ).map((r) => r.k),
   );
   for (const l of input.lines) {
     if (l.lineKey && !knownKeys.has(l.lineKey)) throw unprocessable('Bilinmeyen BOQ satır anahtarı', 'BOQ_LINE_KEY_UNKNOWN');
@@ -223,6 +244,9 @@ export async function approveRevision(tx: Tx, ctx: SubcontractCtx, revisionId: s
   const sc = await lockSubcontract(tx, revision.subcontractId);
   const fresh = await getRevisionRow(tx, revisionId);
   if (fresh.status !== 'draft') throw unprocessable('Yalnızca taslak revizyon onaylanabilir', 'REVISION_NOT_DRAFT');
+  if (await currentRevision(tx, sc.id)) {
+    throw unprocessable('Yürürlükteki sözleşmenin revizyonu değişiklik emri akışıyla onaylanır', 'USE_VARIATION_ORDER');
+  }
   const [count] = await tx.select({ n: sql<number>`count(*)::int` }).from(subcontractBoqLines).where(eq(subcontractBoqLines.revisionId, revisionId));
   if (!count || count.n === 0) throw unprocessable('Boş revizyon onaylanamaz; en az bir BOQ satırı girin', 'REVISION_EMPTY');
 
@@ -239,6 +263,8 @@ export async function deleteRevision(tx: Tx, revisionId: string) {
   const revision = await getRevisionRow(tx, revisionId);
   if (revision.status !== 'draft') throw unprocessable('Onaylanmış revizyon silinemez', 'REVISION_NOT_DRAFT');
   await lockSubcontract(tx, revision.subcontractId);
+  const [vo] = await tx.select({ code: variationOrders.code }).from(variationOrders).where(eq(variationOrders.revisionId, revisionId));
+  if (vo) throw unprocessable(`Bu revizyon ${vo.code} değişiklik emrine bağlı; değişiklik emrini iptal edin`, 'REVISION_IN_VARIATION');
   await tx.delete(subcontractRevisions).where(eq(subcontractRevisions.id, revisionId));
 }
 
@@ -259,6 +285,34 @@ export async function getRevision(tx: Tx, revisionId: string) {
   return { revision: { ...revision, total: total.toFixed(2) }, lines: lines.rows };
 }
 
+/** Sözleşme özeti: ilk bedel, uygulanan DE toplamı, bekleyen DE (gönderilmiş + işveren kabulü bekleyen) ve uzatma günleri. */
+export async function variationSummary(tx: Tx, subcontractId: string) {
+  const [first] = await tx
+    .select({ id: subcontractRevisions.id })
+    .from(subcontractRevisions)
+    .where(and(eq(subcontractRevisions.subcontractId, subcontractId), sql`${subcontractRevisions.status} <> 'draft'`))
+    .orderBy(subcontractRevisions.revisionNo)
+    .limit(1);
+  const [o] = first
+    ? await tx.execute<{ total: string }>(sql`
+        select coalesce(sum(round(quantity * unit_price, 2)), 0)::text as total from subcontract_boq_lines where revision_id = ${first.id}`).then((x) => x.rows)
+    : [];
+  const original = dec(o?.total ?? 0);
+  const [s] = await tx.execute<{ applied: string; pending: string; days: number; n: number }>(sql`
+    select coalesce(sum(amount_delta) filter (where status = 'applied'), 0)::text as applied,
+           coalesce(sum(amount_delta) filter (where status in ('submitted', 'awaiting_client')), 0)::text as pending,
+           coalesce(sum(time_extension_days) filter (where status = 'applied'), 0)::int as days,
+           count(*) filter (where status in ('submitted', 'awaiting_client'))::int as n
+      from variation_orders where subcontract_id = ${subcontractId}`).then((x) => x.rows);
+  return {
+    originalAmount: original.toFixed(2),
+    appliedVariations: dec(s?.applied ?? 0).toFixed(2),
+    pendingVariations: dec(s?.pending ?? 0).toFixed(2),
+    pendingCount: s?.n ?? 0,
+    extensionDays: s?.days ?? 0,
+  };
+}
+
 // --- Okuma ----------------------------------------------------------------------------------
 
 export async function getSubcontract(tx: Tx, id: string) {
@@ -277,10 +331,14 @@ export async function getSubcontract(tx: Tx, id: string) {
   const revisions = await tx.execute<Record<string, unknown>>(sql`
     select r.id, r.revision_no as "revisionNo", r.status, r.title, r.approved_at as "approvedAt", r.created_at as "createdAt",
            coalesce((select sum(round(l.quantity * l.unit_price, 2)) from subcontract_boq_lines l where l.revision_id = r.id), 0)::text as total,
-           r.id = (select c.id from subcontract_revisions c where c.subcontract_id = r.subcontract_id and c.status = 'approved' order by c.revision_no desc limit 1) as "isCurrent"
-      from subcontract_revisions r where r.subcontract_id = ${id} order by r.revision_no desc`);
+           r.id = (select c.id from subcontract_revisions c where c.subcontract_id = r.subcontract_id and c.status = 'approved' order by c.revision_no desc limit 1) as "isCurrent",
+           v.id as "variationId", v.code as "variationCode", v.status as "variationStatus"
+      from subcontract_revisions r
+      left join variation_orders v on v.revision_id = r.id
+     where r.subcontract_id = ${id} order by r.revision_no desc`);
   const current = revisions.rows.find((r) => r.isCurrent);
-  return { subcontract: { ...base, contractAmount: current ? String(current.total) : '0.00' }, revisions: revisions.rows };
+  const variations = await variationSummary(tx, id);
+  return { subcontract: { ...base, contractAmount: current ? String(current.total) : '0.00', ...variations }, revisions: revisions.rows };
 }
 
 export async function listSubcontracts(tx: Tx, q: { projectId?: string; partyId?: string; status?: string; direction?: string }) {

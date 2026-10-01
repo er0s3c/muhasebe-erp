@@ -68,7 +68,8 @@ import { createRequest, submitRequest } from '../modules/procurement/requests';
 import { awardRfq, createRfq, getRfq, upsertOffer } from '../modules/procurement/rfq';
 import { createParam } from '../modules/subcontracts/params';
 import { createProgress, giveAdvance, submitProgress, type ProgressCtx } from '../modules/subcontracts/progress';
-import { approveRevision, createSubcontract, putBoqLines } from '../modules/subcontracts/service';
+import { approveRevision, createSubcontract, getRevision, putBoqLines } from '../modules/subcontracts/service';
+import { createVariation, submitVariation } from '../modules/subcontracts/variations';
 import { decide } from '../modules/approvals/service';
 
 export const DEMO_EMAIL = 'demo@ornek.local';
@@ -524,6 +525,32 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
     subcontractId: emp.id, periodEnd: date(9, 30), vatCode: 'KDV-16',
     lines: [{ lineKey: ek('1'), cumulativeQty: '0.5' }, { lineKey: ek('2'), cumulativeQty: '0' }], deductions: [],
   });
+
+  // ---- Değişiklik emirleri: taşeronda uygulanmış ek iş + süre uzatımı; işverende işveren kabulü bekleyen ek iş ----------
+  /** DE açar, yürürlükteki BOQ'ya kalem ekler, onaya gönderir ve (varsayılan tek adım) onaylar. */
+  const variation = async (contractId: string, input: { title: string; reason: 'client_request' | 'design_change'; description: string; days: number }, extra: { itemNo: string; description: string; unit: string; quantity: string; unitPrice: string; wbsId: string }) => {
+    const vo = await createVariation(tx, pgctx, contractId, { title: input.title, reason: input.reason, description: input.description, timeExtensionDays: input.days });
+    const revisionId = vo.variation.revisionId as string;
+    const cur = await getRevision(tx, revisionId);
+    await putBoqLines(tx, pgctx, revisionId, {
+      lines: [
+        ...cur.lines.map((l) => ({ lineKey: l.lineKey as string, itemNo: l.itemNo as string, description: l.description as string, unit: l.unit as string, quantity: l.quantity as string, unitPrice: l.unitPrice as string, wbsId: l.wbsId as string, costCodeId: (l.costCodeId as string | null) ?? undefined })),
+        extra,
+      ],
+    });
+    const submittedVo = await submitVariation(tx, ctxOwner, vo.variation.id as string);
+    await decide(tx, ctxOwner, submittedVo.approvals[0]!.id, { decision: 'approve' });
+  };
+  await variation(
+    sub.id,
+    { title: 'Bahçe aydınlatması ek işi', reason: 'client_request', description: 'Site bahçesine 60 adet direk tipi aydınlatma eklendi; işveren talebi.', days: 15 },
+    { itemNo: '1.4', description: 'Bahçe aydınlatma direği montajı', unit: 'adet', quantity: '60', unitPrice: '250', wbsId: w.elektrik },
+  );
+  await variation(
+    emp.id,
+    { title: 'Havuz ve çevre düzenlemesi', reason: 'design_change', description: 'İşverenin proje değişikliğiyle 8×4 m havuz eklendi.', days: 20 },
+    { itemNo: '3', description: 'Havuz ve çevre düzenlemesi', unit: 'götürü', quantity: '1', unitPrice: '180000', wbsId: k.ince },
+  );
 
   // ---- Satın alma zinciri: Güneş Sitesi betonarme malzemesi ------------------------------------------
   const idOf = (o: unknown) => (o as { id: string }).id;

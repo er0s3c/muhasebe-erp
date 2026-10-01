@@ -161,7 +161,8 @@
     "realEstateUnits": "Birimler",
     "salesContracts": "Satış sözleşmeleri",
     "salesInstallments": "Taksitler",
-    "orderMatching": "Sipariş eşleştirme"
+    "orderMatching": "Sipariş eşleştirme",
+    "variationOrders": "Değişiklik emirleri"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -2437,7 +2438,8 @@
       "eac": "Tahmini maliyet (EAC)",
       "projected": "Tahmini kâr",
       "recognized": "Tanınmış kâr",
-      "margin": "Marj"
+      "margin": "Marj",
+      "pending": "Bekleyen DE"
     },
     "kinds": {
       "own": "Kendi projesi",
@@ -2448,7 +2450,10 @@
     "noRate": "{{n}} tutar için kur bulunamadı; bu tutarlar sıfır sayıldı. Kur girin.",
     "noReporting": "Yönetim para birimi karşılığı için şirkette raporlama para birimi tanımlı ve kur kayıtlı olmalı.",
     "note": "Tahmini kâr = sözleşmeli gelir − EAC (bütçe ve ilerleme yoksa gerçekleşen maliyet). Yönetim para biriminde tanınmış tutarlar tarihsel, diğerleri bugünkü kurla çevrilir. İç raporlama; yasal kâr hesabı değildir.",
-    "empty": "Henüz proje yok."
+    "empty": "Henüz proje yok.",
+    "pendingHint": "Onayda ya da işveren kabulü bekleyen değişiklik emirleri; sözleşmeli gelire, maliyete ve tahmine eklenmez.",
+    "pendingRevenue": "Gelir {{v}}",
+    "pendingCost": "Maliyet {{v}}"
   },
   "realEstate": {
     "unitStatus": {
@@ -2920,7 +2925,8 @@
     "tabs": {
       "boq": "BOQ ve revizyonlar",
       "progress": "Hakedişler",
-      "balances": "Avans ve teminat"
+      "balances": "Avans ve teminat",
+      "variations": "Değişiklik emirleri"
     },
     "actions": {
       "complete": "Tamamlandı yap",
@@ -2982,7 +2988,7 @@
       "firstDraftHint": "İlk revizyonu onayladığınızda sözleşme yürürlüğe girer. Onay, ekrandaki son hâli de kaydeder.",
       "noWbs": "Projede maliyet yazılabilecek iş kalemi yok. Önce projede iş kırılımı oluşturun.",
       "title": "BOQ (iş kalemleri)",
-      "desc": "Birim fiyatlı metraj. Onaylı revizyon değişmez; değişiklik yeni revizyonla yapılır.",
+      "desc": "Birim fiyatlı metraj. Onaylı revizyon değişmez; yürürlükteki sözleşmede değişiklik, değişiklik emriyle yapılır.",
       "addLine": "Satır ekle",
       "empty": "BOQ boş",
       "emptyDesc": "Satır ekleyerek başlayın.",
@@ -3108,7 +3114,8 @@
       "docTypes": {
         "progress_payment": "Taşeron hakedişi",
         "employer_claim": "İşveren hakedişi",
-        "purchase_request": "Satın alma talebi"
+        "purchase_request": "Satın alma talebi",
+        "variation_order": "Değişiklik emri"
       },
       "defaultStep": "Onay",
       "userStep": "Kullanıcı",
@@ -3206,5 +3213,139 @@
     "regenHint": "Mevcut kodlar geçersiz olur. Güncel bir doğrulama kodu girin.",
     "enabledToast": "İki adımlı doğrulama etkinleştirildi",
     "disabledToast": "İki adımlı doğrulama kapatıldı"
+  },
+  "variations": {
+    "title": "Değişiklik emirleri",
+    "listTitle": "Değişiklik emirleri",
+    "listSubtitle": "Taşeron ve işveren sözleşmelerindeki ek/eksilen iş, fiyat değişikliği ve süre uzatımları.",
+    "listEmptyDesc": "Değişiklik emri, yürürlükteki sözleşmenin sayfasında \"Değişiklik emirleri\" sekmesinden açılır.",
+    "descPayable": "Yürürlükteki sözleşmede BOQ ve süre yalnızca değişiklik emriyle değişir. Onaylanan emir hemen uygulanır.",
+    "descReceivable": "İşveren sözleşmesinde iç onaydan sonra işverenin yazılı kabulü kaydedilir; kabul edilmeden bedele yansımaz.",
+    "add": "Değişiklik emri oluştur",
+    "openExisting": "Açık emre git ({{code}})",
+    "empty": "Değişiklik emri yok",
+    "emptyDesc": "Ek iş, eksilen iş, fiyat değişikliği ya da süre uzatımı için değişiklik emri oluşturun.",
+    "emptyInactive": "Değişiklik emri yalnızca yürürlükteki sözleşmeye açılır.",
+    "notFound": "Değişiklik emri bulunamadı",
+    "back": "Değişiklik emirleri",
+    "docTitle": "Değişiklik emri",
+    "kpiSub": "İlk bedel {{original}} · bekleyen emir {{n}}",
+    "openLinked": "{{code}} değişiklik emrini aç",
+    "draftInVariation": "Bu taslak revizyon {{code}} değişiklik emrine bağlıdır; değişiklik emri sayfasında düzenlenir ve emrin onayıyla yürürlüğe girer.",
+    "boqHint": "Yürürlükteki sözleşmede BOQ değişikliği \"Değişiklik emirleri\" sekmesinden yapılır.",
+    "revisionInfo": "rev. {{base}} → rev. {{rev}}",
+    "print": "Yazdır / PDF",
+    "daysValue": "{{n}} gün",
+    "status": {
+      "draft": "Taslak",
+      "submitted": "Onayda",
+      "awaiting_client": "İşveren kabulü bekliyor",
+      "applied": "Uygulandı",
+      "rejected": "Reddedildi",
+      "cancelled": "İptal"
+    },
+    "reasons": {
+      "client_request": "İşveren talebi",
+      "design_change": "Proje (tasarım) değişikliği",
+      "site_condition": "Saha koşulu",
+      "omission_error": "Eksik/hatalı keşif",
+      "other": "Diğer"
+    },
+    "direction": {
+      "payable": "Taşeron",
+      "receivable": "İşveren"
+    },
+    "change": {
+      "added": "Eklendi",
+      "removed": "Kaldırıldı",
+      "changed": "Değişti",
+      "same": "Aynı"
+    },
+    "filters": {
+      "direction": "Yön",
+      "allDirections": "Tüm yönler"
+    },
+    "cols": {
+      "code": "DE no",
+      "title": "Konu",
+      "contract": "Sözleşme",
+      "reason": "Gerekçe",
+      "status": "Durum",
+      "delta": "Bedel farkı",
+      "days": "Süre uzatımı",
+      "date": "Tarih"
+    },
+    "summary": {
+      "original": "İlk sözleşme bedeli",
+      "originalSub": "İlk onaylı revizyon",
+      "applied": "Uygulanan değişiklikler",
+      "appliedSub": "Toplam süre uzatımı {{days}} gün",
+      "current": "Güncel sözleşme bedeli",
+      "currentSub": "Bitiş {{date}}",
+      "pending": "Bekleyen değişiklikler",
+      "pendingSub": "{{n}} emir; bedele ve tahmine dahil değil"
+    },
+    "createTitle": "Yeni değişiklik emri",
+    "createDesc": "Yürürlükteki BOQ kopyalanır; sonraki ekranda kalemleri değiştirirsiniz.",
+    "create": "Oluştur",
+    "form": {
+      "title": "Konu",
+      "reason": "Gerekçe",
+      "days": "Süre uzatımı (gün)",
+      "daysHint": "Uygulanınca sözleşme bitiş tarihine eklenir",
+      "description": "Açıklama"
+    },
+    "kpi": {
+      "before": "Önceki bedel",
+      "delta": "Bedel farkı",
+      "after": "Yeni bedel",
+      "time": "Süre etkisi",
+      "timeApplied": "Yeni bitiş {{date}}",
+      "timeProjected": "Uygulanırsa bitiş {{date}}",
+      "noEnd": "Sözleşmede bitiş tarihi yok",
+      "noExtension": "Süre değişmiyor"
+    },
+    "editHint": "Kalemleri ekleyin, kaldırın ya da miktar/fiyatı değiştirin. Hakedişte işlenmiş miktarın altına inilemez. Gönderim ekrandaki son hâli de kaydeder.",
+    "boqTitle": "Değişiklik emri BOQ'su (rev. {{rev}})",
+    "boqDesc": "Yürürlükteki BOQ'nun kopyası. Kaydettikçe aşağıdaki karşılaştırma güncellenir.",
+    "save": "Kaydet",
+    "saved": "Değişiklik emri kaydedildi",
+    "submit": "Onaya gönder",
+    "submittedToast": "Değişiklik emri onaya gönderildi",
+    "submittedBody": "Değişiklik emri onayda; onaylanana kadar sözleşme bedeli ve tahminler değişmez.",
+    "rejectedTitle": "Değişiklik emri reddedildi",
+    "awaitingTitle": "İşveren kabulü bekleniyor",
+    "awaitingBody": "İç onay tamamlandı. İşverenin yazılı kabulünü (tarih ve yazı/referans no) kaydettiğinizde değişiklik sözleşmeye işlenir.",
+    "compareTitle": "Önceki / yeni karşılaştırması",
+    "compareDesc": "{{n}} kalem değişti",
+    "compareLive": "Karşılaştırma kaydedilmiş BOQ'dan hesaplanır; kesin tutarlar uygulamada yazılır.",
+    "compare": {
+      "oldQty": "Önceki miktar",
+      "newQty": "Yeni miktar",
+      "oldPrice": "Önceki fiyat",
+      "newPrice": "Yeni fiyat",
+      "oldAmount": "Önceki tutar",
+      "newAmount": "Yeni tutar",
+      "delta": "Fark"
+    },
+    "clientAccepted": "İşveren kabulü: {{date}} · {{ref}}",
+    "clientAccept": "İşveren kabulünü kaydet",
+    "acceptTitle": "İşveren kabulü",
+    "acceptDesc": "Kayıtla birlikte değişiklik sözleşmeye işlenir: yeni revizyon yürürlüğe girer, bitiş tarihi uzar.",
+    "acceptedAt": "Kabul tarihi",
+    "reference": "Yazı / referans no",
+    "referenceHint": "İşverenin onay yazısının sayısı",
+    "acceptedToast": "İşveren kabulü kaydedildi; değişiklik uygulandı",
+    "clientReject": "İşveren reddi",
+    "clientRejectTitle": "İşveren reddi",
+    "clientRejectDesc": "Değişiklik emri reddedilir ve taslak BOQ silinir; sözleşme aynen kalır.",
+    "clientRejectedToast": "İşveren reddi kaydedildi",
+    "rejectNote": "Ret gerekçesi",
+    "cancel": "İptal et",
+    "cancelTitle": "Değişiklik emri iptal edilsin mi?",
+    "cancelDesc": "Bekleyen onay geri çekilir, taslak BOQ silinir; kayıt iptal olarak kalır.",
+    "cancelledToast": "Değişiklik emri iptal edildi",
+    "pendingProjectTitle": "{{n}} bekleyen değişiklik emri",
+    "pendingProjectBody": "Taşeron maliyet farkı {{cost}}, işveren gelir farkı {{revenue}}. Onaylanıp uygulanana kadar taahhüde, EAC'ye ve gelire eklenmez."
   }
 }

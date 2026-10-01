@@ -115,6 +115,11 @@ describe('demo aracı', () => {
       expect((await q(`select count(*)::int as n from journal_entries where source_type = 'progress_payment'`))[0].n).toBe(2);
       expect((await q(`select count(*)::int as n from journal_lines jl join cost_codes c on c.id = jl.cost_code_id where c.kind = 'subcontract' and jl.project_id is not null`))[0].n).toBeGreaterThan(0);
       expect((await q(`select coalesce(sum(amount), 0)::int as n from subcontract_advances`))[0].n).toBe(160000);
+      // Değişiklik emirleri: taşeronda uygulanmış (+15.000, +15 gün), işverende işveren kabulü bekleyen
+      expect(await q(`select direction, status, amount_delta::int as delta, time_extension_days as days from variation_orders order by direction`)).toEqual([
+        { direction: 'payable', status: 'applied', delta: 15000, days: 15 },
+        { direction: 'receivable', status: 'awaiting_client', delta: 180000, days: 20 },
+      ]);
       // Satın alma: 2 talep (1 siparişe dönüşmüş, 1 onayda), RFQ 2 teklif, verilmiş sipariş ve kısmi mal kabul
       expect(await q(`select status, count(*)::int as n from purchase_requests group by status order by status`)).toEqual([
         { status: 'ordered', n: 1 },

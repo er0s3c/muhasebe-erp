@@ -30,7 +30,7 @@ export const verifyConstructionParamSchema = z.object({
 
 // --- Onay motoru ---------------------------------------------------------------------
 
-export const APPROVAL_DOC_TYPES = ['progress_payment', 'employer_claim', 'purchase_request'] as const;
+export const APPROVAL_DOC_TYPES = ['progress_payment', 'employer_claim', 'purchase_request', 'variation_order'] as const;
 export type ApprovalDocType = (typeof APPROVAL_DOC_TYPES)[number];
 
 const approvalAmount = z.string().regex(/^\d{1,15}(\.\d{1,2})?$/, 'Geçersiz tutar');
@@ -116,6 +116,38 @@ export const subcontractListQuerySchema = z.object({
   projectId: uuid.optional(),
   partyId: uuid.optional(),
   status: z.enum(SUBCONTRACT_STATUSES).optional(),
+});
+
+// --- Değişiklik emri (variation order) ---------------------------------------------------
+
+export const VARIATION_REASONS = ['client_request', 'design_change', 'site_condition', 'omission_error', 'other'] as const;
+export type VariationReason = (typeof VARIATION_REASONS)[number];
+export const VARIATION_STATUSES = ['draft', 'submitted', 'awaiting_client', 'applied', 'rejected', 'cancelled'] as const;
+export type VariationStatus = (typeof VARIATION_STATUSES)[number];
+
+const variationHeader = {
+  title: z.string().trim().min(2).max(200),
+  reason: z.enum(VARIATION_REASONS),
+  description: z.string().trim().max(2000).nullable().optional(),
+  /** Süre uzatımı (gün); sözleşme bitiş tarihine eklenir. */
+  timeExtensionDays: z.coerce.number().int().min(0).max(3650).default(0),
+};
+export const createVariationSchema = z.object(variationHeader);
+export type CreateVariationInput = z.infer<typeof createVariationSchema>;
+// Varsayılansız: gönderilmeyen alan değişmez (partial + default süreyi sıfırlardı)
+export const updateVariationSchema = z.object({ ...variationHeader, timeExtensionDays: z.coerce.number().int().min(0).max(3650) }).partial();
+export type UpdateVariationInput = z.infer<typeof updateVariationSchema>;
+export const clientAcceptVariationSchema = z.object({
+  acceptedAt: isoDate,
+  reference: z.string().trim().min(1, 'İşverenin yazı/referans numarası gerekli').max(120),
+});
+export type ClientAcceptVariationInput = z.infer<typeof clientAcceptVariationSchema>;
+export const clientRejectVariationSchema = z.object({ note: z.string().trim().min(3).max(500) });
+export const variationListQuerySchema = z.object({
+  subcontractId: uuid.optional(),
+  projectId: uuid.optional(),
+  direction: z.enum(CONTRACT_DIRECTIONS).optional(),
+  status: z.enum(VARIATION_STATUSES).optional(),
 });
 
 export const createRevisionSchema = z.object({
