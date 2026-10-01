@@ -29,7 +29,16 @@ KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef 
 
 ## Hızlı başlangıç
 
-Gereksinimler: Node.js 22.9+, PostgreSQL 16 (ya da Docker). PostgreSQL'in ICU desteği gerekir (Türkçe sıralama için `tr-TR-x-icu`); resmî Docker imajı ve yaygın paketlerde vardır.
+**Tek komutla (önerilen):** kurulum sihirbazı önce sistemi denetler (işletim sistemi, bellek, disk, portlar, Docker, Node, PostgreSQL), sonra uygun yolu önerir, eksik paketleri kurar ve sistemi ayağa kaldırır.
+
+```bash
+./install.sh                 # Linux / WSL (Ubuntu 22.04+, Debian 12+)
+./install.sh --check         # yalnızca uyumluluk raporu
+```
+
+Windows'ta depo klasöründeki **`Kur.cmd`** dosyasına çift tıklayın (Windows PowerShell 5.1 yeterlidir; Docker gerekmez). Depodan çalıştırınca geliştirme/test kurulumu yapılır: Node 22 ve PostgreSQL 16 yoksa kurulur (ya da veritabanı Docker'da çalışır), `.env`, şema ve demo verisi hazırlanır; sonra `npm run dev`. Seçenekler: `./install.sh --help`, ayrıntı [docs/OPERATIONS.md §2](docs/OPERATIONS.md).
+
+**Elle:** gereksinimler Node.js 22.9+, PostgreSQL 16 (ya da Docker). PostgreSQL'in ICU desteği gerekir (Türkçe sıralama için `tr-TR-x-icu`); resmî Docker imajı ve yaygın paketlerde vardır.
 
 ```bash
 npm install
@@ -63,6 +72,7 @@ npm run dev
 | `npm run db:seed` | Demo verisi yükler (demo kullanıcı varsa dokunmaz; üretimde yalnızca `ALLOW_DEMO=true`) |
 | `npm run demo:reset -- --confirm=<veritabanı>` | Veritabanını **siler**, migration'ları uygular, demo verisini yükler |
 | `npm run admin -- reset-password --email=…` | Operatör parola kurtarma (geçici parola üretir) |
+| `npm run release -- --version=X` | Müşteri sürüm kitleri (`release/X/`: linux-x64, win-x64; `--targets=` ile seçilir) |
 | `npm run build` | Web + API üretim paketi (`apps/api/dist`, `apps/web/dist`) |
 | `npm run licenses:notices` | `THIRD-PARTY-NOTICES.md` üretir |
 | `npm run build:license` | Lisans sunucusunu ve yönetim panelini derler |
@@ -75,7 +85,9 @@ npm run dev
 
 ## Dağıtım ve yedekleme
 
-Tek artefakt bir **Docker imajıdır** (derlenmiş API + web arayüzü, aynı kökenden). `deploy/docker-compose.prod.yml` PostgreSQL 16, tek seferlik migration ve uygulamayı (isteğe bağlı Caddy ile otomatik HTTPS) ayağa kaldırır; uygulama yalnızca RLS'e tabi çalışma zamanı rolünü bilir.
+**Müşteri kurulumu (kaynaksız):** `npm run release -- --version=1.0.0` her platform için tek arşivli bir sürüm kiti üretir (`muhasebe-erp-1.0.0-linux-x64.tar.gz`, `muhasebe-erp-1.0.0-win-x64.zip`): derlenmiş uygulama, gömülü Node.js çalışma zamanı ve kurulum sihirbazı. Müşteri kiti açıp `./install.sh` (Linux/WSL) ya da `Kur.cmd` (Windows) çalıştırır; sihirbaz Docker varsa Docker yolunu, yoksa **Docker'sız yerel kurulumu** (PostgreSQL 16 + systemd/Windows hizmeti, günlük yedek) önerir. Ayrıntı: [docs/OPERATIONS.md §2](docs/OPERATIONS.md).
+
+Docker ile elle kurulumda tek artefakt bir **Docker imajıdır** (derlenmiş API + web arayüzü, aynı kökenden). `deploy/docker-compose.prod.yml` PostgreSQL 16, tek seferlik migration ve uygulamayı (isteğe bağlı Caddy ile otomatik HTTPS) ayağa kaldırır; uygulama yalnızca RLS'e tabi çalışma zamanı rolünü bilir.
 
 ```bash
 cp deploy/.env.production.example deploy/.env      # parolaları ve JWT_SECRET'ı doldurun

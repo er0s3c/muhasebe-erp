@@ -74,7 +74,8 @@ services:
       # Lisans parmak izi: ana makinenin kimliği (yalnızca okuma). Dosya yoksa compose başlamayı reddeder (ana makinede oluşturun:
       # systemd-machine-id-setup). Bu kimlik olmadan lisans yalnızca veritabanı kümesine bağlanır (klon koruması zayıf).
       - type: bind
-        source: /etc/machine-id
+        # Windows (Docker Desktop): kurulum sihirbazı makine kimliğini bir dosyaya yazar ve ERP_HOST_ID_FILE ile verir
+        source: ${ERP_HOST_ID_FILE:-/etc/machine-id}
         target: /etc/host-machine-id
         read_only: true
         bind:

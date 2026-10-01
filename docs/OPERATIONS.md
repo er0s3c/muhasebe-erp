@@ -13,6 +13,8 @@ Tek artefakt bir **Docker imajıdır** (`Dockerfile`): derlenmiş API ve web ara
 | `deploy/.env.production.example` | Ortam değişkenleri şablonu (`deploy/.env` olarak kopyalanır; depoya girmez) |
 | `infra/postgres/init-prod.sh` | İlk açılışta rolleri ve veritabanını yaratır |
 | `scripts/backup.sh`, `restore.sh`, `restore-drill.sh` | Yedek, geri yükleme, geri yükleme tatbikatı |
+| `install.sh`, `Kur.cmd`, `installer/` | Kurulum sihirbazı (Linux/WSL, Windows; Docker'lı ve Docker'sız), §2 |
+| `npm run release` | Sürüm kitleri (linux-x64, win-x64): Docker'sız kurulum da kitten yapılır |
 
 Uygulama kabı yalnızca **RLS'e tabi çalışma zamanı rolünü** (`erp_app`) bilir; şema sahibi rolün (`erp`) parolası yalnızca tek seferlik `migrate` kabındadır. Uygulama, süper kullanıcı/`BYPASSRLS`/tablo sahibi bir rolle ya da RLS'siz tablolarla açılmayı **reddeder** (üretimde `exit 1`).
 
@@ -22,7 +24,32 @@ Uygulama kabı yalnızca **RLS'e tabi çalışma zamanı rolünü** (`erp_app`) 
 
 İmaj yayını (registry) henüz yoktur: imaj müşteri sunucusunda `docker build` ile ya da sizin derleyip `docker save/load` ile taşıdığınız imajla kurulur.
 
-## 2. Kurulum (Docker Compose)
+## 2. Kurulum
+
+### Kurulum sihirbazı (önerilen)
+
+Tek giriş noktası: **Linux/WSL** `./install.sh`, **Windows** `Kur.cmd` (çift tıklama; Windows PowerShell 5.1 yeterli, gerekirse UAC ile yönetici izni ister). Sihirbaz dört aşamada çalışır ve güvenle yeniden çalıştırılabilir (mevcut parolalara/ayarlara dokunmaz):
+
+1. **Uyumluluk kontrolü** — işletim sistemi ve sürümü (Ubuntu 22.04+, Debian 12+, WSL, Windows 10 1809+/11/Server 2019+), mimari (x64), bellek (en az 2 GB, 4 GB önerilir), boş disk (en az 5 GB), yönetici yetkisi, systemd, Docker + compose v2, sanallaştırma (Windows), mevcut Node.js ve PostgreSQL, portlar, internet, makine kimliği, kit hedefi. Her satır ✓/!/✗; ✗ varsa kurulum başlamaz. Yalnızca rapor: `./install.sh --check` / `installer\install.ps1 -Check`.
+2. **Yol seçimi** — kip: `dev` (depodan test/geliştirme) ya da `prod` (sürüm kitinden müşteri kurulumu; `kit.json` varsa varsayılan). Yol: `docker` (Docker çalışıyorsa önerilir) ya da `native` (Docker'sız; sanallaştırması kapalı PC'ler dahil). Erişim: `local` (yalnız bu bilgisayar), `lan` (yerel ağ, http), `domain` (alan adı + otomatik HTTPS, yalnız Docker yolunda Caddy ile).
+3. **Gerekli paketler** — geliştirmede Node.js 22 (nodejs.org resmî paketi, SHA-256 doğrulamalı); yerel yolda PostgreSQL 16 (Linux: dağıtım deposu ya da resmî PGDG deposu; Windows: winget, yoksa EnterpriseDB sessiz kurulumu, Authenticode imzası doğrulanır). Müşteri kitinde Node.js gömülüdür, ayrıca kurulmaz.
+4. **Sistemin kurulumu** — aşağıdaki tabloya göre.
+
+| Kip / yol | Ne yapılır |
+|---|---|
+| dev / docker | `.env` (rastgele JWT), `docker compose up -d db`, geliştirme rolleri, `npm ci`, migration, demo verisi → `npm run dev` |
+| dev / native | Aynısı; veritabanı yerel PostgreSQL'de (`infra/postgres/init.sql`) |
+| prod / docker | İmaj kitteki derlenmiş dosyalardan yerelde oluşturulur (kaynak gerekmez); `deploy/.env` rastgele parolalarla yazılır (chmod 600 / yalnız yöneticiler), `docker compose up -d`, sağlık kontrolü. Windows'ta makine kimliği `ProgramData\MuhasebeERP\host-machine-id` dosyasına yazılıp `ERP_HOST_ID_FILE` ile bağlanır |
+| prod / native (Linux) | `/opt/muhasebe-erp/versions/<sürüm>` + `current` bağı, `/etc/muhasebe-erp/erp.env` (640, uygulama) ve `migrate.env` (600, şema sahibi), `muhasebe-erp` sistem kullanıcısı, systemd hizmeti (yoksa `erpctl start|stop|status|logs`; WSL'de systemd'yi açmayı önerir), günlük yedek zamanlayıcısı (02:30, son 14; `/var/lib/muhasebe-erp/backups`), isteğe bağlı ufw kuralı |
+| prod / native (Windows) | `Program Files\MuhasebeERP\versions\<sürüm>` + `current` bağlantısı (junction), `ProgramData\MuhasebeERP` (yalnız SYSTEM ve Yöneticiler; ayarlar, günlükler, yedekler), **Muhasebe ERP** Windows hizmeti (WinSW; otomatik başlar, çökmede yeniden başlar; LocalService hesabıyla), günlük yedek zamanlanmış görevi (02:30, son 14), isteğe bağlı güvenlik duvarı kuralı, masaüstü kısayolu |
+
+Yeniden çalıştırma = yükseltme: yeni kitin sihirbazı ayarları korur, uygulamayı durdurur, yeni sürümü yan klasöre kopyalar, `current`'ı çevirir, migration'ı uygular, başlatır; migration başarısızsa önceki sürüme döner. **Yükseltmeden önce yedek alın** (`sudo /opt/muhasebe-erp/bin/erp-backup` / `ProgramData\MuhasebeERP` altındaki yedek görevi; Docker: `scripts/backup.sh --compose`). Kaldırma: `./install.sh --uninstall` (veri korunur), `--uninstall --purge` (veritabanı, ayarlar ve yedekler silinir; Windows: `-Uninstall -Purge`).
+
+**Sürüm kiti üretimi (satıcı):** `npm run release -- --version=1.2.0 [--targets=linux-x64,win-x64]` → `release/1.2.0/` altında arşivler ve `SHA256SUMS`. Kitte derlenmiş API + web (kaynak haritası yok), hedef platformun üretim bağımlılıkları (yerel argon2 dahil), resmî Node.js çalışma zamanı, kurulum sihirbazı, Docker yolu dosyaları; Windows kitinde ayrıca WinSW (MIT, sabit SHA-256) ve Docker yolu için Linux bağımlılıkları bulunur. Kit lisanslı derlenir (satıcı açık anahtarı gömülü; [LICENSING.md §5](LICENSING.md)). Kitler şimdilik yalnızca x64'tür.
+
+**Sınamalar:** Linux yerel ve Docker yolları (dev ve prod) Ubuntu 24.04 üzerinde uçtan uca denenmiştir. Windows sihirbazı Windows PowerShell 5.1 sözdizimi/cmdlet uyumluluğu için statik olarak denetlenmiştir; gerçek bir Windows makinede ilk kurulumu bu bölüme göre doğrulayın (özellikle PostgreSQL sessiz kurulumu ve hizmet hesabı).
+
+### Docker Compose ile elle kurulum
 
 Gerekenler: Docker Engine + Compose v2, ≥ 2 GB bellek, kalıcı disk.
 
@@ -171,6 +198,8 @@ RESTORE_DATABASE_URL=postgres://erp:…@host/BOS_VERITABANI scripts/restore.sh y
 ```
 
 Geri yükleme tek işlemde çalışır; hata olursa hedefte yarım veri kalmaz. Sonrasında `/api/health/ready` ve bir oturum açma ile doğrulayın.
+
+**Yerel (Docker'sız) kurulumda** yedekler `/var/lib/muhasebe-erp/backups` (Linux) ya da `C:\ProgramData\MuhasebeERP\backups` (Windows) altındadır. Felaket kurtarma: hizmeti durdurun (`erpctl stop` / `services.msc` → Muhasebe ERP), süper kullanıcıyla veritabanını silip `erp` sahibiyle boş yaratın (`DROP DATABASE erp; CREATE DATABASE erp OWNER erp; GRANT CONNECT ON DATABASE erp TO erp_app; REVOKE ALL ON DATABASE erp FROM PUBLIC;`), ardından `RESTORE_DATABASE_URL=<migrate.env içindeki adres> scripts/restore.sh yedek.dump` (Windows'ta `pg_restore --exit-on-error --single-transaction --no-owner --role=erp -d <adres> yedek.dump`) ve hizmeti başlatın.
 
 ### Tatbikat: "yedeğim gerçekten geri yüklenir mi?"
 

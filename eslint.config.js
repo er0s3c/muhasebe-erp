@@ -11,6 +11,7 @@ export default tseslint.config(
       'apps/api/drizzle/**',
       'playwright-report/**',
       'test-results/**',
+      'release/**',
       'reference-materials/**',
     ],
   },

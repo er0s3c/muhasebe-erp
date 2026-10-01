@@ -15,3 +15,6 @@ test-results
 # Üretilen dosyalar
 THIRD-PARTY-NOTICES.md
 backups/
+
+# Sürüm kitleri (npm run release)
+release/

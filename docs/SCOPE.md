@@ -143,6 +143,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Parola sıfırlama, e-posta doğrulama (SMTP ile), geçici parola, operatör parola kurtarma | ✅ |
 | Güvenlik olayı kaydı (giriş, sıfırlama, yetki değişikliği) | ✅ |
 | Docker imajı, compose dağıtımı, ayrı demo örneği, üçüncü taraf lisans bildirimi | ✅ |
+| Kurulum sihirbazı (uyumluluk kontrolü → yol seçimi → paketler → sistem): Linux/WSL ve Windows, Docker'lı ve Docker'sız (systemd / Windows hizmeti), geliştirme ve müşteri kipi; platform başına sürüm kiti | ✅ ⚠️ Windows yolu gerçek makinede ilk kurulumla doğrulanmalı |
+| Uzaktan tek tıkla güncelleme (satıcı gönderir, müşteride sahip onaylar; yedek + geri dönüş) | ⏳ |
 | Lisanslama: sektör/cihaz/şirket sınırlı, imzalı kiralı lisans; satıcı lisans sunucusu ve web paneli (parola + zorunlu TOTP); salt-okunur mod | ✅ ⚠️ EULA/sözleşme ve veri işleme doğrulanmadı |
 | Cihaz koltukları (kayıtlı tarayıcı/bilgisayar, yönetici kaldırır, boşta cihaz düşer) | ✅ |
 | Uygulama kullanıcıları için iki adımlı doğrulama (TOTP, kurtarma kodları, yönetici sıfırlaması) | ✅ (şirket düzeyinde zorunlu kılma ⏳) |
