@@ -59,7 +59,9 @@ import { createProject, setProjectStatus } from '../modules/projects/service';
 import { createWbs } from '../modules/projects/wbs';
 import { activateContract, createContract, getContract, handoverContract, loadSalesCtx } from '../modules/realestate/contracts';
 import { terminateContract } from '../modules/realestate/termination';
+import { createFeeSchedule, verifyFeeSchedule } from '../modules/realestate/fees';
 import { bulkCreateUnits } from '../modules/realestate/units';
+import { createForecastItem } from '../modules/cash/forecast';
 import { getOrder, issueOrder } from '../modules/procurement/orders';
 import { createReceipt } from '../modules/procurement/receipts';
 import { createRequest, submitRequest } from '../modules/procurement/requests';
@@ -569,10 +571,16 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
       items: [{ lineId: inst.journalLineId!, amount: inst.remaining, settleAmount: (Number(inst.remaining) * rate).toFixed(2) }], description: `Taksit ${seq} tahsilatı (${det.contract.code})`,
     }));
   };
+  // Fon/harç tarifeleri (tarihli, kaynak notlu; biri doğrulanmış örnek, hepsi demo değeridir)
+  const elk = await createFeeSchedule(tx, ctx.companyId, { code: 'ELK', name: 'Elektrik altyapı fonu', side: 'buyer', basis: 'per_unit', amount: '1500', currencyCode: 'GBP', validFrom: date(1, 1), sourceNote: 'Demo değeri (doğrulanmadı)' });
+  await createFeeSchedule(tx, ctx.companyId, { code: 'SU', name: 'Su ve kanalizasyon fonu', side: 'buyer', basis: 'per_m2', amount: '4', currencyCode: 'GBP', validFrom: date(1, 1), sourceNote: 'Demo değeri (doğrulanmadı)' });
+  const bld = await createFeeSchedule(tx, ctx.companyId, { code: 'BLD', name: 'Belediye harcı', side: 'project', basis: 'per_unit', amount: '2500', currencyCode: 'TRY', validFrom: date(1, 1), sourceNote: 'Demo değeri (doğrulanmadı)' });
+  await verifyFeeSchedule(tx, idOfRow(bld), 'Demo kullanıcı', 'Örnek doğrulama');
+  void elk;
   // 1) A-101 Sarah Thompson: yürürlükte; peşinat ve ilk taksit tahsil edildi, Eylül taksidi gecikmiş
   const c1 = await createContract(tx, sctx, {
     unitId: await unitIdOf('A', '101'), partyId: partyId.get('sarah')!, currencyCode: 'GBP', contractDate: date(7, 1), plannedHandover: date(12, 30), price: '105000', downPayment: '30000',
-    installments: [{ kind: 'down_payment', dueDate: date(7, 1), amount: '30000' }, ...monthly([8, 1], 5, '15000')],
+    installments: [{ kind: 'down_payment', dueDate: date(7, 1), amount: '30000' }, ...monthly([8, 1], 5, '15000'), { kind: 'fee', dueDate: date(9, 1), amount: '1500', feeScheduleId: idOfRow(elk), label: 'Elektrik altyapı fonu' }],
   });
   await activateContract(tx, sctx, idOfRow(c1.contract), date(7, 1));
   await collect(idOfRow(c1.contract), 1, date(7, 1), bankTlId);
@@ -593,13 +601,16 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
   await activateContract(tx, sctx, idOfRow(c3.contract), date(5, 2));
   await collect(idOfRow(c3.contract), 1, date(5, 2), bankTlId);
   await terminateContract(tx, sctx, idOfRow(c3.contract), { date: date(9, 22), reason: 'Alıcı vazgeçti', retained: '4000', refundAccountId: bankTlId });
+  // Nakit projeksiyonu: elle girilen ek kalemler
+  await createForecastItem(tx, { companyId: ctx.companyId, userId: ctx.userId }, { itemDate: date(10, 5), direction: 'out', description: 'Ofis kirası', amount: '45000', currencyCode: 'TRY' });
+  await createForecastItem(tx, { companyId: ctx.companyId, userId: ctx.userId }, { itemDate: date(10, 20), direction: 'out', description: 'Maaş ve SGK ödemeleri', amount: '180000', currencyCode: 'TRY' });
   // 4) A-103: taslak sözleşme (arayüzde düzenlenip yürürlüğe alınabilir)
   await createContract(tx, sctx, {
     unitId: await unitIdOf('A', '103'), partyId: partyId.get('ali')!, currencyCode: 'GBP', contractDate: date(9, 25), price: '120000', downPayment: '24000',
     installments: [{ kind: 'down_payment', dueDate: date(9, 25), amount: '24000' }, ...monthly([10, 25], 3, '32000')],
   });
 
-  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans; işveren: 1 sözleşme, 1 onaylı + 1 taslak alınan hakediş, avans; satın alma: 2 talep, 1 RFQ (2 teklif), 1 sipariş (kısmi mal kabul); gayrimenkul: 24 birim, 4 sözleşme (yürürlükte/geciken, teslim, fesih+iade, taslak)';
+  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans; işveren: 1 sözleşme, 1 onaylı + 1 taslak alınan hakediş, avans; satın alma: 2 talep, 1 RFQ (2 teklif), 1 sipariş (kısmi mal kabul); gayrimenkul: 24 birim, 4 sözleşme (yürürlükte/geciken + fon, teslim, fesih+iade, taslak), 3 fon tarifesi; 2 nakit projeksiyonu kalemi';
 }
 
 /**

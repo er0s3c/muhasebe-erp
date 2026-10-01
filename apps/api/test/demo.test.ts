@@ -136,6 +136,9 @@ describe('demo aracı', () => {
         { status: 'handed_over', n: 1 },
         { status: 'terminated', n: 1 },
       ]);
+      expect((await q(`select count(*)::int as n from fee_schedules`))[0].n).toBe(3);
+      expect((await q(`select count(*)::int as n from sales_installments where kind = 'fee'`))[0].n).toBe(1);
+      expect((await q(`select count(*)::int as n from cash_forecast_items`))[0].n).toBe(2);
       expect((await q(`select count(*)::int as n from sales_writeoffs`))[0].n).toBe(4); // fesihte kapatılan taksitler
       expect((await q(`select coalesce(sum(credit_base - debit_base), 0)::int as n from journal_lines jl join accounts a on a.id = jl.account_id where a.code = '380'`))[0].n).toBe(
         Math.round(Number((await q(`select coalesce(sum(price * activation_fx), 0) as v from sales_contracts where status = 'active'`))[0].v)),

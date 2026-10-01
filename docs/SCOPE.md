@@ -113,7 +113,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | **İnşaat:** satın alma talebi, onay, RFQ/teklif karşılaştırma, sipariş (taahhüt), mal kabul (stoğa giriş) | ✅ (B2p) ⚠️ hesap kodu eklenmedi: mal kabul mevcut alış irsaliyesi muhasebesini kullanır |
 | **İnşaat:** variation order, malzeme mahsubu, KDV tevkifatı, faturanın siparişe bağlanması | ⏳ sonraki fazlar ⚠️ |
 | **İnşaat:** yabancılara satış kotaları ve yasal süre takibi | ⏳ Faz C ⚠️ |
-| **İnşaat:** altyapı fonları (elektrik/belediye) | ⏳ Faz B4 ⚠️ |
+| **İnşaat:** altyapı fonları ve harçlar (elektrik/su/belediye): tarihli, doğrulama alanlı tarifeler; alıcıdan tahsil edilen fon (satış sözleşmesine ek satır, 329 yükümlülük, fesihte iade); projenin ödediği fon tahmini | ✅ (B4) ⚠️ tutar/oranlar, 329 hesabı ve fonların vergi/hukuki niteliği doğrulanmadı |
 | **İnşaat:** yabancı işçi belge/teminat takibi, bordro | ⏳ Faz D ⚠️ |
 | **İnşaat:** müteahhitlik sınıf karnesi ve kapasite kontrolü | ⏳ Faz C ⚠️ |
 | **Market:** hızlı satış (POS), barkod, gün sonu | ⏳ Faz E |
@@ -124,10 +124,10 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 
 | İşlev | Durum |
 |---|---|
-| 13 haftalık nakit projeksiyonu | ⏳ |
+| 13 haftalık nakit projeksiyonu (açık alacak/borç vadeleri + elle kalemler, haftalık kapanış bakiyesi) | ✅ (B4) |
 | Döviz pozisyon raporu | ⏳ |
 | Proje bütçe / gerçekleşen / tahmini toplam sapma analizi (EAC, CPI), Excel | ✅ (B1) |
-| Proje kârlılığı (gelir − maliyet, GBP raporlama), nakit projeksiyonu | ⏳ Faz B4 |
+| Proje kârlılığı (sözleşmeli gelir, tanınmış gelir/maliyet, EAC, tahmini kâr; defter ve GBP raporlama) | ✅ (B4) |
 | Yönetici özet raporu | ⏳ |
 
 ## Veri güvencesi
