@@ -128,6 +128,15 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="hr.payroll" />,
+                children: [
+                  { path: 'hr/payroll', ...page(() => import('../features/hr/PayrollPage'), 'PayrollPage') },
+                  { path: 'hr/payroll/settings', ...page(() => import('../features/hr/PayrollSettingsPage'), 'PayrollSettingsPage') },
+                  { path: 'hr/payroll/:id', ...page(() => import('../features/hr/PayrollRunPage'), 'PayrollRunPage') },
+                  { path: 'hr/payroll/:id/slip/:employeeId', ...page(() => import('../features/hr/PayrollSlipPage'), 'PayrollSlipPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="construction.subcontracts" />,
                 children: [
                   { path: 'subcontracts', ...page(() => import('../features/subcontracts/SubcontractsPage'), 'SubcontractsPage') },

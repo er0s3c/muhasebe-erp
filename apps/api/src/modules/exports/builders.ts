@@ -19,6 +19,9 @@ import { listProgress } from '../subcontracts/progress';
 import { listSubcontracts } from '../subcontracts/service';
 import { laborByProject, monthlySummary } from '../hr/attendance';
 import { listEmployees } from '../hr/employees';
+import { logPayrollAccess } from '../payroll/config';
+import { payrollCostByProject } from '../payroll/reports';
+import { getRun } from '../payroll/runs';
 import { getVariation, listVariations } from '../subcontracts/variations';
 import { fxDifferences } from '../treasury/fx-report';
 import { TXN_LABEL } from '../treasury/posting';
@@ -1008,6 +1011,101 @@ export async function attendanceLaborTable(ctx: BuildCtx, q: { from: string; to:
         overtime: r.overtimeHours,
       })),
       totals: { days: d.totals.personDays, normal: d.totals.normalHours, overtime: d.totals.overtimeHours },
+    },
+  ];
+}
+
+// --- Bordro (D3) ----------------------------------------------------------------------------------------
+
+const PAYROLL_STATUS_LABEL: Record<string, string> = { draft: 'Taslak', approved: 'Onaylı', paid: 'Ödendi', cancelled: 'İptal' };
+const PAY_BASIS_LABEL: Record<string, string> = { monthly: 'Aylık', daily: 'Günlük', hourly: 'Saatlik' };
+/** Her bordro çıktısının değişmez uyarısı: iç belge ve doğrulanmamış oranlar. */
+const PAYROLL_NOTE = 'Taslak / iç belge — resmî bordro değildir';
+
+/**
+ * Bordro kaydı (tek çalıştırma, personel başına). İBAN maskelidir (son 4 hane); ücret verisi okuma erişim günlüğüne yazılır.
+ * Oranlar doğrulanmamış parametrelerden geldiyse başlıkta ⚠ uyarısı vardır.
+ */
+export async function payrollRegisterTable(ctx: BuildCtx, q: { id: string }): Promise<ReportTable[]> {
+  const d = await getRun(ctx.tx, q.id);
+  await logPayrollAccess(ctx.tx, d.lines.map((l) => l.employeeId), 'Bordro kaydı dışa aktarma');
+  const r = d.run;
+  const b = ctx.company.baseCurrency;
+  const warn = r.hasUnverifiedParams ? '⚠ doğrulanmamış oranlar kullanıldı' : r.paramsSnapshot.length === 0 ? 'yasal oran uygulanmadı (parametre yok)' : 'parametreler doğrulanmış';
+  return [
+    {
+      key: 'bordro-kaydi',
+      title: `Bordro kaydı — ${r.number} (${monthLabelTR(r.month)})`,
+      sheet: 'Bordro kaydı',
+      subtitle: sub(ctx, PAYROLL_NOTE, PAYROLL_STATUS_LABEL[r.status] ?? r.status, warn, 'kişisel veri: ücret bilgisi, İBAN maskeli'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('dept', 'Departman', 'text', 16),
+        col('basis', 'Ücret türü', 'text', 10),
+        col('normal', 'Normal saat', 'qty'),
+        col('overtime', 'Fazla mesai saati', 'qty'),
+        col('gross', `Brüt (${b})`, 'money'),
+        col('social', `İşçi primi (${b})`, 'money'),
+        col('tax', `Gelir vergisi (${b})`, 'money'),
+        col('other', `Diğer kesinti (${b})`, 'money'),
+        col('net', `Net (${b})`, 'money'),
+        col('employer', `İşveren yükü (${b})`, 'money'),
+        col('iban', 'İBAN (maskeli)', 'text', 20),
+        col('warnings', 'Uyarı', 'int'),
+      ],
+      rows: d.lines.map((l) => ({
+        code: l.employeeCode,
+        name: l.employeeName,
+        dept: l.department,
+        basis: PAY_BASIS_LABEL[l.payBasis] ?? l.payBasis,
+        normal: l.normalHours,
+        overtime: l.overtimeHours,
+        gross: l.gross,
+        social: l.employeeSocial,
+        tax: l.incomeTax,
+        other: l.otherDeductions,
+        net: l.net,
+        employer: l.employerTotal,
+        iban: l.ibanMasked,
+        warnings: l.warnings.length,
+      })),
+      totals: { gross: r.grossTotal, net: r.netTotal, employer: r.employerTotal },
+    },
+  ];
+}
+
+/** Aylık bordro maliyeti: proje / iş kalemi / maliyet koduna göre (onaylı ve ödenmiş bordro). */
+export async function payrollCostTable(ctx: BuildCtx, q: { from: string; to: string }): Promise<ReportTable[]> {
+  const d = await payrollCostByProject(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'bordro-maliyeti',
+      title: 'Bordro maliyeti (proje bazında)',
+      sheet: 'Bordro maliyeti',
+      subtitle: sub(ctx, `${monthLabelTR(q.from)} – ${monthLabelTR(q.to)}`, PAYROLL_NOTE, d.unverified ? '⚠ doğrulanmamış oranlar kullanıldı' : 'onaylı ve ödenmiş bordro'),
+      columns: [
+        col('project', 'Proje', 'text', 26),
+        col('wbs', 'İş kalemi', 'text', 26),
+        col('costCode', 'Maliyet kodu', 'text', 20),
+        col('emps', 'Personel', 'int'),
+        col('hours', 'Saat', 'qty'),
+        col('gross', `Brüt ücret (${b})`, 'money'),
+        col('employer', `İşveren yükü (${b})`, 'money'),
+        col('total', `Toplam maliyet (${b})`, 'money'),
+      ],
+      rows: d.rows.map((r) => ({
+        project: r.projectCode ? `${r.projectCode} — ${r.projectName}` : 'Etiketsiz',
+        wbs: r.wbsCode ? `${r.wbsCode} — ${r.wbsName}` : null,
+        costCode: r.costCode ? `${r.costCode} — ${r.costCodeName}` : null,
+        emps: r.employees,
+        hours: r.hours,
+        gross: r.gross,
+        employer: r.employer,
+        total: r.total,
+      })),
+      totals: { hours: d.totals.hours, gross: d.totals.gross, employer: d.totals.employer, total: d.totals.total },
     },
   ];
 }

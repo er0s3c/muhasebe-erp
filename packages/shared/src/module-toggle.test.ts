@@ -74,7 +74,7 @@ describe('checkModuleToggle', () => {
     expect(parties.ok === false && parties.modules.sort()).toEqual(['core.invoices', 'core.treasury']);
     // Bağımlılar önce kapatılırsa sıra serbest
     expect(check('core.inventory', false, off('core.invoices'))).toEqual({ ok: true });
-    expect(check('core.ledger', false, off('core.invoices', 'core.treasury', 'core.parties', 'core.inventory'))).toEqual({ ok: true });
+    expect(check('core.ledger', false, off('core.invoices', 'core.treasury', 'core.parties', 'core.inventory', 'hr.payroll'))).toEqual({ ok: true });
   });
 
   it('gereksinimi kapalı modül açılamaz', () => {

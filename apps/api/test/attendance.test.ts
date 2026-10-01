@@ -299,6 +299,9 @@ describe('puantaj (Faz D2)', async () => {
 
   it('modül kapalıysa uçlar 403 (MODULE_DISABLED); kimlik doğrulaması yok → 401', async () => {
     const w = await world('AttModul');
+    // hr.core'a bağlı bordro modülü açıkken hr.core kapatılamaz: önce bordro kapatılır
+    expect((await w.c.put('/api/company/modules/hr.core', { enabled: false })).statusCode).toBe(422);
+    expect((await w.c.put('/api/company/modules/hr.payroll', { enabled: false })).statusCode).toBe(200);
     expect((await w.c.put('/api/company/modules/hr.core', { enabled: false })).statusCode).toBe(200);
     const res = await w.c.get(`/api/attendance/month?month=${MONTH}`);
     expect(res.statusCode).toBe(403);

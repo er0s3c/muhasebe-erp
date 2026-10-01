@@ -43,7 +43,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Borç/alacak dekontu (mahsup) elle yevmiye ile | ✅ |
 | Devir işlemleri (yıl sonu ile birlikte) | ⏳ ⚠️ |
 | Cari özel fiyat/iskonto | ⏳ |
-| Personel cari ve avans takibi | ⏳ (bordro ile) |
+| Personel cari ve avans takibi | ⏳ (X5; bordro D3'te kesinti kalemi olarak elle girilir) |
 
 ## Stok
 
@@ -119,7 +119,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | **İnşaat:** altyapı fonları ve harçlar (elektrik/su/belediye): tarihli, doğrulama alanlı tarifeler; alıcıdan tahsil edilen fon (satış sözleşmesine ek satır, 329 yükümlülük, fesihte iade); projenin ödediği fon tahmini | ✅ (B4) ⚠️ tutar/oranlar, 329 hesabı ve fonların vergi/hukuki niteliği doğrulanmadı |
 | **İK:** personel kartı, şifreli hassas alanlar (maskeli gösterim, gerekçeli açma, erişim günlüğü), kişisel veri envanteri/talepler/dışa aktarma | ✅ (D1) ⚠️ envanterdeki dayanak ve saklama süreleri doğrulanmadı |
 | **İK:** puantaj: günlük devam/izin/mesai (gün türü + normal/fazla mesai saati), proje + iş kalemi + maliyet kodu etiketi, aylık çizelge ve günlük giriş, aylık kapanış (kapalı ay kilitli, gerekçeyle açılır), aylık özet, proje/iş kalemi başına işçilik saatleri | ✅ (D2) ⚠️ yasal çalışma süresi, fazla mesai, izin hakları ve resmî tatil takvimi **kodda yok / doğrulanmadı** (kullanıcı girer) |
-| **İnşaat:** bordro, SGK çıktıları, yabancı işçi belge/teminat takibi | ⏳ Faz D (D3–D5) ⚠️ |
+| **İK:** bordro motoru: tarihli, doğrulama alanlı, varsayılan KAPALI bordro parametreleri (kodda yasal oran yok), personel ücret şartı, ek ödeme/kesinti kalemleri, puantajdan brüt → kesinti → net ve işveren yükü, onayda proje/iş kalemi/maliyet koduna etiketli yevmiye, ödeme takibi, gerekçeli iptal, puantaj ay kilidiyle bağ, bordro pusulası (iç belge), bordro kaydı ve proje bazında bordro maliyeti | ✅ (D3) ⚠️ **tüm oranlar/çarpanlar/bölenler doğrulanmadı ve varsayılan kapalı; bordro resmî belge değildir**; gelir vergisi düz oran (dilimli yok); hesap eşlemeleri doğrulanmadı |
+| **İnşaat:** SGK çıktıları (D4), yabancı işçi belge/teminat takibi (D5) | ⏳ Faz D (D4–D5) ⚠️ |
 | **İnşaat:** müteahhitlik sınıf karnesi ve kapasite kontrolü | ⏳ Faz C ⚠️ |
 | **Market:** hızlı satış (POS), barkod, gün sonu | ⏳ Faz E |
 | **Market:** terazi entegrasyonu, reyon/raf envanteri | ⏳ Faz E |

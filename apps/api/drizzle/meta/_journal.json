@@ -400,6 +400,20 @@
       "when": 1790889318630,
       "tag": "0056_attendance_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1790895406875,
+      "tag": "0057_payroll",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1790895411336,
+      "tag": "0058_payroll_rules",
+      "breakpoints": true
     }
   ]
 }

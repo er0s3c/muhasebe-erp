@@ -1964,3 +1964,173 @@ export interface AttendanceLabor {
   rows: AttendanceLaborRow[];
   totals: { personDays: number; normalHours: string; overtimeHours: string };
 }
+
+// --- Bordro (Faz D3) ---
+
+import type { PayrollParamKey, PayrollWarningCode } from '@erp/shared';
+
+export type PayrollRunStatus = 'draft' | 'approved' | 'paid' | 'cancelled';
+export type PayBasisKind = 'monthly' | 'daily' | 'hourly';
+
+export interface PayrollParamRow {
+  id: string;
+  key: PayrollParamKey;
+  value: string;
+  effectiveFrom: string;
+  enabled: boolean;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  supersedesId: string | null;
+}
+
+export interface PayrollItemRow {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'earning' | 'deduction';
+  affectsSocialBase: boolean;
+  affectsTaxBase: boolean;
+  liability: 'tax' | 'social' | 'other';
+  isActive: boolean;
+}
+
+export interface PayTermRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  effectiveFrom: string;
+  payBasis: PayBasisKind;
+  amount: string;
+  note: string | null;
+}
+
+export interface PayrollRunRow {
+  id: string;
+  number: string;
+  month: string;
+  description: string | null;
+  status: PayrollRunStatus;
+  employeeCount: number;
+  grossTotal: string;
+  deductionsTotal: string;
+  netTotal: string;
+  employerTotal: string;
+  paramsSnapshot: { key: PayrollParamKey; value: string; verified: boolean; paramId: string }[];
+  hasUnverifiedParams: boolean;
+  calculatedAt: string | null;
+  entryId: string | null;
+  entryNo?: string | null;
+  reversalEntryId: string | null;
+  approvedAt: string | null;
+  paidAt: string | null;
+  paidNote: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+}
+
+export interface PayrollWarningRow {
+  code: PayrollWarningCode;
+  keys?: PayrollParamKey[];
+  count?: number;
+}
+
+export interface PayrollLineItemRow {
+  kind: 'earning' | 'deduction' | 'employer';
+  source: 'manual' | 'param';
+  code: string;
+  label: string;
+  amount: string;
+  liability: string | null;
+  paramKey: PayrollParamKey | null;
+  rate: string | null;
+}
+
+export interface PayrollLineRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  department: string | null;
+  jobTitle: string | null;
+  ibanMasked: string | null;
+  payBasis: PayBasisKind;
+  rate: string;
+  normalHours: string;
+  overtimeHours: string;
+  hourDays: number;
+  annualLeaveDays: number;
+  sickLeaveDays: number;
+  unpaidLeaveDays: number;
+  absentDays: number;
+  scheduledPay: string;
+  absenceDeduction: string;
+  basePay: string;
+  overtimePay: string;
+  earningsTotal: string;
+  gross: string;
+  socialBase: string;
+  taxBase: string;
+  employeeSocial: string;
+  incomeTax: string;
+  otherDeductions: string;
+  deductionsTotal: string;
+  net: string;
+  employerSocial: string;
+  employerOther: string;
+  employerTotal: string;
+  warnings: PayrollWarningRow[];
+  items: PayrollLineItemRow[];
+  allocations: { projectCode: string | null; wbsCode: string | null; costCode: string | null; hours: string; grossAmount: string; employerAmount: string }[];
+}
+
+export interface PayrollAdjustmentRow {
+  id: string;
+  employeeId: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  kind: 'earning' | 'deduction';
+  amount: string;
+  note: string | null;
+}
+
+export interface PayrollRunDetail {
+  run: PayrollRunRow;
+  lines: PayrollLineRow[];
+  adjustments: PayrollAdjustmentRow[];
+  missingTerms: { id: string; code: string; fullName: string }[];
+  lock: AttendanceLock;
+}
+
+export interface PayrollSlip {
+  run: PayrollRunRow;
+  line: PayrollLineRow;
+  lock: AttendanceLock;
+  hireDate: string | null;
+}
+
+export interface PayrollCostRow {
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
+  costCode: string | null;
+  costCodeName: string | null;
+  employees: number;
+  hours: string;
+  gross: string;
+  employer: string;
+  total: string;
+}
+
+export interface PayrollCostReport {
+  from: string;
+  to: string;
+  rows: PayrollCostRow[];
+  months: { month: string; number: string; status: PayrollRunStatus; employeeCount: number; gross: string; deductions: string; net: string; employer: string; cost: string; hasUnverifiedParams: boolean }[];
+  totals: { hours: string; gross: string; employer: string; total: string };
+  unverified: boolean;
+}

@@ -7,8 +7,8 @@ import type { AttendanceEmployee, AttendanceEntryRow } from '../../lib/types';
 
 export { dayTypeAllowsHours, monthBounds };
 
-/** Puantaj değişince etkilenen sorgular (çizelge, günlük giriş, özet, işçilik). */
-export const ATTENDANCE_INVALIDATE = [['attendance']];
+/** Puantaj değişince etkilenen sorgular (çizelge, günlük giriş, özet, işçilik; bordro puantaj kilidini ve girdisini buradan alır). */
+export const ATTENDANCE_INVALIDATE = [['attendance'], ['payroll']];
 
 /** Hücre görünümü: gün türüne göre renk (renk tek başına taşıyıcı değildir; kısaltma ve ipucu da vardır). */
 export const DAY_TONE: Record<AttendanceDayType, string> = {

@@ -91,6 +91,15 @@ export const MODULES: readonly ModuleDef[] = [
     requires: [],
   },
   {
+    key: 'hr.payroll',
+    labelKey: 'modules.hrPayroll',
+    label: 'Bordro',
+    sectors: 'all',
+    status: 'available',
+    // Bordro puantajdan beslenir (hr.core) ve onayda yevmiye yazar (core.ledger). Oranlar tarihli, doğrulanmamış parametredir.
+    requires: ['core.ledger', 'hr.core'],
+  },
+  {
     key: 'retail.pos',
     labelKey: 'modules.retailPos',
     label: 'Hızlı satış (POS)',
@@ -413,6 +422,24 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'hr',
     module: 'hr.core',
     permission: 'hr.read',
+  },
+  {
+    key: 'payroll',
+    labelKey: 'nav.payroll',
+    path: '/hr/payroll',
+    icon: 'wallet',
+    group: 'hr',
+    module: 'hr.payroll',
+    permission: 'hr.payroll',
+  },
+  {
+    key: 'payroll-settings',
+    labelKey: 'nav.payrollSettings',
+    path: '/hr/payroll/settings',
+    icon: 'sliders-horizontal',
+    group: 'hr',
+    module: 'hr.payroll',
+    permission: 'hr.payroll',
   },
   {
     key: 'privacy',

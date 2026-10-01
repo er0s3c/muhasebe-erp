@@ -81,6 +81,13 @@ export const ACCOUNT_MAPPING_KEYS = [
   // KDV tevkifatı (Faz B kapanışı); varsayılanlar doğrulanmamıştır
   'vat_withholding_payable',
   'vat_withholding_receivable',
+  // Bordro (Faz D3); varsayılanlar doğrulanmamıştır
+  'payroll_labor_cost',
+  'payroll_employer_cost',
+  'payroll_payable',
+  'payroll_social_payable',
+  'payroll_tax_payable',
+  'payroll_other_payable',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -122,6 +129,14 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     // KDV tevkifatı: taşeronda idareye ödenecek tevkifat borcu, işverende işverence tevkif edilen KDV alacağı
     vat_withholding_payable: '360',
     vat_withholding_receivable: '136',
+    // Bordro: direkt işçilik gideri (brüt ücret), işveren yükü gideri, ödenecek net ücret (personele borçlar),
+    // ödenecek sosyal güvenlik (361), ödenecek vergi ve fonlar (360), diğer kesintiler/çeşitli borçlar (336)
+    payroll_labor_cost: '720',
+    payroll_employer_cost: '720',
+    payroll_payable: '335',
+    payroll_social_payable: '361',
+    payroll_tax_payable: '360',
+    payroll_other_payable: '336',
   };
 }
 

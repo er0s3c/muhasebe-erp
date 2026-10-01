@@ -34,6 +34,7 @@ import { realEstateRoutes } from './modules/realestate/routes';
 import { cashRoutes } from './modules/cash/routes';
 import { subcontractRoutes } from './modules/subcontracts/routes';
 import { hrRoutes } from './modules/hr/routes';
+import { payrollRoutes } from './modules/payroll/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
@@ -182,6 +183,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(projectRoutes);
   await app.register(subcontractRoutes);
   await app.register(hrRoutes);
+  await app.register(payrollRoutes);
   await app.register(procurementRoutes);
   await app.register(realEstateRoutes);
   await app.register(cashRoutes);

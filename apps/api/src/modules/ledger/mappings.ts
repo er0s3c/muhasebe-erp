@@ -41,6 +41,12 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   fee_payable: 'Alıcıdan tahsil edilen fon ve harç yükümlülüğü',
   vat_withholding_payable: 'Taşeron hakedişinde tevkif edilen KDV borcu (idareye ödenecek)',
   vat_withholding_receivable: 'İşverence tevkif edilen KDV (alacak)',
+  payroll_labor_cost: 'Bordro: işçilik gideri (brüt ücret)',
+  payroll_employer_cost: 'Bordro: işveren yükü gideri',
+  payroll_payable: 'Bordro: ödenecek net ücret (personele borçlar)',
+  payroll_social_payable: 'Bordro: ödenecek sosyal güvenlik yükümlülüğü',
+  payroll_tax_payable: 'Bordro: ödenecek vergi ve fonlar',
+  payroll_other_payable: 'Bordro: diğer kesinti borçları',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

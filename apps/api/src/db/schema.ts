@@ -1018,7 +1018,7 @@ export const personalDataAccessLog = pgTable(
       .notNull()
       .references(() => companies.id),
     employeeId: uuid().notNull(),
-    /** id_number | birth_date | iban | export */
+    /** id_number | birth_date | iban | export | payroll (bordro/ücret görüntüleme) */
     field: text().notNull(),
     reason: text().notNull(),
     userId: uuid()
@@ -1029,7 +1029,7 @@ export const personalDataAccessLog = pgTable(
   (t) => [
     foreignKey({ name: 'personal_data_access_log_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
     index('personal_data_access_log_emp_idx').on(t.companyId, t.employeeId, t.createdAt),
-    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export')`),
+    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export','payroll')`),
     check('personal_data_access_log_reason_ck', sql`length(btrim(${t.reason})) >= 3`),
   ],
 );
@@ -1112,6 +1112,298 @@ export const attendanceMonths = pgTable(
     unique('attendance_months_company_month_uq').on(t.companyId, t.month),
     check('attendance_months_status_ck', sql`${t.status} in ('closed','open')`),
     check('attendance_months_month_ck', sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
+  ],
+);
+
+// --- Bordro (Faz D3) -----------------------------------------------------------------------------------
+
+/**
+ * Bordro parametreleri: tarihli, kaynak notlu, doğrulama alanlı, varsayılan KAPALI (construction_params deseni).
+ * Kodda hiçbir yasal oran yoktur; satır `enabled` değilse hiçbir hesap yapılmaz. Değer/anahtar/tarih oluştuktan sonra değişmez
+ * (yeni tarihli satır ekleyip öncekinin yerine geçirilir: `supersedes_id`). Anahtar başına en yeni (başlangıcı hesap tarihinden
+ * önce olan) satır geçerlidir; o satır kapalıysa parametre kapalıdır.
+ */
+export const payrollParams = pgTable(
+  'payroll_params',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    key: text().notNull(),
+    value: numeric({ precision: 19, scale: 6 }).notNull(),
+    effectiveFrom: date({ mode: 'string' }).notNull(),
+    enabled: boolean().notNull().default(false),
+    sourceNote: text(),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    supersedesId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('payroll_params_uq').on(t.companyId, t.key, t.effectiveFrom),
+    unique('payroll_params_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'payroll_params_supersedes_fk', columns: [t.supersedesId, t.companyId], foreignColumns: [t.id, t.companyId] }),
+    check(
+      'payroll_params_key_ck',
+      sql`${t.key} in ('days_per_month','hours_per_day','overtime_multiplier','sick_leave_pay_pct','annual_leave_pay_pct','employee_social_pct','income_tax_pct','tax_base_deducts_social','social_base_cap','employer_social_pct','employer_other_pct','minimum_wage_monthly')`,
+    ),
+    check('payroll_params_value_ck', sql`${t.value} >= 0`),
+  ],
+);
+
+/** Personel ücret şartı: tarihli (aylık / günlük / saatlik). Ücret verisi hassastır (hr.payroll izni, okuma erişim günlüğüne yazılır). */
+export const employeePayTerms = pgTable(
+  'employee_pay_terms',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    effectiveFrom: date({ mode: 'string' }).notNull(),
+    /** monthly | daily | hourly */
+    payBasis: text().notNull(),
+    amount: money().notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('employee_pay_terms_uq').on(t.employeeId, t.effectiveFrom),
+    foreignKey({ name: 'employee_pay_terms_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    check('employee_pay_terms_basis_ck', sql`${t.payBasis} in ('monthly','daily','hourly')`),
+    check('employee_pay_terms_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+/** Ek ödeme / kesinti kalemi kataloğu. Vergiye/prime esas bayrakları kullanıcı verisidir (yasal varsayılan yok). */
+export const payrollItems = pgTable(
+  'payroll_items',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    /** earning | deduction */
+    kind: text().notNull(),
+    affectsSocialBase: boolean().notNull().default(false),
+    affectsTaxBase: boolean().notNull().default(false),
+    /** Kesintinin yevmiyede yazılacağı yükümlülük: tax | social | other (ek ödemede 'other', kullanılmaz). */
+    liability: text().notNull().default('other'),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('payroll_items_code_uq').on(t.companyId, t.code),
+    unique('payroll_items_id_company_uq').on(t.id, t.companyId),
+    check('payroll_items_kind_ck', sql`${t.kind} in ('earning','deduction')`),
+    check('payroll_items_liability_ck', sql`${t.liability} in ('tax','social','other')`),
+  ],
+);
+
+/**
+ * Aylık bordro: ay başına en çok bir (iptal edilmemiş) çalıştırma. Taslak → onaylı (yevmiye yazılır) → ödendi; onaylı iptal edilince
+ * yevmiye ters çevrilir. Onaylı/ödenmiş çalıştırmanın satırları değişmez (ERP13). "Resmî bordro değildir": iç belgedir.
+ */
+export const payrollRuns = pgTable(
+  'payroll_runs',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    number: text().notNull(),
+    month: text().notNull(),
+    description: text(),
+    /** draft | approved | paid | cancelled */
+    status: text().notNull().default('draft'),
+    employeeCount: integer().notNull().default(0),
+    grossTotal: money().notNull().default('0'),
+    deductionsTotal: money().notNull().default('0'),
+    netTotal: money().notNull().default('0'),
+    employerTotal: money().notNull().default('0'),
+    /** Hesapta kullanılan parametrelerin kopyası (anahtar, değer, doğrulandı mı, satır kimliği). */
+    paramsSnapshot: jsonb().$type<{ key: string; value: string; verified: boolean; paramId: string }[]>().notNull().default(sql`'[]'::jsonb`),
+    hasUnverifiedParams: boolean().notNull().default(false),
+    calculatedAt: timestamp({ withTimezone: true }),
+    entryId: uuid(),
+    reversalEntryId: uuid(),
+    approvedAt: timestamp({ withTimezone: true }),
+    approvedBy: uuid().references(() => users.id),
+    paidAt: date({ mode: 'string' }),
+    paidNote: text(),
+    paidMarkedBy: uuid().references(() => users.id),
+    cancelledAt: timestamp({ withTimezone: true }),
+    cancelledBy: uuid().references(() => users.id),
+    cancelReason: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('payroll_runs_number_uq').on(t.companyId, t.number),
+    unique('payroll_runs_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('payroll_runs_month_uq')
+      .on(t.companyId, t.month)
+      .where(sql`${t.status} <> 'cancelled'`),
+    foreignKey({ name: 'payroll_runs_entry_fk', columns: [t.entryId, t.companyId], foreignColumns: [journalEntries.id, journalEntries.companyId] }),
+    foreignKey({ name: 'payroll_runs_reversal_fk', columns: [t.reversalEntryId, t.companyId], foreignColumns: [journalEntries.id, journalEntries.companyId] }),
+    check('payroll_runs_status_ck', sql`${t.status} in ('draft','approved','paid','cancelled')`),
+    check('payroll_runs_month_ck', sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
+    check('payroll_runs_totals_ck', sql`${t.grossTotal} >= 0 and ${t.deductionsTotal} >= 0 and ${t.employerTotal} >= 0 and ${t.netTotal} = ${t.grossTotal} - ${t.deductionsTotal}`),
+    // Onaylı/ödenmiş/iptal: onay ve yevmiye vardır; iptalde ters kayıt da
+    check(
+      'payroll_runs_posted_ck',
+      sql`(${t.status} = 'draft') = (${t.approvedAt} is null) and (${t.status} <> 'draft') = (${t.entryId} is not null) and (${t.status} = 'cancelled') = (${t.reversalEntryId} is not null)`,
+    ),
+    check('payroll_runs_paid_ck', sql`(${t.status} = 'paid') = (${t.paidAt} is not null)`),
+  ],
+);
+
+/** Çalıştırmanın personel satırı: hesabın tüm ara değerleri kaydedilir (sonradan parametre değişse de belge değişmez). */
+export const payrollLines = pgTable(
+  'payroll_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    runId: uuid().notNull(),
+    employeeId: uuid().notNull(),
+    payBasis: text().notNull(),
+    rate: money().notNull(),
+    normalHours: numeric({ precision: 9, scale: 2 }).notNull().default('0'),
+    overtimeHours: numeric({ precision: 9, scale: 2 }).notNull().default('0'),
+    hourDays: integer().notNull().default(0),
+    annualLeaveDays: integer().notNull().default(0),
+    sickLeaveDays: integer().notNull().default(0),
+    unpaidLeaveDays: integer().notNull().default(0),
+    absentDays: integer().notNull().default(0),
+    scheduledPay: money().notNull().default('0'),
+    absenceDeduction: money().notNull().default('0'),
+    basePay: money().notNull().default('0'),
+    overtimePay: money().notNull().default('0'),
+    earningsTotal: money().notNull().default('0'),
+    gross: money().notNull().default('0'),
+    socialBase: money().notNull().default('0'),
+    taxBase: money().notNull().default('0'),
+    employeeSocial: money().notNull().default('0'),
+    incomeTax: money().notNull().default('0'),
+    otherDeductions: money().notNull().default('0'),
+    deductionsTotal: money().notNull().default('0'),
+    net: money().notNull().default('0'),
+    employerSocial: money().notNull().default('0'),
+    employerOther: money().notNull().default('0'),
+    employerTotal: money().notNull().default('0'),
+    warnings: jsonb().$type<{ code: string; keys?: string[] }[]>().notNull().default(sql`'[]'::jsonb`),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('payroll_lines_run_emp_uq').on(t.runId, t.employeeId),
+    unique('payroll_lines_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'payroll_lines_run_fk', columns: [t.runId, t.companyId], foreignColumns: [payrollRuns.id, payrollRuns.companyId] }),
+    foreignKey({ name: 'payroll_lines_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    index('payroll_lines_emp_idx').on(t.companyId, t.employeeId),
+    check('payroll_lines_basis_ck', sql`${t.payBasis} in ('monthly','daily','hourly')`),
+    check(
+      'payroll_lines_amounts_ck',
+      sql`${t.scheduledPay} >= 0 and ${t.absenceDeduction} >= 0 and ${t.basePay} >= 0 and ${t.overtimePay} >= 0 and ${t.earningsTotal} >= 0 and ${t.employeeSocial} >= 0 and ${t.incomeTax} >= 0 and ${t.otherDeductions} >= 0 and ${t.employerSocial} >= 0 and ${t.employerOther} >= 0`,
+    ),
+    // Tutarlılık: her satırda aritmetik veritabanında doğrulanır
+    check(
+      'payroll_lines_math_ck',
+      sql`${t.basePay} = ${t.scheduledPay} - ${t.absenceDeduction} and ${t.gross} = ${t.basePay} + ${t.overtimePay} + ${t.earningsTotal} and ${t.deductionsTotal} = ${t.employeeSocial} + ${t.incomeTax} + ${t.otherDeductions} and ${t.net} = ${t.gross} - ${t.deductionsTotal} and ${t.employerTotal} = ${t.employerSocial} + ${t.employerOther}`,
+    ),
+  ],
+);
+
+/** Satırın kalemleri: elle ek ödeme/kesinti ve parametreden gelen kesinti/işveren yükü (slip ve yevmiye için). */
+export const payrollLineItems = pgTable(
+  'payroll_line_items',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    lineId: uuid().notNull(),
+    /** earning | deduction | employer */
+    kind: text().notNull(),
+    /** manual | param */
+    source: text().notNull(),
+    code: text().notNull(),
+    label: text().notNull(),
+    amount: money().notNull(),
+    liability: text(),
+    itemId: uuid(),
+    paramKey: text(),
+    rate: numeric({ precision: 19, scale: 6 }),
+  },
+  (t) => [
+    foreignKey({ name: 'payroll_line_items_line_fk', columns: [t.lineId, t.companyId], foreignColumns: [payrollLines.id, payrollLines.companyId] }),
+    foreignKey({ name: 'payroll_line_items_item_fk', columns: [t.itemId, t.companyId], foreignColumns: [payrollItems.id, payrollItems.companyId] }),
+    index('payroll_line_items_line_idx').on(t.lineId),
+    check('payroll_line_items_kind_ck', sql`${t.kind} in ('earning','deduction','employer')`),
+    check('payroll_line_items_source_ck', sql`${t.source} in ('manual','param')`),
+    check('payroll_line_items_liability_ck', sql`${t.liability} is null or ${t.liability} in ('tax','social','other')`),
+    check('payroll_line_items_amount_ck', sql`${t.amount} >= 0`),
+  ],
+);
+
+/** Taslak bordroya elle girilen ek ödeme/kesinti (yeniden hesaplamada korunur). */
+export const payrollAdjustments = pgTable(
+  'payroll_adjustments',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    runId: uuid().notNull(),
+    employeeId: uuid().notNull(),
+    itemId: uuid().notNull(),
+    amount: money().notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('payroll_adjustments_uq').on(t.runId, t.employeeId, t.itemId),
+    foreignKey({ name: 'payroll_adjustments_run_fk', columns: [t.runId, t.companyId], foreignColumns: [payrollRuns.id, payrollRuns.companyId] }),
+    foreignKey({ name: 'payroll_adjustments_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'payroll_adjustments_item_fk', columns: [t.itemId, t.companyId], foreignColumns: [payrollItems.id, payrollItems.companyId] }),
+    check('payroll_adjustments_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+/** Satır maliyetinin puantaj saat etiketine (proje/iş kalemi/maliyet kodu) dağılımı; yevmiye satırlarının kaynağı. */
+export const payrollLineAllocations = pgTable(
+  'payroll_line_allocations',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    lineId: uuid().notNull(),
+    projectId: uuid(),
+    wbsId: uuid(),
+    costCodeId: uuid(),
+    hours: numeric({ precision: 9, scale: 2 }).notNull().default('0'),
+    grossAmount: money().notNull().default('0'),
+    employerAmount: money().notNull().default('0'),
+  },
+  (t) => [
+    foreignKey({ name: 'payroll_allocations_line_fk', columns: [t.lineId, t.companyId], foreignColumns: [payrollLines.id, payrollLines.companyId] }),
+    foreignKey({ name: 'payroll_allocations_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    foreignKey({ name: 'payroll_allocations_wbs_fk', columns: [t.wbsId, t.projectId], foreignColumns: [projectWbs.id, projectWbs.projectId] }),
+    foreignKey({ name: 'payroll_allocations_cost_code_fk', columns: [t.costCodeId, t.companyId], foreignColumns: [costCodes.id, costCodes.companyId] }),
+    index('payroll_allocations_line_idx').on(t.lineId),
+    index('payroll_allocations_project_idx').on(t.companyId, t.projectId).where(sql`${t.projectId} is not null`),
+    check('payroll_allocations_tag_ck', sql`(${t.wbsId} is null or ${t.projectId} is not null) and (${t.costCodeId} is null or ${t.projectId} is not null)`),
+    check('payroll_allocations_amount_ck', sql`${t.hours} >= 0 and ${t.grossAmount} >= 0 and ${t.employerAmount} >= 0`),
   ],
 );
 
@@ -1784,7 +2076,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable')`,
     ),
   ],
 );

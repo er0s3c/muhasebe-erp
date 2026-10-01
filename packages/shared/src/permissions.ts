@@ -41,6 +41,9 @@ export const PERMISSIONS = [
   'hr.manage',
   'hr.sensitive',
   'privacy.manage',
+  // Bordro (Faz D3): ücret verisi hr.sensitive'ten ayrı, ayrı izinle açılır
+  'hr.payroll',
+  'hr.payroll_manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -90,6 +93,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'realestate.manage',
     'realestate.approve',
     'hr.read',
+    'hr.payroll',
+    'hr.payroll_manage',
   ],
   // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
   // Faturayı taslak olarak hazırlar; muhasebeleştirmeyi (invoices.post) muhasebeci yapar.

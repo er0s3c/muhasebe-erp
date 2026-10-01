@@ -12,6 +12,7 @@ export const FULL_DATA_SHEET_MAX_ROWS = 100_000;
 
 const STATUS_LABEL: Record<string, string> = { draft: 'Taslak', posted: 'Kaydedildi', cancelled: 'İptal' };
 const bool = (v: unknown) => (v ? 'Evet' : 'Hayır');
+const PAYROLL_STATUS: Record<string, string> = { draft: 'Taslak', approved: 'Onaylı', paid: 'Ödendi', cancelled: 'İptal' };
 const ATTENDANCE_DAY_LABEL: Record<string, string> = {
   worked: 'Çalıştı',
   absent: 'Devamsız',
@@ -434,6 +435,28 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
         [col('code', 'Personel kodu', 'text', 12), col('name', 'Ad soyad', 'text', 28), col('date', 'Tarih', 'date'), col('type', 'Gün türü', 'text', 16), col('normal', 'Normal saat', 'qty'), col('overtime', 'Fazla mesai saati', 'qty'), col('project', 'Proje', 'text', 12), col('wbs', 'İş kalemi', 'text', 12), col('costCode', 'Maliyet kodu', 'text', 12), col('note', 'Not', 'text', 28)],
         attRows.map((r) => ({ code: s(r.code), name: s(r.full_name), date: s(r.work_date), type: ATTENDANCE_DAY_LABEL[String(r.day_type)] ?? s(r.day_type), normal: s(r.normal_hours), overtime: s(r.overtime_hours), project: s(r.project), wbs: s(r.wbs), costCode: s(r.cost_code), note: s(r.note) })),
         `Kişisel veri içerir · ${scope}`,
+      ),
+    );
+  }
+
+  // Bordro: yalnızca çalıştırma düzeyi toplamlar. Personel bazında ücret/kesinti/net ayrıntısı bu dosyada YOKTUR (maskelenir):
+  // o ayrıntı hr.payroll izniyle bordro kaydından ve erişim günlüğüyle alınır.
+  const payRows = await query(
+    'Bordro',
+    sql`select number, month, status, employee_count, gross_total::text as gross, deductions_total::text as deductions, net_total::text as net,
+               employer_total::text as employer, has_unverified_params
+          from payroll_runs
+         where true ${q.from ? sql`and month >= ${q.from.slice(0, 7)}` : sql``} ${q.to ? sql`and month <= ${q.to.slice(0, 7)}` : sql``}
+         order by month, number`,
+  );
+  if (payRows.length > 0) {
+    tables.push(
+      table(
+        'Bordro',
+        'Bordro',
+        [col('number', 'Numara', 'text', 16), col('month', 'Ay', 'text', 10), col('status', 'Durum', 'text', 10), col('count', 'Personel', 'int'), col('gross', `Brüt toplam (${b})`, 'money'), col('ded', `Kesinti toplamı (${b})`, 'money'), col('net', `Net toplam (${b})`, 'money'), col('employer', `İşveren yükü (${b})`, 'money'), col('unverified', 'Doğrulanmamış oran', 'text', 18)],
+        payRows.map((r) => ({ number: s(r.number), month: s(r.month), status: PAYROLL_STATUS[String(r.status)] ?? s(r.status), count: Number(r.employee_count), gross: s(r.gross), ded: s(r.deductions), net: s(r.net), employer: s(r.employer), unverified: bool(r.has_unverified_params) })),
+        'Taslak / iç belge — resmî bordro değildir · personel bazında ücret ayrıntısı maskelenir (dahil değil)',
       ),
     );
   }
