@@ -38,8 +38,9 @@ Her faz, ilgili yasal parametrelerin resmi kaynaktan doğrulanmasına bağlıdı
   - **B2 — Taşeron sözleşmesi ve hakediş:** verilen (taşeron) ve alınan (işveren) kümülatif hakediş; stopaj, teminat, avans ve malzeme mahsubu tarihli doğrulamalı parametre olarak; maliyet raporuna "taahhüt edilen" sütunu.
   - **B3 — Gayrimenkul envanteri ve taksit:** bağımsız bölüm, satış sözleşmesi, dövizli (GBP) taksit planı ve tahsilat mahsubu, gelir tanıma yöntemi (parametre).
   - **B4 — Fonlar, kârlılık, nakit:** altyapı fonları/harçlar (tarihli parametre), proje kârlılığı (GBP raporlama), nakit projeksiyonu.
-- **Faz C: Resmî uyum.** Yabancılara satış kotası ve süre motoru, e-Fatura entegrasyonu, KDV/stopaj/BSİV beyannameleri, kur otomatik çekme.
-- **Faz D: İnsan kaynakları.** Personel, puantaj, bordro ve sosyal güvenlik çıktıları, yabancı işçi belge ve teminat takibi.
+- **Ön koşul: mevzuat motoru.** `tax_rates` deseninin genel `legal_parameters` tablosuna genişletilmesi (kategori, kaynak adresi, doğrulama durumu, `supersedes_id`); KDV'nin vergi kategorisine bağlanması ([LEGAL-NOTES.md](LEGAL-NOTES.md) §3 “Hedef model”). B2–B4, C ve D bunun üstüne kurulur.
+- **Faz C: Resmî uyum.** e-Fatura entegrasyonu (resmî REST API v1.2.3, UBL 2.1, UUIDv7; iç faturadan ayrı gönderim durumu, LEGAL-NOTES §7; mükellef yetkilendirmesi ve test erişimi gerekir); yabancılara satış sınırı ve süre motoru (89/2026 YGK ve sonrası; pul, tapu harcı, alım izni ve sözleşme kayıt süreleri ayrı parametre aileleri); KDV/stopaj/BSİV beyannameleri; kur otomatik çekme (yeniden yayın şartı teyit edilince, sabit saate bağlanmadan).
+- **Faz D: İnsan kaynakları.** Personel, puantaj, bordro ve sosyal güvenlik çıktıları (bordro tipi, ör. D3, + tarihli temel oranlar + ayrı ve tarihli prim desteği kuralı), yabancı işçi belge ve teminat takibi (250 € teminat tarihli parametre olarak). Bordro verisi için kişisel veri modülü (LEGAL-NOTES §5) önce gelir.
 - **Faz E: Market ve perakende.** Hızlı satış (POS), barkod ve terazi, reyon/raf envanteri, gün sonu raporu.
 - **Diğer:** çek/senet takas odası, banka teminat mektubu portföyü, 13 haftalık nakit projeksiyonu, çoklu şirket konsolidasyonu.
 

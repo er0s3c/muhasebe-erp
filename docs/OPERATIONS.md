@@ -250,7 +250,8 @@ $D stop app && $D run --rm demo-reset && $D up -d app
 **Kurulumdan önce**
 - [ ] Alan adı ve (internete açıksa) TLS planı; sunucu ≥ 2 GB bellek, kalıcı disk
 - [ ] Yedek hedefi (ofis dışı, şifreli) ve yedekten sorumlu kişi belirlendi
-- [ ] Mali müşavirle teyit: hesap eşlemesi varsayılanları, KDV oranları, açılış bakiyesi karşı hesabı, stok değerleme yöntemi, yıl sonu kapanış/devir (henüz yok; LEGAL-NOTES)
+- [ ] Mali müşavirle teyit: hesap eşlemesi varsayılanları, KDV oranları (yürürlükteki tüzük değişiklikleriyle; %20 dahil), açılış bakiyesi karşı hesabı, stok değerleme yöntemi, yıl sonu kapanış/devir (henüz yok; LEGAL-NOTES)
+- [ ] Kişisel veri: SMTP, yedek ve diğer üçüncü taraf servisler KKTC dışındaysa aktarım ruhsatı değerlendirildi (LEGAL-NOTES §5)
 - [ ] İç belgelerin (fatura, irsaliye, defter çıktısı) **yasal belge yerine geçmediği** müşteriye yazılı bildirildi
 - [ ] Lisans sözleşmesi/EULA müşteriyle imzalandı (hukuki metin avukata yazdırılır; LEGAL-NOTES §11) ve lisans kodu müşteriye güvenli kanaldan iletildi (kod yalnızca bir kez gösterilir)
 - [ ] Sunucu giden HTTPS ile lisans sunucusuna ulaşabiliyor (güvenlik duvarı/vekil); `/etc/machine-id` mevcut ve kalıcı

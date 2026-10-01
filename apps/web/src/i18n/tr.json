@@ -348,7 +348,7 @@
       "title": "KDV oranları",
       "subtitle": "Oranlar tarih aralıklıdır; değişiklikler geçmiş kayıtları etkilemez.",
       "warnTitle": "Bazı oranlar doğrulanmamış",
-      "warnBody": "Başlangıç oranları kapsam belgesinden alınmıştır ve resmi kaynaktan doğrulanmamıştır. Mali müşavirinizle kontrol edip “Doğrula” ile onaylayın.",
+      "warnBody": "Başlangıç oranları (%0, %5, %10, %16, %20) KDV Oranları Tüzüğü cetvellerine göre önerilmiştir ve resmî kaynaktan doğrulanmamıştır. Tüzük sık değiştiği için hangi mal/hizmete hangi oranın uygulanacağını mali müşavirinizle kontrol edip “Doğrula” ile onaylayın.",
       "rate": "Oran (%)",
       "validFrom": "Geçerlilik başı",
       "validTo": "Geçerlilik sonu",
