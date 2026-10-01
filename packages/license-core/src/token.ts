@@ -8,7 +8,7 @@ import { createCipheriv, createDecipheriv, createPrivateKey, createPublicKey, ge
  *  - Kurulum imzası (istekler): `{ p: yükB64, s: imzaB64 }`; imza `erp-license-v1|<tür>|-|<yükB64>` üzerinedir ve
  *    etkinleştirmede satıcıya bildirilen (sabitlenen) kurulum açık anahtarıyla doğrulanır.
  */
-export type TokenKind = 'lease' | 'offline-lease';
+export type TokenKind = 'lease' | 'offline-lease' | 'release';
 export type EnvelopeKind = 'activate' | 'heartbeat' | 'deactivate' | 'offline-request';
 
 export type TokenErrorCode = 'MALFORMED' | 'UNKNOWN_KID' | 'REVOKED_KID' | 'BAD_SIGNATURE' | 'BAD_PAYLOAD';

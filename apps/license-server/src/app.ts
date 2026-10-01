@@ -12,6 +12,7 @@ import { adminPasskeyRoutes } from './modules/admin-passkeys';
 import { adminSetupRoutes } from './modules/admin-setup';
 import { panelNotFoundHandler, registerPanel } from './panel';
 import { publicRoutes } from './modules/public';
+import { releaseRoutes } from './modules/releases';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -65,6 +66,7 @@ export async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
   await app.register(adminSetupRoutes);
   await app.register(adminPasskeyRoutes);
   await app.register(adminApiRoutes);
+  await app.register(releaseRoutes);
   // Yönetim paneli (derlenmişse) rotalardan SONRA kaydedilir
   if (config.PANEL_DIST_DIR) await registerPanel(app, config.PANEL_DIST_DIR);
   return app;

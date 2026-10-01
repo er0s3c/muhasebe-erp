@@ -13,7 +13,7 @@
   Çift tıkla: Kur.cmd. Elle:
     powershell -ExecutionPolicy Bypass -File installer\install.ps1 [-Check] [-Mode dev|prod] [-Path docker|native]
       [-Access local|lan|domain] [-Domain erp.ornek.com] [-Port 3000] [-Yes] [-NoDemo] [-Start] [-Uninstall [-Purge]]
-      [-PgSuperPassword ...]
+      [-PgSuperPassword ...] [-RestoreDb yedek.dump]   (güncelleyicinin geri dönüşü: önce veritabanını yedekten yükler)
 
   Windows PowerShell 5.1 ile uyumludur (PowerShell 7 gerekmez). Ayrıntı: docs/OPERATIONS.md §2.
 #>
@@ -31,6 +31,7 @@ param(
   [switch]$Uninstall,
   [switch]$Purge,
   [string]$PgSuperPassword = '',
+  [string]$RestoreDb = '',
   [switch]$Elevated
 )
 
@@ -505,6 +506,8 @@ function Install-ProdDocker {
     if ($Kit) { Set-EnvLine $envFile 'APP_VERSION' $Kit.version }
     Ok 'deploy\.env mevcut: parolalar korundu, imaj güncellendi'
   }
+  if ($Kit) { Install-Updater 'docker' $envFile }
+  if ($RestoreDb) { Restore-DbDocker $RestoreDb }
   $argv = @('compose', '-f', 'deploy/docker-compose.prod.yml', '--env-file', 'deploy/.env')
   if (Get-EnvValue $envFile 'ERP_DOMAIN') { $argv += @('--profile', 'tls') }
   $argv += @('up', '-d') + $buildFlag
@@ -596,12 +599,18 @@ function Install-ProdNative {
   if ($hadService) { & $winsw stop | Out-Null }
 
   $verDir = Join-Path $ProgDir "versions\$ver"
-  Info "Sürüm $ver kopyalanıyor → $verDir"
-  if (Test-Path $verDir) { Remove-Item -Recurse -Force $verDir }
-  New-Item -ItemType Directory -Path $verDir -Force | Out-Null
-  Copy-Item -Recurse (Join-Path $Root 'app') $verDir
-  Copy-Item (Join-Path $Root 'kit.json') $verDir
-  Copy-Item -Recurse (Join-Path $Root 'installer') $verDir
+  if ((Test-Path $verDir) -and ((Resolve-Path $verDir).Path.TrimEnd('\') -eq (Resolve-Path $Root).Path.TrimEnd('\'))) {
+    Ok "Sürüm $ver zaten yerinde ($verDir)"
+  } else {
+    Info "Sürüm $ver kopyalanıyor → $verDir"
+    if (Test-Path $verDir) { Remove-Item -Recurse -Force $verDir }
+    New-Item -ItemType Directory -Path $verDir -Force | Out-Null
+    Copy-Item -Recurse (Join-Path $Root 'app') $verDir
+    Copy-Item (Join-Path $Root 'kit.json') $verDir
+    Copy-Item -Recurse (Join-Path $Root 'installer') $verDir
+    # Geri dönüşte eski sürümün sihirbazı bu klasörden çalışır (hizmet sarmalayıcısı dahil)
+    Copy-Item -Recurse (Join-Path $Root 'winsw') $verDir
+  }
   & icacls $ProgDir /grant "${SidLocalService}:(OI)(CI)RX" | Out-Null
 
   $erpEnv = Join-Path $DataDir 'erp.env'
@@ -636,6 +645,7 @@ function Install-ProdNative {
     Ok "Ayarlar yazıldı ($erpEnv, $migEnv)"
   }
   Set-EnvLine $erpEnv 'APP_VERSION' $ver
+  if ($RestoreDb) { Restore-DbNative $RestoreDb }
 
   $current = Join-Path $ProgDir 'current'
   $prevTarget = $null
@@ -659,6 +669,7 @@ function Install-ProdNative {
   Invoke-Native $winsw @('start') 'Hizmet başlatma'
   Ok 'Windows hizmeti: Muhasebe ERP (otomatik başlar; services.msc)'
   Write-BackupTask
+  Install-Updater 'native' $erpEnv
   Ok "Günlük yedek: 02:30 ($DataDir\backups, son 14). Elle: powershell -File `"$ProgDir\bin\erp-backup.ps1`""
   if (-not (Wait-Ready "http://127.0.0.1:$Port/api/health/ready" 90)) { Die "Uygulama hazır olmadı: günlük $DataDir\logs" }
   Ok 'Uygulama çalışıyor'
@@ -668,6 +679,79 @@ function Install-ProdNative {
   [IO.File]::WriteAllText((Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Muhasebe ERP.url'), "[InternetShortcut]`r`nURL=$url`r`n", $Utf8NoBom)
   [void]$fresh
   Complete-Prod $Port
+}
+
+# ---- Uzaktan güncelleme: güncelleyici (dakikada bir, SYSTEM) -------------------------------------------------------------
+function Add-EnvSecret([string]$file, [string]$key, [string]$value) {
+  if (-not (Get-EnvValue $file $key)) { Set-EnvLine $file $key $value }
+}
+
+function Install-Updater([string]$mode, [string]$envFile) {
+  $nodeSrc = Join-Path $Root 'app\runtime\node.exe'
+  $jsSrc = Join-Path $Root 'app\dist\updater.js'
+  if (-not ((Test-Path $nodeSrc) -and (Test-Path $jsSrc))) { Warn 'Kitte güncelleyici yok; uzaktan güncelleme kapalı'; return }
+  Add-EnvSecret $envFile 'ERP_UPDATER_TOKEN' (New-RandomHex 32)
+  Add-EnvSecret $envFile 'ERP_KIT_TARGET' 'win-x64'
+  Protect-DataDir
+  $upd = Join-Path $DataDir 'updater'
+  $work = Join-Path $DataDir 'updater-work'
+  foreach ($d in @($upd, $work)) { if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null } }
+  # Çalışan güncelleyicinin node.exe dosyasının üzerine yazılamaz; Windows çalışan dosyayı yeniden adlandırmaya izin verir
+  $nodeDst = Join-Path $upd 'node.exe'
+  try { Copy-Item -Force $nodeSrc $nodeDst -ErrorAction Stop }
+  catch {
+    $old = Join-Path $upd ('node.old-' + (New-RandomHex 3) + '.exe')
+    Move-Item -Force $nodeDst $old
+    Copy-Item -Force $nodeSrc $nodeDst
+  }
+  Get-ChildItem $upd -Filter 'node.old-*.exe' -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -Force $_.FullName -ErrorAction SilentlyContinue }
+  Copy-Item -Force $jsSrc (Join-Path $upd 'updater.js')
+  $cfg = [ordered]@{
+    mode = $mode
+    platform = 'win-x64'
+    appUrl = "http://127.0.0.1:$Port"
+    envFile = $envFile
+    workDir = $work
+    installArgs = @('-Port', "$Port", '-Access', $script:Access) + $(if ($script:Domain) { @('-Domain', $script:Domain) } else { @() })
+  }
+  if ($mode -eq 'docker') { $cfg.dockerDir = $Root; $cfg.dbName = $DbName }
+  else {
+    $cfg.nativePrefix = $ProgDir
+    $cfg.backupCommand = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $ProgDir 'bin\erp-backup.ps1'))
+  }
+  $cfgFile = Join-Path $DataDir 'updater.json'
+  Write-TextFile $cfgFile ($cfg | ConvertTo-Json -Depth 4)
+  $action = New-ScheduledTaskAction -Execute $nodeDst -Argument "`"$upd\updater.js`" `"--config=$cfgFile`"" -WorkingDirectory $upd
+  $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
+  $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+  $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+  Register-ScheduledTask -TaskName 'Muhasebe ERP Güncelleyici' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+  Ok "Uzaktan güncelleme hazır: sahip onaylayınca uygulanır (günlük: $work\updater.log)"
+}
+
+function Restore-DbNative([string]$file) {
+  if (-not (Test-Path $file)) { Die "Yedek dosyası yok: $file" }
+  $url = Get-EnvValue (Join-Path $DataDir 'migrate.env') 'MIGRATION_DATABASE_URL'
+  if (-not $url) { Die 'migrate.env okunamadı' }
+  Info "Veritabanı yedekten geri yükleniyor: $file"
+  Invoke-Psql @('-c', "drop database if exists $DbName with (force)", '-c', "create database $DbName owner erp", '-c', "revoke all on database $DbName from public", '-c', "grant connect on database $DbName to erp_app") | Out-Null
+  Invoke-Native (Join-Path $script:PgInfo.Bin 'pg_restore.exe') @('--exit-on-error', '--single-transaction', '--no-owner', '--role=erp', '-d', $url, $file) 'Geri yükleme'
+  Ok 'Veritabanı geri yüklendi'
+}
+
+function Restore-DbDocker([string]$file) {
+  if (-not (Test-Path $file)) { Die "Yedek dosyası yok: $file" }
+  Info "Veritabanı yedekten geri yükleniyor (Docker): $file"
+  $dc = @('compose', '-f', 'deploy/docker-compose.prod.yml', '--env-file', 'deploy/.env')
+  & docker @dc stop app *> $null
+  Invoke-Native 'docker' ($dc + @('up', '-d', 'db')) 'docker compose up db'
+  for ($i = 0; $i -lt 60; $i++) { & docker @dc exec -T db pg_isready -U postgres *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep 1 }
+  Invoke-Native 'docker' ($dc + @('exec', '-T', 'db', 'psql', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q', '-c', "drop database if exists $DbName with (force)", '-c', "create database $DbName owner erp", '-c', "revoke all on database $DbName from public", '-c', "grant connect on database $DbName to erp_app")) 'Veritabanı yeniden oluşturma'
+  # Döküm ikilidir: PowerShell borusu yerine cmd yönlendirmesiyle aktarılır (bayt bayt)
+  $argLine = ($dc + @('exec', '-T', 'db', 'pg_restore', '-U', 'postgres', '--exit-on-error', '--single-transaction', '--no-owner', '--role=erp', '-d', $DbName)) -join ' '
+  & cmd.exe /c "docker $argLine < `"$file`""
+  if ($LASTEXITCODE -ne 0) { Die 'Geri yükleme başarısız' }
+  Ok 'Veritabanı geri yüklendi'
 }
 
 function Complete-Prod([int]$p) {
@@ -693,6 +777,7 @@ function Uninstall-Native {
   $winsw = Get-WinswExe
   if (Get-Service $SvcId -ErrorAction SilentlyContinue) { & $winsw stop | Out-Null; & $winsw uninstall | Out-Null }
   Unregister-ScheduledTask -TaskName 'Muhasebe ERP Yedek' -Confirm:$false -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName 'Muhasebe ERP Güncelleyici' -Confirm:$false -ErrorAction SilentlyContinue
   Remove-Junction (Join-Path $ProgDir 'current')
   if (Test-Path $ProgDir) { Remove-Item -Recurse -Force $ProgDir }
   Remove-Item -Force (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Muhasebe ERP.url') -ErrorAction SilentlyContinue

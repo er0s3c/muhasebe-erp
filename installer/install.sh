@@ -13,6 +13,7 @@
 #
 # Kullanım:  ./install.sh [--check] [--mode=dev|prod] [--path=docker|native] [--access=local|lan|domain]
 #                         [--domain=erp.ornek.com] [--port=3000] [--yes] [--no-demo] [--start] [--uninstall [--purge]]
+#                         [--restore-db=yedek.dump]   (güncelleyicinin geri dönüşü: kurmadan önce veritabanını yedekten yükler)
 # Ayrıntı:   docs/OPERATIONS.md §2 (Kurulum sihirbazı)
 # =====================================================================================================================
 set -Eeuo pipefail
@@ -37,7 +38,8 @@ DB_NAME=erp
 
 # ---- Seçenekler -----------------------------------------------------------------------------------------------------
 OPT_CHECK=0 OPT_YES=0 OPT_DEMO=1 OPT_START=0 OPT_UNINSTALL=0 OPT_PURGE=0
-MODE="" PATH_CHOICE="" ACCESS="" DOMAIN="" PORT=3000
+MODE="" PATH_CHOICE="" ACCESS="" DOMAIN="" PORT=3000 RESTORE_DB=""
+UPD_DIR=$PREFIX/updater
 
 usage() { sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
@@ -54,6 +56,7 @@ for arg in "$@"; do
     --access=*) ACCESS="${arg#*=}" ;;
     --domain=*) DOMAIN="${arg#*=}" ;;
     --port=*) PORT="${arg#*=}" ;;
+    --restore-db=*) RESTORE_DB="${arg#*=}" ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Bilinmeyen seçenek: $arg (yardım: --help)" >&2; exit 2 ;;
   esac
@@ -459,6 +462,8 @@ install_prod_docker() {
     okm "deploy/.env mevcut: parolalar korundu, imaj $image olarak güncellendi"
   fi
 
+  (( KIT )) && install_updater docker "$ROOT/$envf"
+  [[ -n "$RESTORE_DB" ]] && restore_db_docker "$RESTORE_DB"
   local profile=()
   grep -q '^ERP_DOMAIN=.\+' "$envf" && profile=(--profile tls)
   info "Hizmetler başlatılıyor (docker compose up -d)…"
@@ -599,6 +604,9 @@ install_prod_native() {
   elif [[ -x "$PREFIX/bin/erpctl" ]]; then as_root "$PREFIX/bin/erpctl" stop >/dev/null 2>&1 || true; fi
   [[ "$prev" == "versions/$ver" ]] && prev=""
 
+  if [[ "$ROOT" -ef "$PREFIX/versions/$ver" ]]; then
+    okm "Sürüm $ver zaten yerinde ($PREFIX/versions/$ver)"
+  else
   info "Sürüm $ver kopyalanıyor → $PREFIX/versions/$ver"
   as_root rm -rf "$PREFIX/versions/$ver.tmp"
   as_root mkdir -p "$PREFIX/versions/$ver.tmp"
@@ -607,6 +615,7 @@ install_prod_native() {
   as_root rm -rf "$PREFIX/versions/$ver"
   as_root mv "$PREFIX/versions/$ver.tmp" "$PREFIX/versions/$ver"
   as_root chown -R root:root "$PREFIX/versions/$ver"
+  fi
 
   local owner_pw app_pw jwt fresh=0
   if as_root test -f "$ETC/erp.env" && as_root test -f "$ETC/migrate.env"; then
@@ -647,6 +656,7 @@ EOF
     okm "Ayarlar yazıldı ($ETC/erp.env, $ETC/migrate.env)"
   fi
   as_root sed -i "s/^APP_VERSION=.*/APP_VERSION=$ver/" "$ETC/erp.env"
+  [[ -n "$RESTORE_DB" ]] && restore_db_native "$RESTORE_DB"
 
   # current'ı yeni sürüme çevir → migration → başlat
   as_root ln -sfn "versions/$ver" "$PREFIX/current"
@@ -658,6 +668,7 @@ EOF
 
   write_erpctl
   write_backup_tool
+  install_updater native "$ETC/erp.env"
   if (( HAS_SYSTEMD )); then
     write_unit
     as_root systemctl enable --now "$SVC_NAME" >/dev/null
@@ -679,6 +690,72 @@ EOF
   finish_prod "$PORT"
 }
 
+# ---- Uzaktan güncelleme: güncelleyici (her dakika; yönetici yetkisiyle) -------------------------------------------------
+ensure_env_secret() { # ensure_env_secret dosya ANAHTAR değer — yoksa ekler (varsa dokunmaz)
+  local f="$1" k="$2" v="$3"
+  if ! as_root grep -q "^${k}=" "$f" 2>/dev/null; then printf '%s=%s\n' "$k" "$v" | as_root tee -a "$f" >/dev/null; fi
+}
+
+install_updater() { # install_updater mod ortam-dosyası
+  local mode="$1" envf="$2" node_src="$ROOT/app/runtime/node"
+  [[ -x "$node_src" && -f "$ROOT/app/dist/updater.js" ]] || { warn "Kitte güncelleyici yok; uzaktan güncelleme kapalı"; return 0; }
+  ensure_env_secret "$envf" ERP_UPDATER_TOKEN "$(rand_hex 32)"
+  ensure_env_secret "$envf" ERP_KIT_TARGET linux-x64
+  as_root mkdir -p "$UPD_DIR" "$ETC" "$VARDIR/updater"
+  as_root chmod 700 "$VARDIR/updater"
+  # Çalışan güncelleyicinin dosyaları yeniden adlandırmayla değiştirilir (çalışan ikilinin üzerine yazılamaz)
+  as_root cp "$node_src" "$UPD_DIR/node.new" && as_root mv -f "$UPD_DIR/node.new" "$UPD_DIR/node"
+  as_root cp "$ROOT/app/dist/updater.js" "$UPD_DIR/updater.js.new" && as_root mv -f "$UPD_DIR/updater.js.new" "$UPD_DIR/updater.js"
+  local args="\"--port=$PORT\", \"--access=$ACCESS\""
+  [[ -n "$DOMAIN" ]] && args="$args, \"--domain=$DOMAIN\""
+  local extra
+  if [[ "$mode" == docker ]]; then extra="\"dockerDir\": \"$ROOT\", \"dbName\": \"$DB_NAME\""
+  else extra="\"nativePrefix\": \"$PREFIX\", \"backupCommand\": [\"$PREFIX/bin/erp-backup\"]"; fi
+  printf '{\n  "mode": "%s",\n  "platform": "linux-x64",\n  "appUrl": "http://127.0.0.1:%s",\n  "envFile": "%s",\n  "workDir": "%s",\n  "installArgs": [%s],\n  %s\n}\n' \
+    "$mode" "$PORT" "$envf" "$VARDIR/updater" "$args" "$extra" | as_root tee "$ETC/updater.json" >/dev/null
+  as_root chmod 600 "$ETC/updater.json"
+  printf '#!/usr/bin/env bash\n# Muhasebe ERP güncelleyicisini şimdi çalıştırır (sahibin onayladığı güncelleme varsa uygular). Günlük: %s/updater/updater.log\nexec "%s/node" "%s/updater.js" --config="%s/updater.json"\n' \
+    "$VARDIR" "$UPD_DIR" "$UPD_DIR" "$ETC" | as_root tee /usr/local/bin/erp-update >/dev/null
+  as_root chmod 755 /usr/local/bin/erp-update
+  if (( HAS_SYSTEMD )); then
+    printf '[Unit]\nDescription=Muhasebe ERP uzaktan güncelleme denetimi\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart=%s/node %s/updater.js --config=%s/updater.json\nTimeoutStartSec=2h\n' \
+      "$UPD_DIR" "$UPD_DIR" "$ETC" | as_root tee "/etc/systemd/system/$SVC_NAME-updater.service" >/dev/null
+    printf '[Unit]\nDescription=Muhasebe ERP uzaktan güncelleme denetimi (dakikada bir)\n\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=60s\nAccuracySec=10s\n\n[Install]\nWantedBy=timers.target\n' \
+      | as_root tee "/etc/systemd/system/$SVC_NAME-updater.timer" >/dev/null
+    as_root systemctl daemon-reload
+    as_root systemctl enable --now "$SVC_NAME-updater.timer" >/dev/null 2>&1 || true
+    okm "Uzaktan güncelleme hazır: sahip onaylayınca uygulanır (günlük: $VARDIR/updater/updater.log)"
+  else
+    warn "systemd yok: onaylanan uzaktan güncellemeler kendiliğinden uygulanmaz; 'sudo erp-update' ile çalıştırın (ya da cron'a dakikalık ekleyin)"
+  fi
+}
+
+restore_db_native() { # yedekten geri yükleme (güncelleyicinin geri dönüşü): veritabanı silinip yeniden oluşturulur
+  local file="$1" pgp url
+  [[ -f "$file" ]] || die "Yedek dosyası yok: $file"
+  pgp="$(pg_port)"
+  url="$(as_root sed -n 's/^MIGRATION_DATABASE_URL=//p' "$ETC/migrate.env")"
+  [[ -n "$url" ]] || die "$ETC/migrate.env okunamadı"
+  info "Veritabanı yedekten geri yükleniyor: $file"
+  as_postgres psql -p "$pgp" -v ON_ERROR_STOP=1 -q -c "drop database if exists $DB_NAME with (force)" -c "create database $DB_NAME owner erp" \
+    -c "revoke all on database $DB_NAME from public" -c "grant connect on database $DB_NAME to erp_app" >/dev/null
+  as_root "/usr/lib/postgresql/$PG_MAJOR/bin/pg_restore" --exit-on-error --single-transaction --no-owner --role=erp -d "$url" "$file"
+  okm "Veritabanı geri yüklendi"
+}
+
+restore_db_docker() {
+  local file="$1" dc=(docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env) i
+  [[ -f "$file" ]] || die "Yedek dosyası yok: $file"
+  info "Veritabanı yedekten geri yükleniyor (Docker): $file"
+  "${dc[@]}" stop app >/dev/null 2>&1 || true
+  "${dc[@]}" up -d db >/dev/null
+  for i in $(seq 1 60); do "${dc[@]}" exec -T db pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
+  "${dc[@]}" exec -T db psql -U postgres -v ON_ERROR_STOP=1 -q -c "drop database if exists $DB_NAME with (force)" -c "create database $DB_NAME owner erp" \
+    -c "revoke all on database $DB_NAME from public" -c "grant connect on database $DB_NAME to erp_app" >/dev/null
+  "${dc[@]}" exec -T db pg_restore -U postgres --exit-on-error --single-transaction --no-owner --role=erp -d "$DB_NAME" < "$file"
+  okm "Veritabanı geri yüklendi"
+}
+
 finish_prod() {
   local port="$1" url
   case "$ACCESS" in
@@ -697,11 +774,12 @@ finish_prod() {
 uninstall_native() {
   stage "Muhasebe ERP kaldırılıyor (yerel kurulum)"
   if (( HAS_SYSTEMD )); then
-    as_root systemctl disable --now "$SVC_NAME" "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true
-    as_root rm -f "/etc/systemd/system/$SVC_NAME.service" "/etc/systemd/system/$SVC_NAME-backup.service" "/etc/systemd/system/$SVC_NAME-backup.timer"
+    as_root systemctl disable --now "$SVC_NAME" "$SVC_NAME-backup.timer" "$SVC_NAME-updater.timer" >/dev/null 2>&1 || true
+    as_root rm -f "/etc/systemd/system/$SVC_NAME.service" "/etc/systemd/system/$SVC_NAME-backup.service" "/etc/systemd/system/$SVC_NAME-backup.timer" \
+      "/etc/systemd/system/$SVC_NAME-updater.service" "/etc/systemd/system/$SVC_NAME-updater.timer"
     as_root systemctl daemon-reload
   elif [[ -x "$PREFIX/bin/erpctl" ]]; then as_root "$PREFIX/bin/erpctl" stop >/dev/null 2>&1 || true; fi
-  as_root rm -rf "$PREFIX" /usr/local/bin/erpctl
+  as_root rm -rf "$PREFIX" /usr/local/bin/erpctl /usr/local/bin/erp-update
   okm "Program dosyaları ve hizmet kaldırıldı"
   if (( OPT_PURGE )); then
     confirm "VERİTABANI '$DB_NAME', ayarlar ve yedekler KALICI olarak silinsin mi?" || die "Vazgeçildi"

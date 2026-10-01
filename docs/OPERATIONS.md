@@ -116,6 +116,8 @@ Geçersiz/eksik değerde uygulama başlamaz ve nedenini yazar. Boş değer "tan�
 | `LICENSE_HOST_ID_FILE` | `/etc/host-machine-id` | Ana makine kimliği dosyası (compose bağlar); sunucu parmak izinin parçası |
 | `LICENSE_ALLOW_INSECURE_URL` | `false` | Yalnızca test düzenekleri (`http://` lisans sunucusu); **müşteri kurulumunda kullanılmaz** |
 | `LICENSE_ENFORCEMENT_DEV`, `LICENSE_DEV_KEYRING` | yok | Yalnızca `NODE_ENV≠production` (geliştirme/e2e); üretimde **reddedilir**. Üretim paketinde lisans denetimi **derleme zamanı sabitidir**, ortam değişkeniyle kapatılamaz |
+| `ERP_UPDATER_TOKEN` | yok | Uzaktan güncelleme: ana makinedeki güncelleyiciyle paylaşılan belirteç (≥ 32 karakter; sihirbaz üretir). Yoksa güncelleyici uçları kapalıdır |
+| `ERP_KIT_TARGET` | yok | `linux-x64` / `win-x64`: kurulum kitinin hedefi (sihirbaz yazar); kalp atışında satıcıya bildirilir, güncelleme arşivini seçer |
 | `ALLOW_DEMO` | yok | Yalnızca demo örneğinde `true` (bkz. §8); müşteri kurulumunda **asla** |
 
 Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceliklidir**; kabukta eski bir `JWT_SECRET` tanımlıysa dosyadaki değer yok sayılır.
@@ -143,6 +145,25 @@ Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceli
 - Rol değişiklikleri: `owner` rolünü yalnızca sahip verir/alır; son sahip düşürülemez.
 
 ## 5. Yükseltme
+
+### Uzaktan güncelleme (sihirbazla kurulmuş müşteri kurulumları)
+
+Satıcı yeni sürümü lisans panelinden **gönderir**; müşteride **kurulum sahibi onaylar**; ana makinedeki güncelleyici uygular.
+
+1. Uygulama kalp atışında (yaklaşık 12 saatte bir; **Ayarlar > Lisans > Yazılım güncellemesi > Güncellemeleri denetle** ile hemen) satıcının imzalı sürüm manifestosunu alır ve gömülü satıcı anahtarıyla doğrular. Sahte/bozuk teklif yok sayılır.
+2. Sahip aynı kartta sürüm notunu görür: **Şimdi güncelle** ya da **Bu gece güncelle (02:00, sunucu saati)**. Onay `security_events`'e yazılır (`update_requested`).
+3. Güncelleyici (Linux: `muhasebe-erp-updater.timer`, dakikada bir; Windows: **Muhasebe ERP Güncelleyici** zamanlanmış görevi, SYSTEM) onaylı işi alır: kiti lisans sunucusundan kısa ömürlü, kuruluma özel bir belirteçle indirir, **SHA-256 ve boyutu** manifestoyla karşılaştırır, **yedek alır** (yedek alınamazsa güncelleme yapılmaz), kiti açar ve **yeni kitin kurulum sihirbazını** etkileşimsiz çalıştırır (durdurma, yan klasöre kopyalama, migration, başlatma, sağlık). Uygulama yeni sürümle yanıt verince durum **Tamamlandı** olur.
+4. **Başarısızlıkta:** migration tek işlemde çalıştığından migration hatası veritabanını değiştirmez; eski sürüm çalışmaya devam eder → **Başarısız**. Yeni sürüm migration sonrası ayağa kalkmazsa güncelleyici **önceki sürümün sihirbazını yedekten veritabanı geri yüklemesiyle** çalıştırır → **Geri alındı** (güncelleme sonrası girilen veri yoktur, çünkü uygulama kapalıydı). İkisi de olmazsa durum ve yedeğin yolu günlükte kalır; §6'ya göre elle geri yükleyin.
+
+Gereksinimler ve notlar:
+
+- Docker'lı ve Docker'sız kurulumlarda çalışır (Docker'da yedek `pg_dump` kap içinde alınır, ayarlar yeni kit klasörüne taşınır, aynı compose projesi ve birimler kullanılır).
+- Linux'ta **systemd** gerekir; yoksa (ör. systemd kapalı WSL) onaylanan güncellemeyi `sudo erp-update` çalıştırır.
+- Günlük: Linux `/var/lib/muhasebe-erp/updater/updater.log`, Windows `C:\ProgramData\MuhasebeERP\updater-work\updater.log`. Ayar: `/etc/muhasebe-erp/updater.json` / `C:\ProgramData\MuhasebeERP\updater.json`.
+- Uygulama ile güncelleyici, sihirbazın ürettiği `ERP_UPDATER_TOKEN` ile konuşur (ayar dosyasında; yoksa uzaktan güncelleme kapalıdır, uçlar 401 döner). Kalp atışında satıcıya ayrıca kit hedefi (`linux-x64`/`win-x64`) gönderilir; başka veri gönderilmez.
+- Elle (sihirbazsız) kurulumlarda teklif yine görünür ama onay düğmesi yerine "yeni kiti indirip sihirbazla güncelleyin" uyarısı çıkar.
+
+### Elle yükseltme
 
 ```bash
 scripts/backup.sh --compose                      # 1) yedek al

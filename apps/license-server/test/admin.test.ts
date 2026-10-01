@@ -95,7 +95,8 @@ describe('yönetim uçlarının korunması', () => {
       ['GET /admin/api/setup', 'HEAD /admin/api/setup', 'POST /admin/api/login', 'POST /admin/api/passkey/login', 'POST /admin/api/passkey/options', 'POST /admin/api/setup', 'POST /admin/api/setup/totp'].sort(),
     );
     const others = s.routes.filter((r) => !r.url.startsWith('/admin/api')).map((r) => r.url).sort();
-    expect([...new Set(others)]).toEqual(['/healthz', '/v1/activate', '/v1/deactivate', '/v1/heartbeat']);
+    // /v1/releases: kalp atışında verilen kısa ömürlü, kuruluma özel indirme belirteciyle (HMAC) korunur
+    expect([...new Set(others)]).toEqual(['/healthz', '/v1/activate', '/v1/deactivate', '/v1/heartbeat', '/v1/releases/:version/:name']);
   });
 
   it('çerezsiz her yönetim isteği 401; değiştiren isteklerde CSRF başlığı ve köken denetimi', async () => {

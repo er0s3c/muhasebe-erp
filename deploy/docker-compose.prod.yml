@@ -67,6 +67,9 @@ services:
       # Lisans sunucusu (satıcı); imajda varsayılan adres gömülüyse boş bırakılabilir. Çıkış HTTPS (443) izni gerekir.
       LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
       LICENSE_ALLOW_INSECURE_URL: ${LICENSE_ALLOW_INSECURE_URL:-false}
+      # Uzaktan güncelleme (kurulum sihirbazı yazar): ana makinedeki güncelleyiciyle paylaşılan belirteç ve kit hedefi
+      ERP_UPDATER_TOKEN: ${ERP_UPDATER_TOKEN:-}
+      ERP_KIT_TARGET: ${ERP_KIT_TARGET:-}
     extra_hosts:
       # Ana makinedeki hizmetlere (örn. yerel lisans sunucusu, SMTP geçidi) host.docker.internal adıyla erişim
       - 'host.docker.internal:host-gateway'

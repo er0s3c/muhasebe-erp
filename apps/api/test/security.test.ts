@@ -338,6 +338,9 @@ describe('sözleşme testleri', async () => {
     'POST /api/license/activate',
     'POST /api/license/offline-activate',
     'POST /api/license/offline-request',
+    // Ana makinedeki güncelleyici: kullanıcı oturumu yok; ERP_UPDATER_TOKEN paylaşılan belirteciyle (yoksa her istek 401)
+    'GET /api/system/updater/pending',
+    'POST /api/system/updater/report',
   ].sort();
 
   it('her /api rotası kamuya açık listede ya da tenantRoute/authedRoute kapısındadır (liste birebir)', () => {
@@ -392,7 +395,7 @@ describe('sözleşme testleri', async () => {
            and not exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'company_id' and not a.attisdropped)
          order by 1`);
       expect(global.rows.map((r) => r.relname)).toEqual([
-        'companies', 'currencies', 'devices', 'license_state', 'organizations', 'refresh_tokens', 'security_events', 'user_mfa', 'user_tokens', 'users',
+        'app_updates', 'companies', 'currencies', 'devices', 'license_state', 'organizations', 'refresh_tokens', 'security_events', 'user_mfa', 'user_tokens', 'users',
       ]);
     });
   });

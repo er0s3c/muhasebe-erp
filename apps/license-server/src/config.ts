@@ -53,6 +53,8 @@ const envSchema = z.object({
   PANEL_DIST_DIR: z.string().optional(),
   SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15_000),
   APP_VERSION: z.string().default('dev'),
+  /** Uzaktan güncelleme kit arşivlerinin saklandığı klasör (kalıcı birim; compose: releases birimi). */
+  RELEASES_DIR: z.string().default('releases'),
 });
 
 export type Config = Omit<z.infer<typeof envSchema>, 'ADMIN_COOKIE_SECURE'> & { ADMIN_COOKIE_SECURE: boolean };

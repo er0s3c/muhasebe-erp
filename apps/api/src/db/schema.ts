@@ -98,6 +98,38 @@ export const userMfa = pgTable('user_mfa', {
   createdAt: createdAt(),
 });
 
+/**
+ * Uzaktan güncelleme teklifleri ve uygulama geçmişi (kurulum geneli; kiracı tablosu değildir). Satıcının imzalı manifestosu kalp
+ * atışıyla gelir; kurulum sahibi onaylayınca ana makinedeki güncelleyici isteği alır ve durumu buraya yazar.
+ */
+export const appUpdates = pgTable(
+  'app_updates',
+  {
+    id: id(),
+    version: text().notNull(),
+    notes: text().notNull().default(''),
+    manifest: text().notNull(),
+    files: jsonb().$type<{ target: string; name: string; sha256: string; size: number }[]>().notNull(),
+    downloadToken: text().notNull(),
+    offeredAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** offered | requested | downloading | applying | done | failed | rolled_back | cancelled */
+    status: text().notNull().default('offered'),
+    requestedBy: uuid().references(() => users.id),
+    requestedAt: timestamp({ withTimezone: true }),
+    scheduledFor: timestamp({ withTimezone: true }),
+    startedAt: timestamp({ withTimezone: true }),
+    finishedAt: timestamp({ withTimezone: true }),
+    fromVersion: text(),
+    message: text(),
+    log: text(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('app_updates_version_uq').on(t.version),
+    check('app_updates_status_ck', sql`${t.status} in ('offered','requested','downloading','applying','done','failed','rolled_back','cancelled')`),
+  ],
+);
+
 /** Kimlik doğrulama ve yetki olayları (yalnızca eklenir). Kiracı tablosu değildir; destek/inceleme içindir. */
 export const securityEvents = pgTable(
   'security_events',

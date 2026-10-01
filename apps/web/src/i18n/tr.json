@@ -1930,6 +1930,34 @@
       "multi": "Lisansınız yalnızca şu sektörleri kapsıyor: {{sectors}}.",
       "limit": "Lisansınız en fazla {{limit}} şirkete izin veriyor ve sınıra ulaştınız.",
       "usage": "Şirket kullanımı: {{used}} / {{limit}}"
+    },
+    "update": {
+      "title": "Yazılım güncellemesi",
+      "current": "Çalışan sürüm: {{version}}",
+      "check": "Güncellemeleri denetle",
+      "found": "Yeni sürüm var: {{version}}",
+      "none": "Yeni sürüm yok",
+      "upToDate": "Kurulum güncel. Satıcı yeni bir sürüm gönderdiğinde burada görünür.",
+      "newVersion": "Yeni sürüm {{version}}",
+      "now": "Şimdi güncelle",
+      "tonight": "Bu gece güncelle (02:00)",
+      "cancel": "Vazgeç",
+      "requested": "Güncelleme onaylandı; güncelleyici bir dakika içinde başlar.",
+      "scheduled": "Planlanan zaman: {{at}}",
+      "applyingHint": "Güncelleme uygulanıyor: uygulama birkaç dakika kapanabilir. Önce otomatik yedek alınır; sorun çıkarsa önceki sürüme dönülür.",
+      "noUpdater": "Bu kurulumda otomatik güncelleyici yok (elle kurulum). Yeni kiti indirip kurulum sihirbazını çalıştırarak güncelleyin.",
+      "backupNote": "Güncellemeden önce veritabanının yedeği otomatik alınır. Kullanıcıların çalışmasını kaydetmesi önerilir.",
+      "history": "Güncelleme geçmişi",
+      "status": {
+        "offered": "Bekliyor",
+        "requested": "Onaylandı",
+        "downloading": "İndiriliyor",
+        "applying": "Uygulanıyor",
+        "done": "Tamamlandı",
+        "failed": "Başarısız",
+        "rolled_back": "Geri alındı",
+        "cancelled": "İptal edildi"
+      }
     }
   },
   "devices": {

@@ -19,7 +19,9 @@ async function wipeAdmins() {
   const c = new pg.Client({ connectionString: ownerUrl });
   await c.connect();
   try {
-    await c.query('TRUNCATE admin_passkeys, admin_sessions, admins');
+    // releases.created_by → admins: ON DELETE SET NULL (TRUNCATE yabancı anahtarlı tabloda çalışmaz)
+    await c.query('TRUNCATE admin_passkeys, admin_sessions');
+    await c.query('DELETE FROM admins');
   } finally {
     await c.end();
   }

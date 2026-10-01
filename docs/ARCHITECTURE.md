@@ -302,3 +302,10 @@ React 19 + Vite + Tailwind v4. Renk/yüzey belirteçleri CSS değişkenidir (aç
 - **Taahhüt:** kalan taahhüt = sipariş − max(kabul, bağlı kayıtlı fatura) miktarı; kabulsüz hizmet faturası artık hem maliyet hem taahhüt olarak çift görünmez. Bağlı fatura varken sipariş iptal edilemez; fatura iptali miktarı serbest bırakır.
 - Raporlama: `GET /api/procurement/matching` (sipariş/kabul/faturasız kabul tutarı, fazla fatura), `GET /api/invoices/:id/match`.
 - Kapsam dışı: iade faturasının siparişe bağlanması, toplu "siparişten fatura" sihirbazı, tedarikçi irsaliyesi ↔ fatura ile sipariş kabulü arasındaki otomatik eşleştirme.
+
+## Uzaktan güncelleme
+
+- **Satıcı:** lisans sunucusunda `releases` (taslak → yayımda → geri çekildi; yayımdan sonra dosyalar/özetler değişmez, `LIC03`), `licenses.update_version` (gönderilen sürüm), `activations.platform`. Panel parçalı yükleme (`PUT /admin/api/releases/:id/files/:ad?offset=`), yayımlama manifestoyu `release` türüyle imzalar (`@erp/license-core` `parseReleaseManifest`). Kalp atışı yanıtı `update: { manifest, downloadToken }` taşır; indirme `GET /v1/releases/:sürüm/:dosya?t=` (kuruluma özel HMAC belirteci, 24 saat).
+- **Uygulama:** `app_updates` (kurulum geneli; teklif → onaylandı → indiriliyor → uygulanıyor → tamamlandı/başarısız/geri alındı/iptal). Teklif, gömülü satıcı anahtarıyla doğrulanmadan saklanmaz. Sahip uçları `/api/system/update*` (kurulum sahibi), güncelleyici uçları `/api/system/updater/{pending,report}` (kullanıcı oturumu yok; `ERP_UPDATER_TOKEN`, sabit zamanlı karşılaştırma). "Tamamlandı" yalnızca çalışan sürüm hedef sürümse kabul edilir.
+- **Güncelleyici** (`dist/updater.js`, bağımlılıkları gömülü tek dosya): sihirbazın zamanladığı tek seferlik süreç; kilit dosyası, indirme + SHA-256, yedek, kit açma, yeni kitin sihirbazı, sürüm doğrulama; başarısızlıkta eski sürüm yanıt veriyorsa yalnızca bildirir, vermiyorsa eski kitin sihirbazını `--restore-db` ile çalıştırır. Kurulum mantığı tek yerde (sihirbazlar) kalır; güncelleyici yalnızca düzenler.
+

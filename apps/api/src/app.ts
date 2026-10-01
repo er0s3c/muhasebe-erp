@@ -14,6 +14,7 @@ import { MemoryLimiter, Semaphore } from './http/limits';
 import { createMailer, type Mailer } from './modules/mail/mailer';
 import { assertLicensed, createLicenseService, type LicenseSetup } from './licensing';
 import { licenseRoutes } from './licensing/routes';
+import { updateRoutes } from './modules/system/updates';
 import { DeviceService } from './licensing/devices';
 import { deviceRoutes } from './licensing/device-routes';
 import { accountRoutes } from './modules/auth/account';
@@ -160,6 +161,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   });
 
   await app.register(licenseRoutes);
+  await app.register(updateRoutes);
   await app.register(deviceRoutes);
   await app.register(authRoutes);
   await app.register(accountRoutes);

@@ -12,6 +12,7 @@ import { api } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
 import { fmtDate, fmtDateTime, useLicense, type LicenseInfo, type LicenseState } from '../../lib/license';
 import { OfflineActivation } from '../license/OfflineActivation';
+import { UpdateCard } from './UpdateCard';
 
 const stateTone = { unlicensed: 'danger', active: 'success', grace: 'warning', restricted: 'danger' } as const satisfies Record<LicenseState, string>;
 
@@ -171,6 +172,8 @@ export function LicensePage() {
               </dl>
               {!data.serverConfigured && <div className="px-5 pb-4"><Callout tone="warning">{t('license.page.serverNotConfigured')}</Callout></div>}
             </Card>
+
+            <UpdateCard />
 
             <Card>
               <CardHeader title={t('license.offline.title')} />
