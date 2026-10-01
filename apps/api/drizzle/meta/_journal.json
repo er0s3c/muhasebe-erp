@@ -232,6 +232,20 @@
       "when": 1790826509823,
       "tag": "0032_progress_payments_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790833227668,
+      "tag": "0033_employer_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790833229031,
+      "tag": "0034_employer_claims_rules",
+      "breakpoints": true
     }
   ]
 }

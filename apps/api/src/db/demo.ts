@@ -461,7 +461,7 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
   await createParam(tx, ctx.companyId, { kind: 'advance_recoup_pct', value: '10', validFrom: date(1, 1), sourceNote: 'Demo: sözleşme şartı (doğrulanmadı)' });
   const pgctx: ProgressCtx = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: ctx.baseCurrency, reportingCurrency: ctx.reportingCurrency };
   const sub = await createSubcontract(tx, pgctx, {
-    projectId: gunes, partyId: partyId.get('usta')!, title: 'Elektrik tesisatı', currencyCode: 'TRY', paymentDays: 30, startDate: date(9, 1), endDate: date(12, 15),
+    direction: 'payable', projectId: gunes, partyId: partyId.get('usta')!, title: 'Elektrik tesisatı', currencyCode: 'TRY', paymentDays: 30, startDate: date(9, 1), endDate: date(12, 15),
     penaltyNote: 'Gecikmede günlük %0,1 (demo notu).',
   });
   const [rev] = await tx.select({ id: subcontractRevisions.id }).from(subcontractRevisions).where(eq(subcontractRevisions.subcontractId, sub.id));

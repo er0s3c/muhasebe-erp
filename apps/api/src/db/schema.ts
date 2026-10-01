@@ -503,7 +503,7 @@ export const approvalRules = pgTable(
       columns: [t.projectId, t.companyId],
       foreignColumns: [projects.id, projects.companyId],
     }),
-    check('approval_rules_doc_type_ck', sql`${t.docType} in ('progress_payment')`),
+    check('approval_rules_doc_type_ck', sql`${t.docType} in ('progress_payment','employer_claim')`),
     check('approval_rules_range_ck', sql`${t.minAmount} >= 0 and (${t.maxAmount} is null or ${t.maxAmount} > ${t.minAmount})`),
   ],
 );
@@ -650,6 +650,8 @@ export const subcontracts = pgTable(
     advanceRecoupPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     withholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     penaltyNote: text(),
+    /** payable: taşeron sözleşmesi (tedarikçi cari, 320); receivable: işveren sözleşmesi (müşteri cari, 120). */
+    direction: text().notNull().default('payable'),
     /** draft | active | completed | terminated */
     status: text().notNull().default('draft'),
     createdBy: uuid().references(() => users.id),
@@ -673,6 +675,11 @@ export const subcontracts = pgTable(
     index('subcontracts_project_idx').on(t.companyId, t.projectId),
     index('subcontracts_party_idx').on(t.companyId, t.partyId),
     check('subcontracts_status_ck', sql`${t.status} in ('draft','active','completed','terminated')`),
+    check('subcontracts_direction_ck', sql`${t.direction} in ('payable','receivable')`),
+    // Projede en çok bir (feshedilmemiş) işveren sözleşmesi
+    uniqueIndex('subcontracts_employer_uq')
+      .on(t.projectId)
+      .where(sql`${t.direction} = 'receivable' and ${t.status} <> 'terminated'`),
     check('subcontracts_dates_ck', sql`${t.startDate} is null or ${t.endDate} is null or ${t.endDate} >= ${t.startDate}`),
     check('subcontracts_days_ck', sql`${t.paymentDays} between 0 and 365`),
     check(
@@ -1441,7 +1448,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable')`,
     ),
   ],
 );
@@ -2116,6 +2123,8 @@ export const progressPayments = pgTable(
     /** Kaydedilince boşluksuz belge numarası (HKD-2026-000001); taslakta yok. */
     number: text(),
     periodEnd: date({ mode: 'string' }).notNull(),
+    /** Sözleşmenin yönü (payable: verilen hakediş, receivable: işverene alınan hakediş). */
+    direction: text().notNull().default('payable'),
     /** draft | submitted | posted | cancelled */
     status: text().notNull().default('draft'),
     currencyCode: text()
@@ -2167,6 +2176,7 @@ export const progressPayments = pgTable(
     }),
     index('progress_payments_project_idx').on(t.companyId, t.projectId, t.status),
     check('progress_payments_status_ck', sql`${t.status} in ('draft','submitted','posted','cancelled')`),
+    check('progress_payments_direction_ck', sql`${t.direction} in ('payable','receivable')`),
     check(
       'progress_payments_amounts_ck',
       sql`${t.gross} >= 0 and ${t.vat} >= 0 and ${t.retention} >= 0 and ${t.advance} >= 0 and ${t.withholding} >= 0 and ${t.otherDeductions} >= 0 and ${t.net} >= 0`,

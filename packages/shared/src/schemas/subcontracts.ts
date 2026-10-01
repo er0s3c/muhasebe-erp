@@ -30,7 +30,7 @@ export const verifyConstructionParamSchema = z.object({
 
 // --- Onay motoru ---------------------------------------------------------------------
 
-export const APPROVAL_DOC_TYPES = ['progress_payment'] as const;
+export const APPROVAL_DOC_TYPES = ['progress_payment', 'employer_claim'] as const;
 export type ApprovalDocType = (typeof APPROVAL_DOC_TYPES)[number];
 
 const approvalAmount = z.string().regex(/^\d{1,15}(\.\d{1,2})?$/, 'Geçersiz tutar');
@@ -66,6 +66,9 @@ export type DecideApprovalInput = z.infer<typeof decideApprovalSchema>;
 
 // --- Taşeron sözleşmesi ve BOQ ---------------------------------------------------------
 
+export const CONTRACT_DIRECTIONS = ['payable', 'receivable'] as const;
+export type ContractDirection = (typeof CONTRACT_DIRECTIONS)[number];
+
 export const SUBCONTRACT_STATUSES = ['draft', 'active', 'completed', 'terminated'] as const;
 export type SubcontractStatus = (typeof SUBCONTRACT_STATUSES)[number];
 
@@ -73,6 +76,8 @@ const optionalPercent = percent.optional();
 
 export const createSubcontractSchema = z
   .object({
+    /** payable: taşeron sözleşmesi; receivable: işveren sözleşmesi (contract projesi + işveren cari). */
+    direction: z.enum(CONTRACT_DIRECTIONS).default('payable'),
     projectId: uuid,
     partyId: uuid,
     title: z.string().trim().min(1).max(200),
@@ -107,6 +112,7 @@ export type UpdateSubcontractInput = z.infer<typeof updateSubcontractSchema>;
 export const subcontractStatusSchema = z.object({ status: z.enum(['completed', 'terminated']) });
 
 export const subcontractListQuerySchema = z.object({
+  direction: z.enum(CONTRACT_DIRECTIONS).optional(),
   projectId: uuid.optional(),
   partyId: uuid.optional(),
   status: z.enum(SUBCONTRACT_STATUSES).optional(),
@@ -171,6 +177,7 @@ export const updateProgressPaymentSchema = z.object(progressBody);
 export type UpdateProgressPaymentInput = z.infer<typeof updateProgressPaymentSchema>;
 
 export const progressPaymentListQuerySchema = z.object({
+  direction: z.enum(CONTRACT_DIRECTIONS).optional(),
   subcontractId: uuid.optional(),
   projectId: uuid.optional(),
   status: z.enum(PROGRESS_STATUSES).optional(),

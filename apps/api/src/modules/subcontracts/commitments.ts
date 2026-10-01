@@ -39,7 +39,7 @@ export async function loadCommitted(tx: Tx, projectId: string, asOf: string): Pr
       from cur
       join subcontract_boq_lines l on l.revision_id = cur.id
       join subcontracts s on s.id = l.subcontract_id
-     where s.project_id = ${projectId} and s.status = 'active'`);
+     where s.project_id = ${projectId} and s.status = 'active' and s.direction = 'payable'`);
 
   const byWbs = new Map<string, MoneyValue>();
   const rateByCurrency = new Map<string, MoneyValue | null>();

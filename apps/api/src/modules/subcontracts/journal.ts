@@ -2,6 +2,8 @@ import { applyRate, dec, toDbAmount, toDbRate, type MoneyValue } from '@erp/shar
 import type { AutoJournalLine } from '../ledger/journal';
 
 export interface ProgressJournalInput {
+  /** payable: B maliyet + KDV / A teminat, stopaj, avans, cari(320). receivable: aynasıdır (A gelir + KDV / B cari(120), teminat, avans, stopaj). */
+  direction?: 'payable' | 'receivable';
   baseCurrency: string;
   currency: string;
   /** Hakediş para biriminden defter para birimine kur (aynı para biriminde 1). */
@@ -10,8 +12,11 @@ export interface ProgressJournalInput {
   dueDate: string;
   description: string;
   accounts: {
+    /** Maliyet (payable) ya da hakediş geliri (receivable) hesabı. */
     cost: string;
+    /** Taşeron carisi (320) ya da işveren carisi (120). */
     payable: string;
+    /** İndirilecek (payable) ya da hesaplanan (receivable) KDV. */
     vatInput: string;
     retention: string;
     withholding: string;
@@ -33,6 +38,10 @@ export interface ProgressJournalInput {
  */
 export function buildProgressJournal(i: ProgressJournalInput): { lines: AutoJournalLine[]; netBase: MoneyValue; net: MoneyValue } {
   const foreign = i.currency !== i.baseCurrency;
+  const receivable = i.direction === 'receivable';
+  // Gövde (maliyet/gelir + KDV) bir tarafta, kesintiler ve cari karşı tarafta
+  const bodySide = receivable ? 'credit' : 'debit';
+  const otherSide = receivable ? 'debit' : 'credit';
   const out: AutoJournalLine[] = [];
   const push = (side: 'debit' | 'credit', accountId: string, amount: MoneyValue, extra: Partial<AutoJournalLine> = {}, baseOverride?: MoneyValue) => {
     const base = baseOverride ?? (foreign ? applyRate(amount, i.fx) : amount);
@@ -55,17 +64,17 @@ export function buildProgressJournal(i: ProgressJournalInput): { lines: AutoJour
     if (g.amount.isZero()) continue;
     debitsDoc = debitsDoc.plus(g.amount);
     debitsBase = debitsBase.plus(
-      push('debit', i.accounts.cost, g.amount, {
+      push(bodySide, i.accounts.cost, g.amount, {
         projectId: g.projectId,
         wbsId: g.wbsId,
-        ...(g.costCodeId ? { costCodeId: g.costCodeId } : {}),
-        description: 'Taşeron hakedişi',
+        ...(g.costCodeId && !receivable ? { costCodeId: g.costCodeId } : {}),
+        description: receivable ? 'İşveren hakedişi' : 'Taşeron hakedişi',
       }),
     );
   }
   if (!i.vat.isZero()) {
     debitsDoc = debitsDoc.plus(i.vat);
-    debitsBase = debitsBase.plus(push('debit', i.accounts.vatInput, i.vat, { description: 'İndirilecek KDV' }));
+    debitsBase = debitsBase.plus(push(bodySide, i.accounts.vatInput, i.vat, { description: receivable ? 'Hesaplanan KDV' : 'İndirilecek KDV' }));
   }
 
   let otherCreditsDoc = dec(0);
@@ -73,14 +82,14 @@ export function buildProgressJournal(i: ProgressJournalInput): { lines: AutoJour
   const credit = (accountId: string, amount: MoneyValue, description: string) => {
     if (amount.isZero()) return;
     otherCreditsDoc = otherCreditsDoc.plus(amount);
-    otherCreditsBase = otherCreditsBase.plus(push('credit', accountId, amount, { description }));
+    otherCreditsBase = otherCreditsBase.plus(push(otherSide, accountId, amount, { description }));
   };
-  credit(i.accounts.retention, i.retention, 'Tutulan teminat');
-  credit(i.accounts.withholding, i.withholding, 'Stopaj');
+  credit(i.accounts.retention, i.retention, receivable ? 'İşverence tutulan teminat' : 'Tutulan teminat');
+  credit(i.accounts.withholding, i.withholding, receivable ? 'İşverence kesilen stopaj' : 'Stopaj');
   credit(i.accounts.advance, i.advance, 'Avans mahsubu');
 
   const net = debitsDoc.minus(otherCreditsDoc);
   const netBase = debitsBase.minus(otherCreditsBase);
-  push('credit', i.accounts.payable, net, { partyId: i.partyId, dueDate: i.dueDate, description: i.description }, netBase);
+  push(otherSide, i.accounts.payable, net, { partyId: i.partyId, dueDate: i.dueDate, description: i.description }, netBase);
   return { lines: out, netBase, net };
 }

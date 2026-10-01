@@ -23,7 +23,8 @@ export interface SubcontractCtx {
 }
 
 const NUMBER_KEY = 'SUBCONTRACT';
-export const formatSubcontractCode = (n: number) => `TSZ-${String(n).padStart(4, '0')}`;
+export const formatSubcontractCode = (n: number, direction: 'payable' | 'receivable' = 'payable') =>
+  `${direction === 'receivable' ? 'IVS' : 'TSZ'}-${String(n).padStart(4, '0')}`;
 
 export async function getSubcontractRow(tx: Tx, id: string) {
   const [row] = await tx.select().from(subcontracts).where(eq(subcontracts.id, id));
@@ -65,19 +66,27 @@ export async function createSubcontract(tx: Tx, ctx: SubcontractCtx, input: Crea
   const [party] = await tx.select().from(parties).where(eq(parties.id, input.partyId));
   if (!party) throw unprocessable('Taşeron cari bulunamadı', 'PARTY_NOT_FOUND');
   if (!party.isActive) throw unprocessable(`${party.name} carisi pasif`, 'PARTY_INACTIVE');
-  if (party.kind === 'customer') throw unprocessable('Taşeron cari tedarikçi türünde olmalı', 'PARTY_KIND_MISMATCH');
+  const receivable = input.direction === 'receivable';
+  if (receivable) {
+    if (party.kind === 'supplier') throw unprocessable('İşveren cari müşteri türünde olmalı', 'PARTY_KIND_MISMATCH');
+    if (project.kind !== 'contract') throw unprocessable('İşveren sözleşmesi yalnızca "işverene yapılan iş" türündeki projede açılır', 'EMPLOYER_PROJECT_KIND');
+    if (project.clientPartyId !== party.id) throw unprocessable('İşveren sözleşmesi projenin işvereniyle yapılır', 'EMPLOYER_PARTY_MISMATCH');
+    const [dup] = await tx.select({ code: subcontracts.code }).from(subcontracts).where(and(eq(subcontracts.projectId, project.id), eq(subcontracts.direction, 'receivable'), sql`${subcontracts.status} <> 'terminated'`));
+    if (dup) throw unprocessable(`Projede zaten işveren sözleşmesi var (${dup.code})`, 'EMPLOYER_CONTRACT_EXISTS');
+  } else if (party.kind === 'customer') throw unprocessable('Taşeron cari tedarikçi türünde olmalı', 'PARTY_KIND_MISMATCH');
 
   // Yüzdeler verilmediyse bugün geçerli parametreden anlık görüntü alınır (doğrulanmamış olsa da; ekranda rozet gösterilir)
   const today = todayIso();
   const pct = async (given: string | undefined, kind: 'retention_pct' | 'withholding_pct' | 'advance_recoup_pct') =>
     given ?? (await resolveParam(tx, kind, input.startDate ?? today))?.value ?? '0';
 
-  const code = formatSubcontractCode(await nextNumber(tx, ctx.companyId, NUMBER_KEY, 0));
+  const code = formatSubcontractCode(await nextNumber(tx, ctx.companyId, receivable ? `${NUMBER_KEY}:in` : NUMBER_KEY, 0), input.direction);
   const [row] = await tx
     .insert(subcontracts)
     .values({
       companyId: ctx.companyId,
       code,
+      direction: input.direction,
       projectId: input.projectId,
       partyId: input.partyId,
       title: input.title,
@@ -255,7 +264,7 @@ export async function getRevision(tx: Tx, revisionId: string) {
 export async function getSubcontract(tx: Tx, id: string) {
   const row = await tx.execute<Record<string, unknown>>(sql`
     select s.id, s.code, s.project_id as "projectId", s.party_id as "partyId", s.title, s.currency_code as "currencyCode",
-           s.start_date as "startDate", s.end_date as "endDate", s.payment_days as "paymentDays",
+           s.start_date as "startDate", s.end_date as "endDate", s.payment_days as "paymentDays", s.direction,
            s.retention_pct::text as "retentionPct", s.advance_recoup_pct::text as "advanceRecoupPct", s.withholding_pct::text as "withholdingPct",
            s.penalty_note as "penaltyNote", s.status, s.created_at as "createdAt", s.updated_at as "updatedAt",
            p.code as "projectCode", p.name as "projectName", pa.code as "partyCode", pa.name as "partyName"
@@ -274,9 +283,9 @@ export async function getSubcontract(tx: Tx, id: string) {
   return { subcontract: { ...base, contractAmount: current ? String(current.total) : '0.00' }, revisions: revisions.rows };
 }
 
-export async function listSubcontracts(tx: Tx, q: { projectId?: string; partyId?: string; status?: string }) {
+export async function listSubcontracts(tx: Tx, q: { projectId?: string; partyId?: string; status?: string; direction?: string }) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
-    select s.id, s.code, s.title, s.status, s.currency_code as "currencyCode", s.project_id as "projectId",
+    select s.id, s.code, s.title, s.status, s.direction, s.currency_code as "currencyCode", s.project_id as "projectId",
            p.code as "projectCode", p.name as "projectName", s.party_id as "partyId", pa.name as "partyName",
            s.start_date as "startDate", s.end_date as "endDate",
            coalesce((select sum(round(l.quantity * l.unit_price, 2)) from subcontract_boq_lines l
@@ -287,6 +296,7 @@ export async function listSubcontracts(tx: Tx, q: { projectId?: string; partyId?
      where (${q.projectId ?? null}::uuid is null or s.project_id = ${q.projectId ?? null}::uuid)
        and (${q.partyId ?? null}::uuid is null or s.party_id = ${q.partyId ?? null}::uuid)
        and (${q.status ?? null}::text is null or s.status = ${q.status ?? null}::text)
+       and (${q.direction ?? null}::text is null or s.direction = ${q.direction ?? null}::text)
      order by s.code desc`);
   return { subcontracts: rows.rows };
 }

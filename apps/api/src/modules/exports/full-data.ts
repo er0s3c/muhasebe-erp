@@ -319,7 +319,7 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
   // Taşeron sözleşmeleri, BOQ ve hakedişler (yalnızca sözleşmesi olan şirketlerde)
   const scRows = await query(
     'Taşeron sözleşmeleri',
-    sql`select s.code, s.title, s.status, s.currency_code, p.code as project, pa.name as party, s.payment_days,
+    sql`select s.code, s.title, s.status, s.direction, s.currency_code, p.code as project, pa.name as party, s.payment_days,
                s.retention_pct, s.advance_recoup_pct, s.withholding_pct, s.start_date::text as start_date, s.end_date::text as end_date
           from subcontracts s join projects p on p.id = s.project_id join parties pa on pa.id = s.party_id order by s.code`,
   );
@@ -328,8 +328,8 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
       table(
         'Taşeron sözleşmeleri',
         'Taşeron sözleşmeleri',
-        [col('code', 'Sözleşme', 'text', 12), col('title', 'İş', 'text', 32), col('project', 'Proje', 'text', 12), col('party', 'Taşeron', 'text', 28), col('status', 'Durum', 'text', 12), col('currency', 'Para birimi', 'text', 8), col('days', 'Vade (gün)', 'int'), col('retention', 'Teminat %', 'money'), col('advance', 'Avans mahsup %', 'money'), col('withholding', 'Stopaj %', 'money'), col('start', 'Başlangıç', 'date'), col('end', 'Bitiş', 'date')],
-        scRows.map((r) => ({ code: s(r.code), title: s(r.title), project: s(r.project), party: s(r.party), status: s(r.status), currency: s(r.currency_code), days: Number(r.payment_days), retention: s(r.retention_pct), advance: s(r.advance_recoup_pct), withholding: s(r.withholding_pct), start: s(r.start_date), end: s(r.end_date) })),
+        [col('code', 'Sözleşme', 'text', 12), col('title', 'İş', 'text', 32), col('project', 'Proje', 'text', 12), col('party', 'Taşeron', 'text', 28), col('status', 'Durum', 'text', 12), col('direction', 'Yön', 'text', 12), col('currency', 'Para birimi', 'text', 8), col('days', 'Vade (gün)', 'int'), col('retention', 'Teminat %', 'money'), col('advance', 'Avans mahsup %', 'money'), col('withholding', 'Stopaj %', 'money'), col('start', 'Başlangıç', 'date'), col('end', 'Bitiş', 'date')],
+        scRows.map((r) => ({ code: s(r.code), title: s(r.title), project: s(r.project), party: s(r.party), status: s(r.status), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', currency: s(r.currency_code), days: Number(r.payment_days), retention: s(r.retention_pct), advance: s(r.advance_recoup_pct), withholding: s(r.withholding_pct), start: s(r.start_date), end: s(r.end_date) })),
         'Sözleşme başlıkları',
       ),
     );
@@ -354,7 +354,7 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     );
     const prRows = await query(
       'Hakedişler',
-      sql`select p.number, p.payment_no, s.code as contract, p.status, p.period_end::text as period_end, p.currency_code,
+      sql`select p.number, p.payment_no, s.code as contract, p.direction, p.status, p.period_end::text as period_end, p.currency_code,
                  p.gross, p.vat, p.retention, p.advance, p.withholding, p.other_deductions, p.net
             from progress_payments p join subcontracts s on s.id = p.subcontract_id order by s.code, p.payment_no`,
     );
@@ -362,8 +362,8 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
       table(
         'Hakedişler',
         'Hakedişler',
-        [col('number', 'Belge no', 'text', 16), col('no', 'Sıra', 'int'), col('contract', 'Sözleşme', 'text', 12), col('status', 'Durum', 'text', 12), col('period', 'Dönem sonu', 'date'), col('currency', 'Para birimi', 'text', 8), col('gross', 'Brüt', 'money'), col('vat', 'KDV', 'money'), col('retention', 'Teminat', 'money'), col('advance', 'Avans mahsubu', 'money'), col('withholding', 'Stopaj', 'money'), col('other', 'Diğer kesinti', 'money'), col('net', 'Net', 'money')],
-        prRows.map((r) => ({ number: s(r.number), no: Number(r.payment_no), contract: s(r.contract), status: s(r.status), period: s(r.period_end), currency: s(r.currency_code), gross: s(r.gross), vat: s(r.vat), retention: s(r.retention), advance: s(r.advance), withholding: s(r.withholding), other: s(r.other_deductions), net: s(r.net) })),
+        [col('number', 'Belge no', 'text', 16), col('no', 'Sıra', 'int'), col('contract', 'Sözleşme', 'text', 12), col('direction', 'Yön', 'text', 12), col('status', 'Durum', 'text', 12), col('period', 'Dönem sonu', 'date'), col('currency', 'Para birimi', 'text', 8), col('gross', 'Brüt', 'money'), col('vat', 'KDV', 'money'), col('retention', 'Teminat', 'money'), col('advance', 'Avans mahsubu', 'money'), col('withholding', 'Stopaj', 'money'), col('other', 'Diğer kesinti', 'money'), col('net', 'Net', 'money')],
+        prRows.map((r) => ({ number: s(r.number), no: Number(r.payment_no), contract: s(r.contract), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', status: s(r.status), period: s(r.period_end), currency: s(r.currency_code), gross: s(r.gross), vat: s(r.vat), retention: s(r.retention), advance: s(r.advance), withholding: s(r.withholding), other: s(r.other_deductions), net: s(r.net) })),
         'Taşeron hakedişleri',
       ),
     );

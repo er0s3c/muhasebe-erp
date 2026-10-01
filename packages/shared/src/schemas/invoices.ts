@@ -68,6 +68,11 @@ export const ACCOUNT_MAPPING_KEYS = [
   'retention_payable',
   'withholding_payable',
   'subcontract_advance',
+  // İşveren hakedişi (B2e)
+  'claim_revenue',
+  'retention_receivable',
+  'advance_received',
+  'withholding_receivable',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -95,6 +100,11 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     retention_payable: '326',
     withholding_payable: '360',
     subcontract_advance: '159',
+    // İşveren hakedişi: hakediş geliri, verilen depozito/teminat, alınan sipariş avansı, peşin ödenen vergi
+    claim_revenue: '600',
+    retention_receivable: '126',
+    advance_received: '340',
+    withholding_receivable: '193',
   };
 }
 

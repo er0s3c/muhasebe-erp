@@ -31,6 +31,10 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   retention_payable: 'Taşeron teminat borcu (tutulan teminat)',
   withholding_payable: 'Taşeron hakedişinden kesilen stopaj borcu',
   subcontract_advance: 'Taşerona verilen avanslar',
+  claim_revenue: 'İşveren hakediş geliri',
+  retention_receivable: 'İşveren tarafından tutulan teminat (alacak)',
+  advance_received: 'İşverenden alınan avanslar',
+  withholding_receivable: 'İşverenin hakedişten kestiği stopaj (peşin vergi)',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

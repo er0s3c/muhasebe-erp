@@ -707,19 +707,19 @@ const SUBCONTRACT_STATUS_LABEL: Record<string, string> = { draft: 'Taslak', acti
 const PROGRESS_STATUS_LABEL: Record<string, string> = { draft: 'Taslak', submitted: 'Onayda', posted: 'Kaydedildi', cancelled: 'İptal' };
 
 /** Taşeron sözleşmeleri listesi. */
-export async function subcontractRegisterTable(ctx: BuildCtx, q: { projectId?: string }): Promise<ReportTable[]> {
-  const d = await listSubcontracts(ctx.tx, { projectId: q.projectId });
+export async function subcontractRegisterTable(ctx: BuildCtx, q: { projectId?: string; direction?: string }): Promise<ReportTable[]> {
+  const d = await listSubcontracts(ctx.tx, { projectId: q.projectId, direction: q.direction });
   return [
     {
       key: 'sozlesmeler',
-      title: 'Taşeron sözleşmeleri',
+      title: q.direction === 'receivable' ? 'İşveren sözleşmeleri' : 'Taşeron sözleşmeleri',
       sheet: 'Sözleşmeler',
       subtitle: sub(ctx, formatDateTR(todayIso())),
       columns: [
         col('code', 'Sözleşme', 'text', 12),
         col('title', 'İş', 'text', 32),
         col('project', 'Proje', 'text', 14),
-        col('party', 'Taşeron', 'text', 28),
+        col('party', q.direction === 'receivable' ? 'İşveren' : 'Taşeron', 'text', 28),
         col('status', 'Durum', 'text', 14),
         col('currency', 'Para birimi', 'text', 8),
         col('amount', 'Sözleşme tutarı', 'money'),
@@ -742,19 +742,19 @@ export async function subcontractRegisterTable(ctx: BuildCtx, q: { projectId?: s
 }
 
 /** Taşeron hakedişleri listesi. */
-export async function progressPaymentsTable(ctx: BuildCtx, q: { projectId?: string; subcontractId?: string }): Promise<ReportTable[]> {
+export async function progressPaymentsTable(ctx: BuildCtx, q: { projectId?: string; subcontractId?: string; direction?: string }): Promise<ReportTable[]> {
   const d = await listProgress(ctx.tx, q);
   return [
     {
       key: 'hakedisler',
-      title: 'Taşeron hakedişleri',
+      title: q.direction === 'receivable' ? 'İşveren hakedişleri' : 'Taşeron hakedişleri',
       sheet: 'Hakedişler',
       subtitle: sub(ctx, formatDateTR(todayIso())),
       columns: [
         col('number', 'Hakediş no', 'text', 16),
         col('no', 'Sıra', 'int'),
         col('subcontract', 'Sözleşme', 'text', 12),
-        col('party', 'Taşeron', 'text', 28),
+        col('party', q.direction === 'receivable' ? 'İşveren' : 'Taşeron', 'text', 28),
         col('project', 'Proje', 'text', 14),
         col('status', 'Durum', 'text', 12),
         col('periodEnd', 'Dönem sonu', 'date'),
