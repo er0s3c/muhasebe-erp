@@ -77,7 +77,7 @@ export async function createSubcontract(tx: Tx, ctx: SubcontractCtx, input: Crea
 
   // Yüzdeler verilmediyse bugün geçerli parametreden anlık görüntü alınır (doğrulanmamış olsa da; ekranda rozet gösterilir)
   const today = todayIso();
-  const pct = async (given: string | undefined, kind: 'retention_pct' | 'withholding_pct' | 'advance_recoup_pct') =>
+  const pct = async (given: string | undefined, kind: 'retention_pct' | 'withholding_pct' | 'advance_recoup_pct' | 'vat_withholding_pct') =>
     given ?? (await resolveParam(tx, kind, input.startDate ?? today))?.value ?? '0';
 
   const code = formatSubcontractCode(await nextNumber(tx, ctx.companyId, receivable ? `${NUMBER_KEY}:in` : NUMBER_KEY, 0), input.direction);
@@ -97,6 +97,7 @@ export async function createSubcontract(tx: Tx, ctx: SubcontractCtx, input: Crea
       retentionPct: await pct(input.retentionPct, 'retention_pct'),
       advanceRecoupPct: await pct(input.advanceRecoupPct, 'advance_recoup_pct'),
       withholdingPct: await pct(input.withholdingPct, 'withholding_pct'),
+      vatWithholdingPct: await pct(input.vatWithholdingPct, 'vat_withholding_pct'),
       penaltyNote: input.penaltyNote ?? null,
       createdBy: ctx.userId,
     })
@@ -111,7 +112,7 @@ export async function updateSubcontract(tx: Tx, id: string, input: UpdateSubcont
   if (current.status === 'completed' || current.status === 'terminated') {
     throw unprocessable('Tamamlanmış veya feshedilmiş sözleşme değiştirilemez', 'SUBCONTRACT_CLOSED');
   }
-  const hasPct = input.retentionPct !== undefined || input.advanceRecoupPct !== undefined || input.withholdingPct !== undefined;
+  const hasPct = input.retentionPct !== undefined || input.advanceRecoupPct !== undefined || input.withholdingPct !== undefined || input.vatWithholdingPct !== undefined;
   if (hasPct && current.status !== 'draft') {
     throw unprocessable('Yürürlükteki sözleşmenin kesinti yüzdeleri değiştirilemez', 'SUBCONTRACT_PCT_LOCKED');
   }
@@ -319,7 +320,7 @@ export async function getSubcontract(tx: Tx, id: string) {
   const row = await tx.execute<Record<string, unknown>>(sql`
     select s.id, s.code, s.project_id as "projectId", s.party_id as "partyId", s.title, s.currency_code as "currencyCode",
            s.start_date as "startDate", s.end_date as "endDate", s.payment_days as "paymentDays", s.direction,
-           s.retention_pct::text as "retentionPct", s.advance_recoup_pct::text as "advanceRecoupPct", s.withholding_pct::text as "withholdingPct",
+           s.retention_pct::text as "retentionPct", s.advance_recoup_pct::text as "advanceRecoupPct", s.withholding_pct::text as "withholdingPct", s.vat_withholding_pct::text as "vatWithholdingPct",
            s.penalty_note as "penaltyNote", s.status, s.created_at as "createdAt", s.updated_at as "updatedAt",
            p.code as "projectCode", p.name as "projectName", pa.code as "partyCode", pa.name as "partyName"
       from subcontracts s

@@ -505,7 +505,7 @@ export const constructionParams = pgTable(
     companyId: uuid()
       .notNull()
       .references(() => companies.id),
-    /** retention_pct | withholding_pct | advance_recoup_pct */
+    /** retention_pct | withholding_pct | advance_recoup_pct | vat_withholding_pct (KDV'nin tevkif edilen yüzdesi) */
     kind: text().notNull(),
     /** Yüzde, örn. 5.0000 */
     value: numeric({ precision: 7, scale: 4 }).notNull(),
@@ -518,7 +518,7 @@ export const constructionParams = pgTable(
   },
   (t) => [
     unique('construction_params_uq').on(t.companyId, t.kind, t.validFrom),
-    check('construction_params_kind_ck', sql`${t.kind} in ('retention_pct','withholding_pct','advance_recoup_pct')`),
+    check('construction_params_kind_ck', sql`${t.kind} in ('retention_pct','withholding_pct','advance_recoup_pct','vat_withholding_pct')`),
     check('construction_params_value_ck', sql`${t.value} >= 0 and ${t.value} <= 100`),
     check('construction_params_range_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
   ],
@@ -696,6 +696,8 @@ export const subcontracts = pgTable(
     retentionPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     advanceRecoupPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     withholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    /** KDV'nin tevkif edilen yüzdesi (anlık görüntü; 0 = tevkifat yok). */
+    vatWithholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     penaltyNote: text(),
     /** payable: taşeron sözleşmesi (tedarikçi cari, 320); receivable: işveren sözleşmesi (müşteri cari, 120). */
     direction: text().notNull().default('payable'),
@@ -1559,7 +1561,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable')`,
     ),
   ],
 );
@@ -2259,11 +2261,16 @@ export const progressPayments = pgTable(
     retentionPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     advancePct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     withholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    vatWithholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     gross: money().notNull().default('0'),
     vat: money().notNull().default('0'),
+    /** Tevkif edilen KDV (KDV'nin bir yüzdesi): taşeronda idareye ödenecek, işverende işverence tevkif edilen. */
+    vatWithholding: money().notNull().default('0'),
     retention: money().notNull().default('0'),
     advance: money().notNull().default('0'),
     withholding: money().notNull().default('0'),
+    /** Taşerona verilen malzemenin bedeli mahsubu (yalnızca taşeron hakedişi). */
+    material: money().notNull().default('0'),
     otherDeductions: money().notNull().default('0'),
     net: money().notNull().default('0'),
     note: text(),
@@ -2301,13 +2308,15 @@ export const progressPayments = pgTable(
     check('progress_payments_direction_ck', sql`${t.direction} in ('payable','receivable')`),
     check(
       'progress_payments_amounts_ck',
-      sql`${t.gross} >= 0 and ${t.vat} >= 0 and ${t.retention} >= 0 and ${t.advance} >= 0 and ${t.withholding} >= 0 and ${t.otherDeductions} >= 0 and ${t.net} >= 0`,
+      sql`${t.gross} >= 0 and ${t.vat} >= 0 and ${t.vatWithholding} >= 0 and ${t.vatWithholding} <= ${t.vat} and ${t.retention} >= 0 and ${t.advance} >= 0 and ${t.withholding} >= 0 and ${t.material} >= 0 and ${t.otherDeductions} >= 0 and ${t.net} >= 0`,
     ),
-    // Net = brüt + KDV − teminat − avans − stopaj − diğer kesinti (her satırda doğrulanır)
+    // Net = brüt + KDV − KDV tevkifatı − teminat − avans − stopaj − malzeme − diğer kesinti (her satırda doğrulanır)
     check(
       'progress_payments_net_ck',
-      sql`${t.net} = ${t.gross} + ${t.vat} - ${t.retention} - ${t.advance} - ${t.withholding} - ${t.otherDeductions}`,
+      sql`${t.net} = ${t.gross} + ${t.vat} - ${t.vatWithholding} - ${t.retention} - ${t.advance} - ${t.withholding} - ${t.material} - ${t.otherDeductions}`,
     ),
+    // Malzeme mahsubu yalnızca taşeron (verilen) hakedişinde
+    check('progress_payments_material_ck', sql`${t.direction} = 'payable' or ${t.material} = 0`),
     check(
       'progress_payments_posted_ck',
       sql`(${t.status} in ('posted','cancelled')) = (${t.number} is not null and ${t.entryId} is not null and ${t.fxRate} is not null and ${t.postedAt} is not null)`,
@@ -2415,6 +2424,45 @@ export const subcontractAdvances = pgTable(
       foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId],
     }),
     check('subcontract_advances_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+/**
+ * Taşerona verilen malzeme: stoktan proje + iş kalemi etiketli sarf (stok belgesi) olarak çıkar; bedel stok çıkış maliyetidir.
+ * Hakedişte `material` ile bakiye kadar mahsup edilir. Kayıt değişmez; bağlı stok belgesi ters çevrilemez.
+ */
+export const subcontractMaterialIssues = pgTable(
+  'subcontract_material_issues',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    issueDate: date({ mode: 'string' }).notNull(),
+    stockDocumentId: uuid().notNull(),
+    /** Mahsup bedeli, sözleşme para biriminde (stok çıkış maliyetinin verildiği günkü kurla çevrilmiş hâli). */
+    amount: money().notNull(),
+    /** Stok çıkış maliyeti, defter para biriminde. */
+    amountBase: money().notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('subcontract_material_issues_doc_uq').on(t.stockDocumentId),
+    foreignKey({
+      name: 'subcontract_material_issues_subcontract_fk',
+      columns: [t.subcontractId, t.companyId],
+      foreignColumns: [subcontracts.id, subcontracts.companyId],
+    }),
+    foreignKey({
+      name: 'subcontract_material_issues_doc_fk',
+      columns: [t.stockDocumentId, t.companyId],
+      foreignColumns: [stockDocuments.id, stockDocuments.companyId],
+    }),
+    index('subcontract_material_issues_sc_idx').on(t.companyId, t.subcontractId),
+    check('subcontract_material_issues_amount_ck', sql`${t.amount} > 0 and ${t.amountBase} > 0`),
   ],
 );
 

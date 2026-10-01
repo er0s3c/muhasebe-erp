@@ -45,6 +45,7 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
   const [retention, setRetention] = useState('');
   const [advance, setAdvance] = useState('');
   const [withholding, setWithholding] = useState('');
+  const [vatWithholding, setVatWithholding] = useState('');
   const [penaltyNote, setPenaltyNote] = useState('');
   const [error, setError] = useState<Error | null>(null);
 
@@ -60,6 +61,7 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
     setRetention(edit ? String(Number(edit.retentionPct)) : '');
     setAdvance(edit ? String(Number(edit.advanceRecoupPct)) : '');
     setWithholding(edit ? String(Number(edit.withholdingPct)) : '');
+    setVatWithholding(edit ? String(Number(edit.vatWithholdingPct)) : '');
     setPenaltyNote(edit?.penaltyNote ?? '');
     setError(null);
   }, [open, edit, defaultProjectId, base]);
@@ -84,12 +86,12 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
     if (edit) {
       return call<SubcontractDetail>(`/api/subcontracts/${edit.id}`, {
         method: 'PATCH',
-        body: { ...common, ...(pctLocked ? {} : { retentionPct: pct(retention) ?? '0', advanceRecoupPct: pct(advance) ?? '0', withholdingPct: pct(withholding) ?? '0' }) },
+        body: { ...common, ...(pctLocked ? {} : { retentionPct: pct(retention) ?? '0', advanceRecoupPct: pct(advance) ?? '0', withholdingPct: pct(withholding) ?? '0', vatWithholdingPct: pct(vatWithholding) ?? '0' }) },
       });
     }
     return call<SubcontractDetail>('/api/subcontracts', {
       method: 'POST',
-      body: { ...common, direction, projectId, partyId, currencyCode, retentionPct: pct(retention), advanceRecoupPct: pct(advance), withholdingPct: pct(withholding) },
+      body: { ...common, direction, projectId, partyId, currencyCode, retentionPct: pct(retention), advanceRecoupPct: pct(advance), withholdingPct: pct(withholding), vatWithholdingPct: pct(vatWithholding) },
     });
   }, SUBCONTRACT_INVALIDATE);
 
@@ -173,10 +175,11 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
         <fieldset className="flex flex-col gap-3 rounded-lg border border-border p-4" disabled={pctLocked}>
           <legend className="px-1 text-[13px] text-muted">{t('subcontracts.form.deductions')}</legend>
           <p className="text-xs text-muted">{pctLocked ? t('subcontracts.form.pctLocked') : t('subcontracts.form.deductionsHint')}</p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label={t('subcontracts.form.retention')}>{(id) => <Input id={id} inputMode="decimal" value={retention} onChange={(e) => setRetention(e.target.value)} placeholder="—" />}</Field>
             <Field label={t('subcontracts.form.advance')}>{(id) => <Input id={id} inputMode="decimal" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="—" />}</Field>
             <Field label={t('subcontracts.form.withholding')}>{(id) => <Input id={id} inputMode="decimal" value={withholding} onChange={(e) => setWithholding(e.target.value)} placeholder="—" />}</Field>
+            <Field label={t('subcontracts.form.vatWithholding')} hint={t('subcontracts.form.vatWithholdingHint')}>{(id) => <Input id={id} inputMode="decimal" value={vatWithholding} onChange={(e) => setVatWithholding(e.target.value)} placeholder="—" />}</Field>
           </div>
         </fieldset>
 

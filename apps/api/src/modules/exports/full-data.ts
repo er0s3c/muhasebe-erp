@@ -355,15 +355,15 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     const prRows = await query(
       'Hakedişler',
       sql`select p.number, p.payment_no, s.code as contract, p.direction, p.status, p.period_end::text as period_end, p.currency_code,
-                 p.gross, p.vat, p.retention, p.advance, p.withholding, p.other_deductions, p.net
+                 p.gross, p.vat, p.vat_withholding, p.retention, p.advance, p.withholding, p.material, p.other_deductions, p.net
             from progress_payments p join subcontracts s on s.id = p.subcontract_id order by s.code, p.payment_no`,
     );
     tables.push(
       table(
         'Hakedişler',
         'Hakedişler',
-        [col('number', 'Belge no', 'text', 16), col('no', 'Sıra', 'int'), col('contract', 'Sözleşme', 'text', 12), col('direction', 'Yön', 'text', 12), col('status', 'Durum', 'text', 12), col('period', 'Dönem sonu', 'date'), col('currency', 'Para birimi', 'text', 8), col('gross', 'Brüt', 'money'), col('vat', 'KDV', 'money'), col('retention', 'Teminat', 'money'), col('advance', 'Avans mahsubu', 'money'), col('withholding', 'Stopaj', 'money'), col('other', 'Diğer kesinti', 'money'), col('net', 'Net', 'money')],
-        prRows.map((r) => ({ number: s(r.number), no: Number(r.payment_no), contract: s(r.contract), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', status: s(r.status), period: s(r.period_end), currency: s(r.currency_code), gross: s(r.gross), vat: s(r.vat), retention: s(r.retention), advance: s(r.advance), withholding: s(r.withholding), other: s(r.other_deductions), net: s(r.net) })),
+        [col('number', 'Belge no', 'text', 16), col('no', 'Sıra', 'int'), col('contract', 'Sözleşme', 'text', 12), col('direction', 'Yön', 'text', 12), col('status', 'Durum', 'text', 12), col('period', 'Dönem sonu', 'date'), col('currency', 'Para birimi', 'text', 8), col('gross', 'Brüt', 'money'), col('vat', 'KDV', 'money'), col('vatWithholding', 'KDV tevkifatı', 'money'), col('retention', 'Teminat', 'money'), col('advance', 'Avans mahsubu', 'money'), col('withholding', 'Stopaj', 'money'), col('material', 'Malzeme mahsubu', 'money'), col('other', 'Diğer kesinti', 'money'), col('net', 'Net', 'money')],
+        prRows.map((r) => ({ number: s(r.number), no: Number(r.payment_no), contract: s(r.contract), direction: r.direction === 'receivable' ? 'İşveren' : 'Taşeron', status: s(r.status), period: s(r.period_end), currency: s(r.currency_code), gross: s(r.gross), vat: s(r.vat), vatWithholding: s(r.vat_withholding), retention: s(r.retention), advance: s(r.advance), withholding: s(r.withholding), material: s(r.material), other: s(r.other_deductions), net: s(r.net) })),
         'Taşeron hakedişleri',
       ),
     );

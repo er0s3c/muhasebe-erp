@@ -2257,7 +2257,7 @@
       }
     },
     "params": {
-      "title": "Teminat, stopaj ve avans parametreleri",
+      "title": "Teminat, stopaj, avans ve KDV tevkifatı parametreleri",
       "desc": "Tarih aralıklı ve kaynak notlu değerler. Yeni sözleşme açılırken geçerli değer sözleşmeye kopyalanır; sonradan değişiklik eski sözleşmeyi etkilemez.",
       "legal": "Bu oranlar yasal değer olarak kodda tanımlı değildir ve doğrulanmamıştır. Oranları resmî kaynaktan/mali müşavirden teyit edip kaynak notuyla girin ve \"doğrulandı\" olarak işaretleyin.",
       "empty": "Henüz parametre girilmemiş. Oranlar sözleşme açılırken elle de girilebilir.",
@@ -2278,7 +2278,8 @@
       "kinds": {
         "retention_pct": "Teminat kesintisi %",
         "withholding_pct": "Stopaj %",
-        "advance_recoup_pct": "Avans mahsup %"
+        "advance_recoup_pct": "Avans mahsup %",
+        "vat_withholding_pct": "KDV tevkifatı (KDV'nin yüzdesi)"
       }
     },
     "rules": {
@@ -2972,7 +2973,9 @@
       "retention": "Teminat %",
       "advance": "Avans mahsup %",
       "withholding": "Stopaj %",
-      "penaltyNote": "Ceza/özel koşullar (not)"
+      "penaltyNote": "Ceza/özel koşullar (not)",
+      "vatWithholding": "KDV tevkifatı %",
+      "vatWithholdingHint": "KDV'nin tevkif edilen yüzdesi (ör. 4/10 için 40); boşsa parametreden, yoksa 0"
     },
     "boq": {
       "revision": "Revizyon",
@@ -3032,7 +3035,19 @@
       "noAccount": "{{currency}} cinsinden kasa/banka hesabı yok",
       "amount": "Tutar",
       "note": "Not",
-      "done": "İşlem kaydedildi"
+      "done": "İşlem kaydedildi",
+      "materialBalance": "Kalan malzeme mahsubu",
+      "materialSub": "Verilen {{given}} · mahsup {{recouped}}",
+      "giveMaterial": "Malzeme ver",
+      "materialTitle": "Taşerona verilen malzeme",
+      "materialDesc": "Stoktan projeye etiketli sarf olarak çıkar; bedel stok maliyetidir ve hakedişlerde \"Malzeme mahsubu\" ile bakiye kadar kesilir.",
+      "materialModalDesc": "Seçilen depodan sarf belgesi açılır (stok düşer, proje maliyetine yazılır). Bedel stok çıkış maliyetidir.",
+      "materialGiven": "Malzeme verildi",
+      "warehouse": "Depo",
+      "item": "Stok kartı",
+      "pickItem": "Kart seçin",
+      "qty": "Miktar",
+      "addMaterialLine": "Kalem ekle"
     },
     "progress": {
       "title": "Hakedişler",
@@ -3070,7 +3085,7 @@
       "overContract": "Sözleşmeyi aşıyor",
       "belowPrev": "Öncekinden az",
       "deductionsTitle": "Diğer kesintiler",
-      "deductionsDesc": "Ceza, malzeme mahsubu vb. Maliyetten düşülür.",
+      "deductionsDesc": "Ceza vb. serbest kesintiler ve taşerona verilen malzemenin mahsubu. Maliyetten düşülür.",
       "addDeduction": "Kesinti ekle",
       "noDeductions": "Kesinti yok",
       "deductionDesc": "Açıklama",
@@ -3085,7 +3100,9 @@
         "advanceBalance": "Kalan avans: {{balance}}",
         "withholding": "Stopaj",
         "other": "Diğer kesintiler",
-        "net": "Net ödenecek"
+        "net": "Net ödenecek",
+        "vatWithholding": "KDV tevkifatı",
+        "material": "Malzeme mahsubu"
       },
       "netNegative": "Net ödenecek tutar negatif olamaz.",
       "saveDraft": "Taslak kaydet",
@@ -3099,7 +3116,10 @@
       "cancelTitle": "Hakedişi iptal et",
       "cancelDesc": "Yevmiye ters kayıtla geri alınır. Ödemesi eşleşmiş hakediş iptal edilemez.",
       "cancelReason": "İptal nedeni",
-      "cancelled": "Hakediş iptal edildi"
+      "cancelled": "Hakediş iptal edildi",
+      "materialRecoup": "Malzeme mahsubu",
+      "materialHint": "Taşerona verilip henüz mahsup edilmemiş malzeme: {{balance}}",
+      "materialOver": "Mahsup, kalan malzeme bakiyesini ({{balance}}) aşamaz"
     },
     "approval": {
       "inboxTitle": "Onay kutusu",
@@ -3170,7 +3190,8 @@
         "retention": "Teminat (işverence tutulan)",
         "withholding": "Stopaj (işverence kesilen)",
         "net": "Tahsil edilecek net",
-        "advanceBalance": "Alınan avans bakiyesi: {{balance}}"
+        "advanceBalance": "Alınan avans bakiyesi: {{balance}}",
+        "vatWithholding": "KDV tevkifatı (işverence)"
       },
       "kpi": {
         "contract": "Sözleşme tutarı",

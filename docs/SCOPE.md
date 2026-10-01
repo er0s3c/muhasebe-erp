@@ -113,7 +113,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | **İnşaat:** satın alma talebi, onay, RFQ/teklif karşılaştırma, sipariş (taahhüt), mal kabul (stoğa giriş) | ✅ (B2p) ⚠️ hesap kodu eklenmedi: mal kabul mevcut alış irsaliyesi muhasebesini kullanır |
 | **İnşaat:** faturanın siparişe bağlanması (3'lü eşleştirme: sipariş – mal kabul – fatura, tolerans, yetkili gerekçeli geçiş, faturasız kabul raporu) | ✅ |
 | **İnşaat:** değişiklik emri (variation order; taşeron ve işveren, süre uzatımı, işveren kabulü) | ✅ |
-| **İnşaat:** malzeme mahsubu, KDV tevkifatı | ⏳ sonraki fazlar ⚠️ |
+| **İnşaat:** malzeme mahsubu (taşerona malzeme verme + hakedişte bakiyeli mahsup), KDV tevkifatı (iki yön, parametreli) | ✅ ⚠️ tevkifat oranı/hesapları ve malzemenin KDV'si doğrulanmadı |
+| **İnşaat:** damga/pul vergisi | ⏳ ⚠️ |
 | **İnşaat:** yabancılara satış sınırları ve yasal süre takibi (89/2026 YGK ve sonrası) | ⏳ Faz C ⚠️ |
 | **İnşaat:** altyapı fonları ve harçlar (elektrik/su/belediye): tarihli, doğrulama alanlı tarifeler; alıcıdan tahsil edilen fon (satış sözleşmesine ek satır, 329 yükümlülük, fesihte iade); projenin ödediği fon tahmini | ✅ (B4) ⚠️ tutar/oranlar, 329 hesabı ve fonların vergi/hukuki niteliği doğrulanmadı |
 | **İnşaat:** yabancı işçi belge/teminat takibi, bordro | ⏳ Faz D ⚠️ |

@@ -78,6 +78,9 @@ export const ACCOUNT_MAPPING_KEYS = [
   'property_revenue',
   'termination_income',
   'fee_payable',
+  // KDV tevkifatı (Faz B kapanışı); varsayılanlar doğrulanmamıştır
+  'vat_withholding_payable',
+  'vat_withholding_receivable',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -116,6 +119,9 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     termination_income: '679',
     // Alıcıdan tahsil edilen altyapı fonu/harç (yükümlülük): diğer ticari borçlar
     fee_payable: '329',
+    // KDV tevkifatı: taşeronda idareye ödenecek tevkifat borcu, işverende işverence tevkif edilen KDV alacağı
+    vat_withholding_payable: '360',
+    vat_withholding_receivable: '136',
   };
 }
 

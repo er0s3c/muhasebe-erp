@@ -1182,6 +1182,7 @@ export interface SubcontractDetail {
     paymentDays: number;
     retentionPct: string;
     advanceRecoupPct: string;
+    vatWithholdingPct: string;
     withholdingPct: string;
     penaltyNote: string | null;
     status: SubcontractStatus;
@@ -1311,6 +1312,21 @@ export interface SubcontractBalances {
   retentionReleased: string;
   retentionBalance: string;
   certifiedGross: string;
+  /** Taşerona verilen malzeme bedeli, hakedişlerde mahsup edilen ve kalan. */
+  materialGiven: string;
+  materialRecouped: string;
+  materialBalance: string;
+}
+
+export interface MaterialIssueRow {
+  id: string;
+  issueDate: string;
+  amount: string;
+  amountBase: string;
+  note: string | null;
+  stockDocumentId: string;
+  docNo: string;
+  description: string | null;
 }
 
 export type ProgressStatus = 'draft' | 'submitted' | 'posted' | 'cancelled';
@@ -1377,11 +1393,14 @@ export interface ProgressDetail {
     retentionPct: string;
     advancePct: string;
     withholdingPct: string;
+    vatWithholdingPct: string;
     gross: string;
     vat: string;
+    vatWithholding: string;
     retention: string;
     advance: string;
     withholding: string;
+    material: string;
     otherDeductions: string;
     net: string;
     note: string | null;

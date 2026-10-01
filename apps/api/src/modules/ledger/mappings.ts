@@ -39,6 +39,8 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   property_revenue: 'Taşınmaz satış geliri (teslimde)',
   termination_income: 'Sözleşme fesih kesintisi geliri',
   fee_payable: 'Alıcıdan tahsil edilen fon ve harç yükümlülüğü',
+  vat_withholding_payable: 'Taşeron hakedişinde tevkif edilen KDV borcu (idareye ödenecek)',
+  vat_withholding_receivable: 'İşverence tevkif edilen KDV (alacak)',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

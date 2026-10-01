@@ -75,7 +75,9 @@ export async function getBalances(tx: Tx, subcontractId: string) {
       coalesce((select sum(advance) from progress_payments where subcontract_id = ${subcontractId} and status = 'posted'), 0)::text as "advanceRecouped",
       coalesce((select sum(retention) from progress_payments where subcontract_id = ${subcontractId} and status = 'posted'), 0)::text as "retentionHeld",
       coalesce((select sum(amount) from retention_releases where subcontract_id = ${subcontractId}), 0)::text as "retentionReleased",
-      coalesce((select sum(gross) from progress_payments where subcontract_id = ${subcontractId} and status = 'posted'), 0)::text as "certifiedGross"`);
+      coalesce((select sum(gross) from progress_payments where subcontract_id = ${subcontractId} and status = 'posted'), 0)::text as "certifiedGross",
+      coalesce((select sum(amount) from subcontract_material_issues where subcontract_id = ${subcontractId}), 0)::text as "materialGiven",
+      coalesce((select sum(material) from progress_payments where subcontract_id = ${subcontractId} and status = 'posted'), 0)::text as "materialRecouped"`);
   const b = r.rows[0]!;
   return {
     advanceGiven: dec(b.advanceGiven!).toFixed(2),
@@ -85,6 +87,9 @@ export async function getBalances(tx: Tx, subcontractId: string) {
     retentionReleased: dec(b.retentionReleased!).toFixed(2),
     retentionBalance: dec(b.retentionHeld!).minus(b.retentionReleased!).toFixed(2),
     certifiedGross: dec(b.certifiedGross!).toFixed(2),
+    materialGiven: dec(b.materialGiven!).toFixed(2),
+    materialRecouped: dec(b.materialRecouped!).toFixed(2),
+    materialBalance: dec(b.materialGiven!).minus(b.materialRecouped!).toFixed(2),
   };
 }
 
@@ -98,7 +103,7 @@ async function resolveVatRate(tx: Tx, vatCode: string | null | undefined, date: 
   return dec(hit.rate).toFixed(4);
 }
 
-type Body = Pick<UpdateProgressPaymentInput, 'periodEnd' | 'vatCode' | 'note' | 'lines' | 'deductions'>;
+type Body = Pick<UpdateProgressPaymentInput, 'periodEnd' | 'vatCode' | 'note' | 'lines' | 'deductions' | 'materialRecoup'>;
 
 /** Girdiyi doğrular, önceki kümülatifleri bulur ve tutarları hesaplar (yazmaz). */
 async function prepare(tx: Tx, sc: typeof subcontracts.$inferSelect, input: Body) {
@@ -130,6 +135,14 @@ async function prepare(tx: Tx, sc: typeof subcontracts.$inferSelect, input: Body
 
   const balances = await getBalances(tx, sc.id);
   const vatRate = await resolveVatRate(tx, input.vatCode, input.periodEnd);
+  // Malzeme mahsubu: yalnızca taşeron hakedişi; verilen malzeme bakiyesini aşamaz
+  const material = dec(input.materialRecoup ?? '0');
+  if (material.gt(0)) {
+    if (sc.direction === 'receivable') throw unprocessable('Malzeme mahsubu yalnızca taşeron hakedişinde yapılır', 'MATERIAL_NOT_ALLOWED');
+    if (material.gt(balances.materialBalance)) {
+      throw unprocessable(`Malzeme mahsubu, taşerona verilen malzeme bakiyesini (${balances.materialBalance}) aşamaz`, 'MATERIAL_OVER_BALANCE');
+    }
+  }
   const calc = computeProgress({
     lines: lines.map((l) => ({ thisQty: l.thisQty.toFixed(4), unitPrice: dec(l.boq.unitPrice).toFixed(4) })),
     vatRate,
@@ -138,8 +151,10 @@ async function prepare(tx: Tx, sc: typeof subcontracts.$inferSelect, input: Body
     withholdingPct: sc.withholdingPct,
     advanceBalance: balances.advanceBalance,
     deductions: input.deductions.map((d) => d.amount),
+    vatWithholdingPct: sc.vatWithholdingPct,
+    material: material.toFixed(2),
   });
-  if (calc.otherDeductions.gt(calc.gross)) throw unprocessable('Diğer kesintiler brüt hakediş tutarını aşamaz', 'PROGRESS_DEDUCTION_TOO_HIGH');
+  if (calc.otherDeductions.plus(calc.material).gt(calc.gross)) throw unprocessable('Diğer kesintiler brüt hakediş tutarını aşamaz', 'PROGRESS_DEDUCTION_TOO_HIGH');
   if (calc.net.isNegative()) throw unprocessable('Net ödenecek tutar negatif olamaz; kesintileri gözden geçirin', 'PROGRESS_NET_NEGATIVE');
   return { lines, calc, vatRate };
 }
@@ -179,9 +194,12 @@ async function writeBody(tx: Tx, companyId: string, sc: typeof subcontracts.$inf
       vatRate,
       gross: toDbAmount(calc.gross),
       vat: toDbAmount(calc.vat),
+      vatWithholdingPct: sc.vatWithholdingPct,
+      vatWithholding: toDbAmount(calc.vatWithholding),
       retention: toDbAmount(calc.retention),
       advance: toDbAmount(calc.advance),
       withholding: toDbAmount(calc.withholding),
+      material: toDbAmount(calc.material),
       otherDeductions: toDbAmount(calc.otherDeductions),
       net: toDbAmount(calc.net),
       note: input.note ?? null,
@@ -214,6 +232,7 @@ export async function createProgress(tx: Tx, ctx: ProgressCtx, input: CreateProg
       retentionPct: sc.retentionPct,
       advancePct: sc.advanceRecoupPct,
       withholdingPct: sc.withholdingPct,
+      vatWithholdingPct: sc.vatWithholdingPct,
       createdBy: ctx.userId,
     })
     .returning();
@@ -253,6 +272,7 @@ export async function submitProgress(tx: Tx, ctx: ProgressCtx, approvalCtx: Appr
     note: p.note,
     lines: lines.map((l) => ({ lineKey: l.lineKey, cumulativeQty: dec(l.cumQty).toFixed(4) })),
     deductions: deductions.map((d) => ({ description: d.description, amount: dec(d.amount).toFixed(2) })),
+    materialRecoup: dec(p.material).toFixed(2),
   });
   const fresh = await lockPayment(tx, id);
 
@@ -290,17 +310,19 @@ export async function postProgress(tx: Tx, ctx: ProgressCtx, id: string) {
   const fx = p.currencyCode === ctx.baseCurrency ? dec(1) : await requireRate(tx, p.currencyCode, ctx.baseCurrency, p.periodEnd, ctx.baseCurrency);
 
   const gross = dec(p.gross);
-  const other = dec(p.otherDeductions);
+  // Malzeme mahsubu maliyeti diğer kesinti gibi azaltır: malzeme çıkışında gider zaten yazılmıştır (çift sayım olmaz)
+  const other = dec(p.otherDeductions).plus(p.material);
   const receivable = p.direction === 'receivable';
-  type MapKey = 'subcontract_cost' | 'payable' | 'vat_input' | 'retention_payable' | 'withholding_payable' | 'subcontract_advance' | 'claim_revenue' | 'receivable' | 'vat_output' | 'retention_receivable' | 'withholding_receivable' | 'advance_received';
+  type MapKey = 'subcontract_cost' | 'payable' | 'vat_input' | 'retention_payable' | 'withholding_payable' | 'subcontract_advance' | 'claim_revenue' | 'receivable' | 'vat_output' | 'retention_receivable' | 'withholding_receivable' | 'advance_received' | 'vat_withholding_payable' | 'vat_withholding_receivable';
   const keys = receivable
-    ? { body: 'claim_revenue', party: 'receivable', vat: 'vat_output', retention: 'retention_receivable', withholding: 'withholding_receivable', advance: 'advance_received' }
-    : { body: 'subcontract_cost', party: 'payable', vat: 'vat_input', retention: 'retention_payable', withholding: 'withholding_payable', advance: 'subcontract_advance' };
+    ? { body: 'claim_revenue', party: 'receivable', vat: 'vat_output', retention: 'retention_receivable', withholding: 'withholding_receivable', advance: 'advance_received', vatWithholding: 'vat_withholding_receivable' }
+    : { body: 'subcontract_cost', party: 'payable', vat: 'vat_input', retention: 'retention_payable', withholding: 'withholding_payable', advance: 'subcontract_advance', vatWithholding: 'vat_withholding_payable' };
   const need: MapKey[] = [keys.body, keys.party] as MapKey[];
   if (!dec(p.vat).isZero()) need.push(keys.vat as MapKey);
   if (!dec(p.retention).isZero()) need.push(keys.retention as MapKey);
   if (!dec(p.withholding).isZero()) need.push(keys.withholding as MapKey);
   if (!dec(p.advance).isZero()) need.push(keys.advance as MapKey);
+  if (!dec(p.vatWithholding).isZero()) need.push(keys.vatWithholding as MapKey);
   const acc = (await requireMappings(tx, need)) as Record<string, string>;
 
   // Varsayılan maliyet kodu: BOQ satırında yoksa "taşeron" türündeki ilk aktif kod
@@ -341,12 +363,14 @@ export async function postProgress(tx: Tx, ctx: ProgressCtx, id: string) {
       retention: acc[keys.retention] ?? '',
       withholding: acc[keys.withholding] ?? '',
       advance: acc[keys.advance] ?? '',
+      vatWithholding: acc[keys.vatWithholding] ?? '',
     },
     costGroups,
     vat: dec(p.vat),
     retention: dec(p.retention),
     withholding: dec(p.withholding),
     advance: dec(p.advance),
+    vatWithholding: dec(p.vatWithholding),
   });
   if (!built.net.eq(p.net) || !built.net.gt(0)) {
     // Savunma: hesap (computeProgress) ile yevmiye kimliği ayrışırsa kaydetme
@@ -481,6 +505,7 @@ export async function getProgress(tx: Tx, id: string) {
            p.payment_no as "paymentNo", p.number, p.direction, p.period_end::text as "periodEnd", p.status, p.currency_code as "currencyCode",
            p.fx_rate::text as "fxRate", p.vat_code as "vatCode", p.vat_rate::text as "vatRate",
            p.retention_pct::text as "retentionPct", p.advance_pct::text as "advancePct", p.withholding_pct::text as "withholdingPct",
+           p.vat_withholding_pct::text as "vatWithholdingPct", round(p.vat_withholding, 2)::text as "vatWithholding", round(p.material, 2)::text as material,
            round(p.gross, 2)::text as gross, round(p.vat, 2)::text as vat, round(p.retention, 2)::text as retention, round(p.advance, 2)::text as advance,
            round(p.withholding, 2)::text as withholding, round(p.other_deductions, 2)::text as "otherDeductions", round(p.net, 2)::text as net,
            p.note, p.rejection_note as "rejectionNote", p.entry_id as "entryId",
@@ -510,7 +535,8 @@ export async function listProgress(tx: Tx, q: { subcontractId?: string; projectI
     select p.id, p.number, p.payment_no as "paymentNo", p.status, p.direction, p.period_end::text as "periodEnd",
            p.subcontract_id as "subcontractId", s.code as "subcontractCode", pa.name as "partyName",
            p.project_id as "projectId", pr.code as "projectCode", p.currency_code as "currencyCode",
-           round(p.gross, 2)::text as gross, round(p.net, 2)::text as net
+           round(p.gross, 2)::text as gross, round(p.vat, 2)::text as vat, round(p.vat_withholding, 2)::text as "vatWithholding",
+           round(p.material, 2)::text as material, round(p.net, 2)::text as net
       from progress_payments p
       join subcontracts s on s.id = p.subcontract_id
       join projects pr on pr.id = p.project_id
@@ -556,6 +582,7 @@ export async function getProgressBasis(tx: Tx, subcontractId: string) {
       retentionPct: dec(sc.retentionPct).toFixed(4),
       advanceRecoupPct: dec(sc.advanceRecoupPct).toFixed(4),
       withholdingPct: dec(sc.withholdingPct).toFixed(4),
+      vatWithholdingPct: dec(sc.vatWithholdingPct).toFixed(4),
     },
     lines: lines.rows,
     balances: await getBalances(tx, subcontractId),

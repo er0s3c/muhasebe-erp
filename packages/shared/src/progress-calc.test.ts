@@ -70,3 +70,40 @@ describe('allocateProportional', () => {
     expect(allocateProportional('0', ['5', '5']).map((p) => p.toFixed(2))).toEqual(['0.00', '0.00']);
   });
 });
+
+describe('computeProgress: KDV tevkifatı ve malzeme mahsubu', () => {
+  const lines = [{ thisQty: '1', unitPrice: '100000' }];
+  it('tevkifat KDV\'nin yüzdesidir: brüt 100.000, KDV %20 = 20.000, %40 tevkifat = 8.000 → net 112.000', () => {
+    const r = computeProgress({ ...base, lines, vatRate: '20', vatWithholdingPct: '40' });
+    expect(r.vat.toFixed(2)).toBe('20000.00');
+    expect(r.vatWithholding.toFixed(2)).toBe('8000.00');
+    expect(r.net.toFixed(2)).toBe('112000.00');
+  });
+  it('tevkifat KDV yokken 0; verilmezse 0', () => {
+    expect(computeProgress({ ...base, lines, vatWithholdingPct: '40' }).vatWithholding.toFixed(2)).toBe('0.00');
+    expect(computeProgress({ ...base, lines, vatRate: '20' }).vatWithholding.toFixed(2)).toBe('0.00');
+  });
+  it('malzeme mahsubu net\'ten düşer; tümü bir arada net kimliği tutar', () => {
+    const r = computeProgress({
+      ...base,
+      lines,
+      vatRate: '20',
+      vatWithholdingPct: '50',
+      retentionPct: '5',
+      advancePct: '10',
+      advanceBalance: '50000',
+      withholdingPct: '2',
+      material: '15000.50',
+      deductions: ['250'],
+    });
+    expect(r.material.toFixed(2)).toBe('15000.50');
+    // 100.000 + 20.000 − 10.000 − 5.000 − 10.000 − 2.000 − 15.000,50 − 250
+    expect(r.net.toFixed(2)).toBe('77749.50');
+    expect(r.net.toFixed(2)).toBe(r.gross.plus(r.vat).minus(r.vatWithholding).minus(r.retention).minus(r.advance).minus(r.withholding).minus(r.material).minus(r.otherDeductions).toFixed(2));
+  });
+  it('tevkifat KDV tutarını aşamaz (yüzde ≤ 100) ve kuruşa yuvarlanır', () => {
+    const r = computeProgress({ ...base, lines: [{ thisQty: '1', unitPrice: '333.33' }], vatRate: '16', vatWithholdingPct: '33.3333' });
+    expect(r.vatWithholding.lte(r.vat)).toBe(true);
+    expect(r.vatWithholding.toFixed(2)).toBe(r.vatWithholding.toDecimalPlaces(2).toFixed(2));
+  });
+});

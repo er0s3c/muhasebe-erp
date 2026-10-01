@@ -4,7 +4,8 @@ import { ROLES } from '../permissions';
 
 // --- İnşaat parametreleri (tarihli, kaynak notlu, doğrulama alanlı) ---------------
 
-export const CONSTRUCTION_PARAM_KINDS = ['retention_pct', 'withholding_pct', 'advance_recoup_pct'] as const;
+/** vat_withholding_pct: KDV'nin tevkif edilen yüzdesi (ör. 4/10 → 40); varsayılan 0 = tevkifat yok. */
+export const CONSTRUCTION_PARAM_KINDS = ['retention_pct', 'withholding_pct', 'advance_recoup_pct', 'vat_withholding_pct'] as const;
 export type ConstructionParamKind = (typeof CONSTRUCTION_PARAM_KINDS)[number];
 
 const percent = z
@@ -89,6 +90,8 @@ export const createSubcontractSchema = z
     retentionPct: optionalPercent,
     advanceRecoupPct: optionalPercent,
     withholdingPct: optionalPercent,
+    /** KDV'nin tevkif edilen yüzdesi; verilmezse parametreden (yoksa 0 = tevkifat yok). */
+    vatWithholdingPct: optionalPercent,
     penaltyNote: z.string().trim().max(1000).nullable().optional(),
   })
   .refine((v) => !v.startDate || !v.endDate || v.endDate >= v.startDate, { message: 'Bitiş tarihi başlangıçtan önce olamaz', path: ['endDate'] });
@@ -103,6 +106,7 @@ export const updateSubcontractSchema = z
     retentionPct: percent,
     advanceRecoupPct: percent,
     withholdingPct: percent,
+    vatWithholdingPct: percent,
     penaltyNote: z.string().trim().max(1000).nullable(),
   })
   .partial()
@@ -200,6 +204,8 @@ const progressBody = {
     .max(2000)
     .refine((l) => new Set(l.map((x) => x.lineKey)).size === l.length, 'Aynı BOQ satırı birden çok kez girilemez'),
   deductions: z.array(z.object({ description: z.string().trim().min(1).max(200), amount: positiveAmount })).max(50).default([]),
+  /** Taşerona verilen malzeme bedelinin bu hakedişteki mahsubu (0 = yok); bakiyeyi aşamaz. İşveren hakedişinde 0 olmalı. */
+  materialRecoup: z.string().regex(/^\d{1,15}(\.\d{1,2})?$/, 'Geçersiz tutar').optional(),
 };
 
 export const createProgressPaymentSchema = z.object({ subcontractId: uuid, ...progressBody });
@@ -230,6 +236,25 @@ export const giveAdvanceSchema = z.object({
   note: z.string().trim().max(300).optional(),
 });
 export type GiveAdvanceInput = z.infer<typeof giveAdvanceSchema>;
+
+/** Taşerona malzeme verme: sözleşmenin projesine etiketli stok sarfı; bedel stok çıkış maliyetidir. */
+export const giveMaterialSchema = z.object({
+  date: isoDate,
+  warehouseId: uuid,
+  note: z.string().trim().max(300).optional(),
+  lines: z
+    .array(
+      z.object({
+        itemId: uuid,
+        quantity: z.string().regex(/^\d{1,15}(\.\d{1,4})?$/, 'Geçersiz miktar').refine((v) => Number(v) > 0, 'Miktar sıfırdan büyük olmalı'),
+        /** Sözleşmenin projesinin yaprak iş kalemi. */
+        wbsId: uuid,
+      }),
+    )
+    .min(1, 'En az bir kalem girilmeli')
+    .max(100),
+});
+export type GiveMaterialInput = z.infer<typeof giveMaterialSchema>;
 
 export const releaseRetentionSchema = z.object({
   date: isoDate,

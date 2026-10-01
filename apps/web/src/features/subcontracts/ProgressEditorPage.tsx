@@ -19,7 +19,7 @@ import type { ApprovalRequestRow, ProgressDetail, SubcontractBalances } from '..
 import { ApprovalStatusBadge, ProgressStatusBadge, SUBCONTRACT_INVALIDATE } from './common';
 
 interface Basis {
-  subcontract: { id: string; code: string; title: string; status: string; direction: 'payable' | 'receivable'; currencyCode: string; paymentDays: number; retentionPct: string; advanceRecoupPct: string; withholdingPct: string };
+  subcontract: { id: string; code: string; title: string; status: string; direction: 'payable' | 'receivable'; currencyCode: string; paymentDays: number; retentionPct: string; advanceRecoupPct: string; withholdingPct: string; vatWithholdingPct: string };
   lines: { lineKey: string; lineNo: number; itemNo: string | null; description: string; unit: string; quantity: string; unitPrice: string; prevQty: string; wbsCode: string; costCode: string | null }[];
   balances: SubcontractBalances;
 }
@@ -65,6 +65,7 @@ export function ProgressEditorPage() {
   const [note, setNote] = useState('');
   const [cum, setCum] = useState<Record<string, string>>({});
   const [deductions, setDeductions] = useState<DeductionDraft[]>([]);
+  const [material, setMaterial] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -78,6 +79,7 @@ export function ProgressEditorPage() {
       setVatCode(detail.payment.vatCode ?? '');
       setNote(detail.payment.note ?? '');
       setDeductions(detail.deductions.map((d) => ({ key: d.id, description: d.description, amount: d.amount })));
+      setMaterial(Number(detail.payment.material) > 0 ? String(Number(detail.payment.material)) : '');
       const next: Record<string, string> = {};
       for (const l of basis.lines) next[l.lineKey] = qtyText(detail.lines.find((x) => x.lineKey === l.lineKey)?.cumQty ?? l.prevQty);
       setCum(next);
@@ -112,12 +114,16 @@ export function ProgressEditorPage() {
             withholdingPct: detail?.payment.withholdingPct ?? basis.subcontract.withholdingPct,
             advanceBalance: basis.balances.advanceBalance,
             deductions: deductions.map((d) => d.amount.replace(',', '.') || '0'),
+            vatWithholdingPct: detail?.payment.vatWithholdingPct ?? basis.subcontract.vatWithholdingPct,
+            material: material.replace(',', '.') || '0',
           })
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [basis, detail, vatCode, vatOptions, deductions, JSON.stringify(active.map((r) => [r.lineKey, r.thisQty]))],
+    [basis, detail, vatCode, vatOptions, deductions, material, JSON.stringify(active.map((r) => [r.lineKey, r.thisQty]))],
   );
-  const invalid = rows.some((r) => r.over || r.below) || active.length === 0 || deductions.some((d) => !d.description.trim() || !(Number(d.amount.replace(',', '.')) > 0)) || (calc ? calc.net.isNegative() : true);
+  const materialNum = Number(material.replace(',', '.') || 0);
+  const materialOver = !!basis && materialNum > Number(basis.balances.materialBalance);
+  const invalid = materialOver || rows.some((r) => r.over || r.below) || active.length === 0 || deductions.some((d) => !d.description.trim() || !(Number(d.amount.replace(',', '.')) > 0)) || (calc ? calc.net.isNegative() : true);
 
   const body = () => ({
     periodEnd,
@@ -125,6 +131,7 @@ export function ProgressEditorPage() {
     note: note.trim() || null,
     lines: rows.map((r) => ({ lineKey: r.lineKey, cumulativeQty: r.cum })),
     deductions: deductions.map((d) => ({ description: d.description.trim(), amount: d.amount.replace(',', '.') })),
+    materialRecoup: material.replace(',', '.') || '0',
   });
 
   const save = useCMutation(async (_: void, call) => {
@@ -160,6 +167,8 @@ export function ProgressEditorPage() {
   const view = {
     gross: editable || !p ? calc?.gross.toFixed(2) : p.gross,
     vat: editable || !p ? calc?.vat.toFixed(2) : p.vat,
+    vatWithholding: editable || !p ? calc?.vatWithholding.toFixed(2) : p.vatWithholding,
+    material: editable || !p ? calc?.material.toFixed(2) : p.material,
     retention: editable || !p ? calc?.retention.toFixed(2) : p.retention,
     advance: editable || !p ? calc?.advance.toFixed(2) : p.advance,
     withholding: editable || !p ? calc?.withholding.toFixed(2) : p.withholding,
@@ -262,6 +271,15 @@ export function ProgressEditorPage() {
             ) : undefined}
           />
           <div className="flex flex-col gap-2 p-4">
+            {!receivable && (editable || materialNum > 0) && (
+              <Field
+                label={t('subcontracts.progress.materialRecoup')}
+                hint={t('subcontracts.progress.materialHint', { balance: money2(basis.balances.materialBalance) })}
+                error={materialOver ? t('subcontracts.progress.materialOver', { balance: money2(basis.balances.materialBalance) }) : undefined}
+              >
+                {(fid) => <Input id={fid} inputMode="decimal" className="num w-48 text-right" disabled={!editable} value={material} onChange={(e) => setMaterial(e.target.value.replace(',', '.'))} placeholder="0" />}
+              </Field>
+            )}
             {deductions.length === 0 && <p className="text-sm text-muted">{t('subcontracts.progress.noDeductions')}</p>}
             {deductions.map((d, i) => (
               <div key={d.key} className="flex items-center gap-2">
@@ -282,9 +300,18 @@ export function ProgressEditorPage() {
           <dl className="flex flex-col gap-2 p-4 text-sm">
             <Row label={t('subcontracts.progress.sum.gross')} value={money2(view.gross)} />
             <Row label={`${t('subcontracts.progress.sum.vat')}${vatCode ? ` (${vatCode})` : ''}`} value={`+ ${money2(view.vat)}`} />
+            {(Number(p?.vatWithholdingPct ?? basis.subcontract.vatWithholdingPct) > 0 || Number(view.vatWithholding) > 0) && (
+              <Row
+                label={`${receivable ? t('subcontracts.employer.sum.vatWithholding') : t('subcontracts.progress.sum.vatWithholding')} ${pct(p?.vatWithholdingPct ?? basis.subcontract.vatWithholdingPct)}`}
+                value={`− ${money2(view.vatWithholding)}`}
+              />
+            )}
             <Row label={`${receivable ? t('subcontracts.employer.sum.retention') : t('subcontracts.progress.sum.retention')} ${pct(p?.retentionPct ?? basis.subcontract.retentionPct)}`} value={`− ${money2(view.retention)}`} />
             <Row label={`${t('subcontracts.progress.sum.advance')} ${pct(p?.advancePct ?? basis.subcontract.advanceRecoupPct)}`} value={`− ${money2(view.advance)}`} hint={editable ? (receivable ? t('subcontracts.employer.sum.advanceBalance', { balance: money2(basis.balances.advanceBalance) }) : t('subcontracts.progress.sum.advanceBalance', { balance: money2(basis.balances.advanceBalance) })) : undefined} />
             <Row label={`${receivable ? t('subcontracts.employer.sum.withholding') : t('subcontracts.progress.sum.withholding')} ${pct(p?.withholdingPct ?? basis.subcontract.withholdingPct)}`} value={`− ${money2(view.withholding)}`} />
+            {!receivable && (editable || Number(view.material) > 0) && (
+              <Row label={t('subcontracts.progress.sum.material')} value={`− ${money2(view.material)}`} />
+            )}
             <Row label={t('subcontracts.progress.sum.other')} value={`− ${money2(view.other)}`} />
             <div className="mt-1 flex items-baseline justify-between border-t border-text pt-3 text-base">
               <dt>{receivable ? t('subcontracts.employer.sum.net') : t('subcontracts.progress.sum.net')}</dt>

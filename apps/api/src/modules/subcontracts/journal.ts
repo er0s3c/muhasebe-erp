@@ -21,6 +21,8 @@ export interface ProgressJournalInput {
     retention: string;
     withholding: string;
     advance: string;
+    /** KDV tevkifatı: taşeronda idareye ödenecek borç (alacak), işverende işverence tevkif edilen KDV alacağı (borç). */
+    vatWithholding: string;
   };
   /** Maliyet satırları (iş kalemi + maliyet kodu bazında); tutar = brüt − orantılı diğer kesinti. */
   costGroups: readonly { projectId: string; wbsId: string; costCodeId: string | null; amount: MoneyValue }[];
@@ -28,13 +30,16 @@ export interface ProgressJournalInput {
   retention: MoneyValue;
   withholding: MoneyValue;
   advance: MoneyValue;
+  /** Tevkif edilen KDV (KDV'nin bir kısmı); cari satırı net'i ondan arındırır. */
+  vatWithholding: MoneyValue;
 }
 
 /**
  * Hakediş yevmiyesi (saf). Cari satırın defter tutarı, borç taraflarının defter toplamından diğer alacakların
  * defter tutarı düşülerek bulunur: kur yuvarlaması fişi bozmaz.
  *
- * B maliyet (proje/iş kalemi/maliyet kodu etiketli) + B KDV / A teminat + A stopaj + A avans + A taşeron cari (net)
+ * B maliyet (proje/iş kalemi/maliyet kodu etiketli) + B KDV / A teminat + A stopaj + A avans + A KDV tevkifatı + A taşeron cari (net)
+ * Malzeme mahsubu ayrı satır değildir: maliyet satırları (costGroups) diğer kesintiyle birlikte azaltılarak gelir; stok sarfında gider zaten yazılmıştır.
  */
 export function buildProgressJournal(i: ProgressJournalInput): { lines: AutoJournalLine[]; netBase: MoneyValue; net: MoneyValue } {
   const foreign = i.currency !== i.baseCurrency;
@@ -87,6 +92,7 @@ export function buildProgressJournal(i: ProgressJournalInput): { lines: AutoJour
   credit(i.accounts.retention, i.retention, receivable ? 'İşverence tutulan teminat' : 'Tutulan teminat');
   credit(i.accounts.withholding, i.withholding, receivable ? 'İşverence kesilen stopaj' : 'Stopaj');
   credit(i.accounts.advance, i.advance, 'Avans mahsubu');
+  credit(i.accounts.vatWithholding, i.vatWithholding, receivable ? 'İşverence tevkif edilen KDV' : 'KDV tevkifatı');
 
   const net = debitsDoc.minus(otherCreditsDoc);
   const netBase = debitsBase.minus(otherCreditsBase);
