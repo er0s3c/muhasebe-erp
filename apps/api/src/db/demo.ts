@@ -29,7 +29,7 @@ import {
 } from '@erp/shared';
 import type { CompanyInfo } from '../http/context';
 import { withContext, type Db, type Tx } from './client';
-import { customCodes, exchangeRates, items as itemsTable, memberships, organizations, users, warehouses } from './schema';
+import { customCodes, exchangeRates, items as itemsTable, memberships, organizations, subcontractRevisions, users, warehouses } from './schema';
 import { createParty } from '../modules/parties/service';
 import { createAccount, listAccounts } from '../modules/ledger/accounts';
 import {
@@ -57,6 +57,10 @@ import { approveBudget, createBudget, putBudgetLines } from '../modules/projects
 import { recordProgress } from '../modules/projects/progress';
 import { createProject, setProjectStatus } from '../modules/projects/service';
 import { createWbs } from '../modules/projects/wbs';
+import { createParam } from '../modules/subcontracts/params';
+import { createProgress, giveAdvance, submitProgress, type ProgressCtx } from '../modules/subcontracts/progress';
+import { approveRevision, createSubcontract, putBoqLines } from '../modules/subcontracts/service';
+import { decide } from '../modules/approvals/service';
 
 export const DEMO_EMAIL = 'demo@ornek.local';
 export const DEMO_PASSWORD = 'Demo-Sifre-123';
@@ -324,7 +328,7 @@ async function seedTreasury(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
  * kasadan küçük gider; bir iş kalemi bütçeyi aşar, biri "iş kalemine atanmamış" düşer. Önceki demo hareketleri
  * (etiketsiz sarf, kira, personel) bilerek etiketsiz kalır: proje raporu "projesiz maliyet" ve defter mutabakatını gösterir.
  */
-async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string, cashId: string): Promise<string> {
+async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>, acc: (code: string) => string, cashId: string, bankTlId: string): Promise<string> {
   const pctx = { companyId: ctx.companyId, userId: ctx.userId };
   const stockCtx: StockCtx = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: 'TRY', reportingCurrency: ctx.reportingCurrency, allowNegativeStock: false };
   const invCtx: InvoiceCtx = { ...stockCtx };
@@ -451,7 +455,41 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
   ]);
   await progress(kuzey, date(9, 28), [[k.kaba, '20']]);
 
-  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa)';
+  // ---- Taşeron sözleşmesi ve hakediş (Faz B2): Güneş Sitesi elektrik tesisatı -------------------------
+  // Teminat/avans yüzdeleri bu şirkete elle girilmiş, DOĞRULANMAMIŞ örnek parametrelerdir (yasal değer değildir).
+  await createParam(tx, ctx.companyId, { kind: 'retention_pct', value: '5', validFrom: date(1, 1), sourceNote: 'Demo: sözleşme şartı (doğrulanmadı)' });
+  await createParam(tx, ctx.companyId, { kind: 'advance_recoup_pct', value: '10', validFrom: date(1, 1), sourceNote: 'Demo: sözleşme şartı (doğrulanmadı)' });
+  const pgctx: ProgressCtx = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: ctx.baseCurrency, reportingCurrency: ctx.reportingCurrency };
+  const sub = await createSubcontract(tx, pgctx, {
+    projectId: gunes, partyId: partyId.get('usta')!, title: 'Elektrik tesisatı', currencyCode: 'TRY', paymentDays: 30, startDate: date(9, 1), endDate: date(12, 15),
+    penaltyNote: 'Gecikmede günlük %0,1 (demo notu).',
+  });
+  const [rev] = await tx.select({ id: subcontractRevisions.id }).from(subcontractRevisions).where(eq(subcontractRevisions.subcontractId, sub.id));
+  const boq = await putBoqLines(tx, pgctx, rev!.id, {
+    lines: [
+      { itemNo: '1.1', description: 'Kat tesisatı kablo çekimi', unit: 'm', quantity: '20000', unitPrice: '4', wbsId: w.elektrik },
+      { itemNo: '1.2', description: 'Pano kurulumu', unit: 'adet', quantity: '24', unitPrice: '1500', wbsId: w.elektrik },
+      { itemNo: '1.3', description: 'Aydınlatma montajı', unit: 'adet', quantity: '480', unitPrice: '90', wbsId: w.elektrik },
+    ],
+  });
+  await approveRevision(tx, pgctx, rev!.id);
+  const keyOf = (no: string) => boq.lines.find((l) => l.itemNo === no)!.lineKey as string;
+  await giveAdvance(tx, pgctx, sub.id, { accountId: bankTlId, date: date(9, 5), amount: '10000', note: 'Mobilizasyon avansı' });
+  const hk1 = await createProgress(tx, pgctx, {
+    subcontractId: sub.id, periodEnd: date(9, 28), vatCode: 'KDV-16', note: 'Eylül hakedişi',
+    lines: [{ lineKey: keyOf('1.1'), cumulativeQty: '8000' }, { lineKey: keyOf('1.2'), cumulativeQty: '6' }, { lineKey: keyOf('1.3'), cumulativeQty: '100' }],
+    deductions: [],
+  });
+  const submitted = await submitProgress(tx, pgctx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' }, hk1.payment.id as string);
+  await decide(tx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' }, submitted.approvals[0]!.id, { decision: 'approve' });
+  // İkinci hakediş taslak kalır (arayüzde düzenlenebilir ve onaya gönderilebilir)
+  await createProgress(tx, pgctx, {
+    subcontractId: sub.id, periodEnd: date(9, 30), vatCode: 'KDV-16',
+    lines: [{ lineKey: keyOf('1.1'), cumulativeQty: '12000' }, { lineKey: keyOf('1.2'), cumulativeQty: '9' }, { lineKey: keyOf('1.3'), cumulativeQty: '180' }],
+    deductions: [{ description: 'Gecikme cezası (demo)', amount: '500' }],
+  });
+
+  return 'projeler: 2 (12 iş kalemi düğümü, 3 bütçe revizyonu, etiketli yevmiye/fatura/sarf/kasa); taşeron: 1 sözleşme, BOQ, 1 onaylı + 1 taslak hakediş, avans';
 }
 
 /**
@@ -657,7 +695,7 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
     const stockSummary = await seedInventory(tx, ctx, partyId, acc);
     const treasury = await seedTreasury(tx, ctx, partyId, acc);
     const treasurySummary = `${treasury.summary}; ${await seedBankStatement(tx, ctx, { ...company, sector: company.sector as Sector }, treasury.bankTlId)}`;
-    const projectSummary = await seedProjects(tx, ctx, partyId, acc, treasury.cashId);
+    const projectSummary = await seedProjects(tx, ctx, partyId, acc, treasury.cashId, treasury.bankTlId);
 
     // Geçmiş aylar kapansın (yılın ilk yarısı)
     for (let m = 1; m <= 6; m++) {
