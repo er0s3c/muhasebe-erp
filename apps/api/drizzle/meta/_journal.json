@@ -204,6 +204,20 @@
       "when": 1790825633071,
       "tag": "0028_approvals_params_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790826139725,
+      "tag": "0029_subcontracts",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790826140887,
+      "tag": "0030_subcontracts_rules",
+      "breakpoints": true
     }
   ]
 }

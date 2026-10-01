@@ -625,6 +625,153 @@ export const costCodes = pgTable(
   ],
 );
 
+/** Taşeron sözleşmesi (başlık). Tutar ve kalemler onaylı revizyonun BOQ satırlarındadır. */
+export const subcontracts = pgTable(
+  'subcontracts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    projectId: uuid().notNull(),
+    /** Taşeron (tedarikçi ya da hem müşteri hem tedarikçi türünde cari). */
+    partyId: uuid().notNull(),
+    title: text().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    startDate: date({ mode: 'string' }),
+    endDate: date({ mode: 'string' }),
+    /** Hakediş vadesi (gün); yaşlandırmada cari satırının vadesi. */
+    paymentDays: integer().notNull().default(30),
+    /** Yüzde anlık görüntüleri: sözleşme açılırken parametreden kopyalanır, sonradan parametre değişse bu değişmez. */
+    retentionPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    advanceRecoupPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    withholdingPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    penaltyNote: text(),
+    /** draft | active | completed | terminated */
+    status: text().notNull().default('draft'),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('subcontracts_company_code_uq').on(t.companyId, t.code),
+    unique('subcontracts_id_company_uq').on(t.id, t.companyId),
+    unique('subcontracts_id_project_uq').on(t.id, t.projectId),
+    foreignKey({
+      name: 'subcontracts_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    foreignKey({
+      name: 'subcontracts_party_fk',
+      columns: [t.partyId, t.companyId],
+      foreignColumns: [parties.id, parties.companyId],
+    }),
+    index('subcontracts_project_idx').on(t.companyId, t.projectId),
+    index('subcontracts_party_idx').on(t.companyId, t.partyId),
+    check('subcontracts_status_ck', sql`${t.status} in ('draft','active','completed','terminated')`),
+    check('subcontracts_dates_ck', sql`${t.startDate} is null or ${t.endDate} is null or ${t.endDate} >= ${t.startDate}`),
+    check('subcontracts_days_ck', sql`${t.paymentDays} between 0 and 365`),
+    check(
+      'subcontracts_pct_ck',
+      sql`${t.retentionPct} between 0 and 100 and ${t.advanceRecoupPct} between 0 and 100 and ${t.withholdingPct} between 0 and 100`,
+    ),
+  ],
+);
+
+/** Sözleşme revizyonu (bütçe revizyonu düzeni): taslak → onaylı → yerine geçilmiş; onaylı revizyon değişmez. */
+export const subcontractRevisions = pgTable(
+  'subcontract_revisions',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    subcontractId: uuid().notNull(),
+    revisionNo: integer().notNull(),
+    status: text().notNull().default('draft'),
+    title: text(),
+    approvedAt: timestamp({ withTimezone: true }),
+    approvedBy: uuid().references(() => users.id),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('subcontract_revisions_no_uq').on(t.subcontractId, t.revisionNo),
+    unique('subcontract_revisions_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('subcontract_revisions_draft_uq')
+      .on(t.subcontractId)
+      .where(sql`${t.status} = 'draft'`),
+    foreignKey({
+      name: 'subcontract_revisions_subcontract_fk',
+      columns: [t.subcontractId, t.companyId],
+      foreignColumns: [subcontracts.id, subcontracts.companyId],
+    }),
+    check('subcontract_revisions_status_ck', sql`${t.status} in ('draft','approved','superseded')`),
+    check(
+      'subcontract_revisions_approved_ck',
+      sql`(${t.status} = 'draft' and ${t.approvedAt} is null) or (${t.status} <> 'draft' and ${t.approvedAt} is not null)`,
+    ),
+  ],
+);
+
+/**
+ * BOQ satırı. `lineKey` revizyonlar arasında sabittir (kopyalanınca korunur): hakediş kümülatif miktarı
+ * `lineKey` ile takip edilir.
+ */
+export const subcontractBoqLines = pgTable(
+  'subcontract_boq_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    revisionId: uuid().notNull(),
+    subcontractId: uuid().notNull(),
+    projectId: uuid().notNull(),
+    lineKey: uuid().notNull(),
+    lineNo: integer().notNull(),
+    itemNo: text(),
+    description: text().notNull(),
+    unit: text().notNull(),
+    quantity: qty().notNull(),
+    unitPrice: numeric({ precision: 19, scale: 4 }).notNull(),
+    /** Maliyetin yazılacağı yaprak iş kalemi. */
+    wbsId: uuid().notNull(),
+    costCodeId: uuid(),
+  },
+  (t) => [
+    unique('subcontract_boq_lines_rev_key_uq').on(t.revisionId, t.lineKey),
+    unique('subcontract_boq_lines_rev_no_uq').on(t.revisionId, t.lineNo),
+    index('subcontract_boq_lines_sub_idx').on(t.subcontractId, t.lineKey),
+    index('subcontract_boq_lines_wbs_idx').on(t.wbsId),
+    foreignKey({
+      name: 'subcontract_boq_lines_revision_fk',
+      columns: [t.revisionId, t.companyId],
+      foreignColumns: [subcontractRevisions.id, subcontractRevisions.companyId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'subcontract_boq_lines_subcontract_fk',
+      columns: [t.subcontractId, t.projectId],
+      foreignColumns: [subcontracts.id, subcontracts.projectId],
+    }),
+    foreignKey({
+      name: 'subcontract_boq_lines_wbs_fk',
+      columns: [t.wbsId, t.projectId],
+      foreignColumns: [projectWbs.id, projectWbs.projectId],
+    }),
+    foreignKey({
+      name: 'subcontract_boq_lines_cost_code_fk',
+      columns: [t.costCodeId, t.companyId],
+      foreignColumns: [costCodes.id, costCodes.companyId],
+    }),
+    check('subcontract_boq_lines_amount_ck', sql`${t.quantity} > 0 and ${t.unitPrice} >= 0`),
+  ],
+);
+
 export const journalEntries = pgTable(
   'journal_entries',
   {

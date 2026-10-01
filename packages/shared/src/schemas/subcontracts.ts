@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDate, uuid } from './common';
+import { currencyCode, isoDate, uuid } from './common';
 import { ROLES } from '../permissions';
 
 // --- İnşaat parametreleri (tarihli, kaynak notlu, doğrulama alanlı) ---------------
@@ -63,3 +63,81 @@ export const decideApprovalSchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 export type DecideApprovalInput = z.infer<typeof decideApprovalSchema>;
+
+// --- Taşeron sözleşmesi ve BOQ ---------------------------------------------------------
+
+export const SUBCONTRACT_STATUSES = ['draft', 'active', 'completed', 'terminated'] as const;
+export type SubcontractStatus = (typeof SUBCONTRACT_STATUSES)[number];
+
+const optionalPercent = percent.optional();
+
+export const createSubcontractSchema = z
+  .object({
+    projectId: uuid,
+    partyId: uuid,
+    title: z.string().trim().min(1).max(200),
+    currencyCode,
+    startDate: isoDate.nullable().optional(),
+    endDate: isoDate.nullable().optional(),
+    paymentDays: z.number().int().min(0).max(365).default(30),
+    /** Verilmezse sözleşme tarihinde geçerli inşaat parametresinden kopyalanır (yoksa 0). */
+    retentionPct: optionalPercent,
+    advanceRecoupPct: optionalPercent,
+    withholdingPct: optionalPercent,
+    penaltyNote: z.string().trim().max(1000).nullable().optional(),
+  })
+  .refine((v) => !v.startDate || !v.endDate || v.endDate >= v.startDate, { message: 'Bitiş tarihi başlangıçtan önce olamaz', path: ['endDate'] });
+export type CreateSubcontractInput = z.infer<typeof createSubcontractSchema>;
+
+export const updateSubcontractSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    startDate: isoDate.nullable(),
+    endDate: isoDate.nullable(),
+    paymentDays: z.number().int().min(0).max(365),
+    retentionPct: percent,
+    advanceRecoupPct: percent,
+    withholdingPct: percent,
+    penaltyNote: z.string().trim().max(1000).nullable(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'En az bir alan verilmeli');
+export type UpdateSubcontractInput = z.infer<typeof updateSubcontractSchema>;
+
+export const subcontractStatusSchema = z.object({ status: z.enum(['completed', 'terminated']) });
+
+export const subcontractListQuerySchema = z.object({
+  projectId: uuid.optional(),
+  partyId: uuid.optional(),
+  status: z.enum(SUBCONTRACT_STATUSES).optional(),
+});
+
+export const createRevisionSchema = z.object({
+  title: z.string().trim().max(200).nullable().optional(),
+  copyFromCurrent: z.boolean().default(true),
+});
+export type CreateRevisionInput = z.infer<typeof createRevisionSchema>;
+
+const boqQuantity = z.string().regex(/^\d{1,15}(\.\d{1,4})?$/, 'Geçersiz miktar').refine((v) => Number(v) > 0, 'Miktar sıfırdan büyük olmalı');
+const boqPrice = z.string().regex(/^\d{1,15}(\.\d{1,4})?$/, 'Geçersiz birim fiyat');
+
+export const boqLineSchema = z.object({
+  /** Mevcut satırı revizyonlar arasında izlemek için; yeni satırda verilmez. */
+  lineKey: uuid.optional(),
+  itemNo: z.string().trim().max(40).nullable().optional(),
+  description: z.string().trim().min(1).max(300),
+  unit: z.string().trim().min(1).max(20),
+  quantity: boqQuantity,
+  unitPrice: boqPrice,
+  wbsId: uuid,
+  costCodeId: uuid.nullable().optional(),
+});
+export type BoqLineInput = z.infer<typeof boqLineSchema>;
+
+export const putBoqLinesSchema = z.object({
+  lines: z
+    .array(boqLineSchema)
+    .max(2000)
+    .refine((l) => new Set(l.map((x) => x.lineKey).filter(Boolean)).size === l.filter((x) => x.lineKey).length, 'Aynı satır anahtarı birden çok kez girilemez'),
+});
+export type PutBoqLinesInput = z.infer<typeof putBoqLinesSchema>;

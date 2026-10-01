@@ -2,8 +2,14 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   createApprovalRuleSchema,
   createConstructionParamSchema,
+  createRevisionSchema,
+  createSubcontractSchema,
   decideApprovalSchema,
   idParam,
+  putBoqLinesSchema,
+  subcontractListQuerySchema,
+  subcontractStatusSchema,
+  updateSubcontractSchema,
   verifyConstructionParamSchema,
 } from '@erp/shared';
 import { z } from 'zod';
@@ -19,13 +25,29 @@ import {
   setRuleActive,
   type ApprovalCtx,
 } from '../approvals/service';
+import {
+  approveRevision,
+  createRevision,
+  createSubcontract,
+  deleteRevision,
+  deleteSubcontract,
+  getRevision,
+  getSubcontract,
+  listSubcontracts,
+  putBoqLines,
+  setSubcontractStatus,
+  updateSubcontract,
+  type SubcontractCtx,
+} from './service';
 import { createParam, deleteParam, listParams, verifyParam } from './params';
 
+const subCtx = ({ company, user }: TenantCtx): SubcontractCtx => ({ companyId: company.id, userId: user.id });
 const approvalCtx = ({ company, user, role }: TenantCtx): ApprovalCtx => ({ companyId: company.id, userId: user.id, role });
 
 export const subcontractRoutes: FastifyPluginAsync = async (app) => {
   const MODULE = 'construction.subcontracts';
   const read = { module: MODULE, permission: 'subcontracts.read' } as const;
+  const manage = { module: MODULE, permission: 'subcontracts.manage' } as const;
   const approve = { module: MODULE, permission: 'subcontracts.approve' } as const;
 
   // --- İnşaat parametreleri (teminat, stopaj, avans mahsubu) -----------------------
@@ -101,5 +123,69 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     '/api/approvals/:id/cancel',
     tenantRoute(app, read, async (c) => ({ request: await cancelRequest(c.tx, approvalCtx(c), idParam.parse(c.req.params).id) })),
+  );
+
+  // --- Taşeron sözleşmeleri ---------------------------------------------------------------
+  app.get('/api/subcontracts', tenantRoute(app, read, async ({ tx, req }) => listSubcontracts(tx, subcontractListQuerySchema.parse(req.query))));
+
+  app.post(
+    '/api/subcontracts',
+    tenantRoute(app, manage, async (c) => {
+      const row = await createSubcontract(c.tx, subCtx(c), createSubcontractSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return getSubcontract(c.tx, row.id);
+    }),
+  );
+
+  app.get('/api/subcontracts/:id', tenantRoute(app, read, async ({ tx, req }) => getSubcontract(tx, idParam.parse(req.params).id)));
+
+  app.patch(
+    '/api/subcontracts/:id',
+    tenantRoute(app, manage, async ({ tx, req }) => updateSubcontract(tx, idParam.parse(req.params).id, updateSubcontractSchema.parse(req.body))),
+  );
+
+  app.post(
+    '/api/subcontracts/:id/status',
+    tenantRoute(app, approve, async ({ tx, req }) => setSubcontractStatus(tx, idParam.parse(req.params).id, subcontractStatusSchema.parse(req.body).status)),
+  );
+
+  app.delete(
+    '/api/subcontracts/:id',
+    tenantRoute(app, manage, async ({ tx, req, reply }) => {
+      await deleteSubcontract(tx, idParam.parse(req.params).id);
+      void reply.code(204);
+    }),
+  );
+
+  // --- Revizyon ve BOQ ---------------------------------------------------------------------------
+  app.post(
+    '/api/subcontracts/:id/revisions',
+    tenantRoute(app, manage, async (c) => {
+      const { id } = idParam.parse(c.req.params);
+      const row = await createRevision(c.tx, subCtx(c), id, createRevisionSchema.parse(c.req.body ?? {}));
+      void c.reply.code(201);
+      return getRevision(c.tx, row.id);
+    }),
+  );
+
+  app.get('/api/subcontract-revisions/:id', tenantRoute(app, read, async ({ tx, req }) => getRevision(tx, idParam.parse(req.params).id)));
+
+  app.put(
+    '/api/subcontract-revisions/:id/lines',
+    tenantRoute(app, manage, async (c) => putBoqLines(c.tx, subCtx(c), idParam.parse(c.req.params).id, putBoqLinesSchema.parse(c.req.body))),
+  );
+
+  // Revizyon onayı sözleşmenin yürürlüğünü ve tutarını değiştirir: onaylayıcı izni ister
+  app.post(
+    '/api/subcontract-revisions/:id/approve',
+    tenantRoute(app, approve, async (c) => approveRevision(c.tx, subCtx(c), idParam.parse(c.req.params).id)),
+  );
+
+  app.delete(
+    '/api/subcontract-revisions/:id',
+    tenantRoute(app, manage, async ({ tx, req, reply }) => {
+      await deleteRevision(tx, idParam.parse(req.params).id);
+      void reply.code(204);
+    }),
   );
 };
