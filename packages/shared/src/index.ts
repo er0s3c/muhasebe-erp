@@ -25,3 +25,4 @@ export * from './schemas/projects';
 export * from './schemas/subcontracts';
 export * from './schemas/procurement';
 export * from './schemas/realestate';
+export * from './schemas/cash-forecast';

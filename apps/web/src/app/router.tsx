@@ -93,6 +93,7 @@ export const router = createBrowserRouter([
                 children: [
                   { path: 'treasury/accounts', ...page(() => import('../features/treasury/AccountsPage'), 'AccountsPage') },
                   { path: 'treasury/accounts/:id', ...page(() => import('../features/treasury/AccountDetailPage'), 'AccountDetailPage') },
+                  { path: 'treasury/cash-forecast', ...page(() => import('../features/treasury/CashForecastPage'), 'CashForecastPage') },
                   { path: 'treasury/transactions', ...page(() => import('../features/treasury/TransactionsPage'), 'TransactionsPage') },
                   { path: 'reports/fx-differences', ...page(() => import('../features/reports/FxDifferencePage'), 'FxDifferencePage') },
                 ],

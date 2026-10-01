@@ -205,6 +205,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'treasury.read',
   },
   {
+    key: 'cash-forecast',
+    labelKey: 'nav.cashForecast',
+    path: '/treasury/cash-forecast',
+    icon: 'trending-up',
+    group: 'treasury',
+    module: 'core.treasury',
+    permission: 'treasury.read',
+  },
+  {
     key: 'treasury-transactions',
     labelKey: 'nav.treasuryTransactions',
     path: '/treasury/transactions',

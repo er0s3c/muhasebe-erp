@@ -2939,3 +2939,39 @@ export const salesWriteoffs = pgTable(
     check('sales_writeoffs_amount_ck', sql`${t.amount} > 0 and ${t.amountBase} > 0`),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Nakit projeksiyonu (Faz B4): elle girilen ek kalemler (kira, maaş, vergi vb.)
+// ---------------------------------------------------------------------------
+
+export const cashForecastItems = pgTable(
+  'cash_forecast_items',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    itemDate: date({ mode: 'string' }).notNull(),
+    /** in | out */
+    direction: text().notNull(),
+    description: text().notNull(),
+    amount: money().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    projectId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('cash_forecast_items_id_company_uq').on(t.id, t.companyId),
+    foreignKey({
+      name: 'cash_forecast_items_project_fk',
+      columns: [t.projectId, t.companyId],
+      foreignColumns: [projects.id, projects.companyId],
+    }),
+    index('cash_forecast_items_date_idx').on(t.companyId, t.itemDate),
+    check('cash_forecast_items_direction_ck', sql`${t.direction} in ('in','out')`),
+    check('cash_forecast_items_amount_ck', sql`${t.amount} > 0`),
+  ],
+);

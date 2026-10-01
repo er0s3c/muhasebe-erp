@@ -10,6 +10,7 @@ import { itemProfitability, salesReport } from '../invoices/analytics';
 import { vatSummary } from '../invoices/reports';
 import { reconciliation } from '../bank-statements/service';
 import { partyAging, partyOpenItems, partyStatement } from '../parties/service';
+import { cashForecast } from '../cash/forecast';
 import { projectProfitability } from '../projects/profitability';
 import { projectCostByCode, projectCostReport, projectsSummary } from '../projects/reports';
 import { getContract, listContracts, listInstallments } from '../realestate/contracts';
@@ -976,6 +977,50 @@ export async function projectProfitabilityTable(ctx: BuildCtx, q: { asOf?: strin
         projected: d.totals.projectedProfit,
         ...(withRep && d.totals.reporting ? { rContracted: d.totals.reporting.contractedRevenue, rActual: d.totals.reporting.actual, rProjected: d.totals.reporting.projectedProfit } : {}),
       },
+    },
+  ];
+}
+
+/** Nakit projeksiyonu (haftalık): giriş/çıkış kaynakları ve kümülatif bakiye. */
+export async function cashForecastTable(ctx: BuildCtx, q: { from?: string; weeks?: number }): Promise<ReportTable[]> {
+  const b = ctx.company.baseCurrency;
+  const d = await cashForecast(ctx.tx, { companyId: '', userId: '', baseCurrency: b, reportingCurrency: ctx.company.reportingCurrency }, { from: q.from, weeks: q.weeks ?? 13 });
+  return [
+    {
+      key: 'nakit-projeksiyonu',
+      title: `Nakit projeksiyonu · ${d.weeks} hafta`,
+      sheet: 'Projeksiyon',
+      subtitle: sub(ctx, `${formatDateTR(d.from)} başlangıçlı`, `${b} cinsinden`, `Açılış bakiyesi ${d.opening}`),
+      columns: [
+        col('week', 'Hafta', 'int'),
+        col('start', 'Başlangıç', 'date'),
+        col('end', 'Bitiş', 'date'),
+        col('receivables', `Tahsilat (${b})`, 'money', undefined, b),
+        col('manualIn', `Diğer giriş (${b})`, 'money', undefined, b),
+        col('payables', `Ödeme (${b})`, 'money', undefined, b),
+        col('manualOut', `Diğer çıkış (${b})`, 'money', undefined, b),
+        col('net', `Net (${b})`, 'money', undefined, b),
+        col('closing', `Kapanış bakiyesi (${b})`, 'money', undefined, b),
+      ],
+      rows: d.buckets.map((x) => ({ week: x.week, start: x.start, end: x.end, receivables: x.receivables, manualIn: x.manualIn, payables: x.payables, manualOut: x.manualOut, net: x.net, closing: x.closing })),
+    },
+    {
+      key: 'nakit-kalemleri',
+      title: 'Nakit projeksiyonu kalemleri',
+      sheet: 'Kalemler',
+      subtitle: sub(ctx, `${formatDateTR(d.from)} başlangıçlı`),
+      columns: [
+        col('date', 'Vade', 'date'),
+        col('week', 'Hafta', 'int'),
+        col('source', 'Kaynak', 'text', 14),
+        col('party', 'Cari', 'text', 28),
+        col('description', 'Açıklama', 'text', 40),
+        col('currency', 'Para birimi', 'text', 8),
+        col('amount', 'Tutar', 'money'),
+        col('amountBase', `Karşılık (${b})`, 'money', undefined, b),
+        col('overdue', 'Gecikmiş', 'text', 10),
+      ],
+      rows: d.items.map((i) => ({ date: i.date, week: i.week, source: i.source === 'receivable' ? 'Alacak' : i.source === 'payable' ? 'Borç' : i.direction === 'in' ? 'Elle giriş' : 'Elle çıkış', party: i.partyName, description: i.description, currency: i.currencyCode, amount: i.direction === 'in' ? i.amount : `${i.amount}`, amountBase: i.direction === 'in' ? i.amountBase : (-Number(i.amountBase)).toFixed(2), overdue: i.overdue ? 'Evet' : null })),
     },
   ];
 }

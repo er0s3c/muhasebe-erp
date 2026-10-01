@@ -325,6 +325,14 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
   return byParty;
 }
 
+/** Tüm carilerin açık kalemleri (nakit projeksiyonu): vade, kalan tutar (kalem para biriminde ve defterde), cari adı. */
+export async function allOpenItems(tx: Tx, type: PartyControlType, asOf: string) {
+  const byParty = await loadPartyLines(tx, type, asOf);
+  const out: (ReturnType<typeof computeOpenItems>['items'][number] & { partyName: string })[] = [];
+  for (const p of byParty.values()) for (const it of computeOpenItems(p.lines, type, asOf, p.allocations).items) out.push({ ...it, partyName: p.name });
+  return out;
+}
+
 /** Bir carinin açık kalemleri (kasa/banka tahsilat ve ödemesinde eşleştirme için de kullanılır). */
 export async function openItemsFor(tx: Tx, partyId: string, type: PartyControlType, asOf: string) {
   const byParty = await loadPartyLines(tx, type, asOf, partyId);

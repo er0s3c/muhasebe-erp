@@ -274,6 +274,20 @@
       "when": 1790840877080,
       "tag": "0038_real_estate_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790843364569,
+      "tag": "0039_cash_forecast",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790843365818,
+      "tag": "0040_cash_forecast_rules",
+      "breakpoints": true
     }
   ]
 }

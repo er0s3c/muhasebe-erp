@@ -38,6 +38,7 @@ import {
   progressPaymentsTable,
   subcontractRegisterTable,
   projectsSummaryTable,
+  cashForecastTable,
   projectProfitabilityTable,
   overdueInstallmentsTable,
   realEstateUnitsTable,
@@ -146,6 +147,14 @@ export const EXPORTS: readonly ExportDef[] = [
     schema: z.object({ asOf: isoDate.optional() }),
     build: projectProfitabilityTable,
     file: (q: { asOf?: string }) => `proje-karliligi-${q.asOf ?? todayIso()}`,
+  }),
+  def({
+    key: 'cash-forecast',
+    module: 'core.treasury',
+    permission: 'treasury.read',
+    schema: z.object({ from: isoDate.optional(), weeks: z.coerce.number().int().min(4).max(26).optional() }),
+    build: cashForecastTable,
+    file: () => `nakit-projeksiyonu-${todayIso()}`,
   }),
   def({
     key: 'real-estate-units',
