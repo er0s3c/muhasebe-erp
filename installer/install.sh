@@ -139,8 +139,9 @@ detect() {
 node_version() { command -v node >/dev/null && node -v 2>/dev/null | sed 's/^v//' || true; }
 pg_server_version() { # kurulu PostgreSQL sunucusunun ana sürümü (yoksa boş)
   local v=""
-  if command -v pg_lsclusters >/dev/null; then v="$(pg_lsclusters -h 2>/dev/null | awk '{print $1}' | sort -V | tail -n1)"; fi
-  if [[ -z "$v" ]]; then v="$(ls /usr/lib/postgresql 2>/dev/null | sort -V | tail -n1)"; fi
+  # pipefail + set -e: PostgreSQL hiç kurulu değilse (dizin yok) boru hattı hata döner; "yok" geçerli bir yanıttır
+  if command -v pg_lsclusters >/dev/null; then v="$(pg_lsclusters -h 2>/dev/null | awk '{print $1}' | sort -V | tail -n1 || true)"; fi
+  if [[ -z "$v" ]]; then v="$(ls /usr/lib/postgresql 2>/dev/null | sort -V | tail -n1 || true)"; fi
   printf '%s' "$v"
 }
 pg_port() { # PG_MAJOR kümesinin portu (Debian postgresql-common); bulunamazsa 5432
