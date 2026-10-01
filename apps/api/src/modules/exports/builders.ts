@@ -11,6 +11,8 @@ import { vatSummary } from '../invoices/reports';
 import { reconciliation } from '../bank-statements/service';
 import { partyAging, partyOpenItems, partyStatement } from '../parties/service';
 import { projectCostByCode, projectCostReport, projectsSummary } from '../projects/reports';
+import { getContract, listContracts, listInstallments } from '../realestate/contracts';
+import { listUnits } from '../realestate/units';
 import { listProgress } from '../subcontracts/progress';
 import { listSubcontracts } from '../subcontracts/service';
 import { fxDifferences } from '../treasury/fx-report';
@@ -773,6 +775,154 @@ export async function progressPaymentsTable(ctx: BuildCtx, q: { projectId?: stri
         currency: String(x.currencyCode),
         gross: String(x.gross),
         net: String(x.net),
+      })),
+    },
+  ];
+}
+
+// --- Gayrimenkul satışı (B3) ---------------------------------------------------------------------------
+
+const UNIT_STATUS_LABEL: Record<string, string> = { available: 'Satışa açık', reserved: 'Rezerve', sold: 'Satıldı', handed_over: 'Teslim edildi' };
+const UNIT_TYPE_LABEL: Record<string, string> = { apartment: 'Daire', villa: 'Villa', shop: 'Dükkân', office: 'Ofis', land: 'Arsa', parking: 'Otopark', storage: 'Depo', other: 'Diğer' };
+const CONTRACT_STATUS_LABEL: Record<string, string> = { draft: 'Taslak', active: 'Yürürlükte', handed_over: 'Teslim edildi', terminated: 'Feshedildi', cancelled: 'İptal' };
+const KIND_LABEL: Record<string, string> = { down_payment: 'Peşinat', installment: 'Taksit', balloon: 'Balon ödeme' };
+
+/** Birim envanteri. */
+export async function realEstateUnitsTable(ctx: BuildCtx, q: { projectId?: string; status?: string }): Promise<ReportTable[]> {
+  const d = await listUnits(ctx.tx, q);
+  return [
+    {
+      key: 'birimler',
+      title: 'Birim envanteri',
+      sheet: 'Birimler',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [
+        col('project', 'Proje', 'text', 14),
+        col('block', 'Blok', 'text', 8),
+        col('unitNo', 'Birim no', 'text', 10),
+        col('floor', 'Kat', 'int'),
+        col('type', 'Tür', 'text', 12),
+        col('rooms', 'Oda', 'text', 8),
+        col('grossM2', 'Brüt m²', 'qty'),
+        col('netM2', 'Net m²', 'qty'),
+        col('currency', 'Para birimi', 'text', 8),
+        col('listPrice', 'Liste fiyatı', 'money'),
+        col('status', 'Durum', 'text', 14),
+        col('buyer', 'Alıcı', 'text', 28),
+        col('contract', 'Sözleşme', 'text', 16),
+      ],
+      rows: d.units.map((u) => ({
+        project: String(u.projectCode),
+        block: String(u.block ?? ''),
+        unitNo: String(u.unitNo),
+        floor: u.floor === null ? null : Number(u.floor),
+        type: UNIT_TYPE_LABEL[String(u.unitType)] ?? String(u.unitType),
+        rooms: (u.rooms as string | null) ?? null,
+        grossM2: (u.grossM2 as string | null) ?? null,
+        netM2: (u.netM2 as string | null) ?? null,
+        currency: (u.listCurrency as string | null) ?? null,
+        listPrice: (u.listPrice as string | null) ?? null,
+        status: UNIT_STATUS_LABEL[String(u.status)] ?? String(u.status),
+        buyer: (u.buyerName as string | null) ?? null,
+        contract: (u.contractCode as string | null) ?? null,
+      })),
+    },
+  ];
+}
+
+/** Satış sözleşmeleri listesi. */
+export async function salesContractsTable(ctx: BuildCtx, q: { projectId?: string; status?: string }): Promise<ReportTable[]> {
+  const d = await listContracts(ctx.tx, q);
+  return [
+    {
+      key: 'satis-sozlesmeleri',
+      title: 'Satış sözleşmeleri',
+      sheet: 'Sözleşmeler',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [
+        col('code', 'Sözleşme', 'text', 16),
+        col('date', 'Tarih', 'date'),
+        col('project', 'Proje', 'text', 14),
+        col('unit', 'Birim', 'text', 12),
+        col('buyer', 'Alıcı', 'text', 28),
+        col('status', 'Durum', 'text', 14),
+        col('currency', 'Para birimi', 'text', 8),
+        col('price', 'Bedel', 'money'),
+        col('count', 'Taksit', 'int'),
+      ],
+      rows: d.contracts.map((c) => ({
+        code: String(c.code),
+        date: String(c.contractDate),
+        project: String(c.projectCode),
+        unit: `${c.block ? `${c.block}-` : ''}${c.unitNo}`,
+        buyer: String(c.partyName),
+        status: CONTRACT_STATUS_LABEL[String(c.status)] ?? String(c.status),
+        currency: String(c.currencyCode),
+        price: String(c.price),
+        count: Number(c.installmentCount),
+      })),
+    },
+  ];
+}
+
+/** Tek sözleşmenin ödeme planı (ödenen/kalan/gecikme ile). */
+export async function salesScheduleTable(ctx: BuildCtx, q: { contractId: string }): Promise<ReportTable[]> {
+  const d = await getContract(ctx.tx, q.contractId);
+  const c = d.contract as Record<string, unknown> & { paid: string; remaining: string };
+  const cur = String(c.currencyCode);
+  return [
+    {
+      key: 'odeme-plani',
+      title: `Ödeme planı · ${c.code}`,
+      sheet: 'Ödeme planı',
+      subtitle: sub(ctx, `${c.projectCode} ${c.block ? `${c.block}-` : ''}${c.unitNo}`, String(c.partyName), `${cur} cinsinden`),
+      columns: [
+        col('seq', 'No', 'int'),
+        col('kind', 'Tür', 'text', 14),
+        col('due', 'Vade', 'date'),
+        col('amount', `Tutar (${cur})`, 'money', undefined, cur),
+        col('paid', `Ödenen (${cur})`, 'money', undefined, cur),
+        col('remaining', `Kalan (${cur})`, 'money', undefined, cur),
+        col('days', 'Gecikme (gün)', 'int'),
+      ],
+      rows: d.installments.map((i) => ({ seq: i.seq, kind: KIND_LABEL[i.kind] ?? i.kind, due: i.dueDate, amount: i.amount, paid: i.paid, remaining: i.remaining, days: i.daysOverdue || null })),
+      totals: { amount: d.installments.reduce((s, i) => s + Number(i.amount), 0).toFixed(2), paid: String(c.paid), remaining: String(c.remaining) },
+    },
+  ];
+}
+
+/** Tahsil edilecek / geciken taksitler. */
+export async function overdueInstallmentsTable(ctx: BuildCtx, q: { projectId?: string; asOf?: string; overdue?: boolean }): Promise<ReportTable[]> {
+  const d = await listInstallments(ctx.tx, { projectId: q.projectId, asOf: q.asOf, overdueOnly: q.overdue });
+  return [
+    {
+      key: 'taksitler',
+      title: q.overdue ? 'Geciken taksitler' : 'Tahsil edilecek taksitler',
+      sheet: 'Taksitler',
+      subtitle: sub(ctx, `${formatDateTR(d.asOf)} itibarıyla`),
+      columns: [
+        col('due', 'Vade', 'date'),
+        col('buyer', 'Alıcı', 'text', 28),
+        col('project', 'Proje', 'text', 14),
+        col('unit', 'Birim', 'text', 12),
+        col('contract', 'Sözleşme', 'text', 16),
+        col('seq', 'No', 'int'),
+        col('currency', 'Para birimi', 'text', 8),
+        col('amount', 'Tutar', 'money'),
+        col('remaining', 'Kalan', 'money'),
+        col('days', 'Gecikme (gün)', 'int'),
+      ],
+      rows: d.installments.map((i) => ({
+        due: i.dueDate,
+        buyer: i.partyName,
+        project: i.projectCode,
+        unit: `${i.block ? `${i.block}-` : ''}${i.unitNo}`,
+        contract: i.contractCode,
+        seq: i.seq,
+        currency: i.currencyCode,
+        amount: i.amount,
+        remaining: i.remaining,
+        days: i.daysOverdue || null,
       })),
     },
   ];

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readXlsx } from '../src/files/xlsx-read';
 import { accountIds, asDb, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser } from './helpers';
 
 describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat → teslim', async () => {
@@ -234,6 +235,38 @@ describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat �
     const closing = (code: string) => Number(Object.fromEntries(tb.rows.map((r: any) => [r.code, r.closing]))[code] ?? 0);
     expect(closing('380')).toBe(0);
     expect(closing('120')).toBe(0);
+  });
+
+  it('taksit listesi, proje satış özeti ve dışa aktarmalar', async () => {
+    const w = await world('Ozet');
+    const d = await w.draft('S1');
+    await w.c.post(`/api/sales-contracts/${d.contract.id}/activate`, {});
+    await w.unit('S2'); // satışa açık kalır
+    const inst = (await w.c.get('/api/real-estate/installments')).json();
+    expect(inst.installments.map((i: any) => [i.dueDate, i.amount, i.remaining, i.currencyCode])).toEqual([
+      [day(3, 1), '30000.00', '30000.00', 'GBP'], [day(6, 1), '45000.00', '45000.00', 'GBP'], [day(9, 1), '45000.00', '45000.00', 'GBP'],
+    ]);
+    expect(inst.installments.every((i: any) => i.daysOverdue > 0)).toBe(true); // tarihler geçmişte
+    expect((await w.c.get('/api/real-estate/installments?overdue=true')).json().installments).toHaveLength(3);
+    const sum = (await w.c.get(`/api/projects/${w.project.id}/sales-summary`)).json();
+    expect(sum.units.sold.count).toBe(1);
+    expect(sum.units.available.count).toBe(1);
+    expect(sum.units.sold.grossM2).toBe('120.50');
+    expect(sum.byCurrency).toEqual([{ currencyCode: 'GBP', contracts: 1, price: '120000.00', collected: '0.00', remaining: '120000.00', overdue: '120000.00' }]);
+
+    const book = async (url: string) => {
+      const res = await w.c.get(url);
+      expect(res.statusCode, res.body).toBe(200);
+      return readXlsx(new Uint8Array(res.rawPayload))[0]!.rows;
+    };
+    const plan = await book(`/api/exports/sales-schedule?format=xlsx&contractId=${d.contract.id}`);
+    expect(plan[0]![0]).toContain('Ödeme planı');
+    expect(plan[3]).toEqual(['No', 'Tür', 'Vade', 'Tutar (GBP)', 'Ödenen (GBP)', 'Kalan (GBP)', 'Gecikme (gün)']);
+    expect(plan[4]!.slice(0, 4)).toEqual(['1', 'Peşinat', day(3, 1), '30000']);
+    expect(plan[plan.length - 1]).toEqual(['', 'Toplam', '', '120000', '0', '120000', '']);
+    expect((await book('/api/exports/real-estate-units?format=xlsx')).length).toBeGreaterThan(5);
+    expect((await book('/api/exports/sales-contracts?format=xlsx'))[4]![0]).toMatch(/^SSZ-/);
+    expect((await book('/api/exports/overdue-installments?format=xlsx&overdue=true'))[0]![0]).toBe('Geciken taksitler');
   });
 
   it('kur yoksa etkinleştirme anlaşılır hata verir; kapalı dönem ve izinler', async () => {
