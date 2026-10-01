@@ -175,3 +175,35 @@ export type ProjectTransactionsQuery = z.infer<typeof projectTransactionsQuerySc
 
 export const projectsSummaryQuerySchema = z.object({ asOf: isoDate.optional() });
 export type ProjectsSummaryQuery = z.infer<typeof projectsSummaryQuerySchema>;
+
+// --- Maliyet kodu (maliyet türü) -----------------------------------------------
+
+export const COST_CODE_KINDS = ['material', 'labor', 'subcontract', 'equipment', 'transport', 'overhead', 'other'] as const;
+export type CostCodeKind = (typeof COST_CODE_KINDS)[number];
+
+/** Yeni şirkete tohumlanan maliyet kodları (şirket düzenleyebilir; hukuki parametre değildir). */
+export const DEFAULT_COST_CODES: readonly { code: string; name: string; kind: CostCodeKind }[] = [
+  { code: 'MLZ', name: 'Malzeme', kind: 'material' },
+  { code: 'ISC', name: 'İşçilik', kind: 'labor' },
+  { code: 'TSR', name: 'Taşeron', kind: 'subcontract' },
+  { code: 'EKP', name: 'Ekipman', kind: 'equipment' },
+  { code: 'NKL', name: 'Nakliye', kind: 'transport' },
+  { code: 'GNL', name: 'Genel gider', kind: 'overhead' },
+];
+
+export const createCostCodeSchema = z.object({
+  code: codeText,
+  name: z.string().trim().min(1).max(100),
+  kind: z.enum(COST_CODE_KINDS).default('other'),
+});
+export type CreateCostCodeInput = z.infer<typeof createCostCodeSchema>;
+
+export const updateCostCodeSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    kind: z.enum(COST_CODE_KINDS),
+    isActive: z.boolean(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'En az bir alan verilmeli');
+export type UpdateCostCodeInput = z.infer<typeof updateCostCodeSchema>;

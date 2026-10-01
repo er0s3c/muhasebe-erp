@@ -176,6 +176,20 @@
       "when": 1790784233211,
       "tag": "0024_projects_rls_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790825403722,
+      "tag": "0025_cost_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790825415350,
+      "tag": "0026_cost_codes_rules",
+      "breakpoints": true
     }
   ]
 }

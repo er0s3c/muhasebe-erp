@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
   createBudgetSchema,
+  createCostCodeSchema,
   createProgressSchema,
   createProjectSchema,
   createWbsSchema,
@@ -12,12 +13,14 @@ import {
   projectsSummaryQuerySchema,
   putBudgetLinesSchema,
   todayIso,
+  updateCostCodeSchema,
   updateProjectSchema,
   updateWbsSchema,
 } from '@erp/shared';
 import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { approveBudget, createBudget, deleteBudget, getBudget, listBudgets, putBudgetLines } from './budgets';
+import { createCostCode, deleteCostCode, listCostCodes, updateCostCode } from './cost-codes';
 import { progressOverview, recordProgress } from './progress';
 import { projectCostReport, projectOptions, projectTransactions, projectsSummary } from './reports';
 import { createProject, deleteProject, getProject, listProjects, setProjectStatus, updateProject, type ProjectCtx } from './service';
@@ -48,6 +51,34 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     '/api/projects/:id/transactions',
     tenantRoute(app, read, async ({ tx, req }) => projectTransactions(tx, idParam.parse(req.params).id, projectTransactionsQuerySchema.parse(req.query))),
+  );
+
+  // --- Maliyet kodları -------------------------------------------------------
+
+  app.get('/api/cost-codes', tenantRoute(app, read, async ({ tx }) => ({ costCodes: await listCostCodes(tx) })));
+
+  app.post(
+    '/api/cost-codes',
+    tenantRoute(app, manage, async (c) => {
+      const row = await createCostCode(c.tx, c.company.id, createCostCodeSchema.parse(c.req.body));
+      void c.reply.code(201);
+      return { costCode: row };
+    }),
+  );
+
+  app.patch(
+    '/api/cost-codes/:id',
+    tenantRoute(app, manage, async ({ tx, req }) => ({
+      costCode: await updateCostCode(tx, idParam.parse(req.params).id, updateCostCodeSchema.parse(req.body)),
+    })),
+  );
+
+  app.delete(
+    '/api/cost-codes/:id',
+    tenantRoute(app, manage, async ({ tx, req, reply }) => {
+      await deleteCostCode(tx, idParam.parse(req.params).id);
+      void reply.code(204);
+    }),
   );
 
   // --- Proje ---------------------------------------------------------------

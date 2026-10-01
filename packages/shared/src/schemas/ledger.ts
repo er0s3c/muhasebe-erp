@@ -63,12 +63,15 @@ export const journalLineSchema = z
     projectId: uuid.optional(),
     /** Proje içindeki yaprak iş kalemi; projesiz verilemez. */
     wbsId: uuid.optional(),
+    /** Maliyet kodu (malzeme, işçilik, taşeron…); projesiz verilemez. */
+    costCodeId: uuid.optional(),
   })
   .refine(
     (l) => (Number(l.debit) > 0) !== (Number(l.credit) > 0),
     { message: 'Satırda borç veya alacaktan yalnızca biri sıfırdan büyük olmalı' },
   )
-  .refine((l) => !l.wbsId || !!l.projectId, { message: 'İş kalemi için proje seçilmeli', path: ['wbsId'] });
+  .refine((l) => !l.wbsId || !!l.projectId, { message: 'İş kalemi için proje seçilmeli', path: ['wbsId'] })
+  .refine((l) => !l.costCodeId || !!l.projectId, { message: 'Maliyet kodu için proje seçilmeli', path: ['costCodeId'] });
 export type JournalLineInput = z.infer<typeof journalLineSchema>;
 
 export const createJournalSchema = z.object({

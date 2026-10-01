@@ -7,7 +7,7 @@ import {
   type Sector,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { companies, companyModules, projects, projectWbs } from '../../db/schema';
+import { companies, companyModules, costCodes, projects, projectWbs } from '../../db/schema';
 import { unprocessable } from '../../http/errors';
 
 /** Bir kaydın (yevmiye satırı, fatura satırı, stok satırı) proje boyutu. */
@@ -16,6 +16,8 @@ export interface DimensionLine {
   label: string;
   projectId?: string | null;
   wbsId?: string | null;
+  /** Maliyet kodu (üçüncü boyut); proje etiketi gerektirir. */
+  costCodeId?: string | null;
   /** Yevmiye satırında hesap türü; verilirse gelir/gider/maliyet olmalı. */
   accountType?: string;
 }
@@ -38,11 +40,12 @@ export async function validateDimensions(
   lines: readonly DimensionLine[],
   opts: { allowClosedProject?: boolean } = {},
 ): Promise<void> {
-  const tagged = lines.filter((l) => l.projectId || l.wbsId);
+  const tagged = lines.filter((l) => l.projectId || l.wbsId || l.costCodeId);
   if (tagged.length === 0) return;
 
   for (const l of tagged) {
     if (l.wbsId && !l.projectId) throw unprocessable(`${l.label}: iş kalemi için proje seçilmeli`, 'WBS_WITHOUT_PROJECT');
+    if (l.costCodeId && !l.projectId) throw unprocessable(`${l.label}: maliyet kodu için proje seçilmeli`, 'COST_CODE_WITHOUT_PROJECT');
     if (l.accountType !== undefined && !(PROJECT_TAGGABLE_ACCOUNT_TYPES as readonly string[]).includes(l.accountType)) {
       throw unprocessable(`${l.label}: proje yalnızca gelir, gider ve maliyet hesaplarına etiketlenebilir`, 'PROJECT_ACCOUNT_NOT_ALLOWED');
     }
@@ -51,6 +54,10 @@ export async function validateDimensions(
   if (!(await isProjectsModuleEnabled(tx, companyId))) {
     throw unprocessable('Proje etiketi için "Şantiye ve projeler" modülü etkin olmalı', 'PROJECT_MODULE_DISABLED');
   }
+
+  const costCodeIds = [...new Set(tagged.map((l) => l.costCodeId).filter((c): c is string => !!c))];
+  const costCodeRows = costCodeIds.length ? await tx.select().from(costCodes).where(inArray(costCodes.id, costCodeIds)) : [];
+  const costCodeById = new Map(costCodeRows.map((c) => [c.id, c]));
 
   const projectIds = [...new Set(tagged.map((l) => l.projectId!))];
   const projectRows = await tx.select().from(projects).where(inArray(projects.id, projectIds));
@@ -71,6 +78,11 @@ export async function validateDimensions(
     if (!project) throw unprocessable(`${l.label}: proje bulunamadı`, 'PROJECT_NOT_FOUND');
     if (!opts.allowClosedProject && !PROJECT_OPEN_STATUSES.includes(project.status as ProjectStatus)) {
       throw unprocessable(`${l.label}: ${project.code} projesi tamamlanmış veya iptal edilmiş; yeni kayıt yazılamaz`, 'PROJECT_CLOSED');
+    }
+    if (l.costCodeId) {
+      const cc = costCodeById.get(l.costCodeId);
+      if (!cc) throw unprocessable(`${l.label}: maliyet kodu bulunamadı`, 'COST_CODE_NOT_FOUND');
+      if (!cc.isActive && !opts.allowClosedProject) throw unprocessable(`${l.label}: ${cc.code} maliyet kodu pasif`, 'COST_CODE_INACTIVE');
     }
     if (l.wbsId) {
       const wbs = wbsById.get(l.wbsId);

@@ -447,6 +447,31 @@ export const accounts = pgTable(
   ],
 );
 
+/** Maliyet kodu (maliyet türü): iş kaleminden (WBS) bağımsız üçüncü boyut; malzeme, işçilik, taşeron vb. */
+export const costCodes = pgTable(
+  'cost_codes',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    /** material | labor | subcontract | equipment | transport | overhead | other */
+    kind: text().notNull().default('other'),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('cost_codes_company_code_uq').on(t.companyId, t.code),
+    unique('cost_codes_id_company_uq').on(t.id, t.companyId),
+    check(
+      'cost_codes_kind_ck',
+      sql`${t.kind} in ('material','labor','subcontract','equipment','transport','overhead','other')`,
+    ),
+  ],
+);
+
 export const journalEntries = pgTable(
   'journal_entries',
   {
@@ -728,6 +753,8 @@ export const journalLines = pgTable(
     projectId: uuid(),
     /** Projenin yaprak iş kalemi. */
     wbsId: uuid(),
+    /** Maliyet kodu (üçüncü boyut); yalnızca proje etiketli satırda. */
+    costCodeId: uuid(),
   },
   (t) => [
     foreignKey({
@@ -762,6 +789,12 @@ export const journalLines = pgTable(
       .on(t.wbsId)
       .where(sql`${t.wbsId} is not null`),
     check('journal_lines_wbs_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
+    foreignKey({
+      name: 'journal_lines_cost_code_fk',
+      columns: [t.costCodeId, t.companyId],
+      foreignColumns: [costCodes.id, costCodes.companyId],
+    }),
+    check('journal_lines_cost_code_ck', sql`${t.costCodeId} is null or ${t.projectId} is not null`),
     unique('journal_lines_entry_line_uq').on(t.entryId, t.lineNo),
     // Cari eşleştirmesi (party_allocations) satıra bileşik anahtarla bağlanır
     unique('journal_lines_id_company_uq').on(t.id, t.companyId),
