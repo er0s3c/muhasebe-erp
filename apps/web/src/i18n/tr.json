@@ -160,7 +160,8 @@
     "cashForecast": "Nakit projeksiyonu",
     "realEstateUnits": "Birimler",
     "salesContracts": "Satış sözleşmeleri",
-    "salesInstallments": "Taksitler"
+    "salesInstallments": "Taksitler",
+    "orderMatching": "Sipariş eşleştirme"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -2782,6 +2783,63 @@
       "cancelReceipt": "İptal et",
       "receiptCancelled": "Mal kabul iptal edildi",
       "receiptCancelReason": "Mal kabul iptali"
+    },
+    "match": {
+      "title": "Sipariş eşleştirme (3'lü)",
+      "subtitle": "Sipariş, mal kabul ve alış faturasını karşılaştırır; kabulü olmayan fatura ve faturası gelmemiş kabulü gösterir.",
+      "cols": {
+        "order": "Sipariş",
+        "line": "Kalem",
+        "ordered": "Sipariş",
+        "received": "Kabul",
+        "invoiced": "Faturalanan",
+        "project": "Proje",
+        "party": "Tedarikçi",
+        "orderedAmount": "Sipariş tutarı",
+        "receivedAmount": "Kabul tutarı",
+        "uninvoiced": "Faturasız kabul",
+        "status": "Durum",
+        "orderPrice": "Sipariş fiyatı",
+        "invoicePrice": "Fatura fiyatı",
+        "diff": "Sapma",
+        "invoiceQty": "Fatura miktarı"
+      },
+      "state": {
+        "ok": "Eşleşti",
+        "uninvoiced": "Faturasız kabul",
+        "excess": "Fazla fatura",
+        "open": "Beklemede"
+      },
+      "flags": {
+        "over_received": "Kabulü aşıyor",
+        "over_ordered": "Siparişi aşıyor",
+        "price_variance": "Fiyat sapması"
+      },
+      "empty": "Verilmiş sipariş yok",
+      "emptyDesc": "Sipariş verildikçe kabul ve fatura durumu burada izlenir.",
+      "pickerButton": "Siparişten satır ekle",
+      "pickerTitle": "Siparişten satır ekle",
+      "pickerDesc": "Tedarikçiye ve para birimine ait verilmiş siparişlerin faturalanmamış satırları. Miktar, kabul edilen − faturalanan olarak önerilir.",
+      "pickerAdd": "Seçilenleri ekle",
+      "pickerEmpty": "Bu tedarikçi ve para birimi için faturalanacak sipariş satırı yok.",
+      "pickPartyFirst": "Önce tedarikçi seçin.",
+      "fromOrder": "Sipariş {{code}}",
+      "overrideLabel": "Eşleştirme sapması gerekçesi",
+      "overrideHint": "Yalnızca tolerans dışı kaydı bilerek geçirmek için doldurun (satın alma onay yetkisi gerekir).",
+      "invoicesTitle": "Bağlı faturalar",
+      "invoicesDesc": "Bu siparişin satırlarına bağlanmış alış faturaları.",
+      "draftInvoice": "Taslak fatura",
+      "invoiceStatus": {
+        "posted": "Kayıtlı",
+        "draft": "Taslak"
+      },
+      "settingsTitle": "Eşleştirme toleransları",
+      "settingsDesc": "Şirket politikasıdır (yasal parametre değil). Miktar toleransı sipariş miktarının, fiyat toleransı sipariş fiyatının yüzdesidir.",
+      "qtyTol": "Miktar toleransı (%)",
+      "priceTol": "Fiyat toleransı (%)",
+      "saved": "Toleranslar kaydedildi",
+      "detailTitle": "Sipariş eşleştirme",
+      "override": "Geçiren gerekçe"
     }
   },
   "subcontracts": {

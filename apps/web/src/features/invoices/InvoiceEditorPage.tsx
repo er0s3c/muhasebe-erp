@@ -19,6 +19,7 @@ import type { DeliveryNoteDetail, InvoiceDetail, InvoiceType } from '../../lib/t
 import { qtyText, useUnitLabel } from '../inventory/common';
 import { INVOICE_INVALIDATE, InvoiceStatusBadge, InvoiceTypeBadge } from './common';
 import { InvoiceForm } from './InvoiceForm';
+import { MatchCard } from './MatchCard';
 
 /**
  * /invoices/new (yeni ve iade) ve /invoices/:id: taslaksa düzenlenebilir form,
@@ -231,6 +232,9 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                         {l.wbsCode ? ` · ${l.wbsCode} ${l.wbsName ?? ''}` : ''}
                       </span>
                     )}
+                    {l.poLineId && (
+                      <span className="block text-xs text-muted">{t('procurement.match.fromOrder', { code: l.orderCode ?? '' })}</span>
+                    )}
                     {l.deliveryNoteId && (
                       <span className="block text-xs text-muted">
                         <Link to={`/delivery-notes/${l.deliveryNoteId}`} className="link">
@@ -255,6 +259,8 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
             </tbody>
           </Table>
         </TableWrap>
+
+        {lines.some((l) => l.poLineId) && <MatchCard invoiceId={inv.id} currency={inv.currencyCode} overrideReason={inv.matchOverrideReason} />}
 
         <div className="flex justify-end">
           <dl className="w-full max-w-xs text-sm">

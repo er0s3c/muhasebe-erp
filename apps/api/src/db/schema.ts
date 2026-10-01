@@ -1513,6 +1513,9 @@ export const invoices = pgTable(
     cancelReason: text(),
     cancelJournalEntryId: uuid(),
     cancelStockDocumentId: uuid(),
+    /** Üçlü eşleştirme tolerans dışıysa kaydı geçiren yetkilinin gerekçesi (boşsa eşleşme sorunsuzdu ya da siparişe bağlı değildi). */
+    matchOverrideReason: text(),
+    matchOverrideBy: uuid().references(() => users.id),
     createdBy: uuid().references(() => users.id),
     createdAt: createdAt(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -1744,9 +1747,17 @@ export const invoiceLines = pgTable(
     /** Proje boyutu: yalnızca stoksuz alış/gider/alış iadesi satırında (net tarafa yazılır). */
     projectId: uuid(),
     wbsId: uuid(),
+    /** Alış faturasında, faturalanan sipariş satırı (üçlü eşleştirme: sipariş – mal kabul – fatura). */
+    poLineId: uuid(),
   },
   (t) => [
     unique('invoice_lines_uq').on(t.invoiceId, t.lineNo),
+    index('invoice_lines_po_line_idx').on(t.poLineId),
+    foreignKey({
+      name: 'invoice_lines_po_line_fk',
+      columns: [t.poLineId, t.companyId],
+      foreignColumns: [purchaseOrderLines.id, purchaseOrderLines.companyId],
+    }),
     foreignKey({
       name: 'invoice_lines_project_fk',
       columns: [t.projectId, t.companyId],
@@ -2687,6 +2698,20 @@ export const poReceiptLines = pgTable(
     }),
     check('po_receipt_lines_qty_ck', sql`${t.quantity} > 0`),
   ],
+);
+
+/** Üçlü eşleştirme toleransları (şirket politikası; yasal parametre değildir). Satır yoksa varsayılanlar geçerlidir (miktar %0, fiyat %2). */
+export const procurementSettings = pgTable(
+  'procurement_settings',
+  {
+    companyId: uuid()
+      .primaryKey()
+      .references(() => companies.id),
+    qtyTolerancePct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    priceTolerancePct: numeric({ precision: 7, scale: 4 }).notNull().default('2'),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('procurement_settings_ck', sql`${t.qtyTolerancePct} between 0 and 100 and ${t.priceTolerancePct} between 0 and 100`)],
 );
 
 // ---------------------------------------------------------------------------

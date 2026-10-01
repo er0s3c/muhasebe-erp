@@ -9,6 +9,7 @@ import {
   createRfqSchema,
   idParam,
   purchaseOrderListQuerySchema,
+  procurementSettingsSchema,
   purchaseRequestListQuerySchema,
   updatePurchaseOrderSchema,
   updatePurchaseRequestSchema,
@@ -18,6 +19,7 @@ import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import type { ApprovalCtx } from '../approvals/service';
 import { cancelOrder, closeOrder, createOrder, deleteOrder, getOrder, issueOrder, listOrders, updateOrder } from './orders';
+import { getProcurementSettings, invoiceableOrderLines, orderMatchSummary, putProcurementSettings } from './matching';
 import { cancelReceipt, createReceipt } from './receipts';
 import {
   cancelPurchaseRequest,
@@ -40,6 +42,18 @@ export const procurementRoutes: FastifyPluginAsync = async (app) => {
   const read = { module: MODULE, permission: 'procurement.read' } as const;
   const manage = { module: MODULE, permission: 'procurement.manage' } as const;
   const approve = { module: MODULE, permission: 'procurement.approve' } as const;
+
+  // --- Üçlü eşleştirme ----------------------------------------------------------------------------
+  app.get('/api/procurement/settings', tenantRoute(app, read, async ({ tx }) => ({ settings: await getProcurementSettings(tx) })));
+  app.put(
+    '/api/procurement/settings',
+    tenantRoute(app, manage, async ({ tx, company, req }) => ({ settings: await putProcurementSettings(tx, company.id, procurementSettingsSchema.parse(req.body)) })),
+  );
+  app.get('/api/procurement/invoiceable', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = z.object({ partyId: idParam.shape.id, currency: z.string().length(3) }).parse(req.query);
+    return invoiceableOrderLines(tx, q.partyId, q.currency);
+  }));
+  app.get('/api/procurement/matching', tenantRoute(app, read, async ({ tx }) => orderMatchSummary(tx)));
 
   // --- Talepler ---------------------------------------------------------------------------------
   app.get('/api/purchase-requests', tenantRoute(app, read, async ({ tx, req }) => listRequests(tx, purchaseRequestListQuerySchema.parse(req.query))));

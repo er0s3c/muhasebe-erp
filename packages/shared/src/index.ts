@@ -6,6 +6,7 @@ export * from './treasury-calc';
 export * from './project-cost';
 export * from './progress-calc';
 export * from './installment-plan';
+export * from './three-way-match';
 export * from './permissions';
 export * from './module-registry';
 export * from './schemas/common';

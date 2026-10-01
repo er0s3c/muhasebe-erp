@@ -128,3 +128,10 @@ export const cancelReceiptSchema = z.object({
   reason: z.string().trim().min(3, 'İptal nedeni gerekli').max(300),
   date: isoDate.optional(),
 });
+
+/** Üçlü eşleştirme toleransları (yüzde; şirket politikası). */
+export const procurementSettingsSchema = z.object({
+  qtyTolerancePct: z.string().regex(/^\d{1,3}(\.\d{1,4})?$/, 'Geçerli bir yüzde girin').refine((v) => Number(v) <= 100, 'En çok %100'),
+  priceTolerancePct: z.string().regex(/^\d{1,3}(\.\d{1,4})?$/, 'Geçerli bir yüzde girin').refine((v) => Number(v) <= 100, 'En çok %100'),
+});
+export type ProcurementSettingsInput = z.infer<typeof procurementSettingsSchema>;

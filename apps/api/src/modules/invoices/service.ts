@@ -47,6 +47,8 @@ export interface PreparedLine {
   sourceLineId: string | null;
   /** Faturalanan irsaliye satırı (satış/alış faturası); bağlı satır stok hareketi yapmaz. */
   deliveryLineId: string | null;
+  /** Alış faturasında faturalanan sipariş satırı (üçlü eşleştirme). */
+  orderLineId: string | null;
   /** Proje boyutu (yalnızca stoksuz alış/gider/alış iadesi satırı). */
   projectId: string | null;
   wbsId: string | null;
@@ -68,6 +70,7 @@ export type LineSource = Pick<
   | 'accountId'
   | 'sourceLineId'
   | 'deliveryLineId'
+  | 'orderLineId'
   | 'projectId'
   | 'wbsId'
 >;
@@ -179,6 +182,7 @@ export async function prepareLines(
       accountId: l.accountId ?? null,
       sourceLineId: l.sourceLineId ?? null,
       deliveryLineId: l.deliveryLineId ?? null,
+      orderLineId: l.orderLineId ?? null,
       projectId: l.projectId ?? null,
       wbsId: l.wbsId ?? null,
     };
@@ -309,6 +313,8 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
     warehouseId: stockLines ? (input.warehouseId ?? original?.warehouseId ?? null) : null,
     returnOfId: original?.id ?? null,
     description: input.description ?? null,
+    matchOverrideReason: input.matchOverrideReason ?? null,
+    matchOverrideBy: input.matchOverrideReason ? ctx.userId : null,
     netTotal: toDbAmount(totals.net),
     vatTotal: toDbAmount(totals.vat),
     grossTotal: toDbAmount(totals.gross),
@@ -345,6 +351,7 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
       accountId: l.accountId,
       sourceLineId: l.sourceLineId,
       deliveryLineId: l.deliveryLineId,
+      poLineId: l.orderLineId,
       projectId: l.projectId,
       wbsId: l.wbsId,
     })),
@@ -435,6 +442,8 @@ interface LineRowOut extends Record<string, unknown> {
   vatBase: string | null;
   costValue: string | null;
   deliveryLineId: string | null;
+  poLineId: string | null;
+  orderCode: string | null;
   deliveryNoteId: string | null;
   deliveryNoteNo: string | null;
   deliveryLineNo: number | null;
@@ -454,6 +463,7 @@ export async function getInvoice(tx: Tx, id: string) {
            i.currency_code as "currencyCode", i.fx_rate as "fxRate", i.vat_included as "vatIncluded",
            i.warehouse_id as "warehouseId", w.name as "warehouseName",
            i.return_of_id as "returnOfId", ro.invoice_no as "returnOfNo", i.description,
+           i.match_override_reason as "matchOverrideReason",
            i.net_total as "netTotal", i.vat_total as "vatTotal", i.gross_total as "grossTotal",
            i.net_total_base as "netTotalBase", i.vat_total_base as "vatTotalBase", i.gross_total_base as "grossTotalBase",
            i.journal_entry_id as "journalEntryId", je.entry_no as "journalEntryNo",
@@ -478,7 +488,7 @@ export async function getInvoice(tx: Tx, id: string) {
            l.vat_code as "vatCode", l.vat_rate as "vatRate", l.net, l.vat, l.gross,
            l.account_id as "accountId", a.code as "accountCode", l.source_line_id as "sourceLineId",
            l.net_base as "netBase", l.vat_base as "vatBase", l.cost_value as "costValue",
-           l.delivery_line_id as "deliveryLineId", dn.id as "deliveryNoteId", dn.note_no as "deliveryNoteNo",
+           l.delivery_line_id as "deliveryLineId", l.po_line_id as "poLineId", po.code as "orderCode", dn.id as "deliveryNoteId", dn.note_no as "deliveryNoteNo",
            dl.line_no as "deliveryLineNo",
            l.project_id as "projectId", pr.code as "projectCode", pr.name as "projectName",
            l.wbs_id as "wbsId", pw.code as "wbsCode", pw.name as "wbsName"
@@ -489,6 +499,8 @@ export async function getInvoice(tx: Tx, id: string) {
     left join project_wbs pw on pw.id = l.wbs_id
     left join delivery_note_lines dl on dl.id = l.delivery_line_id
     left join delivery_notes dn on dn.id = dl.note_id
+    left join purchase_order_lines pol on pol.id = l.po_line_id
+    left join purchase_orders po on po.id = pol.order_id
     where l.invoice_id = ${id}
     order by l.line_no`);
 

@@ -128,6 +128,9 @@ export async function issueOrder(tx: Tx, id: string) {
 export async function cancelOrder(tx: Tx, id: string, reason: string) {
   const o = await lockOrder(tx, id);
   if (o.status !== 'draft' && o.status !== 'issued') throw unprocessable('Bu durumdaki sipariş iptal edilemez', 'ORDER_CANNOT_CANCEL');
+  const linked = await tx.execute(sql`select 1 from invoice_lines il join invoices i on i.id = il.invoice_id join purchase_order_lines l on l.id = il.po_line_id
+                                      where l.order_id = ${id} and i.status in ('draft', 'posted') limit 1`);
+  if (linked.rows.length > 0) throw unprocessable('Siparişe bağlı fatura var; önce faturayı iptal edin ya da silin', 'ORDER_HAS_INVOICES');
   await tx.update(purchaseOrders).set({ status: 'cancelled', cancelReason: reason }).where(eq(purchaseOrders.id, id));
   await releaseRequest(tx, o.requestId);
   return getOrder(tx, id);
@@ -159,7 +162,9 @@ export async function getOrder(tx: Tx, id: string) {
            l.quantity::text as quantity, l.unit_price::text as "unitPrice", round(l.quantity * l.unit_price, 2)::text as amount,
            l.wbs_id as "wbsId", w.code as "wbsCode",
            coalesce((select sum(rl.quantity) from po_receipt_lines rl join po_receipts r on r.id = rl.receipt_id
-                      where rl.order_line_id = l.id and r.status = 'posted'), 0)::numeric(19,4)::text as "receivedQty"
+                      where rl.order_line_id = l.id and r.status = 'posted'), 0)::numeric(19,4)::text as "receivedQty",
+           coalesce((select sum(il.quantity) from invoice_lines il join invoices iv on iv.id = il.invoice_id
+                      where il.po_line_id = l.id and iv.status = 'posted'), 0)::numeric(19,4)::text as "invoicedQty"
       from purchase_order_lines l
       left join items i on i.id = l.item_id
       left join project_wbs w on w.id = l.wbs_id
@@ -182,6 +187,12 @@ export async function getOrder(tx: Tx, id: string) {
     },
     lines: lines.rows.map((l) => ({ ...l, remainingQty: dec(String(l.quantity)).minus(String(l.receivedQty)).toFixed(4) })),
     receipts: receipts.rows,
+    invoices: (
+      await tx.execute<Record<string, unknown>>(sql`
+        select distinct i.id, i.invoice_no as "invoiceNo", i.external_no as "externalNo", i.invoice_date::text as "invoiceDate", i.status, i.gross_total::text as "grossTotal"
+          from invoices i join invoice_lines il on il.invoice_id = i.id join purchase_order_lines l on l.id = il.po_line_id
+         where l.order_id = ${id} and i.status in ('draft', 'posted') order by "invoiceDate" desc`)
+    ).rows,
   };
 }
 

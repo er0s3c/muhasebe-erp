@@ -174,6 +174,7 @@ export function PurchaseOrderEditorPage() {
                   <Th className="w-28">{t('procurement.lines.wbs')}</Th>
                   <Th num className="w-24">{t('procurement.lines.quantity')}</Th>
                   <Th num className="w-24">{t('procurement.orders.receivedCol')}</Th>
+                  <Th num className="w-24">{t('procurement.match.cols.invoiced')}</Th>
                   <Th num className="w-24">{t('procurement.orders.remaining')}</Th>
                   <Th num className="w-28">{t('procurement.orders.unitPrice')}</Th>
                   <Th num className="w-32">{t('common.amount')}</Th>
@@ -187,6 +188,7 @@ export function PurchaseOrderEditorPage() {
                     <Td className="text-muted">{l.wbsCode ?? '—'}</Td>
                     <Td num>{qtyText(l.quantity)}</Td>
                     <Td num>{qtyText(l.receivedQty) || '0'}</Td>
+                    <Td num>{qtyText(l.invoicedQty) || '0'}</Td>
                     <Td num>{qtyText(l.remainingQty) || '0'}</Td>
                     <Td num className="text-muted">{moneyIn(l.unitPrice, order!.currencyCode, 4)}</Td>
                     <Td num>{moneyIn(l.amount, order!.currencyCode)}</Td>
@@ -250,6 +252,22 @@ export function PurchaseOrderEditorPage() {
               </Table>
             </TableWrap>
           )}
+        </Card>
+      )}
+
+      {detail && detail.invoices.length > 0 && (
+        <Card>
+          <CardHeader title={t('procurement.match.invoicesTitle')} description={t('procurement.match.invoicesDesc')} />
+          <ul className="divide-y divide-border text-sm">
+            {detail.invoices.map((i) => (
+              <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                <Link to={`/invoices/${i.id}`} className="link">{i.invoiceNo ?? t('procurement.match.draftInvoice')}{i.externalNo ? ` · ${i.externalNo}` : ''}</Link>
+                <span className="text-muted">{formatDateTR(i.invoiceDate)}</span>
+                <Badge tone={i.status === 'posted' ? 'success' : 'neutral'}>{t(`procurement.match.invoiceStatus.${i.status === 'posted' ? 'posted' : 'draft'}`)}</Badge>
+                <span className="num">{moneyIn(i.grossTotal, order!.currencyCode)}</span>
+              </li>
+            ))}
+          </ul>
         </Card>
       )}
 

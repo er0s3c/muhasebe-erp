@@ -168,6 +168,8 @@ export const invoiceLineSchema = z.object({
   projectId: uuid.nullable().optional(),
   /** Projenin yaprak iş kalemi; projesiz verilemez. */
   wbsId: uuid.nullable().optional(),
+  /** Alış faturasında, faturalanan sipariş satırı (üçlü eşleştirme: sipariş – mal kabul – fatura). */
+  orderLineId: uuid.nullable().optional(),
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
 
@@ -190,6 +192,8 @@ const invoiceBase = z.object({
   returnOfId: uuid.nullable().optional(),
   description: optionalText(300),
   lines: z.array(invoiceLineSchema).min(1, 'En az bir satır gerekli').max(300),
+  /** Üçlü eşleştirme tolerans dışıyken kaydı geçirme gerekçesi (`procurement.approve` yetkisi gerekir). */
+  matchOverrideReason: z.string().trim().min(3, 'Gerekçe en az 3 karakter').max(500).nullable().optional(),
   /** true ise taslak beklemeden kaydedilir ve muhasebeleştirilir. */
   post: z.boolean().default(false),
 });
@@ -219,6 +223,9 @@ function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx)
       }
       if (l.deliveryLineId && doc.type !== 'sales' && doc.type !== 'purchase') {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'İrsaliye bağı yalnızca satış ve alış faturasında kullanılır' });
+      }
+      if (l.orderLineId && doc.type !== 'purchase') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'orderLineId'], message: 'Sipariş bağı yalnızca alış faturasında kullanılır' });
       }
       if (l.deliveryLineId && l.sourceLineId) {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'Satır hem iadeye hem irsaliyeye bağlanamaz' });

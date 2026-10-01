@@ -139,6 +139,7 @@ export const router = createBrowserRouter([
                   { path: 'purchasing/requests/:id', ...page(() => import('../features/procurement/RequestEditorPage'), 'PurchaseRequestEditorPage') },
                   { path: 'purchasing/rfqs', ...page(() => import('../features/procurement/RfqsPage'), 'RfqsPage') },
                   { path: 'purchasing/rfqs/:id', ...page(() => import('../features/procurement/RfqPage'), 'RfqPage') },
+                  { path: 'purchasing/matching', ...page(() => import('../features/procurement/MatchingPage'), 'OrderMatchingPage') },
                   { path: 'purchasing/orders', ...page(() => import('../features/procurement/OrdersPage'), 'PurchaseOrdersPage') },
                   { path: 'purchasing/orders/:id', ...page(() => import('../features/procurement/OrderEditorPage'), 'PurchaseOrderEditorPage') },
                 ],

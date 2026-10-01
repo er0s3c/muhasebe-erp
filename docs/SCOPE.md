@@ -111,7 +111,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | **İnşaat:** taşeron sözleşmesi, revizyonlu BOQ, kümülatif hakediş (verilen), teminat/avans/stopaj/diğer kesinti, onay kuralları, avans ve teminat iadesi, maliyet kodu, kalan taahhüt | ✅ (B2) ⚠️ yüzdeler ve yevmiye hesapları doğrulanmadı |
 | **İnşaat:** işveren sözleşmesi, revizyonlu BOQ, alınan hakediş (kümülatif), teminat/avans/stopaj, tahsilat, işveren özeti | ✅ (B2e) ⚠️ hesap kodları ve gelir tanıma doğrulanmadı |
 | **İnşaat:** satın alma talebi, onay, RFQ/teklif karşılaştırma, sipariş (taahhüt), mal kabul (stoğa giriş) | ✅ (B2p) ⚠️ hesap kodu eklenmedi: mal kabul mevcut alış irsaliyesi muhasebesini kullanır |
-| **İnşaat:** variation order, malzeme mahsubu, KDV tevkifatı, faturanın siparişe bağlanması | ⏳ sonraki fazlar ⚠️ |
+| **İnşaat:** faturanın siparişe bağlanması (3'lü eşleştirme: sipariş – mal kabul – fatura, tolerans, yetkili gerekçeli geçiş, faturasız kabul raporu) | ✅ |
+| **İnşaat:** variation order, malzeme mahsubu, KDV tevkifatı | ⏳ sonraki fazlar ⚠️ |
 | **İnşaat:** yabancılara satış sınırları ve yasal süre takibi (89/2026 YGK ve sonrası) | ⏳ Faz C ⚠️ |
 | **İnşaat:** altyapı fonları ve harçlar (elektrik/su/belediye): tarihli, doğrulama alanlı tarifeler; alıcıdan tahsil edilen fon (satış sözleşmesine ek satır, 329 yükümlülük, fesihte iade); projenin ödediği fon tahmini | ✅ (B4) ⚠️ tutar/oranlar, 329 hesabı ve fonların vergi/hukuki niteliği doğrulanmadı |
 | **İnşaat:** yabancı işçi belge/teminat takibi, bordro | ⏳ Faz D ⚠️ |

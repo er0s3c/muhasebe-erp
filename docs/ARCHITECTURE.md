@@ -175,7 +175,7 @@ Tek veritabanı, tek API. Sektöre özgü davranış ayrı dağıtımlarla deği
 - **Sipariş = taahhüt:** taslak taahhüt yaratmaz. Verirken (`issue`) her satırda iş kalemi zorunludur (`ORDER_WBS_REQUIRED`) ve KDV oranı o günkü `tax_rates` kaydından donar. İptal/silmede talep tekrar `approved` olur. Numaralar: `SAT-0001`, `RFQ-0001`, `SIP-0001`, `MK-yyyy-nnnnnn`.
 - **Mal kabul:** sipariş satırına kısmi teslim; kalan miktar aşılamaz. Stok kartlı satırlar için mevcut alış irsaliyesi akışı çağrılır (`createDeliveryDraft` + `postDeliveryNote`; tedarikçi irsaliye no zorunlu, depo seçilebilir) ve mal depoya girer; stoksuz satır yalnızca kayıt tutar. Mal kabul iptali irsaliyeyi de iptal eder. Fatura–sipariş bağı yoktur.
 - **Taahhüt:** `loadOrderCommitted` yalnızca verilmiş siparişlerin kalan miktarı × birim fiyatını (KDV hariç) iş kalemi bazında, tarih kuruyla defter para birimine çevirerek verir; proje maliyet raporunda taşeron taahhüdüyle birleşir (`commitments: {contracts, orders, missingRate}`) ve EAC/ETC/CPI'ya girmez. Taahhüt mal kabulle biter; stoktan sarf sonradan B1 yoluyla maliyete yazılır.
-- **Kapsam dışı / bilinen sınırlar:** faturanın siparişe bağlanması (3'lü eşleştirme), kalite/karantina durumu, uzun teslim süreli kalem takibi, birden çok açık RFQ turu, variation order.
+- **Kapsam dışı / bilinen sınırlar:** kalite/karantina durumu, uzun teslim süreli kalem takibi, birden çok açık RFQ turu, variation order.
 
 ## Gayrimenkul satışı (Faz B3)
 
@@ -293,3 +293,12 @@ React 19 + Vite + Tailwind v4. Renk/yüzey belirteçleri CSS değişkenidir (aç
 - **Giriş akışı:** MFA açıksa `POST /api/auth/login` oturum vermez, 5 dakikalık `purpose:'mfa'` belirteci döner; `POST /api/auth/mfa/verify` kodu doğrulayıp oturumu (çerez + erişim belirteci + cihaz koltuğu) açar. `authenticate` `purpose` taşıyan belirteci reddeder. Hatalı kodlar kullanıcı başına 15 dakikada 5 ile sınırlıdır (429).
 - Kapatma ve kurtarma kodu yenileme parola/güncel kod ister; `members.manage` yetkisi olan yönetici üyenin MFA'sını sıfırlayabilir (`DELETE /api/company/members/:userId/mfa`; sahip için yalnızca sahip). Olaylar `security_events`'e yazılır (`mfa_enabled/disabled/reset/failed/recovery_used/recovery_regenerated`).
 - Kapsam dışı: şirket düzeyinde zorunlu kılma, WebAuthn/passkey, güvenilir cihaz hatırlama.
+
+## Üçlü eşleştirme (sipariş – mal kabul – fatura)
+
+- Alış faturası satırı bir **sipariş satırına** bağlanabilir (`invoice_lines.po_line_id`; yalnızca alış faturası, siparişin tedarikçisi ve para birimi, verilmiş/kapatılmış sipariş: `invoice_lines_po_guard`, ERP11). Web'de "Siparişten satır ekle" seçicisi kabul − faturalanan miktarı önerir.
+- Kayıt sırasında bağlı satırlar kilit altında karşılaştırılır (`procurement/matching.ts`, saf kural `evaluateMatch` @erp/shared): faturalanan toplam > kabul (`over_received`), > sipariş (`over_ordered`) ve KDV hariç birim fiyat sapması (`price_variance`). Tolerans dışıysa **422 `THREE_WAY_MISMATCH`**; `procurement.approve` yetkisi olan kullanıcı `matchOverrideReason` (gerekçe) ile geçirebilir, gerekçe ve kişi faturada saklanır.
+- Toleranslar `procurement_settings` (şirket politikası, yasal parametre değil; varsayılan miktar %0, fiyat %2) — Sipariş eşleştirme sayfasından düzenlenir.
+- **Taahhüt:** kalan taahhüt = sipariş − max(kabul, bağlı kayıtlı fatura) miktarı; kabulsüz hizmet faturası artık hem maliyet hem taahhüt olarak çift görünmez. Bağlı fatura varken sipariş iptal edilemez; fatura iptali miktarı serbest bırakır.
+- Raporlama: `GET /api/procurement/matching` (sipariş/kabul/faturasız kabul tutarı, fazla fatura), `GET /api/invoices/:id/match`.
+- Kapsam dışı: iade faturasının siparişe bağlanması, toplu "siparişten fatura" sihirbazı, tedarikçi irsaliyesi ↔ fatura ile sipariş kabulü arasındaki otomatik eşleştirme.

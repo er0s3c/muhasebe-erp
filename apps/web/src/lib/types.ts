@@ -548,6 +548,8 @@ export interface InvoiceLineRow {
   deliveryNoteId: string | null;
   deliveryNoteNo: string | null;
   deliveryLineNo: number | null;
+  poLineId: string | null;
+  orderCode: string | null;
   projectId: string | null;
   projectCode: string | null;
   projectName: string | null;
@@ -573,6 +575,7 @@ export interface InvoiceDetail {
     postedAt: string | null;
     cancelledAt: string | null;
     cancelReason: string | null;
+    matchOverrideReason: string | null;
     cancelJournalEntryId: string | null;
     cancelJournalEntryNo: string | null;
     cancelStockDocumentId: string | null;
@@ -1457,6 +1460,7 @@ export interface PurchaseOrderLine {
   wbsId: string | null;
   wbsCode: string | null;
   receivedQty: string;
+  invoicedQty: string;
   remainingQty: string;
 }
 
@@ -1486,6 +1490,54 @@ export interface PurchaseOrderDetail {
   };
   lines: PurchaseOrderLine[];
   receipts: { id: string; receiptNo: string; receiptDate: string; status: 'posted' | 'cancelled'; note: string | null; deliveryNoteId: string | null; cancelReason: string | null }[];
+  invoices: { id: string; invoiceNo: string | null; externalNo: string | null; invoiceDate: string; status: string; grossTotal: string }[];
+}
+
+export type MatchFlag = 'over_received' | 'over_ordered' | 'price_variance';
+export interface MatchRow {
+  lineNo: number;
+  poLineId: string;
+  orderCode: string;
+  orderLineNo: number;
+  description: string;
+  orderedQty: string;
+  receivedQty: string;
+  invoicedBeforeQty: string;
+  invoiceQty: string;
+  orderPrice: string;
+  invoicePrice: string;
+  priceDiffPct: string | null;
+  flags: MatchFlag[];
+}
+export interface InvoiceableOrderLine {
+  lineId: string;
+  orderId: string;
+  orderCode: string;
+  orderDate: string;
+  projectId: string;
+  lineNo: number;
+  itemId: string | null;
+  description: string;
+  unit: string;
+  wbsId: string | null;
+  vatCode: string | null;
+  orderedQty: string;
+  unitPrice: string;
+  receivedQty: string;
+  invoicedQty: string;
+}
+export interface OrderMatchRow {
+  id: string;
+  code: string;
+  status: string;
+  projectCode: string;
+  partyName: string;
+  currencyCode: string;
+  orderedAmount: string;
+  receivedAmount: string;
+  invoicedAtOrderPrice: string;
+  uninvoicedReceiptAmount: string;
+  hasExcess: boolean;
 }
 
 // --- Gayrimenkul satışı (B3) ----------------------------------------------------------------------------

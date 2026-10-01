@@ -304,6 +304,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'procurement.read',
   },
   {
+    key: 'order-matching',
+    labelKey: 'nav.orderMatching',
+    path: '/purchasing/matching',
+    icon: 'link-2',
+    group: 'construction',
+    module: 'construction.procurement',
+    permission: 'procurement.read',
+  },
+  {
     key: 'real-estate-units',
     labelKey: 'nav.realEstateUnits',
     path: '/real-estate/units',
