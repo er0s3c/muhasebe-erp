@@ -10,6 +10,11 @@ const treasuryOff = async (c: ReturnType<typeof client>) => {
   await put(c, 'treasury.guarantees', false);
   return put(c, 'core.treasury', false);
 };
+/** Fatura kapatılmadan önce ona bağlı satış teklif/sipariş modülü kapatılır (bağımlılık). */
+const invoicesOff = async (c: ReturnType<typeof client>) => {
+  await put(c, 'invoices.orders', false);
+  return put(c, 'core.invoices', false);
+};
 const navKeys = async (c: ReturnType<typeof client>) =>
   (await c.get('/api/navigation')).json().groups.map((g: any) => g.key) as string[];
 const byKey = (res: any) => Object.fromEntries(res.json().modules.map((m: any) => [m.key, m]));
@@ -28,6 +33,8 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     const m = byKey(res);
     expect(m['core.invoices']).toMatchObject({ enabled: true, locked: false, override: null, requires: ['core.ledger', 'core.parties', 'core.inventory'] });
     expect(m['core.ledger'].dependents).toEqual(expect.arrayContaining(['core.parties', 'core.inventory', 'core.invoices', 'core.treasury']));
+    expect(m['invoices.orders']).toMatchObject({ enabled: true, requires: ['core.invoices', 'core.inventory'] });
+    expect(m['core.invoices'].dependents).toContain('invoices.orders');
     expect(m['treasury.cheques']).toMatchObject({ enabled: true, requires: ['core.treasury'] });
     expect(m['treasury.guarantees']).toMatchObject({ enabled: true, requires: ['core.treasury'] });
     expect(m['core.treasury'].dependents).toEqual(expect.arrayContaining(['treasury.cheques', 'treasury.guarantees']));
@@ -45,7 +52,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     expect(await navKeys(c)).toContain('invoices');
     expect((await c.get('/api/invoices?type=sales')).statusCode).toBe(200);
 
-    const off = await put(c, 'core.invoices', false);
+    const off = await invoicesOff(c);
     expect(off.statusCode).toBe(200);
     expect(byKey(off)['core.invoices']).toMatchObject({ enabled: false, override: false });
 
@@ -61,6 +68,8 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     expect(byKey(on)['core.invoices']).toMatchObject({ enabled: true, override: null });
     expect(await navKeys(c)).toContain('invoices');
     expect((await c.get('/api/invoices?type=sales')).statusCode).toBe(200);
+    // Teklif/sipariş modülünün istisnası da açınca silinir
+    expect((await put(c, 'invoices.orders', true)).statusCode).toBe(200);
 
     const rows = await asDb(handle, { companyId: company.id }, async (q) =>
       (await q(`select module from company_modules where company_id = $1`, [company.id])).rows,
@@ -88,7 +97,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     expect(b.json().error.code).toBe('MODULE_REQUIRED_BY');
 
     // Sırayla: faturayı kapat → stoku kapat → faturayı açmayı dene (stok kapalı)
-    expect((await put(c, 'core.invoices', false)).statusCode).toBe(200);
+    expect((await invoicesOff(c)).statusCode).toBe(200);
     expect((await put(c, 'core.inventory', false)).statusCode).toBe(200);
     const d = await put(c, 'core.invoices', true);
     expect(d.statusCode).toBe(422);
@@ -170,7 +179,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
       conn.release();
     }
     const m = byKey(await c.get('/api/company/modules'));
-    for (const key of ['core.ledger', 'core.parties', 'core.inventory', 'core.invoices', 'core.treasury']) {
+    for (const key of ['core.ledger', 'core.parties', 'core.inventory', 'core.invoices', 'invoices.orders', 'core.treasury']) {
       expect(m[key].enabled, key).toBe(false);
     }
     expect(m['core.settings'].enabled).toBe(true);
@@ -200,7 +209,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
   it('eşzamanlılık: bağımlıyı açarken gereksinimi kapatan iki istek kuralı aşamaz', async () => {
     for (let i = 0; i < 6; i++) {
       const { c } = await setup(`Yaris${i}`);
-      expect((await put(c, 'core.invoices', false)).statusCode).toBe(200);
+      expect((await invoicesOff(c)).statusCode).toBe(200);
       // Faturayı aç + stoğu kapat: ikisi birden olursa fatura açık ama stok kapalı kalırdı.
       const [open, close] = await Promise.all([put(c, 'core.invoices', true), put(c, 'core.inventory', false)]);
       const codes = [open.statusCode, close.statusCode].sort();
@@ -214,7 +223,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
   it('tam veri dışa aktarma kapalı modüllerden bağımsızdır (veri taşınabilirliği)', async () => {
     const { c } = await setup('Tasinir');
     expect((await c.post('/api/parties', { name: 'Taşınabilir Cari', kind: 'customer' })).statusCode).toBe(201);
-    expect((await put(c, 'core.invoices', false)).statusCode).toBe(200);
+    expect((await invoicesOff(c)).statusCode).toBe(200);
     expect((await treasuryOff(c)).statusCode).toBe(200);
     const res = await c.get('/api/exports/full-data?format=xlsx');
     expect(res.statusCode).toBe(200);

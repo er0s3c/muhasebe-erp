@@ -101,7 +101,8 @@
     "hrSocialSecurity": "Sosyal güvenlik çıktıları",
     "hrForeign": "Yabancı işçi belge ve teminat takibi",
     "treasuryCheques": "Çek/senet portföyü ve takas",
-    "treasuryGuarantees": "Banka teminat mektubu portföyü"
+    "treasuryGuarantees": "Banka teminat mektubu portföyü",
+    "invoicesOrders": "Satış teklif ve siparişi"
   },
   "nav": {
     "groups": {
@@ -139,6 +140,11 @@
     "purchaseInvoices": "Alış ve gider faturaları",
     "salesDeliveryNotes": "Satış irsaliyeleri",
     "purchaseDeliveryNotes": "Alış irsaliyeleri",
+    "salesReturnNotes": "Satış iade irsaliyeleri",
+    "purchaseReturnNotes": "Alış iade irsaliyeleri",
+    "salesQuotes": "Satış teklifleri",
+    "salesOrders": "Satış siparişleri",
+    "batchInvoicing": "Toplu faturalama",
     "vatSummary": "KDV özeti",
     "accountMapping": "Hesap eşlemesi",
     "treasuryAccounts": "Hesaplar",
@@ -1093,6 +1099,7 @@
       "cancelled": "İptal"
     },
     "allTypes": "Tümü",
+    "importExcel": "Excel'den içe aktar",
     "allStatuses": "Tüm durumlar",
     "searchPlaceholder": "No, tedarikçi no veya cari ara",
     "number": "Fatura no",
@@ -1186,6 +1193,18 @@
     }
   },
   "deliveries": {
+    "salesReturns": {
+      "title": "Satış iade irsaliyeleri",
+      "subtitle": "Müşteriden geri alınan mal: kayıt stoğa orijinal sevkin maliyetiyle girer; yevmiye yoktur. Değer iadesi için iade faturası kesin.",
+      "empty": "Henüz satış iade irsaliyesi yok",
+      "emptyDesc": "Müşteri mal iade ettiğinde, orijinal satış irsaliyesinden iade irsaliyesi oluşturun."
+    },
+    "purchaseReturns": {
+      "title": "Alış iade irsaliyeleri",
+      "subtitle": "Tedarikçiye geri gönderilen mal: kayıt stoktan ortalama maliyetle çıkarır; yevmiye yoktur. Değer iadesi için alış iade faturası girin.",
+      "empty": "Henüz alış iade irsaliyesi yok",
+      "emptyDesc": "Tedarikçiye mal iade ederken, orijinal alış irsaliyesinden iade irsaliyesi oluşturun."
+    },
     "sales": {
       "title": "Satış irsaliyeleri",
       "subtitle": "Sevk irsaliyeleri: kayıt stoğu ortalama maliyetle çıkarır; yevmiye faturada oluşur.",
@@ -1200,11 +1219,15 @@
     },
     "types": {
       "sales": "Satış irsaliyesi",
-      "purchase": "Alış irsaliyesi"
+      "purchase": "Alış irsaliyesi",
+      "sales_return": "Satış iade irsaliyesi",
+      "purchase_return": "Alış iade irsaliyesi"
     },
     "newType": {
       "sales": "Yeni satış irsaliyesi",
-      "purchase": "Yeni alış irsaliyesi"
+      "purchase": "Yeni alış irsaliyesi",
+      "sales_return": "Yeni satış iade irsaliyesi",
+      "purchase_return": "Yeni alış iade irsaliyesi"
     },
     "status": {
       "draft": "Taslak",
@@ -1224,6 +1247,7 @@
     "warehouse": "Depo",
     "lineCol": "Kalem",
     "invoicingCol": "Faturalama",
+    "creditCol": "İade faturası",
     "pending": {
       "title": "Faturalanmamış irsaliyeler",
       "summary": "{{count}} irsaliye, kalan değer {{value}}",
@@ -1263,7 +1287,12 @@
       "postedMsg": "İrsaliye kaydedildi: {{no}}",
       "deleteDraft": "Taslağı sil",
       "deleteConfirm": "Bu taslak irsaliye silinecek. Stok etkilenmez.",
-      "deleted": "Taslak silindi"
+      "deleted": "Taslak silindi",
+      "returnOf": "Orijinal irsaliye",
+      "returnOfHint": "Seçilirse satırlar orijinalden gelir ve iade miktarı teslim edilenle sınırlanır.",
+      "returnFree": "Orijinale bağlama (serbest iade)",
+      "returnable": "İade edilebilir: {{qty}}",
+      "returnQtyExceeded": "İade miktarı, orijinal irsaliyede iade edilebilir miktarı aşıyor."
     },
     "view": {
       "print": "Yazdır",
@@ -1286,7 +1315,13 @@
       "noPrice": "Fiyatsız",
       "allInvoiced": "Tüm satırlar faturalandı.",
       "noStockNote": "Yevmiye yok: bu irsaliye yalnızca stok defterini etkiler.",
-      "internalNote": "Bu çıktı iç kullanım belgesidir; yasal irsaliye biçimi doğrulanmamıştır (bkz. docs/LEGAL-NOTES.md)."
+      "internalNote": "Bu çıktı iç kullanım belgesidir; yasal irsaliye biçimi doğrulanmamıştır (bkz. docs/LEGAL-NOTES.md).",
+      "createReturn": "İade irsaliyesi oluştur",
+      "createCredit": "İade faturası oluştur",
+      "returnOf": "Orijinal irsaliye",
+      "returns": "İade irsaliyeleri",
+      "credited": "İade faturası",
+      "returned": "İade edilen"
     },
     "picker": {
       "button": "İrsaliyeden ekle",
@@ -1745,7 +1780,9 @@
       "party_openings": "Cari açılış bakiyelerini tek bir açılış yevmiyesi olarak yazar: müşteri bakiyesi 120, tedarikçi bakiyesi 320 hesabına gider; fark açılış karşı hesabına (varsayılan 500) yazılır.",
       "stock_openings": "Depo başına bir stok açılış belgesi oluşturur. Stok defteri ve muhasebe (stok hesabı / açılış karşı hesabı) birlikte güncellenir; stok durumu ile muhasebe mutabakatı bozulmaz.",
       "ledger_openings": "Mizan bakiyelerini tek bir açılış yevmiyesi olarak yazar. Cari (120/320) ve stok (150–157) hesapları burada girilmez; onlar için cari ve stok açılışını kullanın.",
-      "bank_statement": "Banka ekstresi satırlarını içe aktarır; satırlar ardından defter kayıtlarıyla eşleştirilir. Borç = çıkan, Alacak = giren kabul edilir. Aynı satır ikinci kez alınmaz."
+      "bank_statement": "Banka ekstresi satırlarını içe aktarır; satırlar ardından defter kayıtlarıyla eşleştirilir. Borç = çıkan, Alacak = giren kabul edilir. Aynı satır ikinci kez alınmaz.",
+      "sales_invoices": "Satış faturalarını Excel/CSV'den TASLAK olarak oluşturur: aynı belge numaralı satırlar tek faturada toplanır, cari vergi no/kod/ünvanla, stok kod/barkod/adla eşlenir; KDV, Ayarlar > KDV oranlarındaki kod ya da orandan çözülür. Kayıt, yevmiye ve stok hareketi fatura ekranından yapılır. Aynı cari + belge no'lu mevcut fatura atlanır.",
+      "purchase_invoices": "Alış faturalarını Excel/CSV'den TASLAK olarak oluşturur: belge no tedarikçi fatura numarası olarak yazılır; cari ve stok eşlemesi, KDV çözümü ve mükerrer denetimi satış faturasındaki gibidir. Kayıt, yevmiye ve stok girişi fatura ekranından yapılır."
     },
     "file": {
       "title": "Dosyanızı seçin",
@@ -1790,7 +1827,8 @@
       "back": "Geri",
       "closingBalance": "Ekstre kapanış bakiyesi",
       "closingBalanceHint": "İsteğe bağlı; ekstrede Bakiye sütunu yoksa mutabakat farkı için girin.",
-      "bankAmountMissing": "Tutar, Giriş ya da Çıkış sütunlarından en az biri eşlenmeli"
+      "bankAmountMissing": "Tutar, Giriş ya da Çıkış sütunlarından en az biri eşlenmeli",
+      "vatIncluded": "Birim fiyatlar KDV dahil"
     },
     "preview": {
       "title": "Ön izleme",
@@ -1816,12 +1854,23 @@
       "commit": "İçe aktar",
       "changed": "Veriler ön izlemeden sonra değişmiş; ön izleme yenilendi. Lütfen yeniden kontrol edin."
     },
+    "unmatched": {
+      "title": "Eşleşmeyen kayıtlar",
+      "hint": "Dosyadaki şu cari/stok metinleri kartlarla eşleşmedi. Doğru kartı seçin; ön izleme yenilenir. İsterseniz önce kartı oluşturup dosyayı yeniden yükleyebilirsiniz.",
+      "party": "Cari",
+      "item": "Stok",
+      "rows": "{{count}} satır",
+      "suggestions": "Öneriler",
+      "pick": "Kart seçin…"
+    },
     "done": {
       "title": "İçe aktarma tamamlandı",
       "created": "{{count}} kayıt oluşturuldu, {{skipped}} satır atlandı.",
       "journal": "Yevmiye",
       "stock": "Stok belgesi",
       "undoHint": "Açılış yevmiyesi yanlışsa Yevmiye kayıtları sayfasından ters kayıt oluşturabilirsiniz.",
+      "invoice": "Taslak fatura",
+      "draftHint": "Faturalar TASLAK olarak yazıldı: kontrol edip fatura ekranından kaydedin (yevmiye ve stok hareketi o zaman oluşur).",
       "another": "Başka dosya yükle",
       "close": "Tamam"
     }
@@ -2328,7 +2377,8 @@
     "subcontractor": "Taşeron (kaşe / imza)",
     "employer": "İşveren (kaşe / imza)",
     "delivered": "Teslim eden",
-    "receiver": "Teslim alan"
+    "receiver": "Teslim alan",
+    "customerApproval": "Müşteri onayı (kaşe / imza)"
   },
   "feeSchedules": {
     "title": "Altyapı fonları ve harçlar",
@@ -4489,5 +4539,188 @@
       "byProject": "Projeye göre (aktif)",
       "noProject": "Projesiz"
     }
+  },
+  "sales": {
+    "kind": {
+      "quote": "Teklif",
+      "order": "Sipariş"
+    },
+    "quote": {
+      "title": "Satış teklifleri",
+      "subtitle": "Müşteriye verilen fiyat teklifleri: gönderilir, kabul edilir ve siparişe dönüştürülür. Yevmiye ve stok hareketi yoktur.",
+      "empty": "Henüz satış teklifi yok",
+      "emptyDesc": "Müşteriye teklif hazırlayın; kabul edilince tek tıkla siparişe dönüştürün."
+    },
+    "order": {
+      "title": "Satış siparişleri",
+      "subtitle": "Onaylı siparişler: teslim (irsaliye) ve faturalama siparişe bağlanır; teslim edilen ve faturalanan miktarlar siparişten izlenir.",
+      "empty": "Henüz satış siparişi yok",
+      "emptyDesc": "Kabul edilen tekliften ya da doğrudan sipariş oluşturun; sonra irsaliye ve fatura kesin."
+    },
+    "new": {
+      "quote": "Yeni teklif",
+      "order": "Yeni sipariş"
+    },
+    "number": "No",
+    "party": "Müşteri",
+    "validUntil": "Geçerlilik tarihi",
+    "deliveryDate": "Teslim tarihi",
+    "gross": "Toplam (KDV dahil)",
+    "progress": "Durum / karşılanma",
+    "allStatuses": "Tüm durumlar",
+    "searchPlaceholder": "No veya müşteri ara",
+    "status": {
+      "expired": "Süresi geçti",
+      "quote": {
+        "draft": "Taslak",
+        "sent": "Gönderildi",
+        "accepted": "Kabul edildi",
+        "rejected": "Reddedildi",
+        "converted": "Siparişe dönüştü",
+        "cancelled": "İptal",
+        "confirmed": "Onaylandı",
+        "closed": "Kapatıldı"
+      },
+      "order": {
+        "draft": "Taslak",
+        "confirmed": "Onaylandı",
+        "closed": "Kapatıldı",
+        "cancelled": "İptal",
+        "sent": "Gönderildi",
+        "accepted": "Kabul edildi",
+        "rejected": "Reddedildi",
+        "converted": "Dönüştü"
+      }
+    },
+    "fulfil": {
+      "delivery": "Teslim: {{state}}",
+      "invoicing": "Fatura: {{state}}",
+      "state": {
+        "none": "yok",
+        "partial": "kısmi",
+        "full": "tam"
+      }
+    },
+    "form": {
+      "editTitle": "{{type}} (taslak)",
+      "customer": "Müşteri",
+      "pickParty": "Müşteri seçin…",
+      "docDate": "Tarih",
+      "currency": "Para birimi",
+      "warehouse": "Teslimat deposu",
+      "defaultWarehouse": "Varsayılan depo",
+      "vatIncluded": "Birim fiyatlar KDV dahil",
+      "notes": "Koşullar / notlar (çıktıda görünür)",
+      "lines": "Satırlar",
+      "item": "Kart / hizmet",
+      "pickItem": "Kart seçin ya da boş bırakıp yazın…",
+      "freeText": "Serbest metin (hizmet, işçilik…)",
+      "quantity": "Miktar",
+      "unitPrice": "Birim fiyat",
+      "discount": "İskonto %",
+      "vat": "KDV",
+      "noVat": "KDV yok",
+      "addLine": "Satır ekle",
+      "removeLine": "Satırı sil",
+      "noCardPrice": "Kartta {{currency}} cinsinden satış fiyatı yok; birim fiyat girin.",
+      "partyRequired": "Müşteri seçilmeli.",
+      "linesRequired": "Her satırda stok kartı ya da açıklama ve miktar girilmeli.",
+      "priceRequired": "Kartsız satırda birim fiyat girilmeli.",
+      "note": "Boş bırakılan birim fiyat, stok kartının satış fiyatından (belge para biriminde) gelir. Cari özel fiyat ve fiyat listeleri sonraki sürümde aynı yerden bağlanacaktır.",
+      "save": "Taslak kaydet",
+      "saveSend": "Kaydet ve gönder",
+      "saveConfirm": "Kaydet ve onayla",
+      "savedMsg": "Taslak kaydedildi",
+      "deleteDraft": "Taslağı sil",
+      "deleteConfirm": "Bu taslak silinecek.",
+      "deleted": "Taslak silindi"
+    },
+    "actions": {
+      "print": "Yazdır",
+      "send": "Gönderildi olarak işaretle",
+      "accept": "Kabul edildi",
+      "reject": "Reddedildi",
+      "reopen": "Taslağa al (revize)",
+      "cancel": "İptal et",
+      "confirm": "Onayla",
+      "close": "Kapat",
+      "convert": "Siparişe dönüştür",
+      "delivery": "İrsaliye oluştur",
+      "invoice": "Fatura oluştur",
+      "invoiceCreate": "Fatura taslağı oluştur",
+      "invoiceDesc": "Teslim edilmiş ama faturalanmamış mal ve kalan hizmet satırları, sipariş fiyatıyla fatura taslağına alınır.",
+      "includeUndelivered": "Teslim edilmemiş mal satırlarını da ekle",
+      "includeUndeliveredHint": "Bu satırlarda stok, fatura kaydedilirken faturadan çıkar (irsaliye kesilmez).",
+      "reason": "Gerekçe",
+      "reasonDesc": "Gerekçe belge geçmişinde saklanır.",
+      "closeDesc": "Kapatılan siparişe yeni teslim yapılamaz; teslim edilmiş mal yine faturalanabilir.",
+      "done": {
+        "send": "Gönderildi",
+        "accept": "Teklif kabul edildi",
+        "reject": "Teklif reddedildi",
+        "reopen": "Teklif taslağa alındı",
+        "cancel": "İptal edildi",
+        "confirm": "Sipariş onaylandı",
+        "close": "Sipariş kapatıldı",
+        "convert": "Sipariş taslağı oluşturuldu",
+        "delivery": "İrsaliye taslağı oluşturuldu",
+        "invoice": "Fatura taslağı oluşturuldu"
+      }
+    },
+    "view": {
+      "priceMode": "Fiyat türü",
+      "net": "Net",
+      "vatTotal": "KDV",
+      "delivered": "Teslim",
+      "invoiced": "Faturalanan",
+      "fromQuote": "Kaynak teklif",
+      "convertedTo": "Bu teklif siparişe dönüştürüldü:",
+      "expiredNote": "Geçerlilik tarihi ({{date}}) geçti; teklif kabul edilemez, yeni teklif hazırlayın.",
+      "notes": "İrsaliyeler",
+      "invoices": "Faturalar",
+      "history": "Durum geçmişi",
+      "quoteNote": "Teklif yevmiye ve stok hareketi yazmaz; kabul edilince siparişe dönüştürülür.",
+      "orderNote": "Sipariş yevmiye ve stok hareketi yazmaz; muhasebe irsaliye/fatura kesilince oluşur. Teslim ve fatura durumu bağlı belgelerden türetilir.",
+      "printNote": "Bu çıktı iç kullanım belgesidir; yasal geçerlilik ve sözleşme hükümleri doğrulanmamıştır (bkz. docs/LEGAL-NOTES.md)."
+    }
+  },
+  "batch": {
+    "title": "Toplu faturalama",
+    "subtitle": "Faturalanmamış satış irsaliyelerini dönem ve cariye göre seçip tek işlemde faturalayın. Her fatura kendi işleminde kaydedilir; biri başarısız olursa diğerleri etkilenmez.",
+    "party": "Cari",
+    "allParties": "Tüm cariler",
+    "grouping": "Fatura bölme",
+    "groupParty": "Cari başına tek fatura",
+    "groupNote": "İrsaliye başına bir fatura",
+    "invoiceDate": "Fatura tarihi",
+    "post": "Faturaları hemen kaydet (yevmiye oluşur)",
+    "postHint": "Kapalıysa faturalar taslak kalır; satır birleştirilmez (her irsaliye satırı bir fatura satırıdır).",
+    "draftOnly": "Kayıt yetkiniz yok: faturalar taslak olarak oluşturulur.",
+    "empty": "Faturalanacak irsaliye yok",
+    "emptyDesc": "Seçili dönemde kaydedilmiş, faturalanmamış satış irsaliyesi bulunamadı.",
+    "selectParty": "{{name}} irsaliyelerinin tümünü seç",
+    "pendingReturns": "{{count}} iade irsaliyesi için iade faturası bekliyor",
+    "invoicesForParty": "{{count}} fatura",
+    "lines": "Satırlar",
+    "lineCount": "{{count}} satır",
+    "source": {
+      "order": "sipariş fiyatı",
+      "item": "kart fiyatı"
+    },
+    "selected": "{{count}} irsaliye seçili",
+    "run": "Seçilenleri faturala",
+    "doneMsg": "{{count}} fatura oluşturuldu",
+    "result": {
+      "created": "{{count}} fatura oluşturuldu",
+      "failed": "{{count}} kayıt faturalanamadı",
+      "failedHint": "Başarısız kayıtlarda hiçbir fatura ya da numara oluşmadı; nedeni giderip yeniden deneyin.",
+      "skipped": "{{count}} irsaliye atlandı (kalan miktar yok ya da kaydedilmemiş)."
+    },
+    "history": "Son toplu faturalamalar",
+    "user": "Kullanıcı",
+    "created": "Oluşan",
+    "failed": "Başarısız",
+    "posted": "kaydedildi",
+    "draft": "taslak"
   }
 }

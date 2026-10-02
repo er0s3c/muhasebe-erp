@@ -201,7 +201,32 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
         col('warehouse', 'Depo', 'text', 18), col('plate', 'Plaka', 'text', 12), col('line', 'Satır', 'int'), col('item', 'Stok kodu', 'text', 14), col('description', 'Açıklama', 'text', 32),
         col('qty', 'Miktar', 'qty'), col('unit', 'Birim', 'text', 8), col('unitCost', 'Birim maliyet', 'money'), col('currency', 'Para birimi', 'text', 8), col('value', `Stok değeri (${b})`, 'money'),
       ],
-      notes.map((r) => ({ date: s(r.date), no: s(r.note_no), external: s(r.external_no), type: r.type === 'sales' ? 'Satış (sevk)' : 'Alış (mal kabul)', status: STATUS_LABEL[String(r.status)] ?? s(r.status), party: s(r.party), warehouse: s(r.warehouse), plate: s(r.vehicle_plate), line: Number(r.line_no), item: s(r.item_code), description: s(r.description), qty: s(r.quantity), unit: unitLabel(s(r.unit)), unitCost: s(r.unit_cost), currency: s(r.currency_code), value: s(r.stock_value) })),
+      notes.map((r) => ({ date: s(r.date), no: s(r.note_no), external: s(r.external_no), type: ({ sales: 'Satış (sevk)', purchase: 'Alış (mal kabul)', sales_return: 'Satış iadesi', purchase_return: 'Alış iadesi' } as Record<string, string>)[String(r.type)] ?? s(r.type), status: STATUS_LABEL[String(r.status)] ?? s(r.status), party: s(r.party), warehouse: s(r.warehouse), plate: s(r.vehicle_plate), line: Number(r.line_no), item: s(r.item_code), description: s(r.description), qty: s(r.quantity), unit: unitLabel(s(r.unit)), unitCost: s(r.unit_cost), currency: s(r.currency_code), value: s(r.stock_value) })),
+    ),
+  );
+
+  // Satış teklif ve siparişleri (başlık + satır tek sayfada)
+  const salesDocs = await query(
+    'Satış teklif ve siparişleri',
+    sql`select o.doc_date::text as date, o.doc_no, o.kind, o.status, p.name as party, o.currency_code, o.valid_until::text as valid_until,
+               l.line_no, i.code as item_code, l.description, l.quantity, l.unit, l.unit_price, l.discount_pct, l.vat_code, l.net, l.vat, l.gross
+        from sales_orders o
+        join parties p on p.id = o.party_id
+        join sales_order_lines l on l.order_id = o.id
+        left join items i on i.id = l.item_id
+        where true ${between('o.doc_date', q)}
+        order by o.doc_date, o.doc_no nulls last, o.created_at, l.line_no`,
+  );
+  tables.push(
+    table(
+      'Satış teklif ve siparişleri',
+      'Satış teklif ve siparişleri',
+      [
+        col('date', 'Tarih', 'date'), col('no', 'No', 'text', 16), col('kind', 'Tür', 'text', 10), col('status', 'Durum', 'text', 14), col('party', 'Cari', 'text', 32), col('currency', 'Para birimi', 'text', 8),
+        col('valid', 'Geçerlilik', 'date'), col('line', 'Satır', 'int'), col('item', 'Stok kodu', 'text', 14), col('description', 'Açıklama', 'text', 32), col('qty', 'Miktar', 'qty'), col('unit', 'Birim', 'text', 8),
+        col('price', 'Birim fiyat', 'money'), col('discount', 'İskonto %', 'money'), col('vatCode', 'KDV kodu', 'text', 10), col('net', 'Net', 'money'), col('vat', 'KDV', 'money'), col('gross', 'Brüt', 'money'),
+      ],
+      salesDocs.map((r) => ({ date: s(r.date), no: s(r.doc_no), kind: r.kind === 'quote' ? 'Teklif' : 'Sipariş', status: s(r.status), party: s(r.party), currency: s(r.currency_code), valid: s(r.valid_until), line: Number(r.line_no), item: s(r.item_code), description: s(r.description), qty: s(r.quantity), unit: unitLabel(s(r.unit)), price: s(r.unit_price), discount: s(r.discount_pct), vatCode: s(r.vat_code), net: s(r.net), vat: s(r.vat), gross: s(r.gross) })),
     ),
   );
 

@@ -19,7 +19,7 @@ import { CODE_RE, RowState, cellOf, type ImportCtx, type ImportHandler, type Pla
 const KIND_WORDS: Record<string, ItemKind> = { mal: 'goods', stok: 'goods', urun: 'goods', goods: 'goods', hizmet: 'service', service: 'service' };
 
 /** Birim: kod, Türkçe etiket ve yaygın yazımlar. */
-const UNIT_WORDS: Record<string, ItemUnit> = (() => {
+export const UNIT_WORDS: Record<string, ItemUnit> = (() => {
   const map: Record<string, ItemUnit> = {};
   for (const u of ITEM_UNITS) {
     map[foldKey(u)] = u;

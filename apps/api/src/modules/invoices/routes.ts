@@ -14,6 +14,7 @@ import type { Tx } from '../../db/client';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { forbidden } from '../../http/errors';
 import { lockItems } from '../inventory/balances';
+import { lockOrderLines } from '../sales/usage';
 import { lockDeliveryLines } from './delivery-link';
 import { itemProfitability, salesReport } from './analytics';
 import { evaluateInvoiceMatch } from '../procurement/matching';
@@ -41,8 +42,9 @@ const invoiceCtx = ({ company, user }: TenantCtx): InvoiceCtx => ({
  * satır eklerken yabancı anahtar denetiminin aldığı KEY SHARE kilidi sonradan FOR UPDATE'e yükselir ve aynı kartı/
  * irsaliye satırını kullanan eşzamanlı iki istek kilitlenir). Sıra, kayıt işlemindekiyle aynıdır: irsaliye satırları, kartlar.
  */
-async function lockForPosting(tx: Tx, lines: readonly { itemId?: string | null; deliveryLineId?: string | null }[]) {
+async function lockForPosting(tx: Tx, lines: readonly { itemId?: string | null; deliveryLineId?: string | null; salesOrderLineId?: string | null }[]) {
   await lockDeliveryLines(tx, lines.flatMap((l) => (l.deliveryLineId ? [l.deliveryLineId] : [])));
+  await lockOrderLines(tx, lines.flatMap((l) => (l.salesOrderLineId ? [l.salesOrderLineId] : [])));
   await lockItems(tx, lines.flatMap((l) => (l.itemId ? [l.itemId] : [])));
 }
 

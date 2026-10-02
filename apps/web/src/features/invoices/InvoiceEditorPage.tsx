@@ -3,7 +3,7 @@ import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { INVOICE_TYPES, INVOICE_TYPE_META, dec, todayIso } from '@erp/shared';
+import { DELIVERY_NOTE_TYPE_META, INVOICE_TYPES, INVOICE_TYPE_META, dec, todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -45,7 +45,7 @@ export function InvoiceEditorPage() {
     if (returnOf && !original.data) return original.error ? <Callout tone="danger">{errorMessage(original.error)}</Callout> : <PageLoading />;
     if (deliveryNoteId && !fromDelivery.data) return fromDelivery.error ? <Callout tone="danger">{errorMessage(fromDelivery.error)}</Callout> : <PageLoading />;
     // İrsaliyeden fatura: tür irsaliyenin yönünden gelir
-    const type: InvoiceType = fromDelivery.data ? (fromDelivery.data.note.type === 'sales' ? 'sales' : 'purchase') : newType;
+    const type: InvoiceType = fromDelivery.data ? DELIVERY_NOTE_TYPE_META[fromDelivery.data.note.type].invoiceType : newType;
     return <InvoiceForm key={`new-${type}-${returnOf ?? ''}-${deliveryNoteId ?? ''}`} type={type} original={original.data} fromDelivery={fromDelivery.data} />;
   }
   if (detail.error) return <Callout tone="danger">{errorMessage(detail.error)}</Callout>;

@@ -48,6 +48,8 @@ interface LineState {
   /** Alış faturasında bağlı sipariş satırı (üçlü eşleştirme) ve görünen sipariş kodu */
   orderLineId: string;
   orderCode: string;
+  /** Satış faturasında bağlı satış siparişi satırı (X2; düzenlemede korunur). */
+  salesOrderLineId: string;
 }
 
 let lineKey = 1;
@@ -72,6 +74,7 @@ const emptyLine = (vatCode = ''): LineState => ({
   wbsId: '',
   orderLineId: '',
   orderCode: '',
+  salesOrderLineId: '',
 });
 
 interface DeliverySource {
@@ -163,6 +166,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         wbsId: l.wbsId ?? '',
         orderLineId: l.poLineId ?? '',
         orderCode: l.orderCode ?? '',
+        salesOrderLineId: l.salesOrderLineId ?? '',
       }));
     }
     if (original) {
@@ -190,6 +194,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           wbsId: '',
           orderLineId: '',
           orderCode: '',
+          salesOrderLineId: '',
         }));
     }
     return [emptyLine()];
@@ -370,6 +375,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       sourceLineId: l.sourceLineId || null,
       deliveryLineId: l.deliveryLineId || null,
       orderLineId: l.orderLineId || null,
+      ...(type === 'sales' && l.salesOrderLineId ? { salesOrderLineId: l.salesOrderLineId } : {}),
       // Proje yalnızca stoksuz (serbest/hizmet) satırda ve alış tarafında gönderilir
       ...(projectAllowed && (!l.itemId || itemById.get(l.itemId)?.kind === 'service') ? projectFields(l.projectId, l.wbsId) : {}),
     })),
@@ -610,7 +616,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                   {t('procurement.match.pickerButton')}
                 </Button>
               )}
-              {(type === 'sales' || type === 'purchase') && canDelivery && !returnOfId && (
+              {type !== 'expense' && canDelivery && (!returnOfId || meta.isReturn) && (
                 <Button size="sm" disabled={!partyId} onClick={() => setPickerOpen(true)}>
                   <Truck className="size-3.5" aria-hidden />
                   {t('deliveries.picker.button')}

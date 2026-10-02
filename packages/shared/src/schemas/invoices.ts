@@ -204,6 +204,8 @@ export const invoiceLineSchema = z.object({
   wbsId: uuid.nullable().optional(),
   /** Alış faturasında, faturalanan sipariş satırı (üçlü eşleştirme: sipariş – mal kabul – fatura). */
   orderLineId: uuid.nullable().optional(),
+  /** Satış faturasında, faturalanan satış siparişi satırı (X2). */
+  salesOrderLineId: uuid.nullable().optional(),
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
 
@@ -255,8 +257,11 @@ function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx)
       if (l.sourceLineId && !doc.returnOfId) {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'sourceLineId'], message: 'Satır bağı için orijinal fatura seçilmeli' });
       }
-      if (l.deliveryLineId && doc.type !== 'sales' && doc.type !== 'purchase') {
-        ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'İrsaliye bağı yalnızca satış ve alış faturasında kullanılır' });
+      if (l.deliveryLineId && doc.type === 'expense') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'İrsaliye bağı gider faturasında kullanılamaz' });
+      }
+      if (l.salesOrderLineId && doc.type !== 'sales') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'salesOrderLineId'], message: 'Sipariş bağı yalnızca satış faturasında kullanılır' });
       }
       if (l.orderLineId && doc.type !== 'purchase') {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'orderLineId'], message: 'Sipariş bağı yalnızca alış faturasında kullanılır' });

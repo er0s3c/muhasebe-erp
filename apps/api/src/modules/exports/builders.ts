@@ -1,4 +1,4 @@
-import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
+import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type ListDeliveryNotesQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -8,6 +8,8 @@ import { itemStatement } from '../inventory/items';
 import { stockStatus } from '../inventory/reports';
 import { itemProfitability, salesReport } from '../invoices/analytics';
 import { vatSummary } from '../invoices/reports';
+import { listDeliveryNotes } from '../deliveries/service';
+import { listSalesDocs } from '../sales/orders';
 import { reconciliation } from '../bank-statements/service';
 import { partyAging, partyOpenItems, partyStatement } from '../parties/service';
 import { cashForecast } from '../cash/forecast';
@@ -1762,6 +1764,91 @@ export async function bankGuaranteesTable(ctx: BuildCtx, q: BankGuaranteeListQue
         rate: g.commissionRate,
         commission: g.commissionAmount,
         status: g.expiryState === 'lapsed' ? 'Süresi geçmiş (kapatılmadı)' : g.expiryState === 'expiring' ? 'Dolmak üzere' : (BANK_GUARANTEE_STATUS_LABEL[g.status] ?? g.status),
+      })),
+    },
+  ];
+}
+
+const SALES_STATUS_LABEL: Record<string, string> = {
+  draft: 'Taslak', sent: 'Gönderildi', accepted: 'Kabul edildi', rejected: 'Reddedildi', converted: 'Siparişe dönüştü',
+  confirmed: 'Onaylandı', closed: 'Kapatıldı', cancelled: 'İptal',
+};
+const FULFIL_LABEL: Record<string, string> = { none: 'Yok', partial: 'Kısmen', full: 'Tamam' };
+const DELIVERY_TYPE_LABEL: Record<string, string> = {
+  sales: 'Satış irsaliyesi', purchase: 'Alış irsaliyesi', sales_return: 'Satış iade irsaliyesi', purchase_return: 'Alış iade irsaliyesi',
+};
+const DELIVERY_STATUS_LABEL: Record<string, string> = { draft: 'Taslak', posted: 'Kaydedildi', cancelled: 'İptal' };
+const INVOICING_LABEL: Record<string, string> = { open: 'Faturalanmadı', partial: 'Kısmen', invoiced: 'Faturalandı' };
+
+const EXPORT_PAGE = 500;
+const EXPORT_MAX = 20000;
+
+/** Teklif ve sipariş listesi (türetilmiş teslim/fatura durumuyla). */
+export async function salesDocsTable(ctx: BuildCtx, q: Omit<ListSalesDocsQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const docs: Awaited<ReturnType<typeof listSalesDocs>>['docs'] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listSalesDocs(ctx.tx, { ...q, limit: EXPORT_PAGE, offset });
+    docs.push(...page.docs);
+    if (page.docs.length < EXPORT_PAGE) break;
+  }
+  const title = q.kind === 'quote' ? 'Satış teklifleri' : q.kind === 'order' ? 'Satış siparişleri' : 'Satış teklif ve siparişleri';
+  return [
+    {
+      key: 'satis-teklif-siparis',
+      title,
+      sheet: 'Liste',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [
+        col('docNo', 'No', 'text', 16),
+        col('kind', 'Tür', 'text', 10),
+        col('date', 'Tarih', 'date'),
+        col('party', 'Cari', 'text', 30),
+        col('currency', 'Para birimi', 'text', 10),
+        col('gross', 'Toplam (KDV dahil)', 'money'),
+        col('status', 'Durum', 'text', 16),
+        col('delivery', 'Teslim', 'text', 10),
+        col('invoicing', 'Fatura', 'text', 10),
+        col('valid', 'Geçerlilik', 'date'),
+      ],
+      rows: docs.map((d) => ({
+        docNo: d.docNo ?? '', kind: d.kind === 'quote' ? 'Teklif' : 'Sipariş', date: d.docDate, party: d.partyName, currency: d.currencyCode,
+        gross: d.grossTotal, status: SALES_STATUS_LABEL[d.status] ?? d.status,
+        delivery: d.fulfilment?.delivery ? FULFIL_LABEL[d.fulfilment.delivery] : '', invoicing: d.fulfilment ? FULFIL_LABEL[d.fulfilment.invoicing] : '',
+        valid: d.validUntil,
+      })),
+    },
+  ];
+}
+
+/** İrsaliye listesi (satış, alış ve iade irsaliyeleri; faturalama durumuyla). */
+export async function deliveryNotesTable(ctx: BuildCtx, q: Omit<ListDeliveryNotesQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const notes: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listDeliveryNotes(ctx.tx, { ...q, limit: EXPORT_PAGE, offset });
+    notes.push(...page.notes);
+    if (page.notes.length < EXPORT_PAGE) break;
+  }
+  return [
+    {
+      key: 'irsaliyeler',
+      title: 'İrsaliyeler',
+      sheet: 'İrsaliyeler',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [
+        col('noteNo', 'No', 'text', 16),
+        col('type', 'Tür', 'text', 20),
+        col('date', 'Tarih', 'date'),
+        col('party', 'Cari', 'text', 30),
+        col('warehouse', 'Depo', 'text', 16),
+        col('lines', 'Satır', 'int'),
+        col('qty', 'Miktar', 'qty'),
+        col('invoicing', 'Faturalama', 'text', 14),
+        col('status', 'Durum', 'text', 12),
+      ],
+      rows: notes.map((n) => ({
+        noteNo: (n.noteNo as string | null) ?? '', type: DELIVERY_TYPE_LABEL[String(n.type)] ?? String(n.type), date: String(n.noteDate), party: String(n.partyName),
+        warehouse: String(n.warehouseName), lines: Number(n.lineCount), qty: String(n.totalQty),
+        invoicing: n.invoicing ? (INVOICING_LABEL[String(n.invoicing)] ?? '') : '', status: DELIVERY_STATUS_LABEL[String(n.status)] ?? String(n.status),
       })),
     },
   ];

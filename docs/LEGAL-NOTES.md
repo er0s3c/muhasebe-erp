@@ -274,3 +274,9 @@ Teknik çalışma için [ARCHITECTURE.md](ARCHITECTURE.md) "Şantiye projeleri".
 - **Kişisel veri (§5):** keşideci/lehtar mevcut cari kartıdır; çek/senet ve mektup banka adı, şube ve numara gibi iş verisi saklar, yeni kişisel veri alanı eklemez; bu yüzden veri koruma envanterine yeni satır eklenmedi (cari kartı satırları geçerlidir).
 - **Kapsam dışı:** dijital çek/e-çek entegrasyonu, bankayla otomatik mutabakat, protesto süreçleri, mektubun bankadan elektronik doğrulanması.
 
+
+## 17. İade irsaliyesi, teklif/sipariş, toplu faturalama, fatura içe aktarma (Faz X2)
+
+- **Doğrulanmamıştır:** (1) iade irsaliyesi ve iade faturası ilişkisinin mevzuattaki biçimi (iade belgesi, orijinal fatura/irsaliye atfı, KDV düzeltmesi zamanlaması); sistem iade faturasını mevcut iade türüyle yazar, orijinal faturaya otomatik atıf yapmaz; (2) teklif ve sipariş çıktısı iç kullanım belgesidir; teklifin bağlayıcılığı, geçerlilik süresi ve sipariş koşulları hukuki metin değildir, imza blokları yalnızca yerleşimdir; (3) toplu faturalamada tek faturada birden çok irsaliyenin birleştirilmesi (irsaliye atfı, fatura tarihi/irsaliye tarihi sınırı) mevzuata uygunluğu doğrulanmamıştır; fatura tarihi kullanıcı girişidir; (4) Excel'den aktarılan faturalar sağlayıcı e-fatura/e-arşiv biçimi değildir, taslak olarak yazılır ve KDV oranları yalnızca Ayarlar'daki doğrulanmamış kodlardan çözülür.
+- **Kodda yasal değer yoktur:** KDV oranı, vade, fiyat ve tutarlar kullanıcı verisi ya da ayar tablosundandır.
+- **Kişisel veri (§5):** cari kartları mevcut veridir; yeni kişisel veri alanı eklenmedi, envantere yeni satır yok.

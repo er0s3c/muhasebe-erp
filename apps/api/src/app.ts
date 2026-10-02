@@ -38,6 +38,7 @@ import { payrollRoutes } from './modules/payroll/routes';
 import { socialSecurityRoutes } from './modules/socialsecurity/routes';
 import { foreignWorkerRoutes } from './modules/foreignworkers/routes';
 import { chequeRoutes } from './modules/cheques/routes';
+import { salesRoutes } from './modules/sales/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
@@ -179,6 +180,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(inventoryRoutes);
   await app.register(invoiceRoutes);
   await app.register(deliveryRoutes);
+  await app.register(salesRoutes);
   await app.register(treasuryRoutes);
   await app.register(exportRoutes);
   await app.register(importRoutes);

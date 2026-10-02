@@ -559,6 +559,9 @@ export interface InvoiceLineRow {
   deliveryNoteId: string | null;
   deliveryNoteNo: string | null;
   deliveryLineNo: number | null;
+  salesOrderLineId: string | null;
+  salesOrderId: string | null;
+  salesOrderNo: string | null;
   poLineId: string | null;
   orderCode: string | null;
   projectId: string | null;
@@ -621,7 +624,7 @@ export interface InvoiceSummary {
 
 // --- İrsaliye -------------------------------------------------------------
 
-export type DeliveryNoteType = 'sales' | 'purchase';
+export type DeliveryNoteType = 'sales' | 'purchase' | 'sales_return' | 'purchase_return';
 export type DeliveryNoteStatus = 'draft' | 'posted' | 'cancelled';
 export type DeliveryInvoicing = 'open' | 'partial' | 'invoiced';
 
@@ -661,6 +664,13 @@ export interface DeliveryNoteLineRow {
   adjustValue: string | null;
   invoicedQty: string;
   remainingQty: string;
+  /** İade irsaliyesinde orijinal satır; orijinal irsaliyede iade edilen/edilebilir miktar (kaydedilmişse). */
+  sourceLineId: string | null;
+  returnedQty: string | null;
+  returnableQty: string | null;
+  salesOrderLineId: string | null;
+  salesOrderId: string | null;
+  salesOrderNo: string | null;
 }
 
 export interface DeliveryNoteDetail {
@@ -670,6 +680,8 @@ export interface DeliveryNoteDetail {
     status: DeliveryNoteStatus;
     noteNo: string | null;
     externalNo: string | null;
+    returnOfId: string | null;
+    returnOfNo: string | null;
     noteDate: string;
     partyId: string;
     partyCode: string;
@@ -690,6 +702,149 @@ export interface DeliveryNoteDetail {
   };
   lines: DeliveryNoteLineRow[];
   invoices: { id: string; invoiceNo: string | null; status: InvoiceStatus; type: InvoiceType }[];
+  /** Orijinal irsaliyede: bu irsaliyeye kesilmiş iade irsaliyeleri. */
+  returns: { id: string; noteNo: string | null; status: DeliveryNoteStatus }[];
+}
+
+/** İade edilebilecek orijinal irsaliye satırı. */
+export interface ReturnableLine {
+  lineId: string;
+  lineNo: number;
+  noteId: string;
+  noteNo: string;
+  noteDate: string;
+  itemId: string;
+  itemCode: string;
+  description: string;
+  unit: string | null;
+  quantity: string;
+  returnedQty: string;
+  returnableQty: string;
+  invoicedQty: string;
+}
+
+// --- Satış teklifi ve siparişi (X2) ---------------------------------------
+
+export type SalesDocKind = 'quote' | 'order';
+export type SalesDocStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted' | 'confirmed' | 'closed' | 'cancelled';
+export type FulfilmentState = 'none' | 'partial' | 'full';
+export interface Fulfilment {
+  delivery: FulfilmentState | null;
+  invoicing: FulfilmentState;
+}
+
+export interface SalesDocListRow {
+  id: string;
+  kind: SalesDocKind;
+  status: SalesDocStatus;
+  docNo: string | null;
+  docDate: string;
+  validUntil: string | null;
+  deliveryDate: string | null;
+  partyId: string;
+  partyCode: string;
+  partyName: string;
+  currencyCode: string;
+  grossTotal: string;
+  quoteId: string | null;
+  expired: boolean;
+  fulfilment: Fulfilment | null;
+}
+
+export interface SalesDocLine {
+  id: string;
+  lineNo: number;
+  itemId: string | null;
+  itemCode: string | null;
+  isGoods: boolean;
+  description: string;
+  quantity: string;
+  unit: string | null;
+  unitPrice: string;
+  discountPct: string;
+  vatCode: string | null;
+  vatRate: string;
+  net: string;
+  vat: string;
+  gross: string;
+  /** Yalnızca siparişte. */
+  delivered?: string;
+  invoiced?: string;
+  remainingDeliverable?: string;
+  remainingInvoiceable?: string;
+  deliveredNotInvoiced?: string;
+}
+
+export interface SalesDocDetail {
+  doc: {
+    id: string;
+    kind: SalesDocKind;
+    status: SalesDocStatus;
+    docNo: string | null;
+    partyId: string;
+    partyCode: string;
+    partyName: string;
+    docDate: string;
+    validUntil: string | null;
+    deliveryDate: string | null;
+    currencyCode: string;
+    vatIncluded: boolean;
+    warehouseId: string | null;
+    warehouseName: string | null;
+    notes: string | null;
+    quoteId: string | null;
+    quoteNo: string | null;
+    orderId: string | null;
+    orderNo: string | null;
+    netTotal: string;
+    vatTotal: string;
+    grossTotal: string;
+    expired: boolean;
+    fulfilment: Fulfilment | null;
+  };
+  lines: SalesDocLine[];
+  events: { fromStatus: string | null; toStatus: string; reason: string | null; createdAt: string; userName: string | null }[];
+  notes: { id: string; noteNo: string | null; status: DeliveryNoteStatus; noteDate: string }[];
+  invoices: { id: string; invoiceNo: string | null; status: InvoiceStatus; invoiceDate: string }[];
+}
+
+// --- Toplu faturalama (X2) -------------------------------------------------
+
+export interface BatchPreviewNote {
+  noteId: string;
+  noteNo: string | null;
+  noteDate: string;
+  currency: string;
+  blocked: boolean;
+  issues: { code: string; message: string }[];
+  net: string;
+  vat: string;
+  gross: string;
+  lines: { lineId: string; itemCode: string; description: string; unit: string | null; quantity: string; unitPrice: string | null; discountPct: string; vatCode: string | null; priceSource: 'order' | 'item' | null }[];
+}
+
+export interface BatchPreview {
+  grouping: 'party' | 'note';
+  parties: { partyId: string; partyCode: string; partyName: string; notes: BatchPreviewNote[]; invoiceCount: number; pendingReturns: number }[];
+  totals: { notes: number; invoiceable: number; invoices: number };
+}
+
+export interface BatchResult {
+  batchId: string;
+  created: { partyId: string; partyName: string; invoiceId: string; invoiceNo: string | null; status: string; noteIds: string[]; gross: string }[];
+  failed: { partyId: string; partyName: string; noteIds: string[]; code: string; message: string }[];
+  skipped: { noteId: string; reason: string }[];
+}
+
+export interface BatchHistoryRow {
+  id: string;
+  invoiceDate: string;
+  grouping: 'party' | 'note';
+  post: boolean;
+  invoicesCreated: number;
+  invoicesFailed: number;
+  createdAt: string;
+  userName: string | null;
 }
 
 /** Faturaya eklenebilecek, kalan miktarı olan irsaliye satırı. */

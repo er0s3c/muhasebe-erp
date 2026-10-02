@@ -72,8 +72,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Satış (sevk) ve alış (mal kabul) irsaliyesi; stok hemen hareket eder, yevmiye faturada oluşur | ✅ ⚠️ yasal irsaliye biçimi doğrulanmadı |
 | Faturanın irsaliyeye bağlanması: kısmi ve çoklu faturalama, tekrar stok hareketi yok, alışta fiyat farkı düzeltmesi | ✅ |
 | Faturalanmamış irsaliye listesi, özeti ve stok mutabakatında açıklanan fark | ✅ |
-| İade irsaliyesi, sipariş/teklif, toplu faturalama sihirbazı | ⏳ |
-| Excel ile fatura/irsaliye içe aktarma | ⏳ |
+| İade irsaliyesi (satış/alış, orijinale bağlı miktar sınırı, iade faturasına bağlanır), satış teklifi ve siparişi (durum geçişleri veritabanında, teslim/fatura türetilir, irsaliye ve faturaya dönüşüm, yazdırma), toplu faturalama (önizleme, cari/irsaliye başına, kısmi hata raporu, çift faturalama koruması) | ✅ (X2) ⚠️ **sipariş/teklif çıktısı ve iade/toplu fatura mevzuat biçimi doğrulanmadı; cari özel fiyat X3** |
+| Excel ile fatura içe aktarma (taslak, cari/stok eşleme, mükerrer denetimi, şablon) | ✅ (X2) irsaliye içe aktarma ⏳ |
 | Gider kartları ve gider raporları | ⏳ |
 | İthalat maliyet dağıtımı (navlun, gümrük, liman) | ⏳ Faz B |
 | e-Fatura entegrasyonu (resmî REST API v1.2.3; iç faturadan ayrı gönderim durumu) | ⏳ Faz C ⚠️ yetkilendirme/test erişimi gerekir |

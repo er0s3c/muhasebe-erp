@@ -3,9 +3,9 @@ import { dec, sum, toDbAmount, type MoneyValue } from '@erp/shared';
 import type { Tx } from '../../db/client';
 
 export interface PendingDeliveries {
-  /** Faturalanmamış satış irsaliyelerinin stok defterinde yevmiyeye girmemiş maliyeti (eksi: defter stoktan az). */
+  /** Faturalanmamış satış irsaliyelerinin (eksi) ve satış iade irsaliyelerinin (artı) stok defterinde yevmiyeye girmemiş değeri. */
   sales: string;
-  /** Faturalanmamış alış irsaliyelerinin stok defterindeki, henüz yevmiyeye girmemiş değeri (artı). */
+  /** Faturalanmamış alış irsaliyelerinin (artı) ve alış iade irsaliyelerinin (eksi) stok defterindeki, henüz yevmiyeye girmemiş değeri. */
   purchases: string;
   /** İkisinin toplamı: stok defteri ile hesaplar arasındaki beklenen fark. */
   total: string;
@@ -36,8 +36,11 @@ export async function pendingDeliveries(tx: Tx, asOf: string): Promise<{ raw: Pe
       and (i.status = 'posted' or cj.entry_date > ${asOf}::date)
     group by n.type`);
   const by = (rows: { type: string; value: string }[], t: string) => dec(rows.find((r) => r.type === t)?.value ?? 0);
-  const sales = by(released.rows, 'sales').minus(by(noted.rows, 'sales'));
-  const purchases = by(noted.rows, 'purchase').minus(by(released.rows, 'purchase'));
+  // Satış tarafı: faturalanmamış sevk stoğu defterde azaltmış (eksi), faturalanmamış satış iadesi artırmıştır (artı).
+  // Alış tarafı: faturalanmamış mal kabul stoğu artırmış (artı), faturalanmamış alış iadesi azaltmıştır (eksi).
+  const pend = (t: string) => by(noted.rows, t).minus(by(released.rows, t));
+  const sales = pend('sales_return').minus(pend('sales'));
+  const purchases = pend('purchase').minus(pend('purchase_return'));
   const total = sum([sales, purchases]);
   return { raw: { sales: toDbAmount(sales), purchases: toDbAmount(purchases), total: toDbAmount(total) }, total };
 }

@@ -4,7 +4,7 @@ import type { DeliveryInvoicing, DeliveryNoteStatus } from '../../lib/types';
 import { STOCK_INVALIDATE } from '../inventory/common';
 
 /** İrsaliye değişince etkilenen sorgular: irsaliye listeleri/özet ve stok (kart, rapor, hareket, mutabakat). */
-export const DELIVERY_INVALIDATE = [['delivery-notes'], ['delivery-note'], ['delivery-open-lines'], ['delivery-summary'], ...STOCK_INVALIDATE, ['dashboard']];
+export const DELIVERY_INVALIDATE = [['delivery-notes'], ['delivery-note'], ['delivery-open-lines'], ['delivery-summary'], ['sales-doc'], ['sales-docs'], ...STOCK_INVALIDATE, ['dashboard']];
 
 const STATUS_TONE = { draft: 'warning', posted: 'success', cancelled: 'danger' } as const;
 const INVOICING_TONE = { open: 'warning', partial: 'brand', invoiced: 'success' } as const;

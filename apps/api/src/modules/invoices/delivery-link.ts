@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { dec, deliveryTypeForInvoice, roundMoney, type InvoiceType, type MoneyValue } from '@erp/shared';
+import { dec, deliveryTypeForInvoice, roundMoney, type DeliveryNoteType, type InvoiceType, type MoneyValue } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import { uuidList } from '../inventory/balances';
@@ -9,7 +9,7 @@ export interface DeliveryLineInfo {
   id: string;
   noteId: string;
   noteNo: string | null;
-  noteType: 'sales' | 'purchase';
+  noteType: DeliveryNoteType;
   noteStatus: string;
   partyId: string;
   warehouseId: string;
@@ -50,7 +50,7 @@ interface InfoRow extends Record<string, unknown> {
   id: string;
   note_id: string;
   note_no: string | null;
-  type: 'sales' | 'purchase';
+  type: DeliveryNoteType;
   status: string;
   party_id: string;
   warehouse_id: string;
@@ -139,7 +139,7 @@ export async function checkDeliveryLinks(
   const linked = lines.filter((l) => l.deliveryLineId);
   if (linked.length === 0) return;
   if (!deliveryTypeForInvoice(type)) {
-    throw unprocessable('İrsaliye bağı yalnızca satış ve alış faturasında kullanılır', 'DELIVERY_LINK_TYPE');
+    throw unprocessable('İrsaliye bağı gider faturasında kullanılamaz', 'DELIVERY_LINK_TYPE');
   }
   const ids = [...new Set(linked.map((l) => l.deliveryLineId!))];
   const info = await loadInfo(tx, ids, false);
@@ -181,7 +181,7 @@ export class DeliveryAllocator {
   static async lock(tx: Tx, type: InvoiceType, partyId: string, lines: readonly LinkLine[], exceptInvoiceId: string) {
     const linked = lines.filter((l) => l.deliveryLineId);
     if (!deliveryTypeForInvoice(type) && linked.length > 0) {
-      throw unprocessable('İrsaliye bağı yalnızca satış ve alış faturasında kullanılır', 'DELIVERY_LINK_TYPE');
+      throw unprocessable('İrsaliye bağı gider faturasında kullanılamaz', 'DELIVERY_LINK_TYPE');
     }
     const ids = [...new Set(linked.map((l) => l.deliveryLineId!))];
     if (ids.length === 0) return new DeliveryAllocator(new Map(), new Map());

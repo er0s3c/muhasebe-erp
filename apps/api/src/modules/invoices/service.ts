@@ -19,7 +19,9 @@ import { trContains } from '../../db/search';
 import { accounts, invoiceLines, invoices, items, parties, taxRates, warehouses } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { validateDimensions } from '../projects/dimension';
+import { uuidList } from '../inventory/balances';
 import { requireActiveWarehouse } from '../inventory/warehouses';
+import { checkOrderLinks } from '../sales/usage';
 import { checkDeliveryLinks } from './delivery-link';
 
 export interface InvoiceCtx {
@@ -49,6 +51,8 @@ export interface PreparedLine {
   deliveryLineId: string | null;
   /** Alış faturasında faturalanan sipariş satırı (üçlü eşleştirme). */
   orderLineId: string | null;
+  /** Satış faturasında faturalanan satış siparişi satırı. */
+  salesOrderLineId: string | null;
   /** Proje boyutu (yalnızca stoksuz alış/gider/alış iadesi satırı). */
   projectId: string | null;
   wbsId: string | null;
@@ -71,6 +75,7 @@ export type LineSource = Pick<
   | 'sourceLineId'
   | 'deliveryLineId'
   | 'orderLineId'
+  | 'salesOrderLineId'
   | 'projectId'
   | 'wbsId'
 >;
@@ -89,7 +94,7 @@ export async function loadParty(tx: Tx, partyId: string, type: InvoiceType) {
 }
 
 /** KDV kodlarını fatura tarihinde geçerli oranlara çözer. */
-async function resolveVat(tx: Tx, codes: readonly string[], date: string) {
+export async function resolveVat(tx: Tx, codes: readonly string[], date: string) {
   const unique = [...new Set(codes)];
   const out = new Map<string, string>();
   if (unique.length === 0) return out;
@@ -138,8 +143,8 @@ export async function prepareLines(
       throw unprocessable(`${label}: gider faturasında stoklu mal kartı kullanılamaz; alış faturası girin`, 'EXPENSE_STOCK_ITEM');
     }
     if (l.deliveryLineId) {
-      if (type !== 'sales' && type !== 'purchase') {
-        throw unprocessable(`${label}: irsaliye bağı yalnızca satış ve alış faturasında kullanılır`, 'DELIVERY_LINK_TYPE');
+      if (type === 'expense') {
+        throw unprocessable(`${label}: irsaliye bağı gider faturasında kullanılamaz`, 'DELIVERY_LINK_TYPE');
       }
       if (!isStock) throw unprocessable(`${label}: irsaliyeye bağlı satırda stoklu mal kartı gerekli`, 'DELIVERY_LINK_ITEM');
       if (l.sourceLineId) throw unprocessable(`${label}: satır hem iadeye hem irsaliyeye bağlanamaz`, 'DELIVERY_LINK_TYPE');
@@ -183,6 +188,7 @@ export async function prepareLines(
       sourceLineId: l.sourceLineId ?? null,
       deliveryLineId: l.deliveryLineId ?? null,
       orderLineId: l.orderLineId ?? null,
+      salesOrderLineId: l.salesOrderLineId ?? null,
       projectId: l.projectId ?? null,
       wbsId: l.wbsId ?? null,
     };
@@ -277,6 +283,27 @@ async function checkReturnQuantities(tx: Tx, originalId: string, lines: readonly
   }
 }
 
+/**
+ * Satış faturasında irsaliye satırı bir sipariş satırını karşılıyorsa ve fatura aynı para birimindeyse, fatura satırı o sipariş
+ * satırına otomatik bağlanır: sipariş "faturalandı" durumu, irsaliyeden elle fatura kesilse bile doğru türer.
+ */
+async function inheritOrderLinks(tx: Tx, type: InvoiceType, currency: string, lines: PreparedLine[]) {
+  if (type !== 'sales') return;
+  const need = lines.filter((l) => l.deliveryLineId && !l.salesOrderLineId);
+  if (need.length === 0) return;
+  const rows = await tx.execute<{ id: string; sales_order_line_id: string | null; currency_code: string | null }>(sql`
+    select dl.id, dl.sales_order_line_id, o.currency_code
+    from delivery_note_lines dl
+    left join sales_order_lines ol on ol.id = dl.sales_order_line_id
+    left join sales_orders o on o.id = ol.order_id
+    where dl.id in (${uuidList(need.map((l) => l.deliveryLineId!))})`);
+  const byId = new Map(rows.rows.map((r) => [r.id, r]));
+  for (const l of need) {
+    const r = byId.get(l.deliveryLineId!);
+    if (r?.sales_order_line_id && r.currency_code === currency) l.salesOrderLineId = r.sales_order_line_id;
+  }
+}
+
 async function defaultWarehouseId(tx: Tx): Promise<string> {
   const [w] = await tx.select({ id: warehouses.id }).from(warehouses).where(eq(warehouses.isDefault, true));
   if (!w) throw unprocessable('Varsayılan depo tanımlı değil', 'WAREHOUSE_REQUIRED');
@@ -297,6 +324,14 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
   const original = await checkReturnLink(tx, type, party.id, input.returnOfId, lines);
   if (original) await checkReturnQuantities(tx, original.id, lines, id);
   await checkDeliveryLinks(tx, type, party.id, lines, id);
+  await inheritOrderLinks(tx, type, currency, lines);
+  await checkOrderLinks(
+    tx,
+    'invoice',
+    party.id,
+    lines.map((l) => ({ lineNo: l.lineNo, itemId: l.itemId, quantity: l.quantity, salesOrderLineId: l.salesOrderLineId, deliveryLineId: l.deliveryLineId })),
+    { currency },
+  );
 
   // Depo yalnızca doğrudan stok hareketi yapan (irsaliyeye bağlı olmayan) mal satırı varsa gerekir
   const stockLines = lines.some((l) => l.isStock && !l.deliveryLineId);
@@ -352,6 +387,7 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
       sourceLineId: l.sourceLineId,
       deliveryLineId: l.deliveryLineId,
       poLineId: l.orderLineId,
+      salesOrderLineId: l.salesOrderLineId,
       projectId: l.projectId,
       wbsId: l.wbsId,
     })),
@@ -444,6 +480,9 @@ interface LineRowOut extends Record<string, unknown> {
   deliveryLineId: string | null;
   poLineId: string | null;
   orderCode: string | null;
+  salesOrderLineId: string | null;
+  salesOrderId: string | null;
+  salesOrderNo: string | null;
   deliveryNoteId: string | null;
   deliveryNoteNo: string | null;
   deliveryLineNo: number | null;
@@ -488,7 +527,8 @@ export async function getInvoice(tx: Tx, id: string) {
            l.vat_code as "vatCode", l.vat_rate as "vatRate", l.net, l.vat, l.gross,
            l.account_id as "accountId", a.code as "accountCode", l.source_line_id as "sourceLineId",
            l.net_base as "netBase", l.vat_base as "vatBase", l.cost_value as "costValue",
-           l.delivery_line_id as "deliveryLineId", l.po_line_id as "poLineId", po.code as "orderCode", dn.id as "deliveryNoteId", dn.note_no as "deliveryNoteNo",
+           l.delivery_line_id as "deliveryLineId", l.po_line_id as "poLineId", po.code as "orderCode",
+           l.sales_order_line_id as "salesOrderLineId", so.id as "salesOrderId", so.doc_no as "salesOrderNo", dn.id as "deliveryNoteId", dn.note_no as "deliveryNoteNo",
            dl.line_no as "deliveryLineNo",
            l.project_id as "projectId", pr.code as "projectCode", pr.name as "projectName",
            l.wbs_id as "wbsId", pw.code as "wbsCode", pw.name as "wbsName"
@@ -501,6 +541,8 @@ export async function getInvoice(tx: Tx, id: string) {
     left join delivery_notes dn on dn.id = dl.note_id
     left join purchase_order_lines pol on pol.id = l.po_line_id
     left join purchase_orders po on po.id = pol.order_id
+    left join sales_order_lines sol on sol.id = l.sales_order_line_id
+    left join sales_orders so on so.id = sol.order_id
     where l.invoice_id = ${id}
     order by l.line_no`);
 

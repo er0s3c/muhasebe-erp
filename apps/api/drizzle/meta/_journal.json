@@ -456,6 +456,20 @@
       "when": 1790917804667,
       "tag": "0064_cheques_guarantees_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1790920302964,
+      "tag": "0065_orders_returns_batches",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1790920304352,
+      "tag": "0066_orders_returns_rules",
+      "breakpoints": true
     }
   ]
 }

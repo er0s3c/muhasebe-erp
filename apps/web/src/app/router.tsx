@@ -84,8 +84,20 @@ export const router = createBrowserRouter([
                   { path: 'invoices/:id', ...page(() => import('../features/invoices/InvoiceEditorPage'), 'InvoiceEditorPage') },
                   { path: 'delivery-notes/sales', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'SalesDeliveryNotesPage') },
                   { path: 'delivery-notes/purchases', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'PurchaseDeliveryNotesPage') },
+                  { path: 'delivery-notes/sales-returns', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'SalesReturnNotesPage') },
+                  { path: 'delivery-notes/purchase-returns', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'PurchaseReturnNotesPage') },
+                  { path: 'invoices/batch', ...page(() => import('../features/invoices/BatchInvoicingPage'), 'BatchInvoicingPage') },
                   { path: 'delivery-notes/new', ...page(() => import('../features/deliveries/DeliveryNoteEditorPage'), 'DeliveryNoteEditorPage') },
                   { path: 'delivery-notes/:id', ...page(() => import('../features/deliveries/DeliveryNoteEditorPage'), 'DeliveryNoteEditorPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="invoices.orders" />,
+                children: [
+                  { path: 'sales/quotes', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesQuotesPage') },
+                  { path: 'sales/orders', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesOrdersPage') },
+                  { path: 'sales/docs/new', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage') },
+                  { path: 'sales/docs/:id', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage') },
                 ],
               },
               {

@@ -2385,11 +2385,13 @@ export const deliveryNotes = pgTable(
     companyId: uuid()
       .notNull()
       .references(() => companies.id),
-    /** sales | purchase */
+    /** sales | purchase | sales_return | purchase_return */
     type: text().notNull(),
     status: text().notNull().default('draft'),
-    /** Kaydedilene kadar null; boşluksuz seri (SIR/AIR) kaydetme anında atanır. */
+    /** Kaydedilene kadar null; boşluksuz seri (SIR/AIR/SIRI/AIRI) kaydetme anında atanır. */
     noteNo: text(),
+    /** İade irsaliyesinde bağlı orijinal irsaliye (isteğe bağlı). */
+    returnOfId: uuid(),
     /** Tedarikçinin irsaliye numarası (alış). */
     externalNo: text(),
     noteDate: date({ mode: 'string' }).notNull(),
@@ -2419,6 +2421,11 @@ export const deliveryNotes = pgTable(
     index('delivery_notes_date_idx').on(t.companyId, t.type, t.noteDate),
     index('delivery_notes_party_idx').on(t.companyId, t.partyId),
     foreignKey({
+      name: 'delivery_notes_return_of_fk',
+      columns: [t.returnOfId, t.companyId],
+      foreignColumns: [t.id, t.companyId],
+    }),
+    foreignKey({
       name: 'delivery_notes_party_fk',
       columns: [t.partyId, t.companyId],
       foreignColumns: [parties.id, parties.companyId],
@@ -2438,7 +2445,7 @@ export const deliveryNotes = pgTable(
       columns: [t.cancelStockDocumentId, t.companyId],
       foreignColumns: [stockDocuments.id, stockDocuments.companyId],
     }),
-    check('delivery_notes_type_ck', sql`${t.type} in ('sales','purchase')`),
+    check('delivery_notes_type_ck', sql`${t.type} in ('sales','purchase','sales_return','purchase_return')`),
     check('delivery_notes_status_ck', sql`${t.status} in ('draft','posted','cancelled')`),
     check(
       'delivery_notes_posted_ck',
@@ -2473,6 +2480,10 @@ export const deliveryNoteLines = pgTable(
     stockValue: money(),
     /** Kaydedilirken yazılır: bu satırın eksi bakiye kapanışından doğan maliyet düzeltmesi (işaretli). */
     adjustValue: money(),
+    /** İade irsaliyesinde, iade edilen orijinal irsaliye satırı (isteğe bağlı). */
+    sourceLineId: uuid(),
+    /** Satış irsaliyesinde, karşılanan satış siparişi satırı. */
+    salesOrderLineId: uuid(),
   },
   (t) => [
     unique('delivery_note_lines_uq').on(t.noteId, t.lineNo),
@@ -2483,6 +2494,22 @@ export const deliveryNoteLines = pgTable(
       columns: [t.noteId, t.companyId],
       foreignColumns: [deliveryNotes.id, deliveryNotes.companyId],
     }).onDelete('cascade'),
+    foreignKey({
+      name: 'delivery_note_lines_source_fk',
+      columns: [t.sourceLineId, t.companyId],
+      foreignColumns: [t.id, t.companyId],
+    }),
+    foreignKey({
+      name: 'delivery_note_lines_so_line_fk',
+      columns: [t.salesOrderLineId, t.companyId],
+      foreignColumns: [salesOrderLines.id, salesOrderLines.companyId],
+    }),
+    index('delivery_note_lines_source_idx')
+      .on(t.sourceLineId)
+      .where(sql`${t.sourceLineId} is not null`),
+    index('delivery_note_lines_so_line_idx')
+      .on(t.salesOrderLineId)
+      .where(sql`${t.salesOrderLineId} is not null`),
     foreignKey({
       name: 'delivery_note_lines_item_fk',
       columns: [t.itemId, t.companyId],
@@ -2537,10 +2564,30 @@ export const invoiceLines = pgTable(
     wbsId: uuid(),
     /** Alış faturasında, faturalanan sipariş satırı (üçlü eşleştirme: sipariş – mal kabul – fatura). */
     poLineId: uuid(),
+    /** Satış faturasında, faturalanan satış siparişi satırı (X2). */
+    salesOrderLineId: uuid(),
+    /** Toplu faturalamayla oluşan satırın toplu işlem kalemi (aynı irsaliye satırı iki toplu faturada yer alamaz). */
+    batchItemId: uuid(),
   },
   (t) => [
     unique('invoice_lines_uq').on(t.invoiceId, t.lineNo),
     index('invoice_lines_po_line_idx').on(t.poLineId),
+    foreignKey({
+      name: 'invoice_lines_so_line_fk',
+      columns: [t.salesOrderLineId, t.companyId],
+      foreignColumns: [salesOrderLines.id, salesOrderLines.companyId],
+    }),
+    index('invoice_lines_so_line_idx')
+      .on(t.salesOrderLineId)
+      .where(sql`${t.salesOrderLineId} is not null`),
+    foreignKey({
+      name: 'invoice_lines_batch_item_fk',
+      columns: [t.batchItemId, t.companyId],
+      foreignColumns: [invoiceBatchItems.id, invoiceBatchItems.companyId],
+    }),
+    index('invoice_lines_batch_item_idx')
+      .on(t.batchItemId)
+      .where(sql`${t.batchItemId} is not null`),
     foreignKey({
       name: 'invoice_lines_po_line_fk',
       columns: [t.poLineId, t.companyId],
@@ -4287,4 +4334,184 @@ export const portfolioSettings = pgTable(
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check('portfolio_settings_ck', sql`${t.guaranteeWarningDays} is null or ${t.guaranteeWarningDays} between 0 and 3650`)],
+);
+
+// ---------------------------------------------------------------------------
+// Satış teklifi ve siparişi (X2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Satış teklifi (kind = quote) ve siparişi (kind = order): ortak başlık. Yevmiye ve stok hareketi YAZMAZ; teslim (irsaliye) ve
+ * fatura satırları sipariş satırına bağlanır, karşılanan miktar oradan türer. Durum geçişleri veritabanında (sales_orders_guard,
+ * ERP15) ve salt-eklenir olay geçmişiyle (sales_order_events) korunur.
+ */
+export const salesOrders = pgTable(
+  'sales_orders',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** quote | order */
+    kind: text().notNull(),
+    /** quote: draft/sent/accepted/rejected/converted/cancelled; order: draft/confirmed/closed/cancelled. */
+    status: text().notNull().default('draft'),
+    /** Taslaktan çıkarken (gönderildi/onaylandı) atanan boşluksuz numara (TKL/SSP). */
+    docNo: text(),
+    partyId: uuid().notNull(),
+    docDate: date({ mode: 'string' }).notNull(),
+    validUntil: date({ mode: 'string' }),
+    deliveryDate: date({ mode: 'string' }),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    vatIncluded: boolean().notNull().default(false),
+    warehouseId: uuid(),
+    notes: text(),
+    /** Siparişi doğuran teklif. */
+    quoteId: uuid(),
+    netTotal: money().notNull().default('0'),
+    vatTotal: money().notNull().default('0'),
+    grossTotal: money().notNull().default('0'),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('sales_orders_id_company_uq').on(t.id, t.companyId),
+    unique('sales_orders_no_uq').on(t.companyId, t.docNo),
+    index('sales_orders_kind_idx').on(t.companyId, t.kind, t.docDate),
+    index('sales_orders_party_idx').on(t.companyId, t.partyId),
+    // Bir teklif en çok bir siparişe dönüşür
+    uniqueIndex('sales_orders_quote_uq')
+      .on(t.companyId, t.quoteId)
+      .where(sql`${t.quoteId} is not null`),
+    foreignKey({ name: 'sales_orders_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'sales_orders_warehouse_fk', columns: [t.warehouseId, t.companyId], foreignColumns: [warehouses.id, warehouses.companyId] }),
+    foreignKey({ name: 'sales_orders_quote_fk', columns: [t.quoteId, t.companyId], foreignColumns: [t.id, t.companyId] }),
+    check('sales_orders_kind_ck', sql`${t.kind} in ('quote','order')`),
+    check(
+      'sales_orders_status_ck',
+      sql`${t.status} in ('draft','sent','accepted','rejected','converted','confirmed','closed','cancelled')`,
+    ),
+    check('sales_orders_numbered_ck', sql`${t.status} = 'draft' or ${t.status} = 'cancelled' or ${t.docNo} is not null`),
+    check('sales_orders_totals_ck', sql`${t.netTotal} >= 0 and ${t.vatTotal} >= 0 and ${t.grossTotal} = ${t.netTotal} + ${t.vatTotal}`),
+  ],
+);
+
+export const salesOrderLines = pgTable(
+  'sales_order_lines',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    orderId: uuid().notNull(),
+    lineNo: integer().notNull(),
+    /** Boşsa serbest metin satırı (hizmet/işçilik). */
+    itemId: uuid(),
+    description: text().notNull(),
+    quantity: qty().notNull(),
+    unit: text(),
+    unitPrice: unitCost().notNull(),
+    discountPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    vatCode: text(),
+    vatRate: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    net: money().notNull(),
+    vat: money().notNull(),
+    gross: money().notNull(),
+    /** Siparişte, kaynak teklif satırı. */
+    quoteLineId: uuid(),
+  },
+  (t) => [
+    unique('sales_order_lines_uq').on(t.orderId, t.lineNo),
+    unique('sales_order_lines_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'sales_order_lines_order_fk', columns: [t.orderId, t.companyId], foreignColumns: [salesOrders.id, salesOrders.companyId] }).onDelete('cascade'),
+    foreignKey({ name: 'sales_order_lines_item_fk', columns: [t.itemId, t.companyId], foreignColumns: [items.id, items.companyId] }),
+    foreignKey({ name: 'sales_order_lines_quote_line_fk', columns: [t.quoteLineId, t.companyId], foreignColumns: [t.id, t.companyId] }),
+    check(
+      'sales_order_lines_amounts_ck',
+      sql`${t.quantity} > 0 and ${t.unitPrice} >= 0 and ${t.discountPct} between 0 and 100 and ${t.vatRate} between 0 and 100 and ${t.net} >= 0 and ${t.vat} >= 0 and ${t.gross} = ${t.net} + ${t.vat}`,
+    ),
+  ],
+);
+
+/** Durum geçmişi: yalnızca eklenir (silinmez/değişmez); her durum değişikliği aynı işlemde bir olay yazar. */
+export const salesOrderEvents = pgTable(
+  'sales_order_events',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    orderId: uuid().notNull(),
+    /** Oluşturma olayında null. */
+    fromStatus: text(),
+    toStatus: text().notNull(),
+    reason: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('sales_order_events_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'sales_order_events_order_fk', columns: [t.orderId, t.companyId], foreignColumns: [salesOrders.id, salesOrders.companyId] }),
+    index('sales_order_events_order_idx').on(t.orderId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Toplu faturalama (X2)
+// ---------------------------------------------------------------------------
+
+/** Toplu faturalama çalıştırması (salt-eklenir sonuç kaydı). */
+export const invoiceBatches = pgTable(
+  'invoice_batches',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    invoiceDate: date({ mode: 'string' }).notNull(),
+    /** party | note */
+    grouping: text().notNull(),
+    post: boolean().notNull(),
+    invoicesCreated: integer().notNull().default(0),
+    invoicesFailed: integer().notNull().default(0),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('invoice_batches_id_company_uq').on(t.id, t.companyId),
+    check('invoice_batches_grouping_ck', sql`${t.grouping} in ('party','note')`),
+  ],
+);
+
+/** Çalıştırmanın cari/fatura başına sonucu: oluşan fatura ya da hata. Yalnızca eklenir. */
+export const invoiceBatchItems = pgTable(
+  'invoice_batch_items',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    batchId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    /** created | failed */
+    status: text().notNull(),
+    /** Oluşan fatura (bilgi amaçlı; taslak fatura silinirse kayıt kalır, bağlantı ölür). */
+    invoiceId: uuid(),
+    /** Faturaya giren irsaliyeler (id listesi, virgülle). */
+    noteIds: text().notNull().default(''),
+    errorCode: text(),
+    errorMessage: text(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('invoice_batch_items_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'invoice_batch_items_batch_fk', columns: [t.batchId, t.companyId], foreignColumns: [invoiceBatches.id, invoiceBatches.companyId] }),
+    foreignKey({ name: 'invoice_batch_items_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    index('invoice_batch_items_batch_idx').on(t.batchId),
+    check('invoice_batch_items_status_ck', sql`${t.status} in ('created','failed')`),
+    check('invoice_batch_items_result_ck', sql`(${t.status} = 'failed') = (${t.errorCode} is not null)`),
+  ],
 );

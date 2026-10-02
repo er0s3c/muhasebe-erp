@@ -25,6 +25,7 @@ import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
 import { assertMatchOrOverride, evaluateInvoiceMatch } from '../procurement/matching';
+import { checkOrderLinks, lockOrderLines } from '../sales/usage';
 import { DeliveryAllocator } from './delivery-link';
 import { buildInvoiceJournal, requiredMappingKeys } from './journal';
 import {
@@ -110,6 +111,7 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       sourceLineId: l.sourceLineId,
       deliveryLineId: l.deliveryLineId,
       orderLineId: l.poLineId,
+      salesOrderLineId: l.salesOrderLineId,
       projectId: l.projectId,
       wbsId: l.wbsId,
     })),
@@ -181,6 +183,15 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
 
   // İrsaliye bağı: irsaliye satırlarını kilitle, bağları yeniden doğrula, paylaşılan değerleri dağıt
   const allocator = await DeliveryAllocator.lock(tx, type, party.id, lines, inv.id);
+  // Satış siparişi bağı: sipariş satırlarını kilitle, kalan miktarı kilit altında yeniden doğrula
+  await lockOrderLines(tx, lines.flatMap((l) => (l.salesOrderLineId ? [l.salesOrderLineId] : [])));
+  await checkOrderLinks(
+    tx,
+    'invoice',
+    party.id,
+    lines.map((l) => ({ lineNo: l.lineNo, itemId: l.itemId, quantity: l.quantity, salesOrderLineId: l.salesOrderLineId, deliveryLineId: l.deliveryLineId })),
+    { currency: inv.currencyCode },
+  );
 
   // --- Stok (saf planlama; yazma aşağıda) ---
   // İrsaliyeye bağlı satır stok hareketi yapmaz (mal irsaliyede çıktı/girdi). Alışta fatura fiyatı irsaliye
@@ -217,7 +228,8 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       if (l.deliveryLineId) {
         const share = allocator.take(l.lineNo, l.deliveryLineId, qty);
         deliveryShare.set(l.lineNo, { value: share.value, adjust: share.adjust });
-        if (type === 'sales') {
+        // Satış, satış iadesi ve alış iadesi: stok hareketi irsaliyede yapılmıştır; maliyet irsaliye satırının payıdır
+        if (type !== 'purchase') {
           costByLine.set(l.lineNo, share.value);
           continue;
         }

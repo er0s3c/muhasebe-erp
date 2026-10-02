@@ -37,6 +37,23 @@ function pgError(err: unknown): { code?: string; message: string; constraint?: s
   return null;
 }
 
+const PG_RULE_CODES: Record<string, string> = {
+  ERP01: 'LEDGER_RULE_VIOLATION',
+  ERP02: 'STOCK_RULE_VIOLATION',
+  ERP03: 'INVOICE_RULE_VIOLATION',
+  ERP04: 'DELIVERY_RULE_VIOLATION',
+  ERP15: 'SALES_RULE_VIOLATION',
+};
+
+/** Toplu işlemlerde tek kalemin hatasını raporlamak için: uygulama hatası, veritabanı kuralı ya da beklenmeyen hata. */
+export function describeError(err: unknown): { code: string; message: string } {
+  if (err instanceof AppError) return { code: err.code, message: err.message };
+  const pg = pgError(err);
+  if (pg?.code && PG_RULE_CODES[pg.code]) return { code: PG_RULE_CODES[pg.code]!, message: pg.message };
+  if (pg?.code === '40001' || pg?.code === '40P01') return { code: 'RETRY', message: 'Eşzamanlı işlem çakışması; yeniden deneyin' };
+  return { code: 'ERROR', message: 'Beklenmeyen hata' };
+}
+
 export function errorHandler(
   err: FastifyError | Error,
   req: FastifyRequest,
@@ -157,6 +174,13 @@ export function errorHandler(
     void reply
       .status(422)
       .send({ error: { code: 'CHEQUE_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP15') {
+    // Satış teklif/sipariş ve toplu faturalama kuralları (geçersiz durum geçişi, donmuş belge, sipariş miktarı aşımı, çift toplu faturalama)
+    void reply
+      .status(422)
+      .send({ error: { code: 'SALES_RULE_VIOLATION', message: pg.message } });
     return;
   }
   if (pg?.code === '23505') {

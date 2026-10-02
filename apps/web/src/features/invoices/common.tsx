@@ -11,6 +11,8 @@ export const INVOICE_INVALIDATE = [
   ['delivery-note'],
   ['delivery-open-lines'],
   ['delivery-summary'],
+  ['sales-doc'],
+  ['sales-docs'],
   ['invoices'],
   ['invoice'],
   ['journal'],

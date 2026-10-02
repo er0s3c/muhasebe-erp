@@ -5,6 +5,7 @@ import type {
   ImportPreviewRow,
   ImportRow,
   ImportRowStatus,
+  ImportUnmatched,
   Permission,
 } from '@erp/shared';
 import type { Tx } from '../../../db/client';
@@ -78,6 +79,8 @@ export interface PlanResult {
   rows: ImportPreviewRow[];
   general: ImportMessage[];
   summary: { label: string; value: string }[];
+  /** Eşleşmeyen cari/stok metinleri (arayüz elle eşletir). */
+  unmatched?: ImportUnmatched[];
   /** Doğrulanmış verilerle yazma işlemi. Hata varsa çağrılmaz. */
   apply: () => Promise<ApplyResult>;
 }
