@@ -2748,3 +2748,180 @@ export interface SerialHistoryRow {
 export interface SerialLookup {
   serials: (SerialRow & { supplier: string | null; customer: string | null; history: SerialHistoryRow[] })[];
 }
+
+// --- İthalat maliyet dağıtımı ve gider kartları (Faz X4) -----------------------------------------------------------------
+
+export type ImportFileStatus = 'draft' | 'allocated' | 'posted' | 'cancelled';
+export type ImportMethod = 'value' | 'quantity' | 'weight' | 'manual';
+export type ImportCostKind = 'freight' | 'insurance' | 'customs_duty' | 'other_tax' | 'brokerage' | 'other';
+
+export interface ImportFileRow {
+  id: string;
+  code: string;
+  name: string;
+  reference: string | null;
+  status: ImportFileStatus;
+  fileDate: string;
+  postDate: string | null;
+  lineCount: number;
+  goodsValue: string;
+  costTotal: string;
+}
+
+export interface ImportSource {
+  kind: 'invoice' | 'delivery';
+  sourceLineId: string;
+  docNo: string;
+  docDate: string;
+  partyId: string;
+  partyName: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unit: string;
+  quantity: string;
+  value: string;
+  usedIn: string | null;
+}
+
+export interface ImportFileLine {
+  id: string;
+  lineNo: number;
+  sourceKind: 'invoice' | 'delivery';
+  sourceLineId: string;
+  sourceDocNo: string;
+  sourceDate: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unit: string;
+  warehouseName: string;
+  quantity: string;
+  valueBase: string;
+  weight: string | null;
+  allocated: string;
+  stockedAmount: string | null;
+  cogsAmount: string | null;
+}
+
+export interface ImportCostLine {
+  id: string;
+  lineNo: number;
+  kind: ImportCostKind;
+  kindLabel: string;
+  description: string;
+  partyId: string | null;
+  partyName: string | null;
+  invoiceId: string | null;
+  invoiceNo: string | null;
+  currencyCode: string;
+  amount: string;
+  fxRate: string | null;
+  amountBase: string;
+  method: ImportMethod;
+  creditAccountId: string | null;
+  creditAccountCode: string | null;
+  reference: string | null;
+}
+
+export interface ImportFileDetail {
+  file: {
+    id: string;
+    code: string;
+    name: string;
+    reference: string | null;
+    description: string | null;
+    method: ImportMethod;
+    fileDate: string;
+    status: ImportFileStatus;
+    postDate: string | null;
+    journalEntryId: string | null;
+    journalEntryNo: string | null;
+    cancelJournalEntryNo: string | null;
+    stockDocumentNo: string | null;
+    cancelReason: string | null;
+  };
+  lines: ImportFileLine[];
+  costLines: ImportCostLine[];
+  allocations: { costLineId: string; fileLineId: string; amount: string }[];
+  events: { action: string; fromStatus: string | null; toStatus: string; note: string | null; createdAt: string; userName: string | null }[];
+  totals: { goodsValue: string; costTotal: string; landedValue: string };
+}
+
+export interface ImportReport {
+  file: { id: string; code: string; name: string; reference: string | null; status: ImportFileStatus; statusLabel: string; fileDate: string; postDate: string | null };
+  byLine: { lineNo: number; sourceDocNo: string; itemId: string; itemCode: string; itemName: string; unit: string; quantity: string; weight: string | null; goodsValue: string; allocated: string; landedValue: string; unitBefore: string | null; unitAfter: string | null; uplift: string | null; stockedAmount: string | null; cogsAmount: string | null }[];
+  byItem: { itemId: string; itemCode: string; itemName: string; unit: string; quantity: string; goodsValue: string; allocated: string; landedValue: string; unitBefore: string | null; unitAfter: string | null }[];
+  byCost: { kind: ImportCostKind; kindLabel: string; amount: string }[];
+  totals: { goodsValue: string; costTotal: string; landedValue: string; allocated: string };
+}
+
+export interface ExpenseCard {
+  id: string;
+  code: string;
+  name: string;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  taxCode: string | null;
+  withholdingRate: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  wbsId: string | null;
+  costCodeId: string | null;
+  costCodeCode: string | null;
+  notes: string | null;
+  isActive: boolean;
+  entryCount: number;
+}
+
+export interface ExpenseEntry {
+  id: string;
+  entryNo: string;
+  entryDate: string;
+  status: 'posted' | 'cancelled';
+  description: string;
+  cardId: string;
+  cardCode: string;
+  cardName: string;
+  accountCode: string;
+  partyId: string | null;
+  partyName: string | null;
+  paymentKind: 'treasury' | 'party';
+  treasuryAccountId: string | null;
+  treasuryAccountName: string | null;
+  dueDate: string | null;
+  net: string;
+  vatCode: string | null;
+  vatRate: string;
+  vat: string;
+  withholdingRate: string;
+  withholding: string;
+  gross: string;
+  payable: string;
+  documentRef: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  journalEntryId: string;
+  journalEntryNo: string | null;
+  cancelReason: string | null;
+}
+
+export interface ExpenseGroup {
+  count: number;
+  net: string;
+  vat: string;
+  withholding: string;
+  gross: string;
+}
+
+export interface ExpenseReport {
+  from: string;
+  to: string;
+  totals: ExpenseGroup;
+  byCard: (ExpenseGroup & { cardId: string; cardCode: string; cardName: string; accountCode: string })[];
+  byMonth: (ExpenseGroup & { month: string })[];
+  byProject: (ExpenseGroup & { projectId: string | null; projectCode: string | null; projectName: string | null })[];
+  byParty: (ExpenseGroup & { partyId: string | null; partyName: string | null })[];
+  top: { id: string; entryNo: string; entryDate: string; description: string; cardName: string; partyName: string | null; net: string; gross: string }[];
+}

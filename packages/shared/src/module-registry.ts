@@ -68,6 +68,15 @@ export const MODULES: readonly ModuleDef[] = [
     // Seri takipli kartların hareket kuralları veritabanında zorunludur; modül yalnızca sorgu/rapor ekranlarını ve uçlarını açar.
     requires: ['core.inventory'],
   },
+  {
+    key: 'inventory.imports',
+    labelKey: 'modules.inventoryImports',
+    label: 'İthalat maliyet dağıtımı',
+    sectors: 'all',
+    status: 'available',
+    // İthalat dosyası kayıtlı alış faturası/irsaliye satırlarını toplar; ek maliyetler stok maliyetine (cost_adjust) ve yevmiyeye yazılır. Tutarlar kullanıcı girişidir.
+    requires: ['core.invoices', 'core.inventory'],
+  },
   { key: 'core.treasury', labelKey: 'modules.treasury', label: 'Kasa ve banka', sectors: 'all', status: 'available', requires: ['core.ledger', 'core.parties'] },
   { key: 'core.settings', labelKey: 'modules.settings', label: 'Ayarlar', sectors: 'all', status: 'available', locked: true },
   {
@@ -161,6 +170,15 @@ export const MODULES: readonly ModuleDef[] = [
     status: 'available',
     // Yalnızca takip (nazım): yevmiye yazmaz. Cari ve proje/sözleşme bağlantısı isteğe bağlıdır.
     requires: ['core.treasury'],
+  },
+  {
+    key: 'treasury.expenses',
+    labelKey: 'modules.treasuryExpenses',
+    label: 'Gider kartları ve raporları',
+    sectors: 'all',
+    status: 'available',
+    // Gider fişi yevmiye yazar (core.ledger), kasa/banka ya da cari karşılığıyla (core.treasury, core.parties).
+    requires: ['core.treasury', 'core.parties'],
   },
   {
     key: 'retail.pos',
@@ -370,6 +388,33 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'treasury.read',
   },
   {
+    key: 'expense-entries',
+    labelKey: 'nav.expenseEntries',
+    path: '/treasury/expenses',
+    icon: 'receipt',
+    group: 'treasury',
+    module: 'treasury.expenses',
+    permission: 'treasury.read',
+  },
+  {
+    key: 'expense-cards',
+    labelKey: 'nav.expenseCards',
+    path: '/treasury/expense-cards',
+    icon: 'tags',
+    group: 'treasury',
+    module: 'treasury.expenses',
+    permission: 'treasury.read',
+  },
+  {
+    key: 'expense-reports',
+    labelKey: 'nav.expenseReports',
+    path: '/treasury/expense-reports',
+    icon: 'bar-chart',
+    group: 'treasury',
+    module: 'treasury.expenses',
+    permission: 'treasury.read',
+  },
+  {
     key: 'bank-guarantees',
     labelKey: 'nav.bankGuarantees',
     path: '/treasury/guarantees',
@@ -412,6 +457,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     icon: 'arrow-left-right',
     group: 'stock',
     module: 'core.inventory',
+    permission: 'inventory.read',
+  },
+  {
+    key: 'import-files',
+    labelKey: 'nav.importFiles',
+    path: '/inventory/imports',
+    icon: 'ship',
+    group: 'stock',
+    module: 'inventory.imports',
     permission: 'inventory.read',
   },
   {

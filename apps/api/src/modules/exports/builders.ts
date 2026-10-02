@@ -1,4 +1,4 @@
-import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
+import { formatDateTR, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -35,6 +35,9 @@ import { getVariation, listVariations } from '../subcontracts/variations';
 import { listGuarantees as listBankGuarantees } from '../cheques/guarantees';
 import { chequeMaturity, chequesBounced, chequesDue } from '../cheques/reports';
 import { listCheques } from '../cheques/service';
+import { expenseReport } from '../expenses/reports';
+import { listExpenseEntries } from '../expenses/service';
+import { importFileReport, importLandedByItem, listImportFiles } from '../landed/service';
 import { fxDifferences } from '../treasury/fx-report';
 import { TXN_LABEL } from '../treasury/posting';
 import { treasuryStatement } from '../treasury/reports';
@@ -1918,5 +1921,111 @@ export async function partyPricesTable(ctx: BuildCtx, q: { partyId?: string }): 
       columns: [col('party', 'Cari', 'text', 28), col('kind', 'Tür', 'text', 8), col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 28), col('currency', 'Para birimi', 'text', 8), col('price', 'Birim fiyat', 'money'), col('discount', 'İskonto %', 'money'), col('minQty', 'En az miktar', 'qty'), col('from', 'Başlangıç', 'date'), col('to', 'Bitiş', 'date')],
       rows: rows.map((r) => ({ party: String(r.partyName), kind: r.kind === 'sales' ? 'Satış' : 'Alış', item: String(r.itemCode), itemName: String(r.itemName), currency: (r.currencyCode as string | null) ?? '', price: (r.price as string | null) ?? '', discount: (r.discountPct as string | null) ?? '', minQty: String(r.minQty), from: (r.validFrom as string | null) ?? '', to: (r.validTo as string | null) ?? '' })),
     },
+  ];
+}
+
+
+// --- İthalat maliyet dağıtımı ve gider raporları (Faz X4) ------------------------------------------------------------------
+
+const LANDED_NOTE = 'Ek maliyet tutarları kullanıcı girişidir; yasal oran/vergi hesabı yapılmaz, hesap eşlemesi doğrulanmadı';
+const EXPENSE_NOTE = 'KDV ve stopaj oranları kullanıcı verisidir; hesap eşlemeleri ve vergi uygulaması doğrulanmadı';
+
+export async function importFilesTable(ctx: BuildCtx, q: Omit<ListImportFilesQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const d = await listImportFiles(ctx.tx, { ...q, limit: 5000, offset: 0 });
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'ithalat-dosyalari',
+      title: 'İthalat dosyaları',
+      sheet: 'Dosyalar',
+      subtitle: sub(ctx, LANDED_NOTE),
+      columns: [col('code', 'Dosya no', 'text', 16), col('name', 'Ad', 'text', 30), col('reference', 'Referans', 'text', 18), col('fileDate', 'Dosya tarihi', 'date'), col('postDate', 'Kayıt tarihi', 'date'), col('status', 'Durum', 'text', 14), col('lines', 'Mal satırı', 'int'), col('goods', `Mal değeri (${b})`, 'money'), col('cost', `Ek maliyet (${b})`, 'money')],
+      rows: d.files.map((f) => ({ code: f.code as string, name: f.name as string, reference: (f.reference as string | null) ?? null, fileDate: f.fileDate as string, postDate: (f.postDate as string | null) ?? null, status: IMPORT_FILE_STATUS_LABELS[f.status as keyof typeof IMPORT_FILE_STATUS_LABELS], lines: f.lineCount as number, goods: f.goodsValue as string, cost: f.costTotal as string })),
+      totals: { goods: sum(d.files.map((f) => f.goodsValue as string)).toFixed(2), cost: sum(d.files.map((f) => f.costTotal as string)).toFixed(2) },
+    },
+  ];
+}
+
+export async function importFileReportTable(ctx: BuildCtx, q: { id: string }): Promise<ReportTable[]> {
+  const r = await importFileReport(ctx.tx, q.id);
+  const b = ctx.company.baseCurrency;
+  const subtitle = sub(ctx, `${r.file.code} — ${r.file.name}`, `Durum: ${r.file.statusLabel}`, LANDED_NOTE);
+  return [
+    {
+      key: `ithalat-maliyet-${r.file.code}`,
+      title: `İthalat maliyet dağıtımı: ${r.file.code}`,
+      sheet: 'Satırlar',
+      subtitle,
+      columns: [col('no', 'Sıra', 'int'), col('doc', 'Kaynak belge', 'text', 18), col('item', 'Kart', 'text', 14), col('name', 'Ad', 'text', 28), col('qty', 'Miktar', 'qty'), col('weight', 'Ağırlık', 'qty'), col('goods', `Mal değeri (${b})`, 'money'), col('alloc', `Dağıtılan (${b})`, 'money'), col('landed', `Toplam maliyet (${b})`, 'money'), col('before', `Birim maliyet önce (${b})`, 'money'), col('after', `Birim maliyet sonra (${b})`, 'money'), col('uplift', 'Artış %', 'rate')],
+      rows: r.byLine.map((l) => ({ no: l.lineNo, doc: l.sourceDocNo, item: l.itemCode, name: l.itemName, qty: l.quantity, weight: l.weight, goods: l.goodsValue, alloc: l.allocated, landed: l.landedValue, before: l.unitBefore, after: l.unitAfter, uplift: l.uplift })),
+      totals: { goods: r.totals.goodsValue, alloc: r.totals.allocated, landed: r.totals.landedValue },
+    },
+    {
+      key: 'ithalat-maliyet-kartlar',
+      title: `İthalat maliyeti: kart bazında (${r.file.code})`,
+      sheet: 'Kartlar',
+      subtitle,
+      columns: [col('item', 'Kart', 'text', 14), col('name', 'Ad', 'text', 28), col('qty', 'Miktar', 'qty'), col('goods', `Mal değeri (${b})`, 'money'), col('alloc', `Dağıtılan (${b})`, 'money'), col('landed', `Toplam maliyet (${b})`, 'money'), col('before', `Birim maliyet önce (${b})`, 'money'), col('after', `Birim maliyet sonra (${b})`, 'money')],
+      rows: r.byItem.map((i) => ({ item: i.itemCode, name: i.itemName, qty: i.quantity, goods: i.goodsValue, alloc: i.allocated, landed: i.landedValue, before: i.unitBefore, after: i.unitAfter })),
+      totals: { goods: r.totals.goodsValue, alloc: r.totals.allocated, landed: r.totals.landedValue },
+    },
+    {
+      key: 'ithalat-maliyet-turleri',
+      title: `İthalat maliyeti: maliyet türleri (${r.file.code})`,
+      sheet: 'Maliyet türleri',
+      subtitle,
+      columns: [col('kind', 'Tür', 'text', 28), col('amount', `Tutar (${b})`, 'money')],
+      rows: r.byCost.map((k) => ({ kind: k.kindLabel, amount: k.amount })),
+      totals: { amount: sum(r.byCost.map((k) => k.amount)).toFixed(2) },
+    },
+  ];
+}
+
+export async function importLandedItemsTable(ctx: BuildCtx, q: { from?: string; to?: string; itemId?: string }): Promise<ReportTable[]> {
+  const d = await importLandedByItem(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'ithalat-maliyet-kart-bazinda',
+      title: 'İthalat maliyeti: kart bazında (muhasebeleşmiş dosyalar)',
+      sheet: 'Kartlar',
+      subtitle: sub(ctx, q.from && q.to ? period(q.from, q.to) : 'Tüm tarihler', LANDED_NOTE),
+      columns: [col('item', 'Kart', 'text', 14), col('name', 'Ad', 'text', 28), col('files', 'Dosya', 'int'), col('qty', 'Miktar', 'qty'), col('goods', `Mal değeri (${b})`, 'money'), col('alloc', `Ek maliyet (${b})`, 'money'), col('stocked', `Stok maliyetine (${b})`, 'money'), col('cogs', `Satılan mal maliyetine (${b})`, 'money'), col('before', `Birim maliyet önce (${b})`, 'money'), col('after', `Birim maliyet sonra (${b})`, 'money')],
+      rows: d.items.map((i) => ({ item: i.itemCode, name: i.itemName, files: i.fileCount, qty: i.quantity, goods: i.goodsValue, alloc: i.allocated, stocked: i.stocked, cogs: i.cogs, before: i.unitBefore, after: i.unitAfter })),
+      totals: { goods: sum(d.items.map((i) => i.goodsValue)).toFixed(2), alloc: sum(d.items.map((i) => i.allocated)).toFixed(2), stocked: sum(d.items.map((i) => i.stocked)).toFixed(2), cogs: sum(d.items.map((i) => i.cogs)).toFixed(2) },
+    },
+  ];
+}
+
+export async function expenseEntriesTable(ctx: BuildCtx, q: Omit<ListExpenseEntriesQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const d = await listExpenseEntries(ctx.tx, { ...q, limit: 5000, offset: 0 });
+  const b = ctx.company.baseCurrency;
+  const live = d.entries.filter((e) => e.status === 'posted');
+  return [
+    {
+      key: 'gider-fisleri',
+      title: 'Gider fişleri',
+      sheet: 'Gider fişleri',
+      subtitle: sub(ctx, q.from && q.to ? period(q.from, q.to) : 'Tüm tarihler', EXPENSE_NOTE),
+      columns: [col('no', 'Fiş no', 'text', 16), col('date', 'Tarih', 'date'), col('card', 'Gider kartı', 'text', 24), col('desc', 'Açıklama', 'text', 30), col('party', 'Cari', 'text', 24), col('project', 'Proje', 'text', 14), col('ref', 'Belge referansı', 'text', 18), col('net', `KDV hariç (${b})`, 'money'), col('vat', `KDV (${b})`, 'money'), col('wh', `Stopaj (${b})`, 'money'), col('gross', `Brüt (${b})`, 'money'), col('status', 'Durum', 'text', 10)],
+      rows: d.entries.map((e) => ({ no: e.entryNo as string, date: e.entryDate as string, card: e.cardName as string, desc: e.description as string, party: (e.partyName as string | null) ?? null, project: (e.projectCode as string | null) ?? null, ref: (e.documentRef as string | null) ?? null, net: e.net as string, vat: e.vat as string, wh: e.withholding as string, gross: e.gross as string, status: e.status === 'posted' ? 'Kayıtlı' : 'İptal' })),
+      totals: { net: sum(live.map((e) => e.net as string)).toFixed(2), vat: sum(live.map((e) => e.vat as string)).toFixed(2), wh: sum(live.map((e) => e.withholding as string)).toFixed(2), gross: sum(live.map((e) => e.gross as string)).toFixed(2) },
+    },
+  ];
+}
+
+export async function expenseReportTables(ctx: BuildCtx, q: ExpenseReportQuery): Promise<ReportTable[]> {
+  const r = await expenseReport(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  const subtitle = sub(ctx, period(q.from, q.to), 'iptal edilen fişler hariç', EXPENSE_NOTE);
+  const money = (label: string, key: string) => col(key, `${label} (${b})`, 'money');
+  const amounts = [col('count', 'Adet', 'int'), money('KDV hariç', 'net'), money('KDV', 'vat'), money('Stopaj', 'withholding'), money('Brüt', 'gross')];
+  const tot = { net: r.totals.net, vat: r.totals.vat, withholding: r.totals.withholding, gross: r.totals.gross };
+  return [
+    { key: 'gider-kartlara-gore', title: 'Giderler: gider kartına göre', sheet: 'Kartlara göre', subtitle, columns: [col('card', 'Gider kartı', 'text', 28), col('account', 'Hesap', 'text', 10), ...amounts], rows: r.byCard.map((x) => ({ card: `${x.cardCode} ${x.cardName}`, account: x.accountCode, count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
+    { key: 'gider-aylik', title: 'Giderler: aylık eğilim', sheet: 'Aylık', subtitle, columns: [col('month', 'Ay', 'text', 10), ...amounts], rows: r.byMonth.map((x) => ({ month: x.month, count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
+    { key: 'gider-projelere-gore', title: 'Giderler: projeye göre', sheet: 'Projelere göre', subtitle, columns: [col('project', 'Proje', 'text', 28), ...amounts], rows: r.byProject.map((x) => ({ project: x.projectId ? `${x.projectCode} ${x.projectName}` : 'Projesiz', count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
+    { key: 'gider-cariye-gore', title: 'Giderler: cariye göre', sheet: 'Cariye göre', subtitle, columns: [col('party', 'Cari', 'text', 28), ...amounts], rows: r.byParty.map((x) => ({ party: x.partyName ?? 'Cari belirtilmemiş', count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
+    { key: 'gider-en-yuksek', title: `Giderler: en yüksek ${q.top} fiş`, sheet: 'En yüksek', subtitle, columns: [col('no', 'Fiş no', 'text', 16), col('date', 'Tarih', 'date'), col('card', 'Gider kartı', 'text', 24), col('desc', 'Açıklama', 'text', 30), col('party', 'Cari', 'text', 24), money('KDV hariç', 'net'), money('Brüt', 'gross')], rows: r.top.map((x) => ({ no: x.entryNo as string, date: x.entryDate as string, card: x.cardName as string, desc: x.description as string, party: (x.partyName as string | null) ?? null, net: x.net as string, gross: x.gross as string })) },
   ];
 }

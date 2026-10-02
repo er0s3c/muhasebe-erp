@@ -61,6 +61,8 @@ test('modüller: bağımlılık korumalı kapatma, menü/panel/sayfa kapıları 
   await expect(page.getByText('Satış teklif ve siparişi kapatıldı')).toBeVisible();
   await page.getByRole('switch', { name: 'Fiyat listeleri ve cari özel fiyat: Kapat' }).click();
   await expect(page.getByText('Fiyat listeleri ve cari özel fiyat kapatıldı')).toBeVisible();
+  await page.getByRole('switch', { name: 'İthalat maliyet dağıtımı: Kapat' }).click();
+  await expect(page.getByText('İthalat maliyet dağıtımı kapatıldı')).toBeVisible();
   await page.getByRole('switch', { name: 'Fatura ve irsaliye: Kapat' }).click();
   await expect(page.getByText('Fatura ve irsaliye kapatıldı')).toBeVisible();
   await expect(nav.getByRole('link', { name: 'Satış faturaları' })).toHaveCount(0);

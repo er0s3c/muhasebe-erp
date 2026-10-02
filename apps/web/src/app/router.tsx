@@ -109,6 +109,22 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="inventory.imports" />,
+                children: [
+                  { path: 'inventory/imports', ...page(() => import('../features/landed/ImportFilesPage'), 'ImportFilesPage') },
+                  { path: 'inventory/imports/new', ...page(() => import('../features/landed/ImportFilePage'), 'ImportFilePage') },
+                  { path: 'inventory/imports/:id', ...page(() => import('../features/landed/ImportFilePage'), 'ImportFilePage') },
+                ],
+              },
+              {
+                element: <RequireModule module="treasury.expenses" />,
+                children: [
+                  { path: 'treasury/expenses', ...page(() => import('../features/expenses/ExpenseEntriesPage'), 'ExpenseEntriesPage') },
+                  { path: 'treasury/expense-cards', ...page(() => import('../features/expenses/ExpenseCardsPage'), 'ExpenseCardsPage') },
+                  { path: 'treasury/expense-reports', ...page(() => import('../features/expenses/ExpenseReportPage'), 'ExpenseReportPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="inventory.serials" />,
                 children: [{ path: 'inventory/serials', ...page(() => import('../features/inventory/SerialsPage'), 'SerialsPage') }],
               },

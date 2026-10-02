@@ -264,7 +264,7 @@ describe('raporlar ve dışa aktarma', async () => {
     const { c } = await books('Tam');
     const { sheets, res } = await xlsx(c, '/api/exports/full-data');
     expect(res.headers['content-disposition']).toMatch(/^attachment; filename="tum-veriler-\d{4}-\d{2}-\d{2}\.xlsx"$/);
-    expect(sheets.map((s) => s.name)).toEqual(['Cariler', 'Stok kartları', 'Hesap planı', 'Yevmiye satırları', 'Faturalar', 'Fatura satırları', 'İrsaliyeler', 'Satış teklif ve siparişleri', 'Fiyat listeleri', 'Cari özel fiyatlar', 'Seri no sicili', 'Kasa ve banka hesapları', 'Kasa ve banka hareketleri', 'Stok hareketleri']);
+    expect(sheets.map((s) => s.name)).toEqual(['Cariler', 'Stok kartları', 'Hesap planı', 'Yevmiye satırları', 'Faturalar', 'Fatura satırları', 'İrsaliyeler', 'Satış teklif ve siparişleri', 'Fiyat listeleri', 'Cari özel fiyatlar', 'Seri no sicili', 'İthalat dosyaları', 'Gider fişleri', 'Kasa ve banka hesapları', 'Kasa ve banka hareketleri', 'Stok hareketleri']);
     const by = Object.fromEntries(sheets.map((s) => [s.name, s.rows.slice(4)]));
     expect(by['Cariler']).toHaveLength(3);
     expect(by['Cariler']!.map((r) => r[0]).every((v) => /^CR-/.test(v!))).toBe(true);

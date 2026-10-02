@@ -289,6 +289,37 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     ),
   );
 
+  // İthalat dosyaları (mal satırı + dağıtılan ek maliyet) ve gider fişleri (X4)
+  const importRows = await query(
+    'İthalat dosyaları',
+    sql`select f.code, f.name, f.reference, f.status, f.file_date::text as file_date, f.post_date::text as post_date, l.source_doc_no, i.code as item_code, i.name as item_name,
+               l.quantity, l.value_base, coalesce((select sum(a.amount) from import_allocations a where a.file_line_id = l.id), 0) as allocated, l.stocked_amount, l.cogs_amount
+        from import_files f join import_file_lines l on l.import_file_id = f.id join items i on i.id = l.item_id
+        order by f.code, l.line_no`,
+  );
+  tables.push(
+    table(
+      'İthalat dosyaları',
+      'İthalat dosyaları',
+      [col('code', 'Dosya no', 'text', 16), col('name', 'Ad', 'text', 26), col('ref', 'Referans', 'text', 16), col('status', 'Durum', 'text', 12), col('fileDate', 'Dosya tarihi', 'date'), col('postDate', 'Kayıt tarihi', 'date'), col('doc', 'Kaynak belge', 'text', 16), col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 26), col('qty', 'Miktar', 'qty'), col('goods', 'Mal değeri', 'money'), col('alloc', 'Dağıtılan ek maliyet', 'money'), col('stocked', 'Stok maliyetine', 'money'), col('cogs', 'Satılan mal maliyetine', 'money')],
+      importRows.map((r) => ({ code: s(r.code), name: s(r.name), ref: s(r.reference), status: ({ draft: 'Taslak', allocated: 'Dağıtıldı', posted: 'Muhasebeleşti', cancelled: 'İptal' } as Record<string, string>)[String(r.status)] ?? s(r.status), fileDate: s(r.file_date), postDate: s(r.post_date), doc: s(r.source_doc_no), item: s(r.item_code), itemName: s(r.item_name), qty: s(r.quantity), goods: s(r.value_base), alloc: s(r.allocated), stocked: s(r.stocked_amount), cogs: s(r.cogs_amount) })),
+    ),
+  );
+  const expenseRows = await query(
+    'Gider fişleri',
+    sql`select e.entry_no, e.entry_date::text as entry_date, e.status, c.code as card_code, c.name as card_name, e.description, p.name as party, pr.code as project_code, e.document_ref, e.net, e.vat, e.withholding, e.gross
+        from expense_entries e join expense_cards c on c.id = e.card_id left join parties p on p.id = e.party_id left join projects pr on pr.id = e.project_id
+        order by e.entry_date, e.entry_no`,
+  );
+  tables.push(
+    table(
+      'Gider fişleri',
+      'Gider fişleri',
+      [col('no', 'Fiş no', 'text', 16), col('date', 'Tarih', 'date'), col('status', 'Durum', 'text', 10), col('card', 'Gider kartı', 'text', 24), col('desc', 'Açıklama', 'text', 30), col('party', 'Cari', 'text', 24), col('project', 'Proje', 'text', 12), col('ref', 'Belge referansı', 'text', 18), col('net', 'KDV hariç', 'money'), col('vat', 'KDV', 'money'), col('wh', 'Stopaj', 'money'), col('gross', 'Brüt', 'money')],
+      expenseRows.map((r) => ({ no: s(r.entry_no), date: s(r.entry_date), status: r.status === 'posted' ? 'Kayıtlı' : 'İptal', card: `${s(r.card_code)} ${s(r.card_name)}`, desc: s(r.description), party: s(r.party), project: s(r.project_code), ref: s(r.document_ref), net: s(r.net), vat: s(r.vat), wh: s(r.withholding), gross: s(r.gross) })),
+    ),
+  );
+
   // Kasa/banka hesapları (bakiye güncel) ve hareketleri
   const tAccounts = await query(
     'Kasa ve banka hesapları',

@@ -195,6 +195,7 @@ describe('Excel ile fatura içe aktarma (X2)', async () => {
 
     await c.put('/api/company/modules/invoices.orders', { enabled: false });
     await c.put('/api/company/modules/sales.pricelists', { enabled: false });
+    await c.put('/api/company/modules/inventory.imports', { enabled: false });
     expect((await c.put('/api/company/modules/core.invoices', { enabled: false })).statusCode).toBe(200);
     expect((await preview(c, 'sales_invoices', lines)).statusCode).toBe(403);
   });

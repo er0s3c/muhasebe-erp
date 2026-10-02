@@ -41,6 +41,8 @@ import { chequeRoutes } from './modules/cheques/routes';
 import { salesRoutes } from './modules/sales/routes';
 import { pricingRoutes } from './modules/sales/pricing-routes';
 import { serialRoutes } from './modules/inventory/serial-routes';
+import { landedRoutes } from './modules/landed/routes';
+import { expenseRoutes } from './modules/expenses/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
@@ -185,6 +187,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(salesRoutes);
   await app.register(pricingRoutes);
   await app.register(serialRoutes);
+  await app.register(landedRoutes);
+  await app.register(expenseRoutes);
   await app.register(treasuryRoutes);
   await app.register(exportRoutes);
   await app.register(importRoutes);

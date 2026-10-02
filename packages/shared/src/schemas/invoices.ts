@@ -94,6 +94,8 @@ export const ACCOUNT_MAPPING_KEYS = [
   'docs_in_collection',
   'cheque_issued',
   'note_payable',
+  // İthalat maliyet dağıtımı (Faz X4); varsayılan doğrulanmamıştır
+  'import_cost_clearing',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -150,6 +152,8 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     docs_in_collection: '108',
     cheque_issued: '103',
     note_payable: '321',
+    // İthalat maliyetlerinin stoğa aktarılırken alacaklandırılan hesap: gideri ilk yazdığınız hesap (varsayılan genel yönetim gideri; satırda hesap seçilebilir). Doğrulanmamıştır.
+    import_cost_clearing: '632',
   };
 }
 

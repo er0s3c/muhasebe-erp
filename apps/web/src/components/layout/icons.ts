@@ -46,6 +46,7 @@ import {
   Layers,
   Upload,
   ShieldCheck,
+  Ship,
   Users,
   Wallet,
   Warehouse,
@@ -103,6 +104,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   download: Download,
   upload: Upload,
   puzzle: Puzzle,
+  ship: Ship,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

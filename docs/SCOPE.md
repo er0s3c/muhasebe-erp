@@ -76,8 +76,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Excel ile fatura içe aktarma (taslak, cari/stok eşleme, mükerrer denetimi, şablon) | ✅ (X2) irsaliye içe aktarma ⏳ |
 | Fiyat listeleri (satış/alış, miktar kademesi, geçerlilik, kopyala/yüzde ayarı/toplu giriş), cariye özel fiyat ve iskonto, tek fiyat çözümleyici | ✅ (X3) ⚠️ döviz çevirisi yok: belge para birimiyle aynı para birimindeki fiyat kullanılır |
 | Seri no takibi (kart bayrağı, giriş/çıkış/iade/fire/transfer, ters belge, tam geçmiş sorgusu, dışa aktarma) | ✅ (X3) lot/parti ⏳; seri takipli kartın sayım farkı ve kısmi miktar ❌ |
-| Gider kartları ve gider raporları | ⏳ |
-| İthalat maliyet dağıtımı (navlun, gümrük, liman) | ⏳ Faz B |
+| Gider kartları (varsayılan hesap, KDV kodu, stopaj %, proje) ve hızlı gider fişi (kasa/banka ya da cari), kart/ay/proje/cari/en yüksek gider raporları, dışa aktarma | ✅ (X4) ⚠️ KDV/stopaj kullanıcı verisi, doğrulanmadı; döviz ve ek dosya yüklemesi ❌; alış faturası satırında kart seçimi ⏳ |
+| İthalat maliyet dağıtımı (ithalat dosyası; navlun, sigorta, gümrük vergisi, komisyon vb. kullanıcı girişi; değer/miktar/ağırlık/elle dağıtım; stok maliyeti + yevmiye; iptal; birim maliyet raporu) | ✅ (X4) ⚠️ muhasebe işlenişi ve aktarım hesabı doğrulanmadı; gümrük vergisi/oran hesabı yok (kullanıcı girer) |
 | e-Fatura entegrasyonu (resmî REST API v1.2.3; iç faturadan ayrı gönderim durumu) | ⏳ Faz C ⚠️ yetkilendirme/test erişimi gerekir |
 
 ## Kasa ve banka

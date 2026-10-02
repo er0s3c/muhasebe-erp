@@ -104,7 +104,9 @@
     "treasuryGuarantees": "Banka teminat mektubu portföyü",
     "invoicesOrders": "Satış teklif ve siparişi",
     "salesPricelists": "Fiyat listeleri ve cari özel fiyat",
-    "inventorySerials": "Seri no takibi"
+    "inventorySerials": "Seri no takibi",
+    "inventoryImports": "İthalat maliyet dağıtımı",
+    "treasuryExpenses": "Gider kartları ve raporları"
   },
   "nav": {
     "groups": {
@@ -191,7 +193,11 @@
     "foreignSettings": "Yabancı işçi ayarları",
     "cheques": "Çek/senet portföyü",
     "bankGuarantees": "Teminat mektupları",
-    "privacy": "Veri koruma"
+    "privacy": "Veri koruma",
+    "importFiles": "İthalat dosyaları",
+    "expenseEntries": "Gider fişleri",
+    "expenseCards": "Gider kartları",
+    "expenseReports": "Gider raporları"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -4878,6 +4884,286 @@
       "apply": "{{n}} seri no'yu uygula",
       "duplicates": "Yinelenen seri no: {{list}}",
       "tooLong": "Bazı seri no'lar 60 karakterden uzun"
+    }
+  },
+  "landed": {
+    "title": "İthalat dosyaları",
+    "subtitle": "İthal malların alış faturası/irsaliye satırlarını ve navlun, sigorta, gümrük vergisi gibi ek maliyetleri bir dosyada toplayın; ek maliyetleri stok maliyetine dağıtın.",
+    "notice": "Ek maliyet tutarları ve oranları sizin girdiğiniz verilerdir; uygulama gümrük vergisi/oran hesabı yapmaz. Dağıtım ve muhasebeleştirme varsayılanları (aktarım hesabı 632 vb.) mali müşavirce doğrulanmamıştır; Ayarlar > Hesap eşlemesi bölümünden değiştirilir.",
+    "add": "Yeni ithalat dosyası",
+    "empty": "Henüz ithalat dosyası yok",
+    "emptyHint": "Kayıtlı alış faturası ya da alış irsaliyesi satırlarını seçip ek maliyetleri girerek başlayın.",
+    "tabs": {
+      "files": "Dosyalar",
+      "items": "Kart bazında maliyet"
+    },
+    "code": "Dosya no",
+    "name": "Dosya adı",
+    "reference": "Beyanname / referans",
+    "fileDate": "Dosya tarihi",
+    "postDate": "Kayıt tarihi",
+    "lineCount": "Mal satırı",
+    "goodsValue": "Mal değeri",
+    "costTotal": "Ek maliyet",
+    "landedValue": "Toplam maliyet",
+    "searchPlaceholder": "Dosya no, ad veya referans ara",
+    "status": {
+      "draft": "Taslak",
+      "allocated": "Dağıtıldı",
+      "posted": "Muhasebeleşti",
+      "cancelled": "İptal"
+    },
+    "methods": {
+      "value": "Değere göre",
+      "quantity": "Miktara göre",
+      "weight": "Ağırlığa göre",
+      "manual": "Elle"
+    },
+    "kinds": {
+      "freight": "Navlun",
+      "insurance": "Sigorta",
+      "customs_duty": "Gümrük vergisi",
+      "other_tax": "Diğer vergi/harç",
+      "brokerage": "Komisyon/gümrük müşavirliği",
+      "other": "Diğer"
+    },
+    "newTitle": "Yeni ithalat dosyası",
+    "defaultMethod": "Varsayılan dağıtım yöntemi",
+    "description": "Açıklama",
+    "header": "Dosya bilgileri",
+    "goods": {
+      "title": "Mal satırları",
+      "hint": "Kayıtlı alış faturalarının stoklu satırları ve alış irsaliyesi satırları. Bir satır aynı anda yalnızca bir aktif dosyada olabilir; irsaliyesi olan faturalı malda irsaliye satırını seçin.",
+      "add": "Satır ekle",
+      "empty": "Henüz mal satırı yok",
+      "doc": "Belge",
+      "item": "Kart",
+      "qty": "Miktar",
+      "value": "Mal değeri",
+      "weight": "Ağırlık",
+      "remove": "Çıkar",
+      "pickTitle": "Kaynak satır seç",
+      "pickSearch": "Belge no, cari veya kart ara",
+      "pickEmpty": "Eklenebilir kaynak satır bulunamadı",
+      "pickAdd": "Seçilenleri ekle",
+      "kindInvoice": "Fatura",
+      "kindDelivery": "İrsaliye"
+    },
+    "costs": {
+      "title": "Ek maliyet kalemleri",
+      "hint": "Tutarları siz girersiniz. Yabancı para biriminde kur verilmezse dosya tarihindeki kayıtlı kur kullanılır.",
+      "add": "Kalem ekle",
+      "empty": "Henüz maliyet kalemi yok",
+      "kind": "Tür",
+      "description": "Açıklama",
+      "party": "Ödenen taraf",
+      "noParty": "Belirtilmedi",
+      "currency": "Para birimi",
+      "amount": "Tutar",
+      "fxRate": "Kur",
+      "base": "Karşılığı",
+      "method": "Yöntem",
+      "reference": "Referans (fatura/makbuz no)",
+      "remove": "Çıkar"
+    },
+    "alloc": {
+      "title": "Dağıtım",
+      "preview": "Önizleme (kaydedilmemiş hesap)",
+      "result": "Dağıtım sonucu",
+      "cost": "Maliyet kalemi",
+      "total": "Toplam",
+      "manualHint": "Elle yöntemde her satıra düşen tutarı girin; toplam kalem tutarına eşit olmalıdır.",
+      "diff": "Fark",
+      "previewUnavailable": "Önizleme için tutar ve (yabancı parada) kur girin"
+    },
+    "report": {
+      "title": "Maliyet raporu",
+      "item": "Kart",
+      "qty": "Miktar",
+      "goods": "Mal değeri",
+      "allocated": "Dağıtılan",
+      "landed": "Toplam maliyet",
+      "before": "Birim maliyet (önce)",
+      "after": "Birim maliyet (sonra)",
+      "stocked": "Stok maliyetine",
+      "cogs": "Satılan mal maliyetine",
+      "byCost": "Maliyet türleri",
+      "empty": "Rapor için dosyayı dağıtın",
+      "kindTotals": "Maliyet türüne göre"
+    },
+    "itemsReport": {
+      "title": "Kart bazında ithalat maliyeti",
+      "hint": "Yalnızca muhasebeleşmiş dosyalar.",
+      "files": "Dosya",
+      "empty": "Muhasebeleşmiş ithalat dosyası yok"
+    },
+    "actions": {
+      "save": "Kaydet",
+      "allocate": "Dağıt",
+      "reopen": "Taslağa döndür",
+      "post": "Muhasebeleştir",
+      "cancel": "İptal et",
+      "saveFirst": "Önce değişiklikleri kaydedin",
+      "confirmReopen": "Dağıtım sonuçları silinir ve dosya düzenlenebilir olur. Devam edilsin mi?"
+    },
+    "postDialog": {
+      "title": "Muhasebeleştir",
+      "date": "Kayıt tarihi",
+      "hint": "Payların eldeki miktara düşen kısmı stok maliyetine (miktar değişmez, değer artar), artık stokta olmayan kısmı satılan mal maliyetine yazılır; alacak, maliyet kaleminin hesabına ya da aktarım hesabına gider."
+    },
+    "cancelDialog": {
+      "title": "İthalat dosyasını iptal et",
+      "reason": "İptal nedeni",
+      "date": "İptal tarihi",
+      "postedHint": "Stok maliyeti ve yevmiye ters kayıtla geri alınır. Kartlarda sonradan hareket varsa iptal edilemez."
+    },
+    "messages": {
+      "saved": "Kaydedildi",
+      "created": "İthalat dosyası oluşturuldu",
+      "allocated": "Maliyetler dağıtıldı",
+      "reopened": "Dosya taslağa döndürüldü",
+      "posted": "Muhasebeleştirildi",
+      "cancelled": "Dosya iptal edildi"
+    },
+    "refs": {
+      "journal": "Yevmiye",
+      "stockDoc": "Stok belgesi",
+      "cancelJournal": "İptal yevmiyesi",
+      "cancelReason": "İptal nedeni"
+    },
+    "history": {
+      "title": "Geçmiş",
+      "created": "Oluşturuldu",
+      "saved": "Kaydedildi",
+      "allocated": "Dağıtıldı",
+      "reopened": "Taslağa döndürüldü",
+      "posted": "Muhasebeleştirildi",
+      "cancelled": "İptal edildi"
+    },
+    "totals": {
+      "goods": "Mal değeri",
+      "costs": "Ek maliyet",
+      "landed": "Toplam maliyet"
+    }
+  },
+  "expenses": {
+    "notice": "KDV kodları ve stopaj yüzdeleri sizin girdiğiniz kullanıcı verisidir; uygulama vergi doğruluğunu denetlemez. Yevmiye hesapları (191, 320, 360) varsayılan eşlemelerdir ve doğrulanmamıştır. Gider fişi yalnızca defter para biriminde girilir.",
+    "entries": {
+      "title": "Gider fişleri",
+      "subtitle": "Hızlı gider girişi: kasa/banka ya da cari karşılığıyla tek fişte gider, KDV ve stopaj yevmiyesi.",
+      "add": "Yeni gider",
+      "empty": "Henüz gider fişi yok",
+      "emptyHint": "Önce gider kartı tanımlayın, sonra gideri girin.",
+      "no": "Fiş no",
+      "date": "Tarih",
+      "card": "Gider kartı",
+      "description": "Açıklama",
+      "party": "Cari",
+      "payment": "Ödeme",
+      "net": "KDV hariç",
+      "vat": "KDV",
+      "withholding": "Stopaj",
+      "gross": "Brüt",
+      "payable": "Ödenecek",
+      "status": "Durum",
+      "project": "Proje",
+      "ref": "Belge referansı",
+      "search": "Fiş no, açıklama, kart veya cari ara",
+      "all": "Tümü",
+      "posted": "Kayıtlı",
+      "cancelled": "İptal",
+      "journal": "Yevmiye",
+      "totalNet": "Toplam KDV hariç (kayıtlı)",
+      "totalGross": "Toplam brüt (kayıtlı)"
+    },
+    "form": {
+      "title": "Yeni gider",
+      "card": "Gider kartı",
+      "pickCard": "Kart seçin",
+      "date": "Tarih",
+      "description": "Açıklama",
+      "net": "KDV hariç tutar",
+      "taxCode": "KDV kodu",
+      "noTax": "KDV yok",
+      "defaultTax": "Kartın varsayılanı",
+      "withholdingRate": "Stopaj %",
+      "payment": "Ödeme şekli",
+      "paymentTreasury": "Kasa / banka",
+      "paymentParty": "Cari (vadeli)",
+      "treasuryAccount": "Kasa / banka hesabı",
+      "party": "Tedarikçi cari",
+      "partyOptional": "Cari (rapor için, isteğe bağlı)",
+      "dueDate": "Vade",
+      "documentRef": "Belge / ek referansı",
+      "documentRefHint": "Fiş/fatura numarası ya da ek dosyanın nerede saklandığı (metin)",
+      "summary": "Hesaplanan",
+      "vat": "KDV",
+      "withholding": "Stopaj",
+      "gross": "Brüt",
+      "payable": "Ödenecek",
+      "save": "Gideri kaydet",
+      "saved": "Gider kaydedildi",
+      "project": "Proje"
+    },
+    "cancel": {
+      "title": "Gider fişini iptal et",
+      "reason": "İptal nedeni",
+      "date": "İptal tarihi",
+      "done": "Gider fişi iptal edildi",
+      "button": "İptal"
+    },
+    "cards": {
+      "title": "Gider kartları",
+      "subtitle": "Gider türleri kataloğu: varsayılan gider hesabı, KDV kodu, stopaj yüzdesi ve proje.",
+      "add": "Yeni gider kartı",
+      "edit": "Gider kartını düzenle",
+      "empty": "Henüz gider kartı yok",
+      "code": "Kod",
+      "name": "Ad",
+      "account": "Gider hesabı",
+      "taxCode": "KDV kodu",
+      "withholding": "Stopaj %",
+      "project": "Proje",
+      "entries": "Fiş",
+      "notes": "Not",
+      "active": "Aktif",
+      "showInactive": "Pasifleri de göster",
+      "saved": "Gider kartı kaydedildi",
+      "deleted": "Gider kartı silindi",
+      "confirmDelete": "Bu gider kartı silinsin mi?",
+      "noTax": "KDV yok",
+      "pickAccount": "Hesap seçin"
+    },
+    "report": {
+      "title": "Gider raporları",
+      "subtitle": "Kayıtlı gider fişleri (iptaller hariç): kart, ay, proje, cari ve en yüksek giderler.",
+      "groups": {
+        "card": "Gider kartına göre",
+        "month": "Aylık eğilim",
+        "project": "Projeye göre",
+        "party": "Cariye göre",
+        "top": "En yüksek giderler"
+      },
+      "count": "Adet",
+      "net": "KDV hariç",
+      "vat": "KDV",
+      "withholding": "Stopaj",
+      "gross": "Brüt",
+      "month": "Ay",
+      "card": "Gider kartı",
+      "project": "Proje",
+      "noProject": "Projesiz",
+      "party": "Cari",
+      "noParty": "Cari belirtilmemiş",
+      "entry": "Fiş",
+      "date": "Tarih",
+      "description": "Açıklama",
+      "total": "Toplam",
+      "empty": "Bu dönemde gider fişi yok",
+      "topN": "İlk N",
+      "cardFilter": "Gider kartı",
+      "allCards": "Tüm kartlar",
+      "note": "Tutarlar defter para biriminde; KDV ve stopaj sizin girdiğiniz oranlarla hesaplanmıştır, doğrulanmamıştır."
     }
   }
 }
