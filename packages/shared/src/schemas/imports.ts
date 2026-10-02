@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { isoDate, uuid } from './common';
+import { directoryImportOptionsSchema } from './directory';
 
 /** İçe aktarılabilen veri türleri. */
-export const IMPORT_KINDS = ['parties', 'items', 'party_openings', 'stock_openings', 'ledger_openings', 'bank_statement', 'sales_invoices', 'purchase_invoices'] as const;
+export const IMPORT_KINDS = ['parties', 'items', 'party_openings', 'stock_openings', 'ledger_openings', 'bank_statement', 'sales_invoices', 'purchase_invoices', 'directory_contacts'] as const;
 export type ImportKind = (typeof IMPORT_KINDS)[number];
 
 export const IMPORT_KIND_LABELS: Record<ImportKind, string> = {
@@ -14,6 +15,7 @@ export const IMPORT_KIND_LABELS: Record<ImportKind, string> = {
   bank_statement: 'Banka ekstresi',
   sales_invoices: 'Satış faturaları',
   purchase_invoices: 'Alış faturaları',
+  directory_contacts: 'Rehber kişileri',
 };
 
 /** Sınırlar (API ve arayüz aynı değerleri kullanır). */
@@ -76,6 +78,18 @@ const invoiceImportFields = (side: 'sales' | 'purchases'): readonly ImportFieldD
 export const IMPORT_FIELDS: Record<ImportKind, readonly ImportFieldDef[]> = {
   sales_invoices: invoiceImportFields('sales'),
   purchase_invoices: invoiceImportFields('purchases'),
+  directory_contacts: [
+    f('fullName', 'Ad soyad', true, ['ad', 'adı soyadı', 'isim', 'kişi', 'yetkili', 'ad soyad / ünvan'], 'Ahmet Yılmaz'),
+    f('title', 'Unvan', false, ['görev', 'pozisyon', 'meslek'], 'Şube müdürü'),
+    f('organization', 'Kurum', false, ['firma', 'şirket', 'kurum adı', 'organizasyon'], 'Örnek Bankası', 'Mevcut kurum adıyla eşleşir; yoksa yeni kurum açılır'),
+    f('phone', 'Telefon', false, ['tel', 'telefon no', 'gsm', 'cep', 'cep telefonu'], '0392 222 00 00'),
+    f('phone2', 'Telefon 2', false, ['tel 2', 'ikinci telefon', 'telefon2', 'cep 2'], ''),
+    f('email', 'E-posta', false, ['eposta', 'e-mail', 'email', 'mail'], 'ahmet@ornek.com'),
+    f('email2', 'E-posta 2', false, ['eposta 2', 'ikinci e-posta', 'email2'], ''),
+    f('address', 'Adres', false, ['adres bilgisi'], 'Lefkoşa'),
+    f('tags', 'Etiketler', false, ['etiket', 'grup', 'kategori'], 'banka, kredi', 'Virgül ya da noktalı virgülle ayrılır'),
+    f('note', 'Not', false, ['notlar', 'açıklama'], ''),
+  ],
   parties: [
     f('code', 'Kod', false, ['cari kod', 'cari kodu', 'hesap kodu', 'müşteri kodu'], 'CR-000101', 'Boşsa otomatik verilir'),
     f('name', 'Ünvan', true, ['ünvan / ad soyad', 'ad soyad', 'ad', 'adı', 'cari adı', 'cari ünvan', 'firma', 'firma adı', 'müşteri adı', 'isim', 'hesap adı'], 'Demir Çelik A.Ş.'),
@@ -235,6 +249,7 @@ export const IMPORT_OPTION_SCHEMAS = {
   stock_openings: stockOpeningsOptionsSchema,
   ledger_openings: ledgerOpeningsOptionsSchema,
   bank_statement: bankStatementOptionsSchema,
+  directory_contacts: directoryImportOptionsSchema,
 } as const satisfies Record<ImportKind, z.ZodType>;
 
 export const importRunSchema = z.object({

@@ -2,7 +2,10 @@ import { z } from 'zod';
 import {
   accountLedgerQuerySchema,
   agingQuerySchema,
+  agendaListQuerySchema,
   attendanceLaborQuerySchema,
+  contactListQuerySchema,
+  organizationListQuerySchema,
   attendanceMonthQuerySchema,
   advanceListQuerySchema,
   employeeBalancesQuerySchema,
@@ -61,6 +64,9 @@ import {
   attendanceSummaryTable,
   attendanceLaborTable,
   payrollRegisterTable,
+  agendaTable,
+  directoryContactsTable,
+  directoryOrganizationsTable,
   employeeBalancesTable,
   employeeAdvancesTable,
   employeeStatementTable,
@@ -286,6 +292,10 @@ export const EXPORTS: readonly ExportDef[] = [
     build: payrollCostTable,
     file: (q) => `bordro-maliyeti-${q.from}_${q.to}`,
   }),
+  // Rehber (X6): toplu dışa aktarma üçüncü kişilerin kişisel verisini içerir → rehber yönetim izni; ajanda yalnızca görünen kalemleri verir
+  def({ key: 'directory-contacts', module: 'core.directory', permission: 'directory.manage', schema: contactListQuerySchema, build: directoryContactsTable, file: () => `rehber-kisiler-${todayIso()}` }),
+  def({ key: 'directory-organizations', module: 'core.directory', permission: 'directory.manage', schema: organizationListQuerySchema, build: directoryOrganizationsTable, file: () => `rehber-kurumlar-${todayIso()}` }),
+  def({ key: 'agenda', module: 'core.directory', permission: 'directory.read', schema: agendaListQuerySchema.extend({ scope: z.enum(['mine', 'company', 'all']).default('all') }), build: agendaTable, file: () => `ajanda-${todayIso()}` }),
   def({ key: 'employee-balances', module: 'hr.employee_ledger', permission: 'hr.payroll', schema: employeeBalancesQuerySchema, build: employeeBalancesTable, file: (q) => `personel-bakiyeleri-${q.asOf ?? todayIso()}` }),
   def({ key: 'employee-advances', module: 'hr.employee_ledger', permission: 'hr.payroll', schema: advanceListQuerySchema, build: employeeAdvancesTable, file: (q) => `personel-avans-sicili-${q.asOf ?? todayIso()}` }),
   def({

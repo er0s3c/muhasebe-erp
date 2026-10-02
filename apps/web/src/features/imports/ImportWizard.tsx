@@ -37,7 +37,7 @@ const STEPS = ['file', 'map', 'preview', 'done'] as const;
 const NEEDS_OFFSET: readonly ImportKind[] = ['party_openings', 'ledger_openings'];
 const NEEDS_DATE: readonly ImportKind[] = ['party_openings', 'stock_openings', 'ledger_openings'];
 const NEEDS_INVOICE: readonly ImportKind[] = ['sales_invoices', 'purchase_invoices'];
-const NEEDS_SKIP: readonly ImportKind[] = ['parties', 'items', 'sales_invoices', 'purchase_invoices'];
+const NEEDS_SKIP: readonly ImportKind[] = ['parties', 'items', 'sales_invoices', 'purchase_invoices', 'directory_contacts'];
 const NEEDS_CLOSING: readonly ImportKind[] = ['bank_statement'];
 /** Önizleme tablosunda gösterilen en çok satır (yanıt zaten tüm satırları taşır; DOM'u şişirmemek için). */
 const SHOW_ROWS = 500;

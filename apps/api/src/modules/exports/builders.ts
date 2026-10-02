@@ -1,4 +1,4 @@
-import { formatDateTR, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
+import { formatDateTR, hasPermission, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type Role, type TreasuryTxnType, type ContactListQuery, type AgendaListQuery } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -23,6 +23,8 @@ import { listProgress } from '../subcontracts/progress';
 import { listSubcontracts } from '../subcontracts/service';
 import { laborByProject, monthlySummary } from '../hr/attendance';
 import { listEmployees } from '../hr/employees';
+import { listAgenda } from '../directory/agenda';
+import { listContacts, listOrganizations } from '../directory/service';
 import { logPayrollAccess } from '../payroll/config';
 import { advanceRegister, employeeBalances, employeeStatement } from '../employee-ledger/reports';
 import { payrollCostByProject } from '../payroll/reports';
@@ -47,6 +49,8 @@ import { treasuryStatement } from '../treasury/reports';
 export interface BuildCtx {
   tx: Tx;
   company: { name: string; baseCurrency: string; reportingCurrency: string | null };
+  /** İsteği yapan kullanıcı (yalnızca kullanıcıya göre görünürlüğü olan raporlar için: ajanda). */
+  user?: { id: string; role: Role };
 }
 
 const CODE_IN_LABEL = /\(([A-Z]{3})\)$/;
@@ -2114,5 +2118,53 @@ export async function expenseReportTables(ctx: BuildCtx, q: ExpenseReportQuery):
     { key: 'gider-projelere-gore', title: 'Giderler: projeye göre', sheet: 'Projelere göre', subtitle, columns: [col('project', 'Proje', 'text', 28), ...amounts], rows: r.byProject.map((x) => ({ project: x.projectId ? `${x.projectCode} ${x.projectName}` : 'Projesiz', count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
     { key: 'gider-cariye-gore', title: 'Giderler: cariye göre', sheet: 'Cariye göre', subtitle, columns: [col('party', 'Cari', 'text', 28), ...amounts], rows: r.byParty.map((x) => ({ party: x.partyName ?? 'Cari belirtilmemiş', count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
     { key: 'gider-en-yuksek', title: `Giderler: en yüksek ${q.top} fiş`, sheet: 'En yüksek', subtitle, columns: [col('no', 'Fiş no', 'text', 16), col('date', 'Tarih', 'date'), col('card', 'Gider kartı', 'text', 24), col('desc', 'Açıklama', 'text', 30), col('party', 'Cari', 'text', 24), money('KDV hariç', 'net'), money('Brüt', 'gross')], rows: r.top.map((x) => ({ no: x.entryNo as string, date: x.entryDate as string, card: x.cardName as string, desc: x.description as string, party: (x.partyName as string | null) ?? null, net: x.net as string, gross: x.gross as string })) },
+  ];
+}
+
+const DIRECTORY_NOTE = 'Rehber üçüncü kişilerin kişisel verisini içerir (telefon, e-posta, adres); görüşme notları ve serbest not alanı dosyaya DAHİL DEĞİLDİR; kimlik no ve doğum tarihi rehberde tutulmaz';
+
+export async function directoryContactsTable(ctx: BuildCtx, q: Partial<ContactListQuery>): Promise<ReportTable[]> {
+  const { contacts } = await listContacts(ctx.tx, q);
+  return [
+    {
+      key: 'rehber-kisiler',
+      title: 'Rehber: kişiler',
+      sheet: 'Kişiler',
+      subtitle: sub(ctx, DIRECTORY_NOTE),
+      columns: [col('name', 'Ad soyad', 'text', 28), col('title', 'Unvan', 'text', 20), col('org', 'Kurum', 'text', 28), col('phone', 'Telefon', 'text', 18), col('phone2', 'Telefon 2', 'text', 18), col('email', 'E-posta', 'text', 28), col('email2', 'E-posta 2', 'text', 28), col('address', 'Adres', 'text', 32), col('tags', 'Etiketler', 'text', 24), col('party', 'Cari', 'text', 24), col('project', 'Proje', 'text', 14), col('status', 'Durum', 'text', 10)],
+      rows: contacts.map((c) => ({ name: c.fullName as string, title: (c.title as string | null) ?? null, org: (c.organizationName as string | null) ?? null, phone: (c.phone as string | null) ?? null, phone2: (c.phone2 as string | null) ?? null, email: (c.email as string | null) ?? null, email2: (c.email2 as string | null) ?? null, address: (c.address as string | null) ?? null, tags: ((c.tags as string[]) ?? []).join(', ') || null, party: (c.partyName as string | null) ?? null, project: (c.projectCode as string | null) ?? null, status: c.anonymizedAt ? 'Anonim' : c.mergedIntoId ? 'Birleştirildi' : c.isArchived ? 'Arşiv' : 'Etkin' })),
+    },
+  ];
+}
+
+export async function directoryOrganizationsTable(ctx: BuildCtx, q: { q?: string; category?: string; archived: 'active' | 'archived' | 'all'; partyId?: string }): Promise<ReportTable[]> {
+  const { organizations } = await listOrganizations(ctx.tx, q);
+  return [
+    {
+      key: 'rehber-kurumlar',
+      title: 'Rehber: kurumlar',
+      sheet: 'Kurumlar',
+      subtitle: sub(ctx, DIRECTORY_NOTE),
+      columns: [col('name', 'Kurum', 'text', 32), col('category', 'Kategori', 'text', 18), col('phone', 'Telefon', 'text', 18), col('email', 'E-posta', 'text', 28), col('web', 'Web', 'text', 26), col('address', 'Adres', 'text', 32), col('party', 'Cari', 'text', 24), col('contacts', 'Kişi sayısı', 'int'), col('status', 'Durum', 'text', 10)],
+      rows: organizations.map((o) => ({ name: o.name as string, category: o.category as string, phone: (o.phone as string | null) ?? null, email: (o.email as string | null) ?? null, web: (o.web as string | null) ?? null, address: (o.address as string | null) ?? null, party: (o.partyName as string | null) ?? null, contacts: Number(o.contactCount ?? 0), status: o.isArchived ? 'Arşiv' : 'Etkin' })),
+    },
+  ];
+}
+
+const AGENDA_STATUS_LABEL: Record<string, string> = { open: 'Açık', done: 'Bitti', cancelled: 'İptal' };
+
+/** Ajanda dışa aktarma: yalnızca isteği yapanın görebildiği kalemler (kendi + şirket; rehber yöneticisi hepsi). */
+export async function agendaTable(ctx: BuildCtx, q: Partial<AgendaListQuery>): Promise<ReportTable[]> {
+  if (!ctx.user) throw unprocessable('Kullanıcı bağlamı yok', 'EXPORT_NO_USER');
+  const { items } = await listAgenda(ctx.tx, { companyId: '', userId: ctx.user.id, canManage: hasPermission(ctx.user.role, 'directory.manage') }, { scope: 'all', ...q } as AgendaListQuery);
+  return [
+    {
+      key: 'ajanda',
+      title: 'Ajanda',
+      sheet: 'Ajanda',
+      subtitle: sub(ctx, 'Hatırlatma ofseti yalnızca veridir; bildirim gönderilmez'),
+      columns: [col('date', 'Tarih', 'date'), col('time', 'Saat', 'text', 12), col('kind', 'Tür', 'text', 12), col('title', 'Başlık', 'text', 36), col('status', 'Durum', 'text', 10), col('owner', 'Sahibi', 'text', 22), col('contact', 'Kişi', 'text', 24), col('org', 'Kurum', 'text', 24), col('party', 'Cari', 'text', 24), col('project', 'Proje', 'text', 14), col('remind', 'Hatırlatma (dk önce)', 'int')],
+      rows: items.map((i) => ({ date: i.dueDate as string, time: i.allDay ? 'Tüm gün' : `${i.startTime}${i.endTime ? `–${i.endTime}` : ''}`, kind: i.kind === 'appointment' ? 'Randevu' : 'Görev', title: i.title as string, status: AGENDA_STATUS_LABEL[i.status as string] ?? (i.status as string), owner: (i.ownerName as string | null) ?? 'Şirket', contact: (i.contactName as string | null) ?? null, org: (i.organizationName as string | null) ?? null, party: (i.partyName as string | null) ?? null, project: (i.projectCode as string | null) ?? null, remind: (i.remindBeforeMinutes as number | null) ?? null })),
+    },
   ];
 }

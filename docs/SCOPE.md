@@ -12,7 +12,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Kullanıcılar, roller, yetki; denetim izi | ✅ |
 | Sektöre göre menü ve modül açma/kapama (Ayarlar > Modüller: bağımlılık korumalı, veri silinmez) | ✅ |
 | Genel bakış: kurulum kontrol listesi, özetler | ✅ |
-| Rehber: kişi/kurum defteri, ajanda, görüşme ve toplantı notları | ⏳ |
+| Rehber: kişi/kurum defteri, ajanda, görüşme ve toplantı notları (özel/paylaşılan not, takip görevi, birleştirme, vCard/CSV, ilgili kişi dışa aktarma ve anonimleştirme) | ✅ (X6) ⚠️ kişisel veri dayanağı/saklama süresi doğrulanmadı; tekrarlayan ajanda kalemi ve bildirim yok |
 | Özel kodlar (kayıtları kendi ölçütünle grupla) | ✅ |
 | Çalışma alanı ve şirket ayarları (unvan, vergi bilgileri) | ✅ |
 

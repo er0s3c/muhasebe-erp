@@ -997,6 +997,8 @@ export const dataSubjectRequests = pgTable(
       .notNull()
       .references(() => companies.id),
     employeeId: uuid(),
+    /** Rehber kişisi (X6): talep ya personele ya rehber kişisine yöneliktir, ikisine birden değil. */
+    contactId: uuid(),
     requesterName: text().notNull(),
     /** access | export | correction | erasure */
     kind: text().notNull(),
@@ -1011,6 +1013,8 @@ export const dataSubjectRequests = pgTable(
   },
   (t) => [
     foreignKey({ name: 'data_subject_requests_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'data_subject_requests_contact_fk', columns: [t.contactId, t.companyId], foreignColumns: [directoryContacts.id, directoryContacts.companyId] }),
+    check('data_subject_requests_subject_ck', sql`${t.employeeId} is null or ${t.contactId} is null`),
     index('data_subject_requests_status_idx').on(t.companyId, t.status),
     check('data_subject_requests_kind_ck', sql`${t.kind} in ('access','export','correction','erasure')`),
     check('data_subject_requests_status_ck', sql`${t.status} in ('open','completed','rejected')`),
@@ -1026,8 +1030,10 @@ export const personalDataAccessLog = pgTable(
     companyId: uuid()
       .notNull()
       .references(() => companies.id),
-    employeeId: uuid().notNull(),
-    /** id_number | birth_date | iban | export | payroll (bordro/ücret görüntüleme) | social_security_no (açık okuma) | social_security (bildirim/profil görüntüleme) | employee_ledger (personel cari/avans görüntüleme) */
+    employeeId: uuid(),
+    /** Rehber kişisi (X6): kayıt ya personele ya rehber kişisine aittir. */
+    contactId: uuid(),
+    /** id_number | birth_date | iban | export | payroll (bordro/ücret görüntüleme) | social_security_no (açık okuma) | social_security (bildirim/profil görüntüleme) | employee_ledger (personel cari/avans görüntüleme) | directory_export | directory_anonymize (rehber kişisi) */
     field: text().notNull(),
     reason: text().notNull(),
     userId: uuid()
@@ -1037,8 +1043,10 @@ export const personalDataAccessLog = pgTable(
   },
   (t) => [
     foreignKey({ name: 'personal_data_access_log_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'personal_data_access_log_contact_fk', columns: [t.contactId, t.companyId], foreignColumns: [directoryContacts.id, directoryContacts.companyId] }),
+    check('personal_data_access_log_subject_ck', sql`(${t.employeeId} is null) <> (${t.contactId} is null)`),
     index('personal_data_access_log_emp_idx').on(t.companyId, t.employeeId, t.createdAt),
-    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export','payroll','social_security_no','social_security','foreign_doc_no','foreign_docs','employee_ledger')`),
+    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export','payroll','social_security_no','social_security','foreign_doc_no','foreign_docs','employee_ledger','directory_export','directory_anonymize')`),
     check('personal_data_access_log_reason_ck', sql`length(btrim(${t.reason})) >= 3`),
   ],
 );
@@ -5208,5 +5216,184 @@ export const employeeSalaryPayments = pgTable(
     foreignKey({ name: 'employee_salary_payments_txn_fk', columns: [t.treasuryTxnId, t.companyId], foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId] }),
     index('employee_salary_payments_employee_idx').on(t.companyId, t.employeeId, t.payDate),
     check('employee_salary_payments_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+
+// --- Rehber, ajanda ve görüşme notları (Faz X6) --------------------------------------------------------
+
+/** Rehber kurumu (banka, kamu kurumu, tedarikçi…). Kategori kullanıcı yönetimli serbest metindir. Silinmez, arşivlenir (ERP21). */
+export const directoryOrganizations = pgTable(
+  'directory_organizations',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    name: text().notNull(),
+    category: text().notNull().default('Diğer'),
+    address: text(),
+    phone: text(),
+    email: text(),
+    web: text(),
+    /** İsteğe bağlı bağlantı: aynı kurumun cari kartı. */
+    partyId: uuid(),
+    note: text(),
+    isArchived: boolean().notNull().default(false),
+    archivedAt: timestamp({ withTimezone: true }),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('directory_organizations_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'directory_organizations_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    index('directory_organizations_name_idx').on(t.companyId, t.name),
+    check('directory_organizations_name_ck', sql`length(btrim(${t.name})) >= 2`),
+    check('directory_organizations_archive_ck', sql`${t.isArchived} = (${t.archivedAt} is not null)`),
+  ],
+);
+
+/**
+ * Rehber kişisi. Telefon/e-posta/adres kişisel veridir (şifrelenmez, envanterde işaretli); kimlik no ve doğum tarihi
+ * rehberde HİÇ tutulmaz. Silinmez: arşivlenir, birleştirilir (merged_into_id) ya da anonimleştirilir (ERP21).
+ */
+export const directoryContacts = pgTable(
+  'directory_contacts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    fullName: text().notNull(),
+    title: text(),
+    organizationId: uuid(),
+    phone: text(),
+    phone2: text(),
+    email: text(),
+    email2: text(),
+    address: text(),
+    partyId: uuid(),
+    employeeId: uuid(),
+    projectId: uuid(),
+    tags: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    note: text(),
+    isArchived: boolean().notNull().default(false),
+    archivedAt: timestamp({ withTimezone: true }),
+    mergedIntoId: uuid(),
+    anonymizedAt: timestamp({ withTimezone: true }),
+    anonymizedBy: uuid().references(() => users.id),
+    anonymizeReason: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('directory_contacts_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'directory_contacts_org_fk', columns: [t.organizationId, t.companyId], foreignColumns: [directoryOrganizations.id, directoryOrganizations.companyId] }),
+    foreignKey({ name: 'directory_contacts_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'directory_contacts_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'directory_contacts_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    foreignKey({ name: 'directory_contacts_merged_fk', columns: [t.mergedIntoId, t.companyId], foreignColumns: [t.id, t.companyId] }),
+    index('directory_contacts_name_idx').on(t.companyId, t.fullName),
+    index('directory_contacts_org_idx').on(t.companyId, t.organizationId),
+    check('directory_contacts_name_ck', sql`length(btrim(${t.fullName})) >= 2`),
+    check('directory_contacts_archive_ck', sql`${t.isArchived} = (${t.archivedAt} is not null)`),
+    check('directory_contacts_merged_ck', sql`${t.mergedIntoId} is null or ${t.isArchived}`),
+    check('directory_contacts_anonymized_ck', sql`(${t.anonymizedAt} is null) = (${t.anonymizeReason} is null) and (${t.anonymizedAt} is null or ${t.isArchived})`),
+  ],
+);
+
+/**
+ * Görüşme notu: kişi ve/veya kuruma bağlı etkileşim kaydı. Yalnızca eklenir (silinmez); yazarı düzenleyebilir, geçmiş denetim
+ * izindedir. `private` notu yalnızca yazarı görür (kısıtlayıcı RLS politikası), `shared` notu rehber okuyan herkes.
+ */
+export const directoryNotes = pgTable(
+  'directory_notes',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    contactId: uuid(),
+    organizationId: uuid(),
+    /** call | meeting | email | other */
+    kind: text().notNull(),
+    noteDate: date({ mode: 'string' }).notNull(),
+    summary: text().notNull(),
+    /** private | shared */
+    visibility: text().notNull().default('private'),
+    projectId: uuid(),
+    authorId: uuid()
+      .notNull()
+      .references(() => users.id),
+    clearedAt: timestamp({ withTimezone: true }),
+    editedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ name: 'directory_notes_contact_fk', columns: [t.contactId, t.companyId], foreignColumns: [directoryContacts.id, directoryContacts.companyId] }),
+    foreignKey({ name: 'directory_notes_org_fk', columns: [t.organizationId, t.companyId], foreignColumns: [directoryOrganizations.id, directoryOrganizations.companyId] }),
+    foreignKey({ name: 'directory_notes_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    unique('directory_notes_id_company_uq').on(t.id, t.companyId),
+    index('directory_notes_contact_idx').on(t.companyId, t.contactId, t.noteDate),
+    index('directory_notes_org_idx').on(t.companyId, t.organizationId, t.noteDate),
+    check('directory_notes_kind_ck', sql`${t.kind} in ('call','meeting','email','other')`),
+    check('directory_notes_visibility_ck', sql`${t.visibility} in ('private','shared')`),
+    check('directory_notes_subject_ck', sql`${t.contactId} is not null or ${t.organizationId} is not null`),
+    check('directory_notes_summary_ck', sql`length(btrim(${t.summary})) >= 1`),
+  ],
+);
+
+/**
+ * Ajanda kalemi: görev/hatırlatma ya da randevu. `ownerId` boşsa şirket ajandasıdır. Hatırlatma ofseti yalnızca veridir
+ * (bildirim/push altyapısı yoktur). Silinmez; iptal edilir (ERP21).
+ */
+export const agendaItems = pgTable(
+  'agenda_items',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** task | appointment */
+    kind: text().notNull().default('task'),
+    title: text().notNull(),
+    description: text(),
+    dueDate: date({ mode: 'string' }).notNull(),
+    allDay: boolean().notNull().default(true),
+    startTime: text(),
+    endTime: text(),
+    remindBeforeMinutes: integer(),
+    /** open | done | cancelled */
+    status: text().notNull().default('open'),
+    completedAt: timestamp({ withTimezone: true }),
+    ownerId: uuid().references(() => users.id),
+    contactId: uuid(),
+    organizationId: uuid(),
+    partyId: uuid(),
+    projectId: uuid(),
+    sourceNoteId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ name: 'agenda_items_contact_fk', columns: [t.contactId, t.companyId], foreignColumns: [directoryContacts.id, directoryContacts.companyId] }),
+    foreignKey({ name: 'agenda_items_org_fk', columns: [t.organizationId, t.companyId], foreignColumns: [directoryOrganizations.id, directoryOrganizations.companyId] }),
+    foreignKey({ name: 'agenda_items_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'agenda_items_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    foreignKey({ name: 'agenda_items_note_fk', columns: [t.sourceNoteId, t.companyId], foreignColumns: [directoryNotes.id, directoryNotes.companyId] }),
+    index('agenda_items_due_idx').on(t.companyId, t.status, t.dueDate),
+    index('agenda_items_owner_idx').on(t.companyId, t.ownerId, t.dueDate),
+    check('agenda_items_kind_ck', sql`${t.kind} in ('task','appointment')`),
+    check('agenda_items_status_ck', sql`${t.status} in ('open','done','cancelled')`),
+    check('agenda_items_title_ck', sql`length(btrim(${t.title})) >= 1`),
+    check('agenda_items_time_ck', sql`(${t.allDay} and ${t.startTime} is null and ${t.endTime} is null) or (not ${t.allDay} and ${t.startTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and (${t.endTime} is null or (${t.endTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and ${t.endTime} > ${t.startTime})))`),
+    check('agenda_items_remind_ck', sql`${t.remindBeforeMinutes} is null or ${t.remindBeforeMinutes} between 0 and 43200`),
+    check('agenda_items_done_ck', sql`(${t.status} = 'done') = (${t.completedAt} is not null)`),
   ],
 );

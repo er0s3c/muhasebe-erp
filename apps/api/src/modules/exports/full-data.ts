@@ -1,11 +1,11 @@
 import { sql, type SQL } from 'drizzle-orm';
-import { formatDateTR, type FullDataQuery } from '@erp/shared';
+import { formatDateTR, hasPermission, type FullDataQuery } from '@erp/shared';
 import { TR } from '../../db/search';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ReportTable, TableColumn } from '../../files/table';
 import { BOOK_EXPORT_MAX_LINES, countBookLines, journalBook } from '../ledger/books';
 import { TXN_LABEL } from '../treasury/posting';
-import { INVOICE_TYPE_LABEL, col, journalBookColumns, unitLabel, PARTY_KIND_LABEL, STOCK_DOC_LABEL, type BuildCtx } from './builders';
+import { INVOICE_TYPE_LABEL, col, directoryContactsTable, directoryOrganizationsTable, journalBookColumns, unitLabel, PARTY_KIND_LABEL, STOCK_DOC_LABEL, type BuildCtx } from './builders';
 
 /** Sayfa başına en çok satır: büyük şirketlerde tarih süzgeci kullanılmalıdır. */
 export const FULL_DATA_SHEET_MAX_ROWS = 100_000;
@@ -595,6 +595,14 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
         'Genel düzen — resmî bildirim formatı değildir, doğrulanmadı · personel bazında ayrıntı ve sosyal güvenlik no maskelenir (dahil değil)',
       ),
     );
+  }
+
+  // Rehber (X6): üçüncü kişilerin kişisel verisi → yalnızca rehber yönetim izni olanların dosyasına girer; görüşme notları dahil değildir
+  if (ctx.user && hasPermission(ctx.user.role, 'directory.manage')) {
+    const [contacts] = await directoryContactsTable(ctx, { archived: 'all' });
+    if (contacts && contacts.rows.length > 0) tables.push({ ...contacts, key: 'rehber', title: 'Rehber', sheet: 'Rehber' });
+    const [orgs] = await directoryOrganizationsTable(ctx, { archived: 'all' });
+    if (orgs && orgs.rows.length > 0) tables.push({ ...orgs, key: 'rehber-kurumlari', title: 'Rehber kurumları', sheet: 'Rehber kurumları' });
   }
 
   return tables;

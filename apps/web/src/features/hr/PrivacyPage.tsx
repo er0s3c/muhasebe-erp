@@ -13,8 +13,8 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR } from '../../lib/format';
-import { useCMutation, useCQuery } from '../../lib/queries';
-import type { AccessLogRow, DsrRow, EmployeeRow, InventoryRow } from '../../lib/types';
+import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
+import type { AccessLogRow, DirContact, DsrRow, EmployeeRow, InventoryRow } from '../../lib/types';
 import { HR_INVALIDATE } from './common';
 
 type Tab = 'inventory' | 'requests' | 'log';
@@ -149,21 +149,26 @@ function RequestsTab() {
   const [exporting, setExporting] = useState<DsrRow | null>(null);
   const [kind, setKind] = useState('access');
   const [employeeId, setEmployeeId] = useState('');
+  const [contactId, setContactId] = useState('');
+  const dirModule = useModuleEnabled('core.directory');
+  const can = useCan();
+  const dirOn = dirModule && can('directory.manage');
+  const { data: dirContacts } = useCQuery<{ contacts: DirContact[] }>(['directory', 'contacts', 'options'], '/api/directory/contacts', { enabled: dirOn });
   const [requester, setRequester] = useState('');
   const [description, setDescription] = useState('');
   const [outcome, setOutcome] = useState<'completed' | 'rejected'>('completed');
   const [note, setNote] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const [exported, setExported] = useState<string | null>(null);
-  const create = useCMutation((_: void, call) => call('/api/privacy/requests', { method: 'POST', body: { kind, requesterName: requester.trim(), ...(employeeId ? { employeeId } : {}), ...(description.trim() ? { description: description.trim() } : {}) } }), HR_INVALIDATE);
+  const create = useCMutation((_: void, call) => call('/api/privacy/requests', { method: 'POST', body: { kind, requesterName: requester.trim(), ...(employeeId ? { employeeId } : {}), ...(contactId ? { contactId } : {}), ...(description.trim() ? { description: description.trim() } : {}) } }), HR_INVALIDATE);
   const resolve = useCMutation((_: void, call) => call(`/api/privacy/requests/${resolving!.id}/resolve`, { method: 'POST', body: { outcome, resolutionNote: note.trim() } }), HR_INVALIDATE);
-  const doExport = useCMutation((_: void, call) => call<unknown>(`/api/privacy/employees/${exporting!.employeeId}/export`, { method: 'POST', body: { reason: `Talep: ${exporting!.kind} (${exporting!.requesterName})` } }), HR_INVALIDATE);
+  const doExport = useCMutation((_: void, call) => call<unknown>(exporting!.contactId ? `/api/privacy/contacts/${exporting!.contactId}/export` : `/api/privacy/employees/${exporting!.employeeId}/export`, { method: 'POST', body: { reason: `Talep: ${exporting!.kind} (${exporting!.requesterName})` } }), HR_INVALIDATE);
   if (isPending || !data) return <PageLoading />;
   const rows = data.requests;
   return (
     <>
       <div className="mb-3 flex justify-end">
-        <Button variant="primary" onClick={() => { setKind('access'); setEmployeeId(''); setRequester(''); setDescription(''); setError(null); setAdding(true); }}>{t('privacy.req.add')}</Button>
+        <Button variant="primary" onClick={() => { setKind('access'); setEmployeeId(''); setContactId(''); setRequester(''); setDescription(''); setError(null); setAdding(true); }}>{t('privacy.req.add')}</Button>
       </div>
       {rows.length === 0 ? (
         <Card><EmptyState icon={<ShieldCheck className="size-5" />} title={t('privacy.req.empty')} description={t('privacy.req.emptyDesc')} /></Card>
@@ -186,12 +191,12 @@ function RequestsTab() {
                   <Td className="text-muted">{formatDateTR(r.openedAt.slice(0, 10))}</Td>
                   <Td>{r.requesterName}{r.description ? <div className="text-xs text-muted">{r.description}</div> : null}</Td>
                   <Td>{t(`privacy.kinds.${r.kind}`)}</Td>
-                  <Td>{r.employeeId ? <Link className="underline" to={`/hr/employees/${r.employeeId}`}>{r.employeeCode} {r.employeeName}</Link> : '—'}</Td>
+                  <Td>{r.employeeId ? <Link className="underline" to={`/hr/employees/${r.employeeId}`}>{r.employeeCode} {r.employeeName}</Link> : r.contactId ? <Link className="underline" to={`/directory/contacts/${r.contactId}`}>{r.contactName}</Link> : '—'}</Td>
                   <Td><Badge tone={DSR_TONE[r.status]}>{t(`privacy.reqStatus.${r.status}`)}</Badge>{r.resolutionNote ? <div className="text-xs text-muted">{r.resolutionNote}</div> : null}</Td>
                   <Td>
                     {r.status === 'open' && (
                       <div className="flex justify-end gap-2">
-                        {r.employeeId && (r.kind === 'access' || r.kind === 'export') && <Button size="sm" onClick={() => { setExported(null); setError(null); setExporting(r); }}>{t('privacy.req.exportData')}</Button>}
+                        {(r.employeeId || r.contactId) && (r.kind === 'access' || r.kind === 'export') && <Button size="sm" onClick={() => { setExported(null); setError(null); setExporting(r); }}>{t('privacy.req.exportData')}</Button>}
                         <Button size="sm" onClick={() => { setOutcome('completed'); setNote(''); setError(null); setResolving(r); }}>{t('privacy.req.resolve')}</Button>
                       </div>
                     )}
@@ -227,12 +232,22 @@ function RequestsTab() {
           </Field>
           <Field label={t('privacy.req.person')}>
             {(id) => (
-              <Select id={id} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+              <Select id={id} value={employeeId} onChange={(e) => { setEmployeeId(e.target.value); if (e.target.value) setContactId(''); }}>
                 <option value="">—</option>
                 {(emps?.employees ?? []).map((e) => <option key={e.id} value={e.id}>{e.code} {e.fullName}</option>)}
               </Select>
             )}
           </Field>
+          {dirOn && (
+            <Field label={t('privacy.req.contactPerson')}>
+              {(id) => (
+                <Select id={id} value={contactId} onChange={(e) => { setContactId(e.target.value); if (e.target.value) setEmployeeId(''); }}>
+                  <option value="">—</option>
+                  {(dirContacts?.contacts ?? []).map((c) => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+                </Select>
+              )}
+            </Field>
+          )}
           {kind === 'erasure' && <Callout tone="info">{t('privacy.req.erasureNote')}</Callout>}
           <Field label={t('privacy.req.description')}>{(id) => <Textarea id={id} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={1000} />}</Field>
         </div>
@@ -305,8 +320,8 @@ function LogTab() {
           {data.log.map((l) => (
             <Tr key={l.id}>
               <Td className="text-muted">{formatDateTR(l.at.slice(0, 10))} {l.at.slice(11, 16)}</Td>
-              <Td><Link className="underline" to={`/hr/employees/${l.employeeId}`}>{l.employeeCode} {l.employeeName}</Link></Td>
-              <Td>{l.field === 'export' ? t('privacy.log.export') : t(`hr.fields.${l.field}`)}</Td>
+              <Td>{l.employeeId ? <Link className="underline" to={`/hr/employees/${l.employeeId}`}>{l.employeeCode} {l.employeeName}</Link> : <Link className="underline" to={`/directory/contacts/${l.contactId}`}>{l.contactName}</Link>}</Td>
+              <Td>{l.field === 'export' ? t('privacy.log.export') : l.field === 'directory_export' || l.field === 'directory_anonymize' ? t(`privacy.log.${l.field}`) : t(`hr.fields.${l.field}`)}</Td>
               <Td>{l.reason}</Td>
               <Td className="text-muted">{l.by}</Td>
             </Tr>

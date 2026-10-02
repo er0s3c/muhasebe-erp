@@ -4,6 +4,7 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
+import { RelatedContacts } from '../directory/RelatedContacts';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
@@ -191,6 +192,7 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
           </TableWrap>
         )}
       </Card>
+      <RelatedContacts projectId={project.id} />
     </div>
   );
 }

@@ -405,8 +405,9 @@ describe('sözleşme testleri', async () => {
       const definers = await q(
         `select proname from pg_proc where pronamespace = 'public'::regnamespace and prosecdef order by 1`,
       );
+      // directory_*: rehber (X6) tek amaçlı işlevleri (özel not görünürlüğünü yalnızca ilgili kişi dışa aktarma/birleştirme/anonimleştirme için aşar; şirket app_company_id ile doğrulanır);
       // audit_row_change: denetim izi; license_company_count: RLS'i aşan, yalnızca sayı döndüren şirket sayımı (lisans sınırı)
-      expect(definers.rows.map((r) => r.proname)).toEqual(['audit_row_change', 'license_company_count']);
+      expect(definers.rows.map((r) => r.proname)).toEqual(['audit_row_change', 'directory_anonymize_contact', 'directory_repoint_notes', 'directory_subject_notes', 'license_company_count']);
       const role = await q(`select rolsuper, rolbypassrls from pg_roles where rolname = 'erp_app'`);
       expect(role.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
       const owned = await q(

@@ -44,7 +44,7 @@ export const hrRoutes: FastifyPluginAsync = async (app) => {
   const privacy = { module: MODULE, permission: 'privacy.manage' } as const;
   const hrCtx = ({ company, user }: TenantCtx): HrCtx => ({ companyId: company.id, userId: user.id, secret: app.config.JWT_SECRET });
   const listQuery = z.object({ status: z.enum(['open', 'completed', 'rejected']).optional() });
-  const logQuery = z.object({ employeeId: z.string().uuid().optional() });
+  const logQuery = z.object({ employeeId: z.string().uuid().optional(), contactId: z.string().uuid().optional() });
 
   // --- Personel -------------------------------------------------------------------------------------
   app.get('/api/employees', tenantRoute(app, read, async ({ tx, req }) => listEmployees(tx, employeeListQuerySchema.parse(req.query))));

@@ -2030,16 +2030,20 @@ export interface DsrRow {
   employeeId: string | null;
   employeeCode: string | null;
   employeeName: string | null;
+  contactId: string | null;
+  contactName: string | null;
 }
 
 export interface AccessLogRow {
   id: string;
-  field: SensitiveField | 'export';
+  field: SensitiveField | 'export' | 'directory_export' | 'directory_anonymize';
   reason: string;
   at: string;
-  employeeId: string;
-  employeeCode: string;
-  employeeName: string;
+  employeeId: string | null;
+  employeeCode: string | null;
+  employeeName: string | null;
+  contactId: string | null;
+  contactName: string | null;
   by: string;
 }
 
@@ -3054,4 +3058,116 @@ export interface SalaryPaymentRow {
   txnId: string;
   txnStatus: 'posted' | 'cancelled';
   runNumber: string | null;
+}
+
+// --- Rehber, ajanda ve görüşme notları (Faz X6) ---
+
+export interface DirContact {
+  id: string;
+  fullName: string;
+  title: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  phone: string | null;
+  phone2: string | null;
+  email: string | null;
+  email2: string | null;
+  address: string | null;
+  partyId: string | null;
+  partyCode: string | null;
+  partyName: string | null;
+  employeeId: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  tags: string[];
+  note: string | null;
+  isArchived: boolean;
+  mergedIntoId: string | null;
+  anonymizedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DirDuplicate {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  isArchived: boolean;
+  matchedOn: 'phone' | 'email';
+}
+
+export interface DirOrg {
+  id: string;
+  name: string;
+  category: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  web: string | null;
+  partyId: string | null;
+  partyName: string | null;
+  note: string | null;
+  isArchived: boolean;
+  contactCount: number;
+  createdAt: string;
+}
+
+export type DirNoteKind = 'call' | 'meeting' | 'email' | 'other';
+
+export interface DirNote {
+  id: string;
+  contactId: string | null;
+  contactName: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  kind: DirNoteKind;
+  noteDate: string;
+  summary: string;
+  visibility: 'private' | 'shared';
+  projectId: string | null;
+  projectCode: string | null;
+  authorId: string;
+  authorName: string;
+  clearedAt: string | null;
+  editedAt: string | null;
+  createdAt: string;
+  mine: boolean;
+}
+
+export type AgendaBucketKey = 'overdue' | 'today' | 'upcoming' | 'later' | 'closed';
+
+export interface AgendaItem {
+  id: string;
+  kind: 'task' | 'appointment';
+  title: string;
+  description: string | null;
+  dueDate: string;
+  allDay: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  remindBeforeMinutes: number | null;
+  status: 'open' | 'done' | 'cancelled';
+  completedAt: string | null;
+  ownerId: string | null;
+  ownerName: string | null;
+  contactId: string | null;
+  contactName: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  partyId: string | null;
+  partyName: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  sourceNoteId: string | null;
+  createdBy: string | null;
+  bucket?: AgendaBucketKey;
+}
+
+export interface AgendaSummary {
+  asOf: string;
+  counts: { overdue: number; today: number; upcoming: number };
+  overdue: AgendaItem[];
+  today: AgendaItem[];
+  upcoming: AgendaItem[];
 }

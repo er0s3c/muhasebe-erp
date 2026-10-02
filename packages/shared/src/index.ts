@@ -46,3 +46,5 @@ export * from './landed-cost';
 export * from './schemas/landed';
 export * from './employee-ledger';
 export * from './schemas/employee-ledger';
+export * from './directory';
+export * from './schemas/directory';

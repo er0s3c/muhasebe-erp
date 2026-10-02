@@ -117,6 +117,15 @@ export const MODULES: readonly ModuleDef[] = [
     requires: ['core.ledger', 'core.parties', 'construction.projects'],
   },
   {
+    key: 'core.directory',
+    labelKey: 'modules.directory',
+    label: 'Rehber, ajanda ve görüşme notları',
+    sectors: 'all',
+    status: 'available',
+    // Bağımsızdır: cari/proje bağlantıları isteğe bağlıdır (ilgili modül kapalıysa bağlantı seçilmez). Kilitli modüller requires'a konmaz.
+    requires: [],
+  },
+  {
     key: 'hr.core',
     labelKey: 'modules.hrCore',
     label: 'Personel, puantaj ve kişisel veri',
@@ -206,6 +215,7 @@ export type NavGroupKey =
   | 'treasury'
   | 'stock'
   | 'construction'
+  | 'directory'
   | 'hr'
   | 'accounting'
   | 'reports'
@@ -229,6 +239,7 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
   { key: 'treasury', labelKey: 'nav.groups.treasury' },
   { key: 'stock', labelKey: 'nav.groups.stock' },
   { key: 'construction', labelKey: 'nav.groups.construction' },
+  { key: 'directory', labelKey: 'nav.groups.directory' },
   { key: 'hr', labelKey: 'nav.groups.hr' },
   { key: 'accounting', labelKey: 'nav.groups.accounting' },
   { key: 'reports', labelKey: 'nav.groups.reports' },
@@ -657,6 +668,33 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'hr',
     module: 'hr.payroll',
     permission: 'hr.payroll',
+  },
+  {
+    key: 'directory-contacts',
+    labelKey: 'nav.directoryContacts',
+    path: '/directory/contacts',
+    icon: 'book-user',
+    group: 'directory',
+    module: 'core.directory',
+    permission: 'directory.read',
+  },
+  {
+    key: 'directory-orgs',
+    labelKey: 'nav.directoryOrgs',
+    path: '/directory/organizations',
+    icon: 'building-2',
+    group: 'directory',
+    module: 'core.directory',
+    permission: 'directory.read',
+  },
+  {
+    key: 'agenda',
+    labelKey: 'nav.agenda',
+    path: '/agenda',
+    icon: 'calendar-check',
+    group: 'directory',
+    module: 'core.directory',
+    permission: 'directory.read',
   },
   {
     key: 'employee-ledger',

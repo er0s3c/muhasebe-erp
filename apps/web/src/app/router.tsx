@@ -185,6 +185,16 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="core.directory" />,
+                children: [
+                  { path: 'directory/contacts', ...page(() => import('../features/directory/ContactsPage'), 'ContactsPage') },
+                  { path: 'directory/contacts/:id', ...page(() => import('../features/directory/ContactDetailPage'), 'ContactDetailPage') },
+                  { path: 'directory/organizations', ...page(() => import('../features/directory/OrganizationsPage'), 'OrganizationsPage') },
+                  { path: 'directory/organizations/:id', ...page(() => import('../features/directory/OrganizationDetailPage'), 'OrganizationDetailPage') },
+                  { path: 'agenda', ...page(() => import('../features/directory/AgendaPage'), 'AgendaPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="hr.employee_ledger" />,
                 children: [
                   { path: 'hr/employee-ledger', ...page(() => import('../features/hr/EmployeeLedgerPage'), 'EmployeeLedgerPage') },
