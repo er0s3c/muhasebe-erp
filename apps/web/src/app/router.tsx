@@ -99,6 +99,14 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="treasury.cheques" />,
+                children: [{ path: 'treasury/cheques', ...page(() => import('../features/treasury/ChequesPage'), 'ChequesPage') }],
+              },
+              {
+                element: <RequireModule module="treasury.guarantees" />,
+                children: [{ path: 'treasury/guarantees', ...page(() => import('../features/treasury/GuaranteesPage'), 'GuaranteesPage') }],
+              },
+              {
                 element: <RequireModule module="core.inventory" />,
                 children: [
                   { path: 'inventory/items', ...page(() => import('../features/inventory/ItemsPage'), 'ItemsPage') },

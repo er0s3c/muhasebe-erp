@@ -118,6 +118,24 @@ export const MODULES: readonly ModuleDef[] = [
     requires: ['hr.core'],
   },
   {
+    key: 'treasury.cheques',
+    labelKey: 'modules.treasuryCheques',
+    label: 'Çek/senet portföyü ve takas',
+    sectors: 'all',
+    status: 'available',
+    // Her durum değişikliği yevmiye yazar (core.ledger) ve cari kalemlerini kapatır/yeniden açar (core.parties); tahsil/ödeme banka hesabıyla (core.treasury).
+    requires: ['core.treasury'],
+  },
+  {
+    key: 'treasury.guarantees',
+    labelKey: 'modules.treasuryGuarantees',
+    label: 'Banka teminat mektubu portföyü',
+    sectors: 'all',
+    status: 'available',
+    // Yalnızca takip (nazım): yevmiye yazmaz. Cari ve proje/sözleşme bağlantısı isteğe bağlıdır.
+    requires: ['core.treasury'],
+  },
+  {
     key: 'retail.pos',
     labelKey: 'modules.retailPos',
     label: 'Hızlı satış (POS)',
@@ -250,6 +268,24 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     icon: 'trending-up',
     group: 'treasury',
     module: 'core.treasury',
+    permission: 'treasury.read',
+  },
+  {
+    key: 'cheques',
+    labelKey: 'nav.cheques',
+    path: '/treasury/cheques',
+    icon: 'ticket',
+    group: 'treasury',
+    module: 'treasury.cheques',
+    permission: 'treasury.read',
+  },
+  {
+    key: 'bank-guarantees',
+    labelKey: 'nav.bankGuarantees',
+    path: '/treasury/guarantees',
+    icon: 'shield-check',
+    group: 'treasury',
+    module: 'treasury.guarantees',
     permission: 'treasury.read',
   },
   {

@@ -47,6 +47,11 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   payroll_social_payable: 'Bordro: ödenecek sosyal güvenlik yükümlülüğü',
   payroll_tax_payable: 'Bordro: ödenecek vergi ve fonlar',
   payroll_other_payable: 'Bordro: diğer kesinti borçları',
+  cheque_portfolio: 'Portföydeki alınan çekler',
+  note_portfolio: 'Portföydeki alacak senetleri',
+  docs_in_collection: 'Tahsile verilen çek ve senetler',
+  cheque_issued: 'Verilen çekler (ödenmemiş)',
+  note_payable: 'Verilen borç senetleri (ödenmemiş)',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

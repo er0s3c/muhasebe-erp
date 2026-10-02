@@ -99,7 +99,9 @@
     "hrCore": "Personel, puantaj ve veri koruma",
     "hrPayroll": "Bordro",
     "hrSocialSecurity": "Sosyal güvenlik çıktıları",
-    "hrForeign": "Yabancı işçi belge ve teminat takibi"
+    "hrForeign": "Yabancı işçi belge ve teminat takibi",
+    "treasuryCheques": "Çek/senet portföyü ve takas",
+    "treasuryGuarantees": "Banka teminat mektubu portföyü"
   },
   "nav": {
     "groups": {
@@ -176,6 +178,8 @@
     "socialSettings": "Sosyal güvenlik ayarları",
     "foreignWorkers": "Yabancı işçi belgeleri",
     "foreignSettings": "Yabancı işçi ayarları",
+    "cheques": "Çek/senet portföyü",
+    "bankGuarantees": "Teminat mektupları",
     "privacy": "Veri koruma"
   },
   "shell": {
@@ -4216,6 +4220,274 @@
         "newOn": "Yeni parametre açık",
         "days": "gün"
       }
+    }
+  },
+  "cheques": {
+    "title": "Çek/senet portföyü ve takas",
+    "subtitle": "Müşteriden alınan ve tedarikçiye verilen çek/senetler; tahsile verme, tahsil, ciro, karşılıksız ve takas",
+    "notice": "Her durum değişikliği yevmiye yazar. Hesap eşlemeleri (101, 121, 108, 103, 321) genel Tekdüzen yapıya dayalı varsayılanlardır ve DOĞRULANMAMIŞTIR; Ayarlar > Hesap eşlemesi'nden değiştirilir. Yalnızca defter para biriminde işlenir; yasal geçerlilik ve protesto/ibraz süreleri denetlenmez.",
+    "tabs": {
+      "portfolio": "Portföy",
+      "clearing": "Takas",
+      "reports": "Raporlar"
+    },
+    "direction": {
+      "received": "Alınan",
+      "issued": "Verilen"
+    },
+    "docType": {
+      "cheque": "Çek",
+      "note": "Senet"
+    },
+    "status": {
+      "portfolio": "Portföyde",
+      "in_collection": "Tahsilde",
+      "collected": "Tahsil edildi",
+      "bounced": "Karşılıksız",
+      "endorsed": "Ciro edildi",
+      "returned": "İade edildi",
+      "issued": "Düzenlendi",
+      "paid": "Ödendi",
+      "cancelled": "İptal"
+    },
+    "actions": {
+      "deposit": "Tahsile ver",
+      "collect": "Tahsil edildi",
+      "bounce": "Karşılıksız",
+      "return": "İade",
+      "endorse": "Ciro et",
+      "unendorse": "Ciro iadesi",
+      "pay": "Öde",
+      "cancel": "İptal"
+    },
+    "actionDesc": {
+      "deposit": "Belge bankaya tahsile verilir: portföy hesabından tahsildeki belgeler hesabına geçer.",
+      "collect": "Tahsil edilen tutar tahsildeki belgeler hesabından banka hesabına geçer.",
+      "bounce": "Belge karşılıksız çıktı: müşterinin (ya da tedarikçinin) cari kalemi yeniden açılır.",
+      "return": "Belge keşidecisine iade edilir: müşterinin cari kalemi yeniden açılır.",
+      "endorse": "Belge tedarikçiye ciro edilir: tedarikçi borcu kapanır (seçilen kalemler, kalan avans).",
+      "unendorse": "Ciro edilen belge geri alındı: tedarikçi borcu yeniden açılır, belge portföye döner.",
+      "pay": "Verilen belge bankadan ödendi.",
+      "cancel": "Verilen belge iptal edildi: tedarikçi borcu yeniden açılır."
+    },
+    "actionDone": "İşlem kaydedildi: {{no}}",
+    "reopenNote": "Bu işlem cariye yeni bir açık kalem yazar; önceki kapama kaydı değişmez.",
+    "endorsedTo": "Ciro: {{name}}",
+    "empty": "Çek/senet bulunamadı",
+    "emptyDesc": "Alınan ya da verilen bir çek/senet kaydederek başlayın.",
+    "filters": {
+      "direction": "Yön",
+      "docType": "Tür",
+      "status": "Durum",
+      "search": "Ara (no, banka, cari)",
+      "dueFrom": "Vade (başlangıç)",
+      "dueTo": "Vade (bitiş)",
+      "all": "Tümü",
+      "open": "Açık (portföyde/ödenmemiş)"
+    },
+    "cols": {
+      "direction": "Yön",
+      "docType": "Tür",
+      "no": "Numara",
+      "bank": "Banka / şube",
+      "party": "Cari",
+      "due": "Vade",
+      "amount": "Tutar",
+      "status": "Durum"
+    },
+    "new": {
+      "received": "Alınan çek/senet",
+      "issued": "Verilen çek/senet",
+      "desc": "Kayıt, tahsilat/ödeme gibi cariyi kapatır; seçilmeyen kalan tutar avans olur.",
+      "save": "Kaydet",
+      "saved": "{{no}} kaydedildi"
+    },
+    "form": {
+      "docType": "Tür",
+      "no": "Çek/senet numarası",
+      "bank": "Banka",
+      "branch": "Şube",
+      "drawer": "Keşideci (müşteri)",
+      "payee": "Lehtar (tedarikçi)",
+      "pickParty": "Cari seçin",
+      "amount": "Tutar ({{cur}})",
+      "registerDate": "Kayıt tarihi",
+      "issueDate": "Düzenleme tarihi",
+      "dueDate": "Vade tarihi",
+      "description": "Açıklama",
+      "receivedNote": "Alınan belge: B portföy hesabı / A 120 Alıcılar. Hesaplar doğrulanmamış varsayılanlardır.",
+      "issuedNote": "Verilen belge: B 320 Satıcılar / A 103 (çek) ya da 321 (senet). Hesaplar doğrulanmamış varsayılanlardır.",
+      "actionDate": "İşlem tarihi",
+      "bankAccount": "Banka hesabı",
+      "pickBank": "Banka hesabı seçin",
+      "endorsee": "Ciro edilen tedarikçi",
+      "pickSupplier": "Tedarikçi seçin",
+      "note": "Not"
+    },
+    "items": {
+      "title": "Kapatılacak açık kalemler",
+      "pickParty": "Önce cari seçin.",
+      "none": "Açık kalem yok; tutarın tamamı avans olur.",
+      "allocate": "Dağıt",
+      "due": "Vade",
+      "remaining": "Kalan",
+      "amount": "Kapatılan",
+      "settle": "Karşılık ({{cur}})",
+      "summary": "Kalemlere ayrılan {{used}}; avans olarak kalan {{rest}}",
+      "over": "Kalemler belge tutarını aşıyor"
+    },
+    "history": {
+      "action": "Geçmiş",
+      "title": "Durum geçmişi"
+    },
+    "clearing": {
+      "title": "Takas: toplu işlem",
+      "desc": "Birden çok belge tek yevmiye ve tek banka satırıyla işlenir (banka ekstresinde tek kalem olarak eşleşir).",
+      "deposit": "Toplu tahsile ver",
+      "collect": "Toplu tahsil",
+      "pay": "Toplu ödeme",
+      "depositedTo": "Tahsile verilen banka",
+      "empty": "Bu işlem için uygun belge yok",
+      "selectAll": "Tümünü seç",
+      "selected": "{{n}} belge seçili, toplam {{total}}",
+      "run": {
+        "deposit": "Tahsile ver",
+        "collect": "Tahsil edildi olarak işle",
+        "pay": "Ödendi olarak işle"
+      },
+      "history": "Toplu işlem geçmişi",
+      "noHistory": "Henüz toplu işlem yok",
+      "batchNo": "İşlem no",
+      "action": "İşlem",
+      "date": "Tarih",
+      "count": "Adet",
+      "entry": "Yevmiye"
+    },
+    "reports": {
+      "maturity": "Vade analizi",
+      "maturityDesc": "Portföyde/tahsilde olan alınan ve ödenmemiş verilen belgeler, vade kovalarına göre",
+      "asOf": "Değerlendirme günü",
+      "bucket": "Vade",
+      "total": "Toplam",
+      "buckets": {
+        "overdue": "Vadesi geçmiş",
+        "d0_7": "0–7 gün",
+        "d8_30": "8–30 gün",
+        "d31_60": "31–60 gün",
+        "d61_90": "61–90 gün",
+        "d90p": "90+ gün"
+      },
+      "byParty": "Cariye göre",
+      "overdue": "Vadesi geçmiş",
+      "earliest": "En erken vade",
+      "due": "Vadesi gelenler",
+      "dueDesc": "Seçilen gün içinde vadesi gelen (vadesi geçmişler dahil) açık belgeler",
+      "days": "Gün",
+      "noneDue": "Vadesi gelen belge yok",
+      "dueTotals": "Alınan toplam {{received}}, verilen toplam {{issued}}",
+      "bounced": "Karşılıksız belgeler",
+      "bouncedDesc": "Cariye yeniden açılan kalemlerin kaynağı",
+      "noneBounced": "Karşılıksız belge yok",
+      "bouncedDate": "Karşılıksız tarihi",
+      "daysSince": "Geçen gün"
+    }
+  },
+  "guarantees": {
+    "title": "Banka teminat mektupları",
+    "subtitle": "Verilen ve alınan teminat mektupları; süre uyarısı ve raporlar",
+    "notice": "Nazım takiptir: yevmiye yazmaz. Komisyon oranı/tutarı, süre ve tutar bilgileri kullanıcı girişidir (kodda oran yoktur); hesap eşlemesi ve hukuki geçerlilik DOĞRULANMADI. Komisyon ödemesi kasa/banka 'Diğer ödeme' ile ayrıca girilir.",
+    "new": "Yeni mektup",
+    "empty": "Teminat mektubu bulunamadı",
+    "emptyDesc": "Verilen ya da alınan bir mektup kaydederek başlayın.",
+    "noExpiry": "Süresiz",
+    "direction": {
+      "given": "Verilen",
+      "received": "Alınan"
+    },
+    "status": {
+      "active": "Aktif",
+      "returned": "İade edildi",
+      "liquidated": "Nakde çevrildi",
+      "expired": "Süresi doldu"
+    },
+    "state": {
+      "expiring": "Dolmak üzere",
+      "lapsed": "Süresi geçmiş"
+    },
+    "warning": {
+      "title": "Süre uyarısı",
+      "desc": "Uyarı günü kullanıcı ayarıdır; boşsa 'dolmak üzere' üretilmez.",
+      "days": "Uyarı günü",
+      "saved": "Uyarı günü kaydedildi",
+      "none": "Uyarı günü tanımsız: yalnızca süresi geçmiş mektuplar işaretlenir.",
+      "expiring": "{{n}} dolmak üzere",
+      "lapsed": "{{n}} süresi geçmiş"
+    },
+    "totals": {
+      "title": "Aktif mektup toplamı",
+      "desc": "Yön ve para birimi ayrı (kur çevrimi yok)",
+      "none": "Aktif mektup yok"
+    },
+    "filters": {
+      "direction": "Yön",
+      "status": "Durum",
+      "within": "Kalan gün (en çok)",
+      "search": "Ara (no, banka, taraf)"
+    },
+    "cols": {
+      "direction": "Yön",
+      "no": "Mektup no",
+      "bank": "Banka / şube",
+      "party": "Karşı taraf",
+      "project": "Proje / sözleşme",
+      "amount": "Tutar",
+      "expiry": "Son kullanma",
+      "days": "Kalan gün",
+      "commission": "Komisyon",
+      "status": "Durum"
+    },
+    "form": {
+      "editTitle": "Mektup {{no}}",
+      "desc": "Numara, banka, taraf, tutar ve düzenleme tarihi sonradan değişmez; süre ve komisyon bilgisi güncellenebilir.",
+      "direction": "Yön",
+      "letterNo": "Mektup numarası",
+      "bank": "Banka",
+      "branch": "Şube",
+      "beneficiary": "Lehtar (cari)",
+      "issuedBy": "Mektubu veren (cari)",
+      "partyHint": "İsteğe bağlı",
+      "pickParty": "Cari seçin",
+      "counterparty": "Karşı taraf adı",
+      "counterpartyHint": "Cari seçilmezse zorunlu",
+      "project": "Proje",
+      "contract": "Sözleşme",
+      "purpose": "Amaç (kesin teminat, avans teminatı…)",
+      "amount": "Tutar",
+      "currency": "Para birimi",
+      "issueDate": "Düzenleme tarihi",
+      "expiryDate": "Son kullanma tarihi",
+      "expiryHint": "Süresiz mektup için boş bırakın",
+      "commissionRate": "Komisyon oranı (%)",
+      "commissionHint": "Kullanıcı girişi; hesaplanmaz",
+      "commissionAmount": "Komisyon tutarı",
+      "commissionNote": "Komisyon notu",
+      "note": "Not",
+      "saved": "Mektup kaydedildi",
+      "limit": "Yevmiye/nazım hesap kaydı yoktur; komisyon bilgisi yalnızca takip içindir."
+    },
+    "resolve": {
+      "action": "Sonuçlandır",
+      "title": "Mektup {{no}} sonuçlandır",
+      "desc": "Sonuçlanan mektup değiştirilemez ve silinemez.",
+      "outcome": "Sonuç",
+      "date": "Sonuç tarihi",
+      "note": "Not",
+      "done": "Mektup sonuçlandırıldı"
+    },
+    "report": {
+      "byBank": "Bankaya göre (aktif)",
+      "byProject": "Projeye göre (aktif)",
+      "noProject": "Projesiz"
     }
   }
 }

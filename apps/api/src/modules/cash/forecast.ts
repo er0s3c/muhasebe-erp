@@ -27,6 +27,8 @@ export interface ForecastItem {
   amountBase: string;
   overdue: boolean;
   itemId?: string;
+  /** Çek/senet portföyünden gelen kalem (vade = belge vadesi). */
+  cheque?: boolean;
 }
 
 /**
@@ -77,6 +79,31 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
         amount: dec(it.remaining).toFixed(2),
         amountBase: (await toBase(dec(it.remaining), it.currencyCode, dec(it.remainingBase))).toFixed(2),
         overdue: due < from,
+      });
+    }
+  }
+  // Çek/senet portföyü (Faz X1): portföyde/tahsildeki alınan belgeler beklenen giriş, ödenmemiş verilen belgeler beklenen çıkıştır.
+  // Cari kalemleri kayıtta kapandığı için (B portföy / A 120) bu tutarlar başka türlü projeksiyonda görünmez. Yalnızca defter para birimi.
+  if (!q.projectId) {
+    const docs = await tx.execute<{ direction: string; doc_type: string; doc_no: string; due_date: string; amount: string; party_name: string }>(sql`
+      select c.direction, c.doc_type, c.doc_no, c.due_date::text, c.amount::text, p.name as party_name
+        from cheques c join parties p on p.id = c.party_id and p.company_id = c.company_id
+       where ((c.direction = 'received' and c.status in ('portfolio','in_collection')) or (c.direction = 'issued' and c.status = 'issued'))
+       order by c.due_date, c.doc_no`);
+    for (const d of docs.rows) {
+      const received = d.direction === 'received';
+      items.push({
+        date: d.due_date,
+        week: weekOf(d.due_date),
+        source: received ? 'receivable' : 'payable',
+        direction: received ? 'in' : 'out',
+        description: `${d.doc_type === 'cheque' ? 'Çek' : 'Senet'} ${d.doc_no}`,
+        partyName: d.party_name,
+        currencyCode: base,
+        amount: dec(d.amount).toFixed(2),
+        amountBase: dec(d.amount).toFixed(2),
+        overdue: d.due_date < from,
+        cheque: true,
       });
     }
   }

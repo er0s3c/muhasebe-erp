@@ -88,6 +88,12 @@ export const ACCOUNT_MAPPING_KEYS = [
   'payroll_social_payable',
   'payroll_tax_payable',
   'payroll_other_payable',
+  // Çek/senet portföyü (Faz X1); varsayılanlar doğrulanmamıştır
+  'cheque_portfolio',
+  'note_portfolio',
+  'docs_in_collection',
+  'cheque_issued',
+  'note_payable',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -137,6 +143,13 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     payroll_social_payable: '361',
     payroll_tax_payable: '360',
     payroll_other_payable: '336',
+    // Çek/senet: alınan çekler (101), alacak senetleri (121), tahsile verilen çek/senetler (108 diğer hazır değerler),
+    // verilen çekler ve ödeme emirleri (103), borç senetleri (321). Doğrulanmamıştır: tahsildeki belge hesabı uygulamaya göre değişir.
+    cheque_portfolio: '101',
+    note_portfolio: '121',
+    docs_in_collection: '108',
+    cheque_issued: '103',
+    note_payable: '321',
   };
 }
 

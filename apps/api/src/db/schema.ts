@@ -2251,7 +2251,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable','cheque_portfolio','note_portfolio','docs_in_collection','cheque_issued','note_payable')`,
     ),
   ],
 );
@@ -4052,4 +4052,239 @@ export const foreignWorkerGuarantees = pgTable(
     check('foreign_worker_guarantees_amount_ck', sql`${t.amount} > 0 and ${t.currency} ~ '^[A-Z]{3}$'`),
     check('foreign_worker_guarantees_resolved_ck', sql`(${t.status} = 'held') = (${t.resolvedDate} is null) and (${t.resolvedDate} is null or ${t.resolvedDate} >= ${t.depositedDate})`),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Çek/senet portföyü ve takas, banka teminat mektubu portföyü (Faz X1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Çek/senet: alınan (müşteriden; portföy/tahsil/ciro) ve verilen (tedarikçiye). Yalnızca defter para biriminde.
+ * Durum yalnızca geçerli geçişlerle (cheques_guard) ve olay kaydıyla değişir; belge silinmez, tutar/cari/vade sonradan değişmez.
+ */
+export const cheques = pgTable(
+  'cheques',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** received | issued */
+    direction: text().notNull(),
+    /** cheque | note */
+    docType: text().notNull(),
+    docNo: text().notNull(),
+    bankName: text().notNull().default(''),
+    branch: text(),
+    /** Alınanda keşideci (müşteri), verilende lehtar (tedarikçi). */
+    partyId: uuid().notNull(),
+    amount: money().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    issueDate: date({ mode: 'string' }).notNull(),
+    dueDate: date({ mode: 'string' }).notNull(),
+    status: text().notNull(),
+    /** Ciro edilmişse ciro edilen tedarikçi (yalnızca status = endorsed). */
+    holderPartyId: uuid(),
+    /** Son tahsile verme/ödeme banka hesabı. */
+    bankAccountId: uuid(),
+    /** Kayıt (alınış/veriliş) yevmiyesi. */
+    entryId: uuid().notNull(),
+    description: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('cheques_id_company_uq').on(t.id, t.companyId),
+    unique('cheques_number_uq').on(t.companyId, t.direction, t.docType, t.bankName, t.docNo),
+    foreignKey({ name: 'cheques_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'cheques_holder_fk', columns: [t.holderPartyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'cheques_bank_fk', columns: [t.bankAccountId, t.companyId], foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId] }),
+    foreignKey({ name: 'cheques_entry_fk', columns: [t.entryId, t.companyId], foreignColumns: [journalEntries.id, journalEntries.companyId] }),
+    index('cheques_party_idx').on(t.companyId, t.partyId),
+    index('cheques_due_idx').on(t.companyId, t.dueDate),
+    check('cheques_direction_ck', sql`${t.direction} in ('received','issued')`),
+    check('cheques_doc_type_ck', sql`${t.docType} in ('cheque','note')`),
+    check(
+      'cheques_status_ck',
+      sql`(${t.direction} = 'received' and ${t.status} in ('portfolio','in_collection','collected','bounced','endorsed','returned')) or (${t.direction} = 'issued' and ${t.status} in ('issued','paid','bounced','cancelled'))`,
+    ),
+    check('cheques_amount_ck', sql`${t.amount} > 0 and ${t.currencyCode} ~ '^[A-Z]{3}$' and ${t.dueDate} >= ${t.issueDate}`),
+    check('cheques_holder_ck', sql`(${t.status} = 'endorsed') = (${t.holderPartyId} is not null)`),
+  ],
+);
+
+/** Takas/toplu işlem başlığı: tek yevmiye ve (tahsile verme/ödemede) tek banka satırı; tek belgelik işlem de bir toplu işlemdir. */
+export const chequeBatches = pgTable(
+  'cheque_batches',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    batchNo: text().notNull(),
+    /** deposit | collect | bounce | return | endorse | unendorse | pay | cancel */
+    action: text().notNull(),
+    eventDate: date({ mode: 'string' }).notNull(),
+    bankAccountId: uuid(),
+    partyId: uuid(),
+    total: money().notNull(),
+    docCount: integer().notNull(),
+    entryId: uuid().notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('cheque_batches_id_company_uq').on(t.id, t.companyId),
+    unique('cheque_batches_no_uq').on(t.companyId, t.batchNo),
+    foreignKey({ name: 'cheque_batches_bank_fk', columns: [t.bankAccountId, t.companyId], foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId] }),
+    foreignKey({ name: 'cheque_batches_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'cheque_batches_entry_fk', columns: [t.entryId, t.companyId], foreignColumns: [journalEntries.id, journalEntries.companyId] }),
+    check('cheque_batches_action_ck', sql`${t.action} in ('deposit','collect','bounce','return','endorse','unendorse','pay','cancel')`),
+    check('cheque_batches_amount_ck', sql`${t.total} > 0 and ${t.docCount} > 0`),
+  ],
+);
+
+/** Salt-eklenir durum geçmişi: her durum değişikliği (ve kayıt) bir olaydır, yevmiyesiyle birlikte. */
+export const chequeEvents = pgTable(
+  'cheque_events',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    chequeId: uuid().notNull(),
+    /** Kayıt olayında null. */
+    fromStatus: text(),
+    toStatus: text().notNull(),
+    eventDate: date({ mode: 'string' }).notNull(),
+    batchId: uuid(),
+    entryId: uuid().notNull(),
+    /** Ciroda ciro edilen cari. */
+    partyId: uuid(),
+    bankAccountId: uuid(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('cheque_events_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'cheque_events_cheque_fk', columns: [t.chequeId, t.companyId], foreignColumns: [cheques.id, cheques.companyId] }),
+    foreignKey({ name: 'cheque_events_batch_fk', columns: [t.batchId, t.companyId], foreignColumns: [chequeBatches.id, chequeBatches.companyId] }),
+    foreignKey({ name: 'cheque_events_entry_fk', columns: [t.entryId, t.companyId], foreignColumns: [journalEntries.id, journalEntries.companyId] }),
+    foreignKey({ name: 'cheque_events_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'cheque_events_bank_fk', columns: [t.bankAccountId, t.companyId], foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId] }),
+    index('cheque_events_cheque_idx').on(t.chequeId),
+  ],
+);
+
+/**
+ * Çek/senet kaydının (alınan) ya da ciro/verilen kaydının kapattığı açık kalem: `party_allocations`'ın kasa/banka hareketsiz karşılığı.
+ * Cari açık kalem hesabı (`loadPartyLines`) bunları okur. Yalnızca eklenir; belge karşılıksız/iade dönse bile eşleştirme kalır,
+ * yeniden açılan alacak/borç yeni bir cari satırdır.
+ */
+export const chequeAllocations = pgTable(
+  'cheque_allocations',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    chequeId: uuid().notNull(),
+    eventId: uuid().notNull(),
+    partyId: uuid().notNull(),
+    /** receivable | payable */
+    control: text().notNull(),
+    chargeLineId: uuid().notNull(),
+    settleLineId: uuid().notNull(),
+    amount: money().notNull(),
+    amountBase: money().notNull(),
+    settleAmount: money().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('cheque_allocations_settle_uq').on(t.settleLineId),
+    index('cheque_allocations_charge_idx').on(t.chargeLineId),
+    index('cheque_allocations_party_idx').on(t.companyId, t.partyId),
+    foreignKey({ name: 'cheque_allocations_cheque_fk', columns: [t.chequeId, t.companyId], foreignColumns: [cheques.id, cheques.companyId] }),
+    foreignKey({ name: 'cheque_allocations_event_fk', columns: [t.eventId, t.companyId], foreignColumns: [chequeEvents.id, chequeEvents.companyId] }),
+    foreignKey({ name: 'cheque_allocations_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'cheque_allocations_charge_fk', columns: [t.chargeLineId, t.companyId], foreignColumns: [journalLines.id, journalLines.companyId] }),
+    foreignKey({ name: 'cheque_allocations_settle_fk', columns: [t.settleLineId, t.companyId], foreignColumns: [journalLines.id, journalLines.companyId] }),
+    check('cheque_allocations_control_ck', sql`${t.control} in ('receivable','payable')`),
+    check('cheque_allocations_amount_ck', sql`${t.amount} > 0 and ${t.amountBase} > 0 and ${t.settleAmount} > 0`),
+  ],
+);
+
+/**
+ * Banka teminat mektubu (nazım takip; yevmiye yazmaz). given: bankanın bizim adımıza lehtara verdiği; received: taşeron/tedarikçiden alınan.
+ * Komisyon oranı/tutarı kullanıcı girişidir (kodda oran yok). active → returned | liquidated | expired.
+ */
+export const bankGuarantees = pgTable(
+  'bank_guarantees',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** given | received */
+    direction: text().notNull(),
+    letterNo: text().notNull(),
+    bankName: text().notNull(),
+    branch: text(),
+    partyId: uuid(),
+    counterpartyName: text().notNull(),
+    projectId: uuid(),
+    subcontractId: uuid(),
+    purpose: text(),
+    amount: money().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    issueDate: date({ mode: 'string' }).notNull(),
+    expiryDate: date({ mode: 'string' }),
+    commissionRate: numeric({ precision: 7, scale: 4 }),
+    commissionAmount: money(),
+    commissionNote: text(),
+    note: text(),
+    /** active | returned | liquidated | expired */
+    status: text().notNull().default('active'),
+    resolvedDate: date({ mode: 'string' }),
+    resolutionNote: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('bank_guarantees_no_uq').on(t.companyId, t.direction, t.bankName, t.letterNo),
+    foreignKey({ name: 'bank_guarantees_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'bank_guarantees_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    foreignKey({ name: 'bank_guarantees_subcontract_fk', columns: [t.subcontractId, t.companyId], foreignColumns: [subcontracts.id, subcontracts.companyId] }),
+    index('bank_guarantees_expiry_idx').on(t.companyId, t.expiryDate),
+    check('bank_guarantees_direction_ck', sql`${t.direction} in ('given','received')`),
+    check('bank_guarantees_status_ck', sql`${t.status} in ('active','returned','liquidated','expired')`),
+    check('bank_guarantees_amount_ck', sql`${t.amount} > 0 and ${t.currencyCode} ~ '^[A-Z]{3}$' and (${t.expiryDate} is null or ${t.expiryDate} >= ${t.issueDate})`),
+    check('bank_guarantees_commission_ck', sql`(${t.commissionRate} is null or ${t.commissionRate} between 0 and 100) and (${t.commissionAmount} is null or ${t.commissionAmount} >= 0)`),
+    check(
+      'bank_guarantees_resolved_ck',
+      sql`(${t.status} = 'active') = (${t.resolvedDate} is null) and (${t.resolvedDate} is null or ${t.resolvedDate} >= ${t.issueDate}) and (${t.status} <> 'expired' or ${t.expiryDate} is not null)`,
+    ),
+  ],
+);
+
+/** Portföy ayarları (şirket başına tek satır): teminat mektubu uyarı günü kullanıcı verisidir; boş = uyarı yok. */
+export const portfolioSettings = pgTable(
+  'portfolio_settings',
+  {
+    companyId: uuid()
+      .primaryKey()
+      .references(() => companies.id),
+    guaranteeWarningDays: integer(),
+    updatedBy: uuid().references(() => users.id),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('portfolio_settings_ck', sql`${t.guaranteeWarningDays} is null or ${t.guaranteeWarningDays} between 0 and 3650`)],
 );

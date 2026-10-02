@@ -86,8 +86,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Tahsilat/ödeme (fatura eşleştirmeli), virman, döviz alım-satım (ortalama maliyet), diğer tahsilat/ödeme (masraf, faiz), iptal (ters kayıt) | ✅ |
 | Kasa eksi bakiyeye düşmez (banka düşebilir) | ✅ ⚠️ kural doğrulanmadı |
 | Banka ekstresi içe aktarma (genel sütun eşleme), defter kayıtlarıyla eşleştirme (kesin/olası öneri, elle, otomatik), eşleşmeyen satırdan hareket oluşturma, mutabakat farkı | ✅ ⚠️ bankaya özgü biçimler doğrulanmadı |
-| Çek/senet portföyü ve takas | ⏳ |
-| Banka teminat mektupları | ⏳ Faz B |
+| Çek/senet portföyü ve takas: alınan/verilen çek ve senet, durum geçişleri (portföy/tahsil/ciro/karşılıksız/iade; verilen: ödeme/karşılıksız/iptal) veritabanında korunur ve salt-eklenir geçmişle izlenir, her değişiklik yevmiye yazar, cari kalemi kapatma/yeniden açma, toplu takas (tek yevmiye, tek banka satırı), vade analizi, vadesi gelenler, karşılıksız listesi, nakit projeksiyonu, xlsx/csv | ✅ (X1) ⚠️ **hesap eşlemeleri (101/121/108/103/321) ve çek/senedin yasal geçerliliği doğrulanmadı; yalnızca defter para birimi; reeskont, kısmi tahsil, protesto yok** |
+| Banka teminat mektupları: verilen/alınan, proje ve sözleşme bağlantısı, kullanıcı girişli komisyon (kodda oran yok), kullanıcı ayarlı süre uyarısı, iade/nakde çevrildi/süresi doldu, banka ve projeye göre rapor, xlsx/csv | ✅ (X1) ⚠️ **nazım takip: yevmiye/komisyon gideri yazmaz; süre, tutar ve komisyon doğrulanmadı** |
 
 ## Kur ve vergi
 

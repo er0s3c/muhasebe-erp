@@ -1,5 +1,15 @@
 /** API yanıt tipleri (sunucu Drizzle satırlarının JSON hâli). Tutarlar her zaman string. */
-import type { AttendanceDayType } from '@erp/shared';
+import type {
+  AttendanceDayType,
+  BankGuaranteeStatus,
+  ChequeAction,
+  ChequeDirection,
+  ChequeDocType,
+  ChequeStatus,
+  GuaranteeDirection,
+  GuaranteeExpiryState,
+  MaturityBucket,
+} from '@erp/shared';
 
 export interface Account {
   id: string;
@@ -2334,4 +2344,145 @@ export interface GuaranteeReport {
   byProject: { projectId: string | null; projectCode: string | null; projectName: string | null; currency: string; employees: number; count: number; amount: string; unverified: number }[];
   totals: { currency: string; held: string; refunded: string; forfeited: string }[];
   unverified: boolean;
+}
+
+// --- Çek/senet portföyü ve banka teminat mektubu (Faz X1) -----------------------------------------------------
+
+export interface ChequeRow {
+  id: string;
+  direction: ChequeDirection;
+  docType: ChequeDocType;
+  docNo: string;
+  bankName: string;
+  branch: string | null;
+  partyId: string;
+  partyCode: string;
+  partyName: string;
+  amount: string;
+  currencyCode: string;
+  issueDate: string;
+  dueDate: string;
+  status: ChequeStatus;
+  holderPartyId: string | null;
+  holderName: string | null;
+  bankAccountId: string | null;
+  bankAccountName: string | null;
+  description: string | null;
+  entryId: string;
+  entryNo: string | null;
+  lastEventDate: string | null;
+}
+
+export interface ChequeList {
+  cheques: ChequeRow[];
+  summary: { direction: ChequeDirection; status: ChequeStatus; count: number; amount: string }[];
+  asOf: string;
+}
+
+export interface ChequeEventRow {
+  id: string;
+  fromStatus: ChequeStatus | null;
+  toStatus: ChequeStatus;
+  eventDate: string;
+  note: string | null;
+  batchNo: string | null;
+  action: string | null;
+  entryNo: string | null;
+  entryId: string;
+  partyName: string | null;
+  bankAccountName: string | null;
+}
+
+export interface ChequeDetail {
+  cheque: ChequeRow;
+  events: ChequeEventRow[];
+}
+
+export interface ChequeBatchRow {
+  id: string;
+  batchNo: string;
+  action: ChequeAction;
+  eventDate: string;
+  total: string;
+  docCount: number;
+  bankAccountName: string | null;
+  partyName: string | null;
+  entryNo: string | null;
+  entryId: string;
+  note: string | null;
+}
+
+export interface ChequeActionResult {
+  batch: { id: string; batchNo: string; action: ChequeAction; eventDate: string; total: string; docCount: number; entryId: string };
+  cheques: ChequeRow[];
+}
+
+export interface ChequeMaturityDirection {
+  count: number;
+  amount: string;
+  buckets: { bucket: MaturityBucket; count: number; amount: string }[];
+}
+export interface ChequeMaturity {
+  asOf: string;
+  received: ChequeMaturityDirection;
+  issued: ChequeMaturityDirection;
+  byParty: { direction: ChequeDirection; partyId: string; partyName: string; count: number; amount: string; overdue: string; earliestDue: string }[];
+}
+
+export interface ChequeDueReport {
+  from: string;
+  to: string;
+  days: number;
+  rows: { id: string; direction: ChequeDirection; docType: ChequeDocType; docNo: string; bankName: string; status: ChequeStatus; partyName: string; dueDate: string; amount: string; overdue: boolean }[];
+  totals: { received: string; issued: string };
+}
+
+export interface ChequeBouncedReport {
+  asOf: string;
+  rows: { id: string; direction: ChequeDirection; docType: ChequeDocType; docNo: string; bankName: string; partyName: string; amount: string; dueDate: string; bouncedDate: string | null; daysSince: number | null }[];
+  totals: { received: string; issued: string };
+}
+
+export interface BankGuaranteeRow {
+  id: string;
+  direction: GuaranteeDirection;
+  letterNo: string;
+  bankName: string;
+  branch: string | null;
+  partyId: string | null;
+  counterpartyName: string;
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  subcontractId: string | null;
+  subcontractCode: string | null;
+  purpose: string | null;
+  amount: string;
+  currencyCode: string;
+  issueDate: string;
+  expiryDate: string | null;
+  commissionRate: string | null;
+  commissionAmount: string | null;
+  commissionNote: string | null;
+  note: string | null;
+  status: BankGuaranteeStatus;
+  resolvedDate: string | null;
+  resolutionNote: string | null;
+  expiryState: GuaranteeExpiryState | 'closed';
+  daysToExpiry: number | null;
+}
+
+export interface BankGuaranteeList {
+  guarantees: BankGuaranteeRow[];
+  asOf: string;
+  warningDays: number | null;
+  activeTotals: { direction: GuaranteeDirection; currency: string; count: number; amount: string }[];
+  expiring: number;
+  lapsed: number;
+}
+
+export interface BankGuaranteeReport {
+  byBank: { direction: GuaranteeDirection; bankName: string; currency: string; count: number; amount: string; commission: string }[];
+  byProject: { direction: GuaranteeDirection; projectId: string | null; projectCode: string | null; projectName: string | null; currency: string; count: number; amount: string }[];
+  closed: { direction: GuaranteeDirection; status: BankGuaranteeStatus; currency: string; count: number; amount: string }[];
 }

@@ -152,6 +152,13 @@ export function errorHandler(
       .send({ error: { code: 'HR_RULE_VIOLATION', message: pg.message } });
     return;
   }
+  if (pg?.code === 'ERP14') {
+    // Çek/senet ve teminat mektubu kuralları (geçersiz durum geçişi, değişmez geçmiş, eşleştirme aşımı, sonuçlanmış mektup)
+    void reply
+      .status(422)
+      .send({ error: { code: 'CHEQUE_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
   if (pg?.code === '23505') {
     void reply
       .status(409)

@@ -1,4 +1,4 @@
-import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
+import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -28,6 +28,9 @@ import { logSocialAccess } from '../socialsecurity/config';
 import { getDeclaration } from '../socialsecurity/declarations';
 import { premiumSummary } from '../socialsecurity/reports';
 import { getVariation, listVariations } from '../subcontracts/variations';
+import { listGuarantees as listBankGuarantees } from '../cheques/guarantees';
+import { chequeMaturity, chequesBounced, chequesDue } from '../cheques/reports';
+import { listCheques } from '../cheques/service';
 import { fxDifferences } from '../treasury/fx-report';
 import { TXN_LABEL } from '../treasury/posting';
 import { treasuryStatement } from '../treasury/reports';
@@ -1612,6 +1615,154 @@ export async function cashForecastTable(ctx: BuildCtx, q: { from?: string; weeks
         col('overdue', 'Gecikmiş', 'text', 10),
       ],
       rows: d.items.map((i) => ({ date: i.date, week: i.week, source: i.source === 'receivable' ? 'Alacak' : i.source === 'payable' ? 'Borç' : i.direction === 'in' ? 'Elle giriş' : 'Elle çıkış', party: i.partyName, description: i.description, currency: i.currencyCode, amount: i.direction === 'in' ? i.amount : `${i.amount}`, amountBase: i.direction === 'in' ? i.amountBase : (-Number(i.amountBase)).toFixed(2), overdue: i.overdue ? 'Evet' : null })),
+    },
+  ];
+}
+
+// --- Çek/senet portföyü ve banka teminat mektubu (X1) ----------------------------------------------------------------
+
+const CHEQUE_STATUS_LABEL: Record<string, string> = {
+  portfolio: 'Portföyde',
+  in_collection: 'Tahsilde',
+  collected: 'Tahsil edildi',
+  bounced: 'Karşılıksız',
+  endorsed: 'Ciro edildi',
+  returned: 'İade edildi',
+  issued: 'Düzenlendi',
+  paid: 'Ödendi',
+  cancelled: 'İptal',
+};
+const CHEQUE_DIR_LABEL: Record<string, string> = { received: 'Alınan', issued: 'Verilen' };
+const CHEQUE_TYPE_LABEL: Record<string, string> = { cheque: 'Çek', note: 'Senet' };
+const BUCKET_LABEL: Record<string, string> = { overdue: 'Vadesi geçmiş', d0_7: '0–7 gün', d8_30: '8–30 gün', d31_60: '31–60 gün', d61_90: '61–90 gün', d90p: '90+ gün' };
+const GUARANTEE_NOTE = 'Komisyon, süre ve tutar bilgileri kullanıcı girişidir; hesap eşlemeleri ve hukuki geçerlilik doğrulanmadı';
+const BANK_GUARANTEE_STATUS_LABEL: Record<string, string> = { active: 'Aktif', returned: 'İade edildi', liquidated: 'Nakde çevrildi', expired: 'Süresi doldu' };
+
+const chequeColumns = (b: string) => [
+  col('direction', 'Yön', 'text', 10),
+  col('type', 'Tür', 'text', 8),
+  col('no', 'Numara', 'text', 16),
+  col('bank', 'Banka', 'text', 20),
+  col('party', 'Cari', 'text', 28),
+  col('issue', 'Düzenleme', 'date'),
+  col('due', 'Vade', 'date'),
+  col('amount', `Tutar (${b})`, 'money'),
+  col('status', 'Durum', 'text', 14),
+];
+
+export async function chequesTable(ctx: BuildCtx, q: ChequeListQuery): Promise<ReportTable[]> {
+  const d = await listCheques(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'cek-senet-portfoyu',
+      title: 'Çek/senet portföyü',
+      sheet: 'Portföy',
+      subtitle: sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`),
+      columns: chequeColumns(b),
+      rows: d.cheques.map((c) => ({ direction: CHEQUE_DIR_LABEL[c.direction], type: CHEQUE_TYPE_LABEL[c.docType], no: c.docNo, bank: c.bankName, party: c.partyName, issue: c.issueDate, due: c.dueDate, amount: c.amount, status: CHEQUE_STATUS_LABEL[c.status] ?? c.status })),
+      totals: { amount: sum(d.cheques.map((c) => c.amount)).toFixed(2) },
+    },
+  ];
+}
+
+export async function chequeMaturityTable(ctx: BuildCtx, q: ChequeMaturityQuery): Promise<ReportTable[]> {
+  const d = await chequeMaturity(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  const subtitle = sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`, 'portföyde/tahsilde olan alınan ve ödenmemiş verilen belgeler');
+  return [
+    {
+      key: 'cek-vade-analizi',
+      title: 'Çek/senet vade analizi',
+      sheet: 'Vade kovaları',
+      subtitle,
+      columns: [col('direction', 'Yön', 'text', 12), col('bucket', 'Vade', 'text', 16), col('count', 'Adet', 'int'), col('amount', `Tutar (${b})`, 'money')],
+      rows: (['received', 'issued'] as const).flatMap((dir) => d[dir].buckets.map((k) => ({ direction: CHEQUE_DIR_LABEL[dir], bucket: BUCKET_LABEL[k.bucket], count: k.count, amount: k.amount }))),
+    },
+    {
+      key: 'cek-vade-cari',
+      title: 'Çek/senet vade analizi (cariye göre)',
+      sheet: 'Cariye göre',
+      subtitle,
+      columns: [col('direction', 'Yön', 'text', 12), col('party', 'Cari', 'text', 30), col('count', 'Adet', 'int'), col('amount', `Tutar (${b})`, 'money'), col('overdue', `Vadesi geçmiş (${b})`, 'money'), col('earliest', 'En erken vade', 'date')],
+      rows: d.byParty.map((p) => ({ direction: CHEQUE_DIR_LABEL[p.direction], party: p.partyName, count: p.count, amount: p.amount, overdue: p.overdue, earliest: p.earliestDue })),
+    },
+  ];
+}
+
+export async function chequesDueTable(ctx: BuildCtx, q: ChequeDueQuery): Promise<ReportTable[]> {
+  const d = await chequesDue(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'vadesi-gelen-cek-senet',
+      title: 'Vadesi gelen çek/senetler',
+      sheet: 'Vadesi gelen',
+      subtitle: sub(ctx, `${formatDateTR(d.from)} – ${formatDateTR(d.to)} (vadesi geçmişler dahil)`),
+      columns: [col('direction', 'Yön', 'text', 10), col('type', 'Tür', 'text', 8), col('no', 'Numara', 'text', 16), col('party', 'Cari', 'text', 28), col('due', 'Vade', 'date'), col('amount', `Tutar (${b})`, 'money'), col('status', 'Durum', 'text', 14), col('overdue', 'Vadesi geçmiş', 'text', 14)],
+      rows: d.rows.map((r) => ({ direction: CHEQUE_DIR_LABEL[r.direction], type: CHEQUE_TYPE_LABEL[r.docType], no: r.docNo, party: r.partyName, due: r.dueDate, amount: r.amount, status: CHEQUE_STATUS_LABEL[r.status] ?? r.status, overdue: r.overdue ? 'Evet' : '' })),
+    },
+  ];
+}
+
+export async function chequesBouncedTable(ctx: BuildCtx, q: { direction?: 'received' | 'issued' }): Promise<ReportTable[]> {
+  const d = await chequesBounced(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'karsiliksiz-cek-senet',
+      title: 'Karşılıksız çek/senetler',
+      sheet: 'Karşılıksız',
+      subtitle: sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`, 'cariye yeniden açılan alacak/borç tutarıdır'),
+      columns: [col('direction', 'Yön', 'text', 10), col('type', 'Tür', 'text', 8), col('no', 'Numara', 'text', 16), col('bank', 'Banka', 'text', 20), col('party', 'Cari', 'text', 28), col('due', 'Vade', 'date'), col('bounced', 'Karşılıksız tarihi', 'date'), col('days', 'Geçen gün', 'int'), col('amount', `Tutar (${b})`, 'money')],
+      rows: d.rows.map((r) => ({ direction: CHEQUE_DIR_LABEL[r.direction], type: CHEQUE_TYPE_LABEL[r.docType], no: r.docNo, bank: r.bankName, party: r.partyName, due: r.dueDate, bounced: r.bouncedDate, days: r.daysSince, amount: r.amount })),
+    },
+  ];
+}
+
+export async function bankGuaranteesTable(ctx: BuildCtx, q: BankGuaranteeListQuery): Promise<ReportTable[]> {
+  const d = await listBankGuarantees(ctx.tx, q);
+  const warn = d.warningDays === null ? 'uyarı günü tanımsız: "dolmak üzere" üretilmedi' : `uyarı günü ${d.warningDays}`;
+  return [
+    {
+      key: 'banka-teminat-mektuplari',
+      title: 'Banka teminat mektupları',
+      sheet: 'Mektuplar',
+      subtitle: sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`, warn, GUARANTEE_NOTE),
+      columns: [
+        col('direction', 'Yön', 'text', 10),
+        col('no', 'Mektup no', 'text', 16),
+        col('bank', 'Banka', 'text', 20),
+        col('party', 'Karşı taraf', 'text', 26),
+        col('project', 'Proje', 'text', 22),
+        col('contract', 'Sözleşme', 'text', 14),
+        col('purpose', 'Amaç', 'text', 22),
+        col('amount', 'Tutar', 'money'),
+        col('currency', 'Para birimi', 'text', 8),
+        col('issue', 'Düzenleme', 'date'),
+        col('expiry', 'Son kullanma', 'date'),
+        col('days', 'Kalan gün', 'int'),
+        col('rate', 'Komisyon oranı (%)', 'rate'),
+        col('commission', 'Komisyon tutarı', 'money'),
+        col('status', 'Durum', 'text', 14),
+      ],
+      rows: d.guarantees.map((g) => ({
+        direction: g.direction === 'given' ? 'Verilen' : 'Alınan',
+        no: g.letterNo,
+        bank: g.bankName,
+        party: g.counterpartyName,
+        project: g.projectCode ? `${g.projectCode} — ${g.projectName}` : null,
+        contract: g.subcontractCode,
+        purpose: g.purpose,
+        amount: g.amount,
+        currency: g.currencyCode,
+        issue: g.issueDate,
+        expiry: g.expiryDate,
+        days: g.daysToExpiry,
+        rate: g.commissionRate,
+        commission: g.commissionAmount,
+        status: g.expiryState === 'lapsed' ? 'Süresi geçmiş (kapatılmadı)' : g.expiryState === 'expiring' ? 'Dolmak üzere' : (BANK_GUARANTEE_STATUS_LABEL[g.status] ?? g.status),
+      })),
     },
   ];
 }

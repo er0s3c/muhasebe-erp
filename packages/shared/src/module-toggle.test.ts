@@ -63,7 +63,8 @@ describe('checkModuleToggle', () => {
 
   it('yaprak modüller (fatura, kasa/banka) serbestçe kapanıp açılır', () => {
     expect(check('core.invoices', false)).toEqual({ ok: true });
-    expect(check('core.treasury', false)).toEqual({ ok: true });
+    expect(check('treasury.cheques', false)).toEqual({ ok: true });
+    expect(check('treasury.guarantees', false)).toEqual({ ok: true });
     expect(check('core.invoices', true, off('core.invoices'))).toEqual({ ok: true });
   });
 
@@ -87,6 +88,13 @@ describe('checkModuleToggle', () => {
     expect(check('hr.core', false, off('hr.payroll', 'hr.socialsecurity'))).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['hr.foreign'] });
     expect(check('hr.core', false, off('hr.payroll', 'hr.socialsecurity', 'hr.foreign'))).toEqual({ ok: true });
     expect(check('hr.foreign', true, off('hr.foreign', 'hr.core'))).toMatchObject({ ok: false });
+  });
+
+  it('kasa/banka, çek/senet ve teminat mektubu modülleri açıkken kapatılamaz; bunlar kapalıyken serbest', () => {
+    const blocked = check('core.treasury', false);
+    expect(blocked.ok === false && blocked.modules.sort()).toEqual(['treasury.cheques', 'treasury.guarantees']);
+    expect(check('core.treasury', false, off('treasury.cheques', 'treasury.guarantees'))).toEqual({ ok: true });
+    expect(check('treasury.cheques', true, off('core.treasury', 'treasury.cheques'))).toMatchObject({ ok: false });
   });
 
   it('gereksinimi kapalı modül açılamaz', () => {

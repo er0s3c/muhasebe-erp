@@ -4,6 +4,12 @@ import { addMember, asDb, client, createCompany, makeApp, orgOf, registerUser } 
 const { app, handle } = await makeApp();
 
 const put = (c: ReturnType<typeof client>, key: string, enabled: boolean) => c.put(`/api/company/modules/${key}`, { enabled });
+/** Kasa/banka kapatılmadan önce ona bağlı çek/senet ve teminat mektubu modülleri kapatılır (bağımlılık). */
+const treasuryOff = async (c: ReturnType<typeof client>) => {
+  await put(c, 'treasury.cheques', false);
+  await put(c, 'treasury.guarantees', false);
+  return put(c, 'core.treasury', false);
+};
 const navKeys = async (c: ReturnType<typeof client>) =>
   (await c.get('/api/navigation')).json().groups.map((g: any) => g.key) as string[];
 const byKey = (res: any) => Object.fromEntries(res.json().modules.map((m: any) => [m.key, m]));
@@ -22,6 +28,9 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     const m = byKey(res);
     expect(m['core.invoices']).toMatchObject({ enabled: true, locked: false, override: null, requires: ['core.ledger', 'core.parties', 'core.inventory'] });
     expect(m['core.ledger'].dependents).toEqual(expect.arrayContaining(['core.parties', 'core.inventory', 'core.invoices', 'core.treasury']));
+    expect(m['treasury.cheques']).toMatchObject({ enabled: true, requires: ['core.treasury'] });
+    expect(m['treasury.guarantees']).toMatchObject({ enabled: true, requires: ['core.treasury'] });
+    expect(m['core.treasury'].dependents).toEqual(expect.arrayContaining(['treasury.cheques', 'treasury.guarantees']));
     expect(m['core.ledger'].blocked).toMatchObject({ reason: 'REQUIRED_BY' });
     expect(m['core.dashboard']).toMatchObject({ locked: true, blocked: { reason: 'LOCKED' } });
     // Proje modülü inşaat şirketinde açık; yalnızca muhasebeye bağlı
@@ -61,8 +70,8 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
 
   it('aynı duruma geçiş etkisizdir (iki kez kapat / iki kez aç)', async () => {
     const { c } = await setup('Idempotent');
-    expect((await put(c, 'core.treasury', false)).statusCode).toBe(200);
-    expect((await put(c, 'core.treasury', false)).statusCode).toBe(200);
+    expect((await treasuryOff(c)).statusCode).toBe(200);
+    expect((await treasuryOff(c)).statusCode).toBe(200);
     expect((await put(c, 'core.treasury', true)).statusCode).toBe(200);
     expect((await put(c, 'core.treasury', true)).statusCode).toBe(200);
   });
@@ -125,7 +134,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
       const r = await put(m.client, 'core.treasury', false);
       expect(r.statusCode).toBe(403);
     }
-    expect((await put(admin.client, 'core.treasury', false)).statusCode).toBe(200);
+    expect((await treasuryOff(admin.client)).statusCode).toBe(200);
     expect((await put(c, 'core.treasury', true)).statusCode).toBe(200);
     expect(owner.token).toBeTruthy();
     // Kimliksiz
@@ -135,7 +144,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
   it('şirketler arası yalıtım: A şirketindeki istisna B şirketini etkilemez', async () => {
     const a = await setup('IzolA');
     const b = await setup('IzolB');
-    expect((await put(a.c, 'core.treasury', false)).statusCode).toBe(200);
+    expect((await treasuryOff(a.c)).statusCode).toBe(200);
     expect(byKey(await b.c.get('/api/company/modules'))['core.treasury']).toMatchObject({ enabled: true, override: null });
     expect((await b.c.get('/api/treasury/accounts')).statusCode).toBe(200);
     expect((await a.c.get('/api/treasury/accounts')).statusCode).toBe(403);
@@ -206,7 +215,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     const { c } = await setup('Tasinir');
     expect((await c.post('/api/parties', { name: 'Taşınabilir Cari', kind: 'customer' })).statusCode).toBe(201);
     expect((await put(c, 'core.invoices', false)).statusCode).toBe(200);
-    expect((await put(c, 'core.treasury', false)).statusCode).toBe(200);
+    expect((await treasuryOff(c)).statusCode).toBe(200);
     const res = await c.get('/api/exports/full-data?format=xlsx');
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('spreadsheetml');
