@@ -109,6 +109,15 @@ export const MODULES: readonly ModuleDef[] = [
     requires: ['hr.payroll'],
   },
   {
+    key: 'hr.foreign',
+    labelKey: 'modules.hrForeign',
+    label: 'Yabancı işçi belge ve teminat takibi',
+    sectors: 'all',
+    status: 'available',
+    // Personel kartındaki uyruk bilgisini kullanır (hr.core). Süre/tutar/makam tarihli, doğrulanmamış kullanıcı verisidir.
+    requires: ['hr.core'],
+  },
+  {
     key: 'retail.pos',
     labelKey: 'modules.retailPos',
     label: 'Hızlı satış (POS)',
@@ -467,6 +476,24 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'hr',
     module: 'hr.socialsecurity',
     permission: 'hr.payroll',
+  },
+  {
+    key: 'foreign-workers',
+    labelKey: 'nav.foreignWorkers',
+    path: '/hr/foreign-workers',
+    icon: 'hourglass',
+    group: 'hr',
+    module: 'hr.foreign',
+    permission: 'hr.read',
+  },
+  {
+    key: 'foreign-settings',
+    labelKey: 'nav.foreignSettings',
+    path: '/hr/foreign-workers/settings',
+    icon: 'sliders-horizontal',
+    group: 'hr',
+    module: 'hr.foreign',
+    permission: 'hr.read',
   },
   {
     key: 'privacy',

@@ -98,7 +98,8 @@
     "constructionRealestate": "Gayrimenkul satışı",
     "hrCore": "Personel, puantaj ve veri koruma",
     "hrPayroll": "Bordro",
-    "hrSocialSecurity": "Sosyal güvenlik çıktıları"
+    "hrSocialSecurity": "Sosyal güvenlik çıktıları",
+    "hrForeign": "Yabancı işçi belge ve teminat takibi"
   },
   "nav": {
     "groups": {
@@ -173,6 +174,8 @@
     "payrollSettings": "Bordro ayarları",
     "socialSecurity": "Sosyal güvenlik",
     "socialSettings": "Sosyal güvenlik ayarları",
+    "foreignWorkers": "Yabancı işçi belgeleri",
+    "foreignSettings": "Yabancı işçi ayarları",
     "privacy": "Veri koruma"
   },
   "shell": {
@@ -4022,6 +4025,197 @@
       "invalidRange": "Başlangıç tarihi bitişten sonra olamaz.",
       "empty": "Bu aralıkta işçilik saati yok",
       "emptyDesc": "{{from}} – {{to}} arasında saatli puantaj kaydı bulunmuyor."
+    }
+  },
+  "foreign": {
+    "title": "Yabancı işçi belge ve teminat takibi",
+    "subtitle": "Personel kartındaki uyruğa göre belge (çalışma/ikamet izni, pasaport, sağlık raporu vb.), son kullanma takibi ve teminat kaydı.",
+    "notice": "Tüm süre, uyarı günü, teminat tutarı ve makam bilgileri sizin girdiğiniz kullanıcı verisidir; sistemde yasal değer yoktur ve hiçbiri doğrulanmadı. Belge numaraları şifreli saklanır ve maskeli gösterilir. Dosya yükleme yoktur: ek belge için metin atfı yazılır. Bildirim/e-posta hatırlatması yoktur; süresi dolan/dolmak üzere listesini buradan izleyin.",
+    "unverifiedBadge": "Doğrulanmadı",
+    "tabs": {
+      "documents": "Belgeler",
+      "guarantees": "Teminatlar"
+    },
+    "status": {
+      "valid": "Geçerli",
+      "expiring": "Dolmak üzere",
+      "expired": "Süresi dolmuş",
+      "revoked": "İptal"
+    },
+    "gStatus": {
+      "held": "Tutuluyor",
+      "refunded": "İade edildi",
+      "forfeited": "İrat kaydedildi"
+    },
+    "noWarning": "Uyarı günü parametresi tanımsız ya da kapalı: \"dolmak üzere\" durumu üretilmez. Ayarlardan tarihli bir uyarı günü girip açın.",
+    "warningInfo": "Uyarı günü: {{days}} gün",
+    "filters": {
+      "status": "Durum",
+      "all": "Tümü",
+      "within": "Kalan gün en çok",
+      "nationality": "Uyruk",
+      "type": "Belge türü",
+      "search": "Personel ara",
+      "asOf": "Değerlendirme günü"
+    },
+    "cols": {
+      "employee": "Personel",
+      "nationality": "Uyruk",
+      "type": "Belge türü",
+      "number": "Belge no",
+      "authority": "Veren makam",
+      "issue": "Veriliş",
+      "expiry": "Son kullanma",
+      "days": "Kalan gün",
+      "status": "Durum",
+      "renewals": "Yenileme",
+      "reference": "Ek belge atfı"
+    },
+    "empty": "Henüz belge yok",
+    "emptyDesc": "Uyruğu kayıtlı bir personel için ilk belgeyi ekleyin.",
+    "emptyFiltered": "Süzgece uyan belge yok",
+    "newDoc": "Yeni belge",
+    "docForm": {
+      "title": "Belge ekle",
+      "desc": "Uyruğu personel kartında kayıtlı olmalıdır. Numara şifreli saklanır.",
+      "employee": "Personel",
+      "pick": "Seçin",
+      "type": "Belge türü",
+      "number": "Belge numarası",
+      "authority": "Veren makam",
+      "issue": "Veriliş tarihi",
+      "expiry": "Son kullanma tarihi",
+      "reference": "Ek belge atfı (dosya/klasör/arşiv no)",
+      "save": "Kaydet",
+      "added": "Belge eklendi"
+    },
+    "show": "Göster",
+    "hide": "Gizle",
+    "reveal": {
+      "title": "Belge numarasını göster",
+      "desc": "Gerekçe zorunludur ve erişim günlüğüne yazılır.",
+      "reason": "Gerekçe",
+      "reasonHint": "Örn. kayıt doğrulaması"
+    },
+    "renew": {
+      "action": "Yenile",
+      "title": "Belgeyi yenile",
+      "desc": "Önceki bilgiler salt-eklenir yenileme geçmişine yazılır; düzeltilemez.",
+      "issue": "Yeni veriliş tarihi",
+      "expiry": "Yeni son kullanma tarihi",
+      "number": "Yeni belge numarası (boşsa değişmez)",
+      "note": "Not",
+      "done": "Belge yenilendi"
+    },
+    "revoke": {
+      "action": "İptal et",
+      "title": "Belgeyi iptal et",
+      "desc": "İptal geri alınamaz ve belge yenilenemez.",
+      "reason": "Gerekçe",
+      "done": "Belge iptal edildi"
+    },
+    "history": {
+      "action": "Geçmiş",
+      "title": "Yenileme geçmişi",
+      "empty": "Henüz yenileme yok",
+      "prev": "Önceki",
+      "next": "Yeni",
+      "at": "Yenileme zamanı"
+    },
+    "exportDocs": "Belge kaydı",
+    "guarantees": {
+      "title": "Teminat kaydı",
+      "desc": "Tutar, yatırma tarihinde geçerli kullanıcı parametresinden alınır; istekte tutar girilmez. Kasa/yevmiye bağlantısı yoktur: yalnızca takip.",
+      "noParam": "Teminat tutarı parametresi yok: ayarlardan tarihli, açık bir teminat tutarı girmeden kayıt açılamaz.",
+      "empty": "Henüz teminat kaydı yok",
+      "new": "Teminat kaydet",
+      "form": {
+        "title": "Teminat kaydet",
+        "employee": "Personel",
+        "pick": "Seçin",
+        "doc": "Bağlı belge (isteğe bağlı)",
+        "noDoc": "Belge yok",
+        "date": "Yatırma tarihi",
+        "reference": "Makbuz/dekont no",
+        "save": "Kaydet",
+        "added": "Teminat kaydedildi"
+      },
+      "cols": {
+        "employee": "Personel",
+        "project": "Proje",
+        "amount": "Tutar",
+        "deposited": "Yatırma",
+        "reference": "Makbuz/dekont",
+        "status": "Durum",
+        "resolved": "İade/irat",
+        "param": "Parametre"
+      },
+      "resolve": {
+        "action": "Sonuçlandır",
+        "title": "Teminatı sonuçlandır",
+        "desc": "İade ya da irat kaydı geri alınamaz.",
+        "kind": "Sonuç",
+        "refunded": "İade edildi",
+        "forfeited": "İrat kaydedildi",
+        "date": "Tarih",
+        "note": "Not",
+        "done": "Teminat sonuçlandırıldı"
+      },
+      "delete": "Sil",
+      "outstanding": "Tutulan teminat",
+      "byEmployee": "Personele göre",
+      "byProject": "Projeye göre",
+      "noProject": "Etiketsiz",
+      "count": "Kayıt",
+      "totals": "Para birimine göre toplam",
+      "held": "Tutulan",
+      "refunded": "İade",
+      "forfeited": "İrat",
+      "unverified": "Doğrulanmamış parametreden gelen tutar içerir",
+      "verified": "Doğrulanmış",
+      "export": "Teminat kaydı"
+    },
+    "settings": {
+      "title": "Yabancı işçi ayarları",
+      "subtitle": "Belge türü kataloğu ve tarihli parametreler (uyarı günü, teminat tutarı).",
+      "legal": "Sistemde yasal değer yoktur: belge türleri, uyarı günü ve teminat tutarı sizin girdiğiniz, tarihli ve doğrulama gerektiren kullanıcı verisidir. Parametre satırları varsayılan KAPALIdır.",
+      "types": {
+        "title": "Belge türleri",
+        "desc": "Yalnızca genel adlar hazır gelir; geçerlilik süresi, ücret ya da makam bilgisi yoktur. Türler silinmez, pasifleştirilir.",
+        "code": "Kod",
+        "name": "Ad",
+        "active": "Etkin",
+        "activeLabel": "{{name}} etkin",
+        "add": "Tür ekle",
+        "added": "Belge türü eklendi"
+      },
+      "params": {
+        "title": "Tarihli parametreler",
+        "desc": "Anahtar başına başlangıcı geçmiş en yeni satır geçerlidir; o satır kapalıysa parametre kapalıdır. Değer sonradan değişmez: yeni tarihli satır ekleyin.",
+        "empty": "Henüz parametre yok: uyarı günü ve teminat tutarı uygulanmaz.",
+        "key": "Parametre",
+        "keys": {
+          "guarantee_amount": "Teminat tutarı",
+          "expiry_warning_days": "Uyarı günü (belge bitişinden önce)"
+        },
+        "value": "Değer",
+        "currency": "Para birimi",
+        "from": "Geçerlilik başlangıcı",
+        "source": "Kaynak notu",
+        "enabled": "Açık",
+        "enableLabel": "{{key}} {{date}} açık",
+        "verification": "Doğrulama",
+        "verifiedBy": "Doğrulandı: {{by}}",
+        "verify": "Doğrula",
+        "verifyTitle": "Parametreyi doğrula",
+        "verifyDesc": "Kaynağı kendiniz kontrol ettiyseniz doğrulandı olarak işaretleyin.",
+        "verifyHint": "Kaynak notunu güncelleyebilirsiniz",
+        "verifiedToast": "Parametre doğrulandı",
+        "add": "Ekle",
+        "added": "Parametre eklendi",
+        "newOn": "Yeni parametre açık",
+        "days": "gün"
+      }
     }
   }
 }

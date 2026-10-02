@@ -145,6 +145,13 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="hr.foreign" />,
+                children: [
+                  { path: 'hr/foreign-workers', ...page(() => import('../features/hr/ForeignWorkersPage'), 'ForeignWorkersPage') },
+                  { path: 'hr/foreign-workers/settings', ...page(() => import('../features/hr/ForeignSettingsPage'), 'ForeignSettingsPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="construction.subcontracts" />,
                 children: [
                   { path: 'subcontracts', ...page(() => import('../features/subcontracts/SubcontractsPage'), 'SubcontractsPage') },

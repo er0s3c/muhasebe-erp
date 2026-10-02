@@ -1,4 +1,4 @@
-import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
+import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -22,6 +22,8 @@ import { listEmployees } from '../hr/employees';
 import { logPayrollAccess } from '../payroll/config';
 import { payrollCostByProject } from '../payroll/reports';
 import { getRun } from '../payroll/runs';
+import { logForeignAccess, listDocs } from '../foreignworkers/docs';
+import { guaranteeReport, listGuarantees } from '../foreignworkers/guarantees';
 import { logSocialAccess } from '../socialsecurity/config';
 import { getDeclaration } from '../socialsecurity/declarations';
 import { premiumSummary } from '../socialsecurity/reports';
@@ -1255,6 +1257,118 @@ export async function socialPremiumSummaryTable(ctx: BuildCtx, q: { from: string
         erDue: p.employerDue,
       })),
       totals: { empPrem: d.totals.employeePremium, erPrem: d.totals.employerPremium, supEmp: d.totals.supportEmployee, supEr: d.totals.supportEmployer, empDue: d.totals.employeeDue, erDue: d.totals.employerDue },
+    },
+  ];
+}
+
+// --- Yabancı işçi belge ve teminat takibi (D5) -------------------------------------------------------------
+
+const FOREIGN_NOTE = 'Süre/tutar/makam bilgileri kullanıcı girişidir, doğrulanmadı';
+const FOREIGN_DOC_STATUS_LABEL: Record<string, string> = { valid: 'Geçerli', expiring: 'Dolmak üzere', expired: 'Süresi dolmuş', revoked: 'İptal' };
+const GUARANTEE_STATUS_LABEL: Record<string, string> = { held: 'Tutuluyor', refunded: 'İade edildi', forfeited: 'İrat kaydedildi' };
+
+/** Belge kaydı (süzgeçli): belge numarası MASKELİDİR (son 4 hane); okuma erişim günlüğüne yazılır. */
+export async function foreignDocsTable(ctx: BuildCtx, q: ForeignDocListQuery): Promise<ReportTable[]> {
+  const d = await listDocs(ctx.tx, q);
+  await logForeignAccess(ctx.tx, d.docs.map((x) => x.employeeId), 'Yabancı işçi belge kaydı dışa aktarma');
+  const warn = d.warning.configured ? `uyarı günü ${d.warning.days}${d.warning.verified ? '' : ' (⚠ doğrulanmadı)'}` : 'uyarı günü tanımsız: "dolmak üzere" üretilmedi';
+  return [
+    {
+      key: 'yabanci-isci-belgeleri',
+      title: 'Yabancı işçi belge kaydı',
+      sheet: 'Belgeler',
+      subtitle: sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`, warn, FOREIGN_NOTE, 'kişisel veri: belge numarası maskeli'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 26),
+        col('nat', 'Uyruk', 'text', 14),
+        col('type', 'Belge türü', 'text', 18),
+        col('no', 'Belge no (maskeli)', 'text', 16),
+        col('auth', 'Veren makam', 'text', 22),
+        col('issue', 'Veriliş', 'date'),
+        col('expiry', 'Son kullanma', 'date'),
+        col('days', 'Kalan gün', 'int'),
+        col('status', 'Durum', 'text', 14),
+        col('renewals', 'Yenileme', 'int'),
+        col('ref', 'Ek belge atfı', 'text', 24),
+      ],
+      rows: d.docs.map((x) => ({
+        code: x.employeeCode,
+        name: x.employeeName,
+        nat: x.nationality,
+        type: x.typeName,
+        no: x.numberMasked,
+        auth: x.issuingAuthority,
+        issue: x.issueDate,
+        expiry: x.expiryDate,
+        days: x.daysToExpiry,
+        status: FOREIGN_DOC_STATUS_LABEL[x.status] ?? x.status,
+        renewals: x.renewalCount,
+        ref: x.referenceNote,
+      })),
+    },
+  ];
+}
+
+/** Teminat kaydı + tutulan teminat özeti (personel ve projeye göre; para birimleri ayrı, kur çevrimi yok). */
+export async function foreignGuaranteesTable(ctx: BuildCtx, q: { employeeId?: string; projectId?: string; status?: string }): Promise<ReportTable[]> {
+  const g = await listGuarantees(ctx.tx, q);
+  const r = await guaranteeReport(ctx.tx, { projectId: q.projectId });
+  const sb = sub(ctx, FOREIGN_NOTE, r.unverified ? '⚠ doğrulanmamış parametreden gelen tutar içerir' : 'tutarlar doğrulanmış parametreden', 'kasa/yevmiye bağlantısı yok: yalnızca takip');
+  return [
+    {
+      key: 'yabanci-isci-teminat-kaydi',
+      title: 'Yabancı işçi teminat kaydı',
+      sheet: 'Teminatlar',
+      subtitle: sb,
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 26),
+        col('project', 'Proje', 'text', 22),
+        col('amount', 'Tutar', 'money'),
+        col('cur', 'Para birimi', 'text', 8),
+        col('dep', 'Yatırma', 'date'),
+        col('ref', 'Makbuz/dekont', 'text', 18),
+        col('status', 'Durum', 'text', 14),
+        col('res', 'İade/irat tarihi', 'date'),
+        col('ver', 'Parametre', 'text', 14),
+      ],
+      rows: g.guarantees.map((x) => ({
+        code: x.employeeCode,
+        name: x.employeeName,
+        project: x.projectCode ? `${x.projectCode} — ${x.projectName}` : null,
+        amount: x.amount,
+        cur: x.currency,
+        dep: x.depositedDate,
+        ref: x.depositReference,
+        status: GUARANTEE_STATUS_LABEL[x.status] ?? x.status,
+        res: x.resolvedDate,
+        ver: x.paramVerified ? 'doğrulanmış' : 'doğrulanmadı',
+      })),
+    },
+    {
+      key: 'yabanci-isci-teminat-ozeti',
+      title: 'Tutulan teminat özeti (personel ve projeye göre)',
+      sheet: 'Tutulan teminat',
+      subtitle: sb,
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 26),
+        col('project', 'Proje', 'text', 22),
+        col('count', 'Kayıt', 'int'),
+        col('amount', 'Tutulan tutar', 'money'),
+        col('cur', 'Para birimi', 'text', 8),
+        col('unv', 'Doğrulanmamış kayıt', 'int'),
+      ],
+      rows: r.byEmployee.map((x) => ({
+        code: x.employeeCode as string,
+        name: x.employeeName as string,
+        project: x.projectCode ? `${x.projectCode as string} — ${x.projectName as string}` : null,
+        count: Number(x.count),
+        amount: x.amount as string,
+        cur: x.currency as string,
+        unv: Number(x.unverified),
+      })),
     },
   ];
 }

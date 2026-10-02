@@ -1029,7 +1029,7 @@ export const personalDataAccessLog = pgTable(
   (t) => [
     foreignKey({ name: 'personal_data_access_log_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
     index('personal_data_access_log_emp_idx').on(t.companyId, t.employeeId, t.createdAt),
-    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export','payroll','social_security_no','social_security')`),
+    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export','payroll','social_security_no','social_security','foreign_doc_no','foreign_docs')`),
     check('personal_data_access_log_reason_ck', sql`length(btrim(${t.reason})) >= 3`),
   ],
 );
@@ -3898,5 +3898,158 @@ export const feeSchedules = pgTable(
     check('fee_schedules_amount_ck', sql`${t.amount} >= 0 and (${t.basis} <> 'pct_of_price' or ${t.amount} <= 100)`),
     check('fee_schedules_currency_ck', sql`(${t.basis} = 'pct_of_price') or ${t.currencyCode} is not null`),
     check('fee_schedules_range_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Yabancı işçi belge ve teminat takibi (Faz D5). Yasal süre/ücret/tutar/makam kodda ve tohumda YOKTUR: belge türleri kullanıcı
+// kataloğudur, uyarı günü ve teminat tutarı tarihli, doğrulama alanlı, varsayılan KAPALI kullanıcı parametresidir.
+// ---------------------------------------------------------------------------
+
+/** Belge türü kataloğu (kullanıcı yönetir). Yalnızca genel adlar tohumlanır; geçerlilik süresi/ücret/makam yoktur. Silinmez, pasifleştirilir. */
+export const foreignDocTypes = pgTable(
+  'foreign_doc_types',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    active: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [unique('foreign_doc_types_uq').on(t.companyId, t.code), unique('foreign_doc_types_id_company_uq').on(t.id, t.companyId)],
+);
+
+/** Personelin yabancı işçi belgesi. Numara şifreli + maskeli (D1 kimlik numarası gibi). Tarih/numara yalnızca yenileme ile değişir. */
+export const foreignWorkerDocs = pgTable(
+  'foreign_worker_docs',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    typeId: uuid().notNull(),
+    numberEnc: text(),
+    numberLast4: text(),
+    issuingAuthority: text(),
+    issueDate: date({ mode: 'string' }),
+    expiryDate: date({ mode: 'string' }),
+    /** Dosya yükleme olanağı yoktur: ek belgeye metin atfı (dosya adı/klasör/arşiv no). */
+    referenceNote: text(),
+    note: text(),
+    revokedAt: timestamp({ withTimezone: true }),
+    revokedBy: uuid().references(() => users.id),
+    revokeReason: text(),
+    renewalCount: integer().notNull().default(0),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('foreign_worker_docs_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'foreign_worker_docs_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'foreign_worker_docs_type_fk', columns: [t.typeId, t.companyId], foreignColumns: [foreignDocTypes.id, foreignDocTypes.companyId] }),
+    index('foreign_worker_docs_emp_idx').on(t.companyId, t.employeeId),
+    index('foreign_worker_docs_expiry_idx').on(t.companyId, t.expiryDate),
+    check('foreign_worker_docs_dates_ck', sql`${t.expiryDate} is null or ${t.issueDate} is null or ${t.expiryDate} >= ${t.issueDate}`),
+    check('foreign_worker_docs_revoke_ck', sql`(${t.revokedAt} is null) = (${t.revokeReason} is null) and (${t.revokedAt} is null) = (${t.revokedBy} is null)`),
+  ],
+);
+
+/** Belge yenileme geçmişi: salt-eklenir (düzeltilemez/silinemez; sahip rolü dahil). */
+export const foreignDocRenewals = pgTable(
+  'foreign_doc_renewals',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    docId: uuid().notNull(),
+    prevIssueDate: date({ mode: 'string' }),
+    prevExpiryDate: date({ mode: 'string' }),
+    prevNumberLast4: text(),
+    newIssueDate: date({ mode: 'string' }),
+    newExpiryDate: date({ mode: 'string' }),
+    newNumberLast4: text(),
+    note: text(),
+    renewedBy: uuid().references(() => users.id),
+    renewedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ name: 'foreign_doc_renewals_doc_fk', columns: [t.docId, t.companyId], foreignColumns: [foreignWorkerDocs.id, foreignWorkerDocs.companyId] }),
+    index('foreign_doc_renewals_doc_idx').on(t.docId),
+  ],
+);
+
+/**
+ * Yabancı işçi parametreleri: tarihli, kaynak notlu, doğrulama alanlı, varsayılan KAPALI (payroll_params deseni). Anahtarlar:
+ * guarantee_amount (teminat tutarı, para birimi zorunlu) ve expiry_warning_days (uyarı günü). Değer kodda/tohumda YOKTUR.
+ */
+export const foreignWorkerParams = pgTable(
+  'foreign_worker_params',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    key: text().notNull(),
+    value: numeric({ precision: 19, scale: 4 }).notNull(),
+    currency: text(),
+    effectiveFrom: date({ mode: 'string' }).notNull(),
+    enabled: boolean().notNull().default(false),
+    sourceNote: text(),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('foreign_worker_params_uq').on(t.companyId, t.key, t.effectiveFrom),
+    unique('foreign_worker_params_id_company_uq').on(t.id, t.companyId),
+    check('foreign_worker_params_key_ck', sql`${t.key} in ('guarantee_amount','expiry_warning_days')`),
+    check('foreign_worker_params_value_ck', sql`${t.value} >= 0 and (${t.key} <> 'expiry_warning_days' or (${t.value} = trunc(${t.value}) and ${t.value} <= 3650))`),
+    check('foreign_worker_params_currency_ck', sql`(${t.key} = 'guarantee_amount' and ${t.currency} is not null and ${t.currency} ~ '^[A-Z]{3}$') or (${t.key} <> 'guarantee_amount' and ${t.currency} is null)`),
+  ],
+);
+
+/** Teminat kaydı: tutar, kayıt tarihinde geçerli kullanıcı parametresinden anlık görüntüdür. held → refunded | forfeited. */
+export const foreignWorkerGuarantees = pgTable(
+  'foreign_worker_guarantees',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    docId: uuid(),
+    paramId: uuid().notNull(),
+    projectId: uuid(),
+    amount: money().notNull(),
+    currency: text().notNull(),
+    /** Kayıt anında parametrenin doğrulanmış olup olmadığı (anlık görüntü). */
+    paramVerified: boolean().notNull().default(false),
+    depositedDate: date({ mode: 'string' }).notNull(),
+    depositReference: text(),
+    /** held | refunded | forfeited */
+    status: text().notNull().default('held'),
+    resolvedDate: date({ mode: 'string' }),
+    resolutionNote: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ name: 'foreign_worker_guarantees_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'foreign_worker_guarantees_doc_fk', columns: [t.docId, t.companyId], foreignColumns: [foreignWorkerDocs.id, foreignWorkerDocs.companyId] }),
+    foreignKey({ name: 'foreign_worker_guarantees_param_fk', columns: [t.paramId, t.companyId], foreignColumns: [foreignWorkerParams.id, foreignWorkerParams.companyId] }),
+    foreignKey({ name: 'foreign_worker_guarantees_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    index('foreign_worker_guarantees_emp_idx').on(t.companyId, t.employeeId),
+    check('foreign_worker_guarantees_status_ck', sql`${t.status} in ('held','refunded','forfeited')`),
+    check('foreign_worker_guarantees_amount_ck', sql`${t.amount} > 0 and ${t.currency} ~ '^[A-Z]{3}$'`),
+    check('foreign_worker_guarantees_resolved_ck', sql`(${t.status} = 'held') = (${t.resolvedDate} is null) and (${t.resolvedDate} is null or ${t.resolvedDate} >= ${t.depositedDate})`),
   ],
 );

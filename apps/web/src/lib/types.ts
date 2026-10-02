@@ -2242,3 +2242,96 @@ export interface PremiumSummaryReport {
   totals: { employeePremium: string; employerPremium: string; supportEmployee: string; supportEmployer: string; employeeDue: string; employerDue: string };
   unverified: boolean;
 }
+
+// --- Yabancı işçi belge ve teminat takibi (Faz D5) ---
+
+export type ForeignDocStatus = 'valid' | 'expiring' | 'expired' | 'revoked';
+export type GuaranteeStatus = 'held' | 'refunded' | 'forfeited';
+export type ForeignParamKey = 'guarantee_amount' | 'expiry_warning_days';
+
+export interface ForeignDocTypeRow {
+  id: string;
+  code: string;
+  name: string;
+  active: boolean;
+}
+
+export interface ForeignParamRow {
+  id: string;
+  key: ForeignParamKey;
+  value: string;
+  currency: string | null;
+  effectiveFrom: string;
+  enabled: boolean;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface ForeignDocRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  nationality: string | null;
+  typeId: string;
+  typeName: string;
+  typeCode: string;
+  hasNumber: boolean;
+  numberMasked: string | null;
+  issuingAuthority: string | null;
+  issueDate: string | null;
+  expiryDate: string | null;
+  referenceNote: string | null;
+  note: string | null;
+  renewalCount: number;
+  revokedAt: string | null;
+  revokeReason: string | null;
+  status: ForeignDocStatus;
+  daysToExpiry: number | null;
+}
+
+export interface ForeignDocList {
+  asOf: string;
+  warning: { days: number | null; configured: boolean; verified: boolean };
+  summary: Record<ForeignDocStatus, number>;
+  docs: ForeignDocRow[];
+}
+
+export interface ForeignDocRenewalRow {
+  id: string;
+  prevIssueDate: string | null;
+  prevExpiryDate: string | null;
+  prevNumberMasked: string | null;
+  newIssueDate: string | null;
+  newExpiryDate: string | null;
+  newNumberMasked: string | null;
+  note: string | null;
+  renewedAt: string;
+}
+
+export interface GuaranteeRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  docId: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  amount: string;
+  currency: string;
+  paramVerified: boolean;
+  depositedDate: string;
+  depositReference: string | null;
+  status: GuaranteeStatus;
+  resolvedDate: string | null;
+  resolutionNote: string | null;
+}
+
+export interface GuaranteeReport {
+  byEmployee: { employeeId: string; employeeCode: string; employeeName: string; projectCode: string | null; projectName: string | null; currency: string; count: number; amount: string; unverified: number }[];
+  byProject: { projectId: string | null; projectCode: string | null; projectName: string | null; currency: string; employees: number; count: number; amount: string; unverified: number }[];
+  totals: { currency: string; held: string; refunded: string; forfeited: string }[];
+  unverified: boolean;
+}

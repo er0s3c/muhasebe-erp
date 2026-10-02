@@ -428,6 +428,20 @@
       "when": 1790897652971,
       "tag": "0060_social_security_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1790899321838,
+      "tag": "0061_foreign_workers",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1790899327032,
+      "tag": "0062_foreign_workers_rules",
+      "breakpoints": true
     }
   ]
 }

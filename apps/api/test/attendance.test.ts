@@ -303,6 +303,9 @@ describe('puantaj (Faz D2)', async () => {
     expect((await w.c.put('/api/company/modules/hr.core', { enabled: false })).statusCode).toBe(422);
     expect((await w.c.put('/api/company/modules/hr.socialsecurity', { enabled: false })).statusCode).toBe(200);
     expect((await w.c.put('/api/company/modules/hr.payroll', { enabled: false })).statusCode).toBe(200);
+    // Yabancı işçi takibi (D5) da hr.core'a bağlıdır
+    expect((await w.c.put('/api/company/modules/hr.core', { enabled: false })).statusCode).toBe(422);
+    expect((await w.c.put('/api/company/modules/hr.foreign', { enabled: false })).statusCode).toBe(200);
     expect((await w.c.put('/api/company/modules/hr.core', { enabled: false })).statusCode).toBe(200);
     const res = await w.c.get(`/api/attendance/month?month=${MONTH}`);
     expect(res.statusCode).toBe(403);

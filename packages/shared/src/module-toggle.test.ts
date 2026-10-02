@@ -83,6 +83,12 @@ describe('checkModuleToggle', () => {
     expect(check('hr.socialsecurity', true, off('hr.socialsecurity', 'hr.payroll'))).toMatchObject({ ok: false });
   });
 
+  it('yabancı işçi takibi personel modülüne bağlıdır', () => {
+    expect(check('hr.core', false, off('hr.payroll', 'hr.socialsecurity'))).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['hr.foreign'] });
+    expect(check('hr.core', false, off('hr.payroll', 'hr.socialsecurity', 'hr.foreign'))).toEqual({ ok: true });
+    expect(check('hr.foreign', true, off('hr.foreign', 'hr.core'))).toMatchObject({ ok: false });
+  });
+
   it('gereksinimi kapalı modül açılamaz', () => {
     expect(check('core.invoices', true, off('core.invoices', 'core.inventory'))).toEqual({
       ok: false,
