@@ -149,8 +149,9 @@ async function agingSection(tx: Tx, type: 'receivable' | 'payable', asOf: string
   return { total: toDbAmount(cur.total), overdue: toDbAmount(sum2([cur.d1_30, cur.d31_60, cur.d61_90, cur.d90plus])), buckets, previousTotal: prev === null ? null : toDbAmount(prev) };
 }
 
-async function incomeFor(tx: Tx, scope: ExecScope, from: string, to: string) {
-  const tb = await trialBalance(tx, { from, to, currency: 'base', baseCurrency: scope.baseCurrency, reportingCurrency: scope.reportingCurrency });
+async function incomeFor(tx: Tx, scope: ExecScope, from: string, to: string, includeClosing: boolean) {
+  // Yıl sonu kapanış/devir fişleri varsayılan olarak hariç: gelir/gider kapanışla sıfırlanmış görünmesin
+  const tb = await trialBalance(tx, { from, to, currency: 'base', baseCurrency: scope.baseCurrency, reportingCurrency: scope.reportingCurrency, excludeClosing: !includeClosing });
   const leaves = tb.rows.filter((r) => r.isPostable);
   const income = summarizeIncome(leaves);
   const closingNet = (prefix: string) => sum2(leaves.filter((r) => r.code.startsWith(prefix)).map((r) => r.closing));
@@ -171,8 +172,8 @@ export async function companyExecutive(tx: Tx, scope: ExecScope, q: ExecutiveSum
 
   let recTotals: AgingSection | undefined;
   if (can('ledger')) {
-    const cur = await incomeFor(tx, scope, q.from, q.to);
-    const prev = cmp ? await incomeFor(tx, scope, cmp.from, cmp.to) : null;
+    const cur = await incomeFor(tx, scope, q.from, q.to, q.includeClosing);
+    const prev = cmp ? await incomeFor(tx, scope, cmp.from, cmp.to, q.includeClosing) : null;
     out.income = {
       current: cur.income,
       previous: prev?.income ?? null,

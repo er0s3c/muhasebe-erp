@@ -47,6 +47,7 @@ import { employeeLedgerRoutes } from './modules/employee-ledger/routes';
 import { directoryRoutes } from './modules/directory/routes';
 import { consolidationRoutes } from './modules/consolidation/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
+import { yearEndRoutes } from './modules/yearend/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
 import { settingsRoutes } from './modules/settings/routes';
@@ -183,6 +184,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(memberRoutes);
   await app.register(settingsRoutes);
   await app.register(ledgerRoutes);
+  await app.register(yearEndRoutes);
   await app.register(partyRoutes);
   await app.register(inventoryRoutes);
   await app.register(invoiceRoutes);

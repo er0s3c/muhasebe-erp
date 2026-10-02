@@ -151,6 +151,8 @@ export interface AccountLedgerData {
     entryId: string;
     entryNo: string;
     entryDate: string;
+    /** Yıl sonu kapanış/devir fişi ise kaynak türü. */
+    closingSource: string | null;
     accountCode: string;
     description: string;
     currencyCode: string;
@@ -3288,4 +3290,72 @@ export interface IntercompanyHint {
   receivable: string;
   payable: string;
   currency: string;
+}
+
+// --- Yıl sonu kapanışı ve devir (hesap seçimleri doğrulanmadı) ---------------------------------------------------------
+
+export interface FiscalYearEvent {
+  id: string;
+  action: 'close' | 'reopen';
+  reason: string | null;
+  resultBase: string | null;
+  closeEntryId: string | null;
+  carryEntryId: string | null;
+  at: string;
+  by: string;
+}
+
+export interface FiscalYear {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: 'open' | 'closed';
+  closedAt: string | null;
+  reopenReason: string | null;
+  reopenedAt: string | null;
+  events: FiscalYearEvent[];
+}
+
+export interface FiscalYearsData {
+  years: FiscalYear[];
+  suggestions: { startDate: string; endDate: string; name: string }[];
+}
+
+export type CheckSeverity = 'ok' | 'info' | 'warning' | 'blocker';
+
+export interface PreflightCheck {
+  key: string;
+  severity: CheckSeverity;
+  count?: number;
+  link?: string;
+  details?: string[];
+}
+
+export interface PreflightData {
+  checks: PreflightCheck[];
+  canClose: boolean;
+  blockers: number;
+  result: { kind: 'profit' | 'loss' | 'zero'; net: string; accountCount: number; lineCount: number };
+}
+
+export interface ClosingPreviewLine {
+  accountCode: string;
+  accountName: string;
+  description: string;
+  currencyCode: string;
+  debit: string;
+  credit: string;
+  debitBase: string;
+  creditBase: string;
+  projectCode: string | null;
+  wbsCode: string | null;
+}
+
+export interface ClosingPreviewData {
+  kind: 'profit' | 'loss' | 'zero';
+  net: string;
+  accountCount: number;
+  closingEntry: { date: string; description: string; lines: ClosingPreviewLine[]; totals: { debitBase: string; creditBase: string } } | null;
+  carryEntry: { date: string; description: string; lines: ClosingPreviewLine[] } | null;
 }

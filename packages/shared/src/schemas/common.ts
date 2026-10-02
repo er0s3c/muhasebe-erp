@@ -18,3 +18,9 @@ export const rateString = z
 export const isoDate = z.iso.date();
 
 export const uuid = z.uuid();
+
+/** Sorgu dizesindeki mantıksal değer ("true"/"1" → true; "false"/"0"/yok → false). `z.coerce.boolean` "false"i true yapar, bu yüzden kullanılmaz. */
+export const boolQuery = z
+  .enum(['true', 'false', '1', '0'])
+  .optional()
+  .transform((v) => v === 'true' || v === '1');

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { currencyCode, isoDate, moneyString, uuid } from './common';
+import { boolQuery, currencyCode, isoDate, moneyString, uuid } from './common';
 import { MAP_LEVELS, parseRateList } from '../consolidation-calc';
 
 /** "TRY:0.0245,EUR:1.08": para birimi:kur çiftleri (kur yöntemi kullanıcı verisidir, doğrulanmadı). */
@@ -42,6 +42,8 @@ export const consolidationReportQuerySchema = z.object({
   closingRates: rateListString.optional(),
   plRates: rateListString.optional(),
   mapLevel: z.enum(MAP_LEVELS).default('3'),
+  /** Yıl sonu kapanış/devir fişlerini DAHİL et (varsayılan: hariç; gelir tablosu kapanışla sıfırlanmasın). */
+  includeClosing: boolQuery,
 });
 export type ConsolidationReportQuery = z.infer<typeof consolidationReportQuerySchema>;
 
@@ -97,6 +99,8 @@ export const executiveSummaryQuerySchema = z.object({
   compare: z.enum(['none', 'previous', 'last_year']).default('previous'),
   /** Grup modunda şirket defter para birimi -> grup para birimi elle kur (yoksa dönem sonundaki kayıtlı kur). */
   rates: rateListString.optional(),
+  /** Yıl sonu kapanış/devir fişlerini DAHİL et (varsayılan: hariç). */
+  includeClosing: boolQuery,
 });
 export type ExecutiveSummaryQuery = z.infer<typeof executiveSummaryQuerySchema>;
 

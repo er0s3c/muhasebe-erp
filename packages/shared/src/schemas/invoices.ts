@@ -98,6 +98,11 @@ export const ACCOUNT_MAPPING_KEYS = [
   'import_cost_clearing',
   // Personel avansları (Faz X5); varsayılan doğrulanmamıştır
   'employee_advance',
+  // Yıl sonu kapanışı (Faz Y1); varsayılanlar doğrulanmamıştır
+  'year_end_profit',
+  'year_end_loss',
+  'year_end_retained_profit',
+  'year_end_retained_loss',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -158,6 +163,11 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     import_cost_clearing: '632',
     // Personele verilen avanslar (alacak): genel Tekdüzen yapıda 195 iş avansları / 196 personel avansları; 196 seçildi. Doğrulanmamıştır.
     employee_advance: '196',
+    // Yıl sonu: dönem net kârı (590) / zararı (591) ve geçmiş yıllar kârları (570) / zararları (580). Doğrulanmamıştır.
+    year_end_profit: '590',
+    year_end_loss: '591',
+    year_end_retained_profit: '570',
+    year_end_retained_loss: '580',
   };
 }
 

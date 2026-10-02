@@ -2270,7 +2270,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable','cheque_portfolio','note_portfolio','docs_in_collection','cheque_issued','note_payable','import_cost_clearing','employee_advance')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable','cheque_portfolio','note_portfolio','docs_in_collection','cheque_issued','note_payable','import_cost_clearing','employee_advance','year_end_profit','year_end_loss','year_end_retained_profit','year_end_retained_loss')`,
     ),
   ],
 );
@@ -5496,5 +5496,74 @@ export const consolidationEliminationLines = pgTable(
     unique('consolidation_elimination_lines_uq').on(t.eliminationId, t.lineNo),
     check('consolidation_elimination_lines_amount_ck', sql`${t.debit} >= 0 and ${t.credit} >= 0 and (${t.debit} > 0) <> (${t.credit} > 0)`),
     check('consolidation_elimination_lines_code_ck', sql`${t.accountCode} ~ '^[0-9][0-9A-Za-z.]{0,19}$'`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Yıl sonu kapanışı ve devir (Faz Y1). Hesap seçimleri ve yöntem doğrulanmamıştır (LEGAL-NOTES §23).
+// Mali yıl, ay bazlı dönemlerin (fiscal_periods) kullanıcı tanımlı bir aralığıdır; kod takvim yılını varsaymaz.
+// Kapatılan yılın dönemleri mevcut dönem kilidiyle kapatılır; veritabanı tetikleyicisi kapalı yıla kayıt ve dönem açmayı engeller (ERP23).
+// ---------------------------------------------------------------------------
+
+export const fiscalYears = pgTable(
+  'fiscal_years',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    /** Kullanıcıya gösterilen ad ve kapanış onayında yazılan metin (varsayılan "2026"). */
+    name: text().notNull(),
+    startDate: date({ mode: 'string' }).notNull(),
+    endDate: date({ mode: 'string' }).notNull(),
+    /** open | closed (kapatma ve yeniden açma geçmişi fiscal_year_events'te) */
+    status: text().notNull().default('open'),
+    closedAt: timestamp({ withTimezone: true }),
+    closedBy: uuid().references(() => users.id),
+    /** Son yeniden açma gerekçesi (veritabanı tetikleyicisi yeniden açmada zorunlu tutar). */
+    reopenReason: text(),
+    reopenedAt: timestamp({ withTimezone: true }),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('fiscal_years_id_company_uq').on(t.id, t.companyId),
+    unique('fiscal_years_start_uq').on(t.companyId, t.startDate),
+    check('fiscal_years_status_ck', sql`${t.status} in ('open','closed')`),
+    check('fiscal_years_range_ck', sql`${t.endDate} > ${t.startDate}`),
+    check('fiscal_years_closed_ck', sql`${t.status} = 'open' or (${t.closedAt} is not null and ${t.closedBy} is not null)`),
+  ],
+);
+
+export const fiscalYearEvents = pgTable(
+  'fiscal_year_events',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    fiscalYearId: uuid().notNull(),
+    /** close | reopen */
+    action: text().notNull(),
+    reason: text(),
+    /** Kapanışta: dönem sonucu (defter para birimi, kâr +). */
+    resultBase: money(),
+    closeEntryId: uuid(),
+    carryEntryId: uuid(),
+    /** Kapanış seçenekleri ve kullanılan hesap eşlemeleri (anlık görüntü). */
+    snapshot: jsonb(),
+    at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    by: uuid()
+      .notNull()
+      .references(() => users.id),
+  },
+  (t) => [
+    unique('fiscal_year_events_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'fiscal_year_events_year_fk', columns: [t.fiscalYearId, t.companyId], foreignColumns: [fiscalYears.id, fiscalYears.companyId] }),
+    foreignKey({ name: 'fiscal_year_events_close_entry_fk', columns: [t.closeEntryId, t.companyId], foreignColumns: [journalEntries.id, journalEntries.companyId] }),
+    foreignKey({ name: 'fiscal_year_events_carry_entry_fk', columns: [t.carryEntryId, t.companyId], foreignColumns: [journalEntries.id, journalEntries.companyId] }),
+    index('fiscal_year_events_year_idx').on(t.fiscalYearId, t.at),
+    check('fiscal_year_events_action_ck', sql`${t.action} in ('close','reopen')`),
+    check('fiscal_year_events_reason_ck', sql`${t.action} <> 'reopen' or length(btrim(coalesce(${t.reason}, ''))) >= 5`),
   ],
 );

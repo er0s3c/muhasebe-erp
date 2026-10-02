@@ -36,6 +36,7 @@ import {
   journalBookQuerySchema,
   openItemsQuerySchema,
   partyStatementQuerySchema,
+  previewFiscalYearQuerySchema,
   salesReportQuerySchema,
   stockStatusQuerySchema,
   todayIso,
@@ -110,6 +111,7 @@ import {
 } from './builders';
 import { fullDataTables } from './full-data';
 import { executiveBuild, fxPositionBuild } from '../consolidation/builders';
+import { yearEndClosingTable } from '../yearend/builders';
 
 /** Dışa aktarılabilir rapor: kendi modül ve izniyle korunur (ekran raporuyla aynı). */
 export interface ExportDef {
@@ -151,6 +153,7 @@ const invoices = { module: 'core.invoices', permission: 'reports.read' } as cons
 export const EXPORTS: readonly ExportDef[] = [
   // Mevcut raporlar
   def({ key: 'trial-balance', ...ledger, schema: trialBalanceQuerySchema.extend({ view: z.enum(['groups', 'accounts']).default('groups') }), build: trialBalanceTable, file: range('mizan') }),
+  def({ key: 'year-end-closing', module: 'core.ledger', permission: 'ledger.yearend', schema: previewFiscalYearQuerySchema.extend({ fiscalYearId: uuid }), build: yearEndClosingTable, file: (q) => `yil-sonu-kapanis-${q.fiscalYearId.slice(0, 8)}` }),
   def({ key: 'account-ledger', ...ledger, schema: accountLedgerQuerySchema, build: accountLedgerTable, file: range('muavin') }),
   def({ key: 'party-aging', module: 'core.parties', permission: 'parties.read', schema: agingQuerySchema, build: partyAgingTable, file: (q) => `yaslandirma-${q.type === 'receivable' ? 'alacak' : 'borc'}-${q.asOf}` }),
   def({ key: 'party-statement', module: 'core.parties', permission: 'parties.read', schema: partyStatementQuerySchema.extend({ partyId: uuid }), build: partyStatementTable, file: range('cari-ekstre') }),

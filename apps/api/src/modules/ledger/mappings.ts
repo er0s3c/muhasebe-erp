@@ -54,6 +54,10 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   note_payable: 'Verilen borç senetleri (ödenmemiş)',
   import_cost_clearing: 'İthalat maliyetleri aktarım hesabı (stoğa eklenen gider karşılığı)',
   employee_advance: 'Personele verilen avanslar (personel avansları)',
+  year_end_profit: 'Yıl sonu: dönem net kârı hesabı',
+  year_end_loss: 'Yıl sonu: dönem net zararı hesabı',
+  year_end_retained_profit: 'Yıl sonu: geçmiş yıllar kârları hesabı',
+  year_end_retained_loss: 'Yıl sonu: geçmiş yıllar zararları hesabı',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

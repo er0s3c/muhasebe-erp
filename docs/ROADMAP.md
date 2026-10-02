@@ -1,6 +1,7 @@
 # Yol haritası
 
 ## Tamamlanan
+| Y1 | Yıl sonu kapanışı ve devir | Mali yıl (kullanıcı tanımlı aralık), ön kontrol, kapanış ve devir fişleri, yıl kilidi (veritabanı korumalı), sıralı yeniden açma; gelir tablosu/proje/konsolidasyon raporlarında kapanış dışlaması. Hesap seçimleri doğrulanmadı |
 
 | # | Kilometre taşı | İçerik |
 |---|---|---|
@@ -37,7 +38,6 @@
 | # | Kilometre taşı | İçerik |
 |---|---|---|
 | M7b | Kur değerlemesi ve avans mahsubu | Dönem sonu dövizli hesap/cari değerlemesi (gerçekleşmemiş kur farkı) ve sonradan avans mahsubu: yalnızca-defter-tutarı düzeltme satırı gerektirir; yasal kural doğrulanmadan yazılmaz |
-| — | Yıl sonu kapanış ve devir | Gelir/gider hesaplarının kapanışı, bilanço hesaplarının devri, açılış kaydı; KKTC uygulaması doğrulanmadan yazılmaz |
 
 ## MVP sonrası
 
@@ -68,5 +68,5 @@ Faz X (X1–X7), Faz B, Faz D ve altyapı kilometre taşları tamamlandı; bu be
 
 - **Faz C (resmî uyum)** — e-Fatura entegrasyonu (resmî API erişimi ve mükellef yetkilendirmesi gerekir), yabancılara satış sınırı ve süre motoru, KDV/stopaj/BSİV beyannameleri, kur otomatik çekme (yeniden yayın şartı teyidi); hepsi mevzuat/mali müşavir doğrulamasına bağlı.
 - **Faz E (market ve perakende)** — hızlı satış (POS), barkod ve terazi, reyon/raf envanteri, gün sonu raporu.
-- **Doğrulama bekleyenler** — M7b (dönem sonu kur değerlemesi, sonradan avans mahsubu), yıl sonu kapanış ve devir, damga/pul vergisi; KDV oranları, hesap planı şablonu, bordro/sosyal güvenlik parametreleri, konsolidasyon/eliminasyon/kur çevrimi yöntemi ve diğer "doğrulanmadı" öğeleri (LEGAL-NOTES).
+- **Doğrulama bekleyenler** — M7b (dönem sonu kur değerlemesi, sonradan avans mahsubu), damga/pul vergisi; yıl sonu kapanış ve devir **yazıldı ama hesap seçimleri doğrulanmadı** (LEGAL-NOTES §23); KDV oranları, hesap planı şablonu, bordro/sosyal güvenlik parametreleri, konsolidasyon/eliminasyon/kur çevrimi yöntemi ve diğer "doğrulanmadı" öğeleri (LEGAL-NOTES).
 - **Belgelenmiş sınırlar** — her X diliminin ARCHITECTURE bölümündeki "sınırlar" maddeleri (ör. döviz çek/senet yok, tekrarlayan ajanda kalemi yok, gider fişiyle avans mahsubu yok, yasal konsolide tablo yok, lot/parti ve emanet stok yok, kampanya yok), "Bilinen sınırlar" (tek örnek oran sınırı, bellek içi dışa aktarma vb.) ve "Teknik borç" listesi.

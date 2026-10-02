@@ -18,6 +18,7 @@ import { getProjectRow } from './service';
 import { listWbs } from './wbs';
 import { loadOrderCommitted } from '../procurement/commitments';
 import { loadCommitted, loadPendingVariations } from '../subcontracts/commitments';
+import { notClosingEntry } from '../ledger/closing';
 
 /** Hesap kodu ön eki regex'i: gelir tarafı (60, 61, 64); diğer tüm etiketli hesaplar maliyet tarafıdır. */
 const REVENUE_RE = `^(${PROJECT_REVENUE_PREFIXES.join('|')})`;
@@ -68,7 +69,7 @@ async function loadActuals(tx: Tx, projectId: string, asOf: string) {
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id
       join accounts a on a.id = jl.account_id
-     where jl.project_id = ${projectId} and je.status = 'posted' and je.entry_date <= ${asOf}::date
+     where jl.project_id = ${projectId} and je.status = 'posted' and ${notClosingEntry('je')} and je.entry_date <= ${asOf}::date
      group by jl.wbs_id`);
   return new Map(rows.rows.map((r) => [r.wbsId, { cost: dec(r.cost), revenue: dec(r.revenue) }]));
 }
@@ -224,7 +225,7 @@ export async function projectCostReport(tx: Tx, projectId: string, asOf: string)
 /** Projeye etiketli kaydedilmiş satırlar (hareket dökümü); iş kalemi ve tarih süzgeçli, sayfalı. */
 export async function projectTransactions(tx: Tx, projectId: string, q: ProjectTransactionsQuery) {
   await getProjectRow(tx, projectId);
-  const conds = [sql`jl.project_id = ${projectId}`, sql`je.status = 'posted'`];
+  const conds = [sql`jl.project_id = ${projectId}`, sql`je.status = 'posted'`, notClosingEntry('je')];
   if (q.wbsId) conds.push(sql`jl.wbs_id = ${q.wbsId}`);
   if (q.unassigned) conds.push(sql`jl.wbs_id is null`);
   if (q.from) conds.push(sql`je.entry_date >= ${q.from}::date`);
@@ -286,7 +287,7 @@ export async function projectsSummary(tx: Tx, asOf: string) {
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id
       join accounts a on a.id = jl.account_id
-     where je.status = 'posted' and je.entry_date <= ${asOf}::date
+     where je.status = 'posted' and ${notClosingEntry('je')} and je.entry_date <= ${asOf}::date
        and a.type in (${TAGGABLE_TYPES}) and a.code !~ ${REVENUE_RE}`);
   const l = ledger.rows[0];
   const allocated = dec(l?.allocated ?? 0);
@@ -338,7 +339,7 @@ export async function projectCostByCode(tx: Tx, projectId: string, asOf: string)
       join journal_entries je on je.id = jl.entry_id
       join accounts a on a.id = jl.account_id
       left join cost_codes cc on cc.id = jl.cost_code_id
-     where jl.project_id = ${projectId} and je.status = 'posted' and je.entry_date <= ${asOf}::date
+     where jl.project_id = ${projectId} and je.status = 'posted' and ${notClosingEntry('je')} and je.entry_date <= ${asOf}::date
      group by cc.id, cc.code, cc.name
      order by cc.code nulls last`);
   const total = rows.rows.reduce((s, r) => s.plus(dec(r.actual)), dec(0));

@@ -132,6 +132,7 @@
     "accounts": "Hesap planı",
     "trialBalance": "Mizan",
     "accountLedger": "Hesap ekstresi",
+    "yearEnd": "Yıl sonu kapanışı",
     "company": "Şirket bilgileri",
     "members": "Kullanıcılar",
     "currencies": "Para birimi ve kurlar",
@@ -602,6 +603,8 @@
       "accountName": "Hesap adı",
       "view": "Görünüm",
       "withGroups": "Gruplarla",
+      "excludeClosing": "Yıl sonu kapanış fişlerini hariç tut",
+      "closingNote": "Kapanış fişleri dahil: gelir/gider hesapları kapalı yılda sıfır görünür.",
       "accountsOnly": "Yalnızca hesaplar",
       "opening": "Açılış bakiyesi",
       "periodDebit": "Dönem borç",
@@ -629,8 +632,187 @@
       "closing": "Kapanış bakiyesi",
       "totals": "Dönem toplamı",
       "empty": "Bu aralıkta hareket yok",
-      "fx": "Döviz tutarı"
+      "fx": "Döviz tutarı",
+      "closingTag": "Kapanış",
+      "excludeClosing": "Yıl sonu kapanış fişlerini hariç tut"
     }
+  },
+  "yearend": {
+    "title": "Yıl sonu kapanışı",
+    "subtitle": "Mali yılı kapatın: gelir ve gider hesapları dönem sonucuna aktarılır, yıl kilitlenir, sonuç ertesi yıla devredilir.",
+    "unverified": "Doğrulanmadı: hesap seçimleri ve kapanış yöntemi genel Tekdüzen yapıya dayanan varsayılanlardır; mali müşavir onayı gerekmeden gerçek kapanış yapmayın. Kapanıştan önce yedek alın (Kurulum ve işletim kılavuzu).",
+    "backupHint": "Kapanıştan önce yedek alın.",
+    "years": {
+      "title": "Mali yıllar",
+      "subtitle": "Mali yıl ay başı ile ay sonu arasında, en çok 12 ay olur; takvim yılı olması gerekmez.",
+      "empty": "Henüz mali yıl tanımlı değil. Aşağıdan bir yıl tanımlayın.",
+      "name": "Yıl",
+      "range": "Tarih aralığı",
+      "status": "Durum",
+      "result": "Dönem sonucu",
+      "actions": "İşlem",
+      "open": "Açık",
+      "closed": "Kapalı",
+      "profit": "Kâr",
+      "loss": "Zarar",
+      "closedAt": "Kapanış: {{date}}",
+      "reopenedNote": "Son yeniden açma: {{reason}}",
+      "work": "Kapanışı hazırla",
+      "view": "Ayrıntı",
+      "history": "Geçmiş",
+      "reopen": "Yeniden aç",
+      "delete": "Sil"
+    },
+    "define": {
+      "title": "Mali yıl tanımla",
+      "start": "Başlangıç",
+      "end": "Bitiş",
+      "name": "Ad (isteğe bağlı)",
+      "submit": "Yılı tanımla",
+      "created": "Mali yıl tanımlandı",
+      "suggest": "Önerilen takvim yılları",
+      "deleted": "Mali yıl silindi"
+    },
+    "banner": {
+      "closed": "{{name}} mali yılı kapalı: kayıt yapılamaz. Kapanış fişleri raporlarda ayrı gösterilir.",
+      "open": "Yıl sonu kapanışı sayfası"
+    },
+    "options": {
+      "title": "Seçenekler",
+      "carry": "Dönem sonucunu ertesi yılın ilk gününe geçmiş yıllar hesabına devret",
+      "cost": "7. sınıf maliyet hesaplarını da dönem sonucuna kapat"
+    },
+    "checks": {
+      "title": "Ön kontrol listesi",
+      "subtitle": "Engel (kırmızı) varken kapatılamaz; uyarılar bilgilendirme içindir.",
+      "blocker": "Engel",
+      "warning": "Uyarı",
+      "info": "Bilgi",
+      "ok": "Tamam",
+      "count": "{{count}} kayıt",
+      "open": "Aç",
+      "already_closed": {
+        "title": "Mali yıl kapalı",
+        "hint": "Bu yıl zaten kapatılmış; yalnızca yeniden açılabilir."
+      },
+      "previous_year_open": {
+        "title": "Önceki mali yıl kapatılmış olmalı",
+        "hint": "Kapanış sırayla yapılır: önce önceki mali yılı kapatın."
+      },
+      "earlier_result_balance": {
+        "title": "Önceki dönemlerden kalan gelir/gider bakiyesi",
+        "hint": "Bu yıldan önceki hareketlerde kapatılmamış gelir/gider bakiyesi var. Bu kapanışa dahil edilmez; mali müşavirinizle denetleyin."
+      },
+      "draft_entries": {
+        "title": "Taslak yevmiye kaydı yok",
+        "hint": "Yılda kaydedilmemiş yevmiye taslakları var; kaydedin ya da silin."
+      },
+      "draft_invoices": {
+        "title": "Taslak fatura yok",
+        "hint": "Yıl içinde tarihli kaydedilmemiş faturalar var; kaydedin, iptal edin ya da silin."
+      },
+      "draft_deliveries": {
+        "title": "Taslak irsaliye yok",
+        "hint": "Yıl içinde tarihli kaydedilmemiş irsaliyeler var."
+      },
+      "open_stock_counts": {
+        "title": "Açık stok sayımı yok",
+        "hint": "Yıl içinde tarihli işlenmemiş stok sayımları var."
+      },
+      "pending_approvals": {
+        "title": "Bekleyen onay yok",
+        "hint": "Onay bekleyen belgeler var; yıl kapandıktan sonra tarihli işlemler yapılamaz."
+      },
+      "draft_payroll": {
+        "title": "Taslak bordro yok",
+        "hint": "Yıl içindeki aylarda onaylanmamış bordro var."
+      },
+      "open_attendance": {
+        "title": "Açık puantaj ayı yok",
+        "hint": "Yıl içinde puantajı kapatılmamış ay var."
+      },
+      "periods_to_lock": {
+        "title": "Dönemler kilitlenecek",
+        "hint": "Yılın tüm ayları kapanışta kilitlenir (eksik aylar oluşturulur)."
+      },
+      "next_period_closed": {
+        "title": "Devir dönemi açık",
+        "hint": "Devir fişi ertesi yılın ilk gününe yazılır; o dönem kapalı. Önce açın ya da devri kapatın."
+      },
+      "mappings_missing": {
+        "title": "Yıl sonu hesap eşlemeleri tanımlı",
+        "hint": "Hesap eşlemesi sayfasında dönem kârı/zararı ve geçmiş yıllar hesaplarını seçin."
+      },
+      "inactive_result_accounts": {
+        "title": "Bakiyeli pasif hesap yok",
+        "hint": "Bakiyesi olan pasif gelir/gider hesabı var; hesabı yeniden etkinleştirin."
+      },
+      "fx_residual": {
+        "title": "Dövizli gelir/gider hesapları kapanabilir",
+        "hint": "Döviz tutarı ile defter tutarı birlikte sıfırlanamayan hesap var; elle düzeltme yevmiyesi gerekir."
+      },
+      "cost_class_balances": {
+        "title": "7. sınıf maliyet hesapları",
+        "hint": "7. sınıf hesaplarda bakiye var. Bu seçenekle doğrudan dönem sonucuna kapatılır; yapılmakta olan işler/stok aktarımını mali müşavirinizle denetleyin."
+      },
+      "nothing_to_close": {
+        "title": "Kapatılacak gelir/gider bakiyesi yok",
+        "hint": "Kapanış fişi yazılmaz; yıl yalnızca kilitlenir."
+      },
+      "trial_balance": {
+        "title": "Mizan dengeli",
+        "hint": "Borç ve alacak toplamları eşit olmalı."
+      },
+      "fx_revaluation_not_done": {
+        "title": "Dönem sonu kur değerlemesi yapılmadı",
+        "hint": "Bu sürüm dönem sonu kur değerlemesi yapmaz. Dövizli alacak, borç ve kasa/banka bakiyelerinin değerlemesini kapanıştan önce elle ve mali müşavirinizle yapın."
+      }
+    },
+    "preview": {
+      "title": "Kapanış önizlemesi",
+      "subtitle": "Kapanışta yazılacak fişlerin tam satırları. Önizleme hiçbir şey kaydetmez.",
+      "closing": "Kapanış fişi",
+      "carry": "Devir fişi",
+      "date": "Tarih",
+      "account": "Hesap",
+      "description": "Açıklama",
+      "project": "Proje",
+      "debit": "Borç",
+      "credit": "Alacak",
+      "net": "Dönem sonucu",
+      "nothing": "Kapatılacak gelir/gider bakiyesi yok.",
+      "kind": {
+        "profit": "Dönem net kârı",
+        "loss": "Dönem net zararı",
+        "zero": "Sonuç sıfır"
+      },
+      "accounts": "{{count}} gelir/gider kalemi kapanır",
+      "noCarry": "Devir fişi yazılmaz."
+    },
+    "close": {
+      "button": "Yılı kapat",
+      "title": "{{name}} mali yılını kapat",
+      "body": "Kapanış fişi yazılır, yılın tüm dönemleri kilitlenir ve bu yıla kayıt yapılamaz. Yalnızca sahip ve yönetici, gerekçeyle geri açabilir.",
+      "type": "Onaylamak için yılın adını yazın: {{name}}",
+      "confirm": "Onay metni",
+      "done": "Mali yıl kapatıldı",
+      "blocked": "Önce ön kontrol engellerini çözün"
+    },
+    "reopen": {
+      "title": "{{name}} mali yılını yeniden aç",
+      "body": "Kapanış ve devir fişleri ters kayıtla geri alınır, dönemler açılır. Sonraki bir yıl kapalıysa önce onu açmalısınız.",
+      "reason": "Gerekçe (en az 5 karakter)",
+      "submit": "Yeniden aç",
+      "done": "Mali yıl yeniden açıldı"
+    },
+    "history": {
+      "close": "Kapatıldı",
+      "reopen": "Yeniden açıldı",
+      "result": "Sonuç: {{amount}}",
+      "reason": "Gerekçe: {{reason}}"
+    },
+    "export": "Kapanış fişi",
+    "readOnly": "Yıl sonu işlemleri yalnızca sahip ve yönetici içindir; durumu görebilirsiniz."
   },
   "errors": {
     "UNAUTHORIZED": "Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.",

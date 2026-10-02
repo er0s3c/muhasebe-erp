@@ -59,6 +59,7 @@ export const router = createBrowserRouter([
                   { path: 'accounting/accounts', ...page(() => import('../features/ledger/AccountsPage'), 'AccountsPage') },
                   { path: 'accounting/trial-balance', ...page(() => import('../features/ledger/TrialBalancePage'), 'TrialBalancePage') },
                   { path: 'accounting/account-ledger', ...page(() => import('../features/ledger/AccountLedgerPage'), 'AccountLedgerPage') },
+                  { path: 'accounting/year-end', ...page(() => import('../features/ledger/YearEndPage'), 'YearEndPage') },
                   { path: 'reports/journal-book', ...page(() => import('../features/reports/JournalBookPage'), 'JournalBookPage') },
                   { path: 'reports/general-ledger', ...page(() => import('../features/reports/GeneralLedgerPage'), 'GeneralLedgerPage') },
                 ],

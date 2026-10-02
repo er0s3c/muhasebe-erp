@@ -92,9 +92,9 @@ const PARTY_KIND_LABEL: Record<string, string> = { customer: 'Müşteri', suppli
 
 export async function trialBalanceTable(
   ctx: BuildCtx,
-  q: { from: string; to: string; currency: 'base' | 'reporting'; view: 'groups' | 'accounts' },
+  q: { from: string; to: string; currency: 'base' | 'reporting'; view: 'groups' | 'accounts'; excludeClosing?: boolean },
 ): Promise<ReportTable[]> {
-  const data = await trialBalance(ctx.tx, { from: q.from, to: q.to, currency: q.currency, baseCurrency: ctx.company.baseCurrency, reportingCurrency: ctx.company.reportingCurrency });
+  const data = await trialBalance(ctx.tx, { from: q.from, to: q.to, currency: q.currency, baseCurrency: ctx.company.baseCurrency, reportingCurrency: ctx.company.reportingCurrency, excludeClosing: q.excludeClosing });
   const cur = q.currency === 'base' ? ctx.company.baseCurrency : (ctx.company.reportingCurrency ?? '');
   return [
     {
@@ -108,7 +108,7 @@ export async function trialBalanceTable(
   ];
 }
 
-export async function accountLedgerTable(ctx: BuildCtx, q: { accountId: string; from: string; to: string }): Promise<ReportTable[]> {
+export async function accountLedgerTable(ctx: BuildCtx, q: { accountId: string; from: string; to: string; excludeClosing?: boolean }): Promise<ReportTable[]> {
   const d = await accountLedger(ctx.tx, q);
   const b = ctx.company.baseCurrency;
   const rows: Record<string, CellValue>[] = [{ description: 'Açılış bakiyesi', balance: d.opening }];
@@ -117,7 +117,7 @@ export async function accountLedgerTable(ctx: BuildCtx, q: { accountId: string; 
       date: l.entryDate,
       entryNo: l.entryNo,
       account: l.accountCode,
-      description: l.description,
+      description: l.closingSource ? `[Yıl sonu kapanış/devir] ${l.description}` : l.description,
       currency: l.currencyCode,
       fxRate: l.currencyCode === b ? null : l.fxRate,
       debit: l.currencyCode === b ? null : l.debit,

@@ -249,6 +249,8 @@ curl -fsS http://127.0.0.1:3000/api/health/ready # 3) doğrula, bir oturum açma
 
 ### Yedek
 
+> **Yıl sonu kapanışından önce mutlaka yedek alın.** Kapanış fişleri ve dönem kilidi geri açma akışıyla geri alınabilir ama bu yöntem mali müşavirce doğrulanmamıştır (LEGAL-NOTES §23); önce yedek, sonra kapanış.
+
 ```bash
 scripts/backup.sh --compose                       # deploy/.env'den okur; ./backups/ altına yazar
 scripts/backup.sh --compose --dir /var/backups/erp --keep-days 30

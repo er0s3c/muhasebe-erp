@@ -17,6 +17,7 @@ import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/que
 import { useCompany } from '../../lib/session';
 import type { JournalEntry, JournalListItem } from '../../lib/types';
 import { JournalForm } from './JournalForm';
+import { ClosedYearBanner } from './ClosedYearBanner';
 
 type StatusFilter = '' | 'draft' | 'posted';
 
@@ -97,6 +98,7 @@ export function JournalPage() {
           )}
         </Field>
       </div>
+      <ClosedYearBanner from={from} to={to} />
 
       {isPending ? (
         <PageLoading />

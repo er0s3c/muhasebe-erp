@@ -50,3 +50,5 @@ export * from './directory';
 export * from './schemas/directory';
 export * from './consolidation-calc';
 export * from './schemas/consolidation';
+export * from './year-end';
+export * from './schemas/year-end';

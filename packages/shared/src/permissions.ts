@@ -8,6 +8,8 @@ export const PERMISSIONS = [
   'ledger.read',
   'ledger.post',
   'ledger.close_period',
+  // Yıl sonu kapanışı ve devir (kapanış fişi, yılı kilitleme, yeniden açma): yalnızca sahip ve yönetici; muhasebeci durumu okur (ledger.read)
+  'ledger.yearend',
   'parties.read',
   'parties.manage',
   'inventory.read',

@@ -13,6 +13,9 @@ import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
+import { Badge } from '../../components/ui/Badge';
+import { Switch } from '../../components/ui/Switch';
+import { ClosedYearBanner } from './ClosedYearBanner';
 import type { Account, AccountLedgerData } from '../../lib/types';
 
 function Balance({ value }: { value: string }) {
@@ -32,6 +35,7 @@ export function AccountLedgerPage() {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [from, setFrom] = useState(`${year}-01-01`);
   const [to, setTo] = useState(todayIso());
+  const [excludeClosing, setExcludeClosing] = useState(false);
 
   const { data: accountsData } = useCQuery<{ accounts: Account[] }>(['accounts'], '/api/accounts');
   const options = useMemo<ComboOption[]>(
@@ -40,8 +44,8 @@ export function AccountLedgerPage() {
   );
 
   const { data, isPending, error } = useCQuery<AccountLedgerData>(
-    ['account-ledger', accountId, from, to],
-    accountId ? `/api/reports/account-ledger?${new URLSearchParams({ accountId, from, to })}` : null,
+    ['account-ledger', accountId, from, to, excludeClosing],
+    accountId ? `/api/reports/account-ledger?${new URLSearchParams({ accountId, from, to, ...(excludeClosing ? { excludeClosing: 'true' } : {}) })}` : null,
   );
 
   return (
@@ -49,7 +53,7 @@ export function AccountLedgerPage() {
       <PageHeader
         title={t('ledger.accountLedger.title')}
         description={t('ledger.accountLedger.subtitle')}
-        actions={accountId ? <ExportMenu exportKey="account-ledger" params={{ accountId, from, to }} disabled={!data} /> : undefined}
+        actions={accountId ? <ExportMenu exportKey="account-ledger" params={{ accountId, from, to, excludeClosing: excludeClosing ? 'true' : undefined }} disabled={!data} /> : undefined}
       />
       <PrintHeader subtitle={`${from.split('-').reverse().join('.')} – ${to.split('-').reverse().join('.')}`} />
 
@@ -59,7 +63,12 @@ export function AccountLedgerPage() {
         </Field>
         <Field label={t('common.from')}>{(id) => <Input id={id} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-44" />}</Field>
         <Field label={t('common.to')}>{(id) => <Input id={id} type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />}</Field>
+        <label className="flex items-center gap-2 pb-2 text-sm">
+          <Switch checked={excludeClosing} onChange={setExcludeClosing} label={t('ledger.accountLedger.excludeClosing')} />
+          {t('ledger.accountLedger.excludeClosing')}
+        </label>
       </div>
+      <ClosedYearBanner from={from} to={to} />
 
       {!accountId ? (
         <Card>
@@ -107,6 +116,7 @@ export function AccountLedgerPage() {
                   <Td className="font-mono text-[13px]">{l.entryNo}</Td>
                   <Td>
                     {l.accountCode !== data.account.code && <span className="mr-2 font-mono text-xs text-muted">{l.accountCode}</span>}
+                    {l.closingSource && <Badge className="mr-2">{t('ledger.accountLedger.closingTag')}</Badge>}
                     {l.description}
                   </Td>
                   <Td num className="text-muted">

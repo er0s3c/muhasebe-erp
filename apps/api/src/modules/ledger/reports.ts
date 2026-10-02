@@ -3,6 +3,7 @@ import { dec, sum, toDbAmount, type MoneyValue } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { notFound, unprocessable } from '../../http/errors';
 import { assertReportSize, maxReportRows } from '../../http/limits';
+import { closingFilter } from './closing';
 
 export interface TrialBalanceRow {
   accountId: string;
@@ -48,6 +49,8 @@ export async function trialBalance(
     currency: 'base' | 'reporting';
     baseCurrency: string;
     reportingCurrency: string | null;
+    /** Yıl sonu kapanış/devir fişlerini hariç tut (varsayılan: dahil). */
+    excludeClosing?: boolean;
   },
 ): Promise<TrialBalance> {
   if (q.currency === 'reporting' && !q.reportingCurrency) {
@@ -64,7 +67,7 @@ export async function trialBalance(
       coalesce(sum(${c}) filter (where e.entry_date >= ${q.from}::date), 0) as period_c
     from accounts a
     left join journal_lines l on l.account_id = a.id
-    left join journal_entries e on e.id = l.entry_id and e.status = 'posted' and e.entry_date <= ${q.to}::date
+    left join journal_entries e on e.id = l.entry_id and e.status = 'posted' and e.entry_date <= ${q.to}::date and ${closingFilter(q.excludeClosing)}
     where l.id is null or e.id is not null
     group by a.id
     order by a.code`);
@@ -74,7 +77,7 @@ export async function trialBalance(
       ? await tx.execute<{ n: number }>(sql`
           select count(*)::int as n from journal_lines l
           join journal_entries e on e.id = l.entry_id
-          where e.status = 'posted' and e.entry_date <= ${q.to}::date and l.debit_reporting is null`)
+          where e.status = 'posted' and e.entry_date <= ${q.to}::date and l.debit_reporting is null and ${closingFilter(q.excludeClosing)}`)
       : null;
 
   // Kendi hareketi olan satırlar (yaprak) ve dönem başı bakiyeleri
@@ -145,6 +148,8 @@ export interface AccountLedgerLine {
   entryId: string;
   entryNo: string;
   entryDate: string;
+  /** Yıl sonu kapanış/devir fişi ise kaynak türü (year_end_close | year_end_carry), değilse null. */
+  closingSource: string | null;
   accountCode: string;
   description: string;
   currencyCode: string;
@@ -170,7 +175,7 @@ export interface AccountLedger {
 /** Hesap ekstresi (muavin). Üst hesap seçilirse alt hesapların hareketleri de gelir. */
 export async function accountLedger(
   tx: Tx,
-  q: { accountId: string; from: string; to: string },
+  q: { accountId: string; from: string; to: string; excludeClosing?: boolean },
 ): Promise<AccountLedger> {
   const acc = await tx.execute<{ id: string; code: string; name: string }>(
     sql`select id, code, name from accounts where id = ${q.accountId}`,
@@ -187,13 +192,14 @@ export async function accountLedger(
     select coalesce(sum(l.debit_base), 0) as d, coalesce(sum(l.credit_base), 0) as c
     from journal_lines l
     join journal_entries e on e.id = l.entry_id
-    where e.status = 'posted' and e.entry_date < ${q.from}::date
+    where e.status = 'posted' and e.entry_date < ${q.from}::date and ${closingFilter(q.excludeClosing)}
       and l.account_id in (select id from tree)`);
 
   const lines = await tx.execute<{
     entry_id: string;
     entry_no: string;
     entry_date: string;
+    source_type: string | null;
     code: string;
     description: string;
     currency_code: string;
@@ -208,13 +214,13 @@ export async function accountLedger(
       union all
       select a.id from accounts a join tree t on a.parent_id = t.id
     )
-    select e.id as entry_id, e.entry_no, e.entry_date::text as entry_date, a.code,
+    select e.id as entry_id, e.entry_no, e.entry_date::text as entry_date, e.source_type, a.code,
       coalesce(l.description, e.description) as description,
       l.currency_code, l.fx_rate, l.debit, l.credit, l.debit_base, l.credit_base
     from journal_lines l
     join journal_entries e on e.id = l.entry_id
     join accounts a on a.id = l.account_id
-    where e.status = 'posted' and e.entry_date between ${q.from}::date and ${q.to}::date
+    where e.status = 'posted' and e.entry_date between ${q.from}::date and ${q.to}::date and ${closingFilter(q.excludeClosing)}
       and l.account_id in (select id from tree)
     order by e.entry_date, e.entry_no, l.line_no
     limit ${maxReportRows() + 1}`);
@@ -232,6 +238,7 @@ export async function accountLedger(
       entryId: r.entry_id,
       entryNo: r.entry_no,
       entryDate: r.entry_date,
+      closingSource: r.source_type === 'year_end_close' || r.source_type === 'year_end_carry' ? r.source_type : null,
       accountCode: r.code,
       description: r.description,
       currencyCode: r.currency_code,

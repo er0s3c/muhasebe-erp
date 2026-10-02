@@ -832,6 +832,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'reports.read',
   },
   {
+    key: 'year-end',
+    labelKey: 'nav.yearEnd',
+    path: '/accounting/year-end',
+    icon: 'calendar-check',
+    group: 'accounting',
+    module: 'core.ledger',
+    permission: 'ledger.read',
+  },
+  {
     key: 'report-journal-book',
     labelKey: 'nav.reportJournalBook',
     path: '/reports/journal-book',
