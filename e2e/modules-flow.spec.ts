@@ -59,10 +59,14 @@ test('modüller: bağımlılık korumalı kapatma, menü/panel/sayfa kapıları 
   await expect(page.getByRole('switch', { name: 'Fatura ve irsaliye: Kapat' })).toBeDisabled();
   await page.getByRole('switch', { name: 'Satış teklif ve siparişi: Kapat' }).click();
   await expect(page.getByText('Satış teklif ve siparişi kapatıldı')).toBeVisible();
+  await page.getByRole('switch', { name: 'Fiyat listeleri ve cari özel fiyat: Kapat' }).click();
+  await expect(page.getByText('Fiyat listeleri ve cari özel fiyat kapatıldı')).toBeVisible();
   await page.getByRole('switch', { name: 'Fatura ve irsaliye: Kapat' }).click();
   await expect(page.getByText('Fatura ve irsaliye kapatıldı')).toBeVisible();
   await expect(nav.getByRole('link', { name: 'Satış faturaları' })).toHaveCount(0);
   // Faturaya bağlı olanlar artık serbest: stok kapatılabilir hale gelir (kasa ve banka hâlâ açık)
+  await page.getByRole('switch', { name: 'Seri no takibi: Kapat' }).click();
+  await expect(page.getByText('Seri no takibi kapatıldı')).toBeVisible();
   await expect(page.getByRole('switch', { name: 'Stok: Kapat' })).toBeEnabled();
   await expect(page.getByRole('switch', { name: 'Fatura ve irsaliye: Aç' })).toBeEnabled();
   await page.getByRole('link', { name: 'Genel bakış' }).first().click();

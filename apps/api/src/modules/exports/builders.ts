@@ -1,4 +1,4 @@
-import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type ListDeliveryNotesQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
+import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -10,6 +10,8 @@ import { itemProfitability, salesReport } from '../invoices/analytics';
 import { vatSummary } from '../invoices/reports';
 import { listDeliveryNotes } from '../deliveries/service';
 import { listSalesDocs } from '../sales/orders';
+import { listPriceListItems, listPriceLists, listPartyPrices } from '../sales/pricelists';
+import { listSerials } from '../inventory/serials';
 import { reconciliation } from '../bank-statements/service';
 import { partyAging, partyOpenItems, partyStatement } from '../parties/service';
 import { cashForecast } from '../cash/forecast';
@@ -1850,6 +1852,71 @@ export async function deliveryNotesTable(ctx: BuildCtx, q: Omit<ListDeliveryNote
         warehouse: String(n.warehouseName), lines: Number(n.lineCount), qty: String(n.totalQty),
         invoicing: n.invoicing ? (INVOICING_LABEL[String(n.invoicing)] ?? '') : '', status: DELIVERY_STATUS_LABEL[String(n.status)] ?? String(n.status),
       })),
+    },
+  ];
+}
+
+
+const SERIAL_STATUS_LABEL: Record<string, string> = { in_stock: 'Depoda', issued: 'Müşteriye çıktı', returned: 'Tedarikçiye iade', scrapped: 'Fire/hurda' };
+
+/** Seri no listesi (kart, depo, durum filtresiyle). */
+export async function serialsTable(ctx: BuildCtx, q: Omit<ListSerialsQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listSerials(ctx.tx, { ...q, limit: EXPORT_PAGE, offset });
+    rows.push(...page.serials);
+    if (page.serials.length < EXPORT_PAGE) break;
+  }
+  return [
+    {
+      key: 'seri-no',
+      title: 'Seri no listesi',
+      sheet: 'Seri no',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 30), col('serial', 'Seri no', 'text', 26), col('status', 'Durum', 'text', 18), col('warehouse', 'Depo', 'text', 18)],
+      rows: rows.map((r) => ({ item: String(r.itemCode), itemName: String(r.itemName), serial: String(r.serialNo), status: SERIAL_STATUS_LABEL[String(r.status)] ?? String(r.status), warehouse: (r.warehouseName as string | null) ?? '' })),
+    },
+  ];
+}
+
+/** Bir fiyat listesinin satırları (bakım için dışa aktarma; toplu giriş biçimiyle uyumlu sütunlar). */
+export async function priceListItemsTable(ctx: BuildCtx, q: { listId: string }): Promise<ReportTable[]> {
+  const list = (await listPriceLists(ctx.tx, {})).lists.find((l) => l.id === q.listId);
+  if (!list) throw unprocessable('Fiyat listesi bulunamadı', 'PRICE_LIST_NOT_FOUND');
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listPriceListItems(ctx.tx, q.listId, { limit: EXPORT_PAGE, offset });
+    rows.push(...page.items);
+    if (page.items.length < EXPORT_PAGE) break;
+  }
+  return [
+    {
+      key: 'fiyat-listesi',
+      title: `Fiyat listesi: ${String(list.code)} ${String(list.name)}`,
+      sheet: 'Fiyat listesi',
+      subtitle: sub(ctx, `${list.kind === 'sales' ? 'Satış' : 'Alış'} · ${String(list.currencyCode)}`),
+      columns: [col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 30), col('minQty', 'En az miktar', 'qty'), col('price', `Birim fiyat (${String(list.currencyCode)})`, 'money'), col('from', 'Başlangıç', 'date'), col('to', 'Bitiş', 'date')],
+      rows: rows.map((r) => ({ item: String(r.itemCode), itemName: String(r.itemName), minQty: String(r.minQty), price: String(r.price), from: (r.validFrom as string | null) ?? '', to: (r.validTo as string | null) ?? '' })),
+    },
+  ];
+}
+
+/** Cari özel fiyat ve iskontolar. */
+export async function partyPricesTable(ctx: BuildCtx, q: { partyId?: string }): Promise<ReportTable[]> {
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listPartyPrices(ctx.tx, { partyId: q.partyId, limit: EXPORT_PAGE, offset });
+    rows.push(...page.prices);
+    if (page.prices.length < EXPORT_PAGE) break;
+  }
+  return [
+    {
+      key: 'cari-ozel-fiyat',
+      title: 'Cari özel fiyat ve iskontolar',
+      sheet: 'Cari özel fiyat',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [col('party', 'Cari', 'text', 28), col('kind', 'Tür', 'text', 8), col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 28), col('currency', 'Para birimi', 'text', 8), col('price', 'Birim fiyat', 'money'), col('discount', 'İskonto %', 'money'), col('minQty', 'En az miktar', 'qty'), col('from', 'Başlangıç', 'date'), col('to', 'Bitiş', 'date')],
+      rows: rows.map((r) => ({ party: String(r.partyName), kind: r.kind === 'sales' ? 'Satış' : 'Alış', item: String(r.itemCode), itemName: String(r.itemName), currency: (r.currencyCode as string | null) ?? '', price: (r.price as string | null) ?? '', discount: (r.discountPct as string | null) ?? '', minQty: String(r.minQty), from: (r.validFrom as string | null) ?? '', to: (r.validTo as string | null) ?? '' })),
     },
   ];
 }

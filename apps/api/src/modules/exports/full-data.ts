@@ -230,6 +230,65 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     ),
   );
 
+  // Fiyat listeleri (başlık + fiyat satırı tek sayfada) ve cari özel fiyatlar (X3)
+  const priceRows = await query(
+    'Fiyat listeleri',
+    sql`select l.code, l.name, l.kind, l.currency_code, l.is_active, l.is_default, l.valid_from::text as list_from, l.valid_to::text as list_to,
+               i.code as item_code, i.name as item_name, x.min_qty, x.price, x.valid_from::text as valid_from, x.valid_to::text as valid_to
+        from price_lists l
+        left join price_list_items x on x.price_list_id = l.id
+        left join items i on i.id = x.item_id
+        order by l.kind, l.code, i.code, x.min_qty`,
+  );
+  tables.push(
+    table(
+      'Fiyat listeleri',
+      'Fiyat listeleri',
+      [
+        col('code', 'Liste kodu', 'text', 14), col('name', 'Liste adı', 'text', 28), col('kind', 'Tür', 'text', 8), col('currency', 'Para birimi', 'text', 8), col('active', 'Aktif', 'text', 8), col('def', 'Varsayılan', 'text', 10),
+        col('listFrom', 'Liste başlangıç', 'date'), col('listTo', 'Liste bitiş', 'date'), col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 28),
+        col('minQty', 'En az miktar', 'qty'), col('price', 'Birim fiyat', 'money'), col('from', 'Fiyat başlangıç', 'date'), col('to', 'Fiyat bitiş', 'date'),
+      ],
+      priceRows.map((r) => ({ code: s(r.code), name: s(r.name), kind: r.kind === 'sales' ? 'Satış' : 'Alış', currency: s(r.currency_code), active: bool(r.is_active), def: bool(r.is_default), listFrom: s(r.list_from), listTo: s(r.list_to), item: s(r.item_code), itemName: s(r.item_name), minQty: s(r.min_qty), price: s(r.price), from: s(r.valid_from), to: s(r.valid_to) })),
+    ),
+  );
+  const partyPriceRows = await query(
+    'Cari özel fiyatlar',
+    sql`select p.code as party_code, p.name as party, x.kind, i.code as item_code, i.name as item_name, x.currency_code, x.price, x.discount_pct, x.min_qty, x.valid_from::text as valid_from, x.valid_to::text as valid_to
+        from party_prices x join parties p on p.id = x.party_id join items i on i.id = x.item_id
+        order by p.code, x.kind, i.code, x.min_qty`,
+  );
+  tables.push(
+    table(
+      'Cari özel fiyatlar',
+      'Cari özel fiyatlar',
+      [
+        col('partyCode', 'Cari kodu', 'text', 14), col('party', 'Cari', 'text', 28), col('kind', 'Tür', 'text', 8), col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 28), col('currency', 'Para birimi', 'text', 8),
+        col('price', 'Birim fiyat', 'money'), col('discount', 'İskonto %', 'money'), col('minQty', 'En az miktar', 'qty'), col('from', 'Başlangıç', 'date'), col('to', 'Bitiş', 'date'),
+      ],
+      partyPriceRows.map((r) => ({ partyCode: s(r.party_code), party: s(r.party), kind: r.kind === 'sales' ? 'Satış' : 'Alış', item: s(r.item_code), itemName: s(r.item_name), currency: s(r.currency_code), price: s(r.price), discount: s(r.discount_pct), minQty: s(r.min_qty), from: s(r.valid_from), to: s(r.valid_to) })),
+    ),
+  );
+
+  // Seri no sicili (güncel durum) ve hareket geçmişi (X3)
+  const serialRows = await query(
+    'Seri no sicili',
+    sql`select i.code as item_code, i.name as item_name, s.serial_no, s.status, w.name as warehouse,
+               (select p.name from serial_events e join parties p on p.id = e.party_id where e.serial_id = s.id and e.event = 'receive' order by e.seq desc limit 1) as supplier,
+               (select p.name from serial_events e join parties p on p.id = e.party_id where e.serial_id = s.id and e.event = 'issue' order by e.seq desc limit 1) as customer
+        from item_serials s join items i on i.id = s.item_id left join warehouses w on w.id = s.warehouse_id
+        where s.status <> 'pending'
+        order by i.code, s.serial_no`,
+  );
+  tables.push(
+    table(
+      'Seri no sicili',
+      'Seri no sicili',
+      [col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 28), col('serial', 'Seri no', 'text', 24), col('status', 'Durum', 'text', 16), col('warehouse', 'Depo', 'text', 18), col('supplier', 'Tedarikçi (son giriş)', 'text', 28), col('customer', 'Müşteri (son çıkış)', 'text', 28)],
+      serialRows.map((r) => ({ item: s(r.item_code), itemName: s(r.item_name), serial: s(r.serial_no), status: ({ in_stock: 'Depoda', issued: 'Müşteriye çıktı', returned: 'Tedarikçiye iade', scrapped: 'Fire/hurda', void: 'İptal (giriş ters)' } as Record<string, string>)[String(r.status)] ?? s(r.status), warehouse: s(r.warehouse), supplier: s(r.supplier), customer: s(r.customer) })),
+    ),
+  );
+
   // Kasa/banka hesapları (bakiye güncel) ve hareketleri
   const tAccounts = await query(
     'Kasa ve banka hesapları',

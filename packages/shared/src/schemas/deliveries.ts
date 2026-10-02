@@ -75,6 +75,8 @@ export const deliveryLineSchema = z.object({
   sourceLineId: uuid.nullable().optional(),
   /** Satış irsaliyesinde, karşılanan satış siparişi satırı (X2). */
   salesOrderLineId: uuid.nullable().optional(),
+  /** Seri takipli kartta: miktar kadar seri no (kayıtta stok hareketine işlenir). */
+  serials: z.array(z.string().trim().min(1).max(60)).max(1000).optional(),
 });
 export type DeliveryLineInput = z.infer<typeof deliveryLineSchema>;
 

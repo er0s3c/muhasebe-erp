@@ -23,6 +23,7 @@ import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
 import { requireActiveWarehouse } from '../inventory/warehouses';
+import { lineSerials } from '../inventory/serials';
 import { checkReturnLinks, returnedTotals } from './returns';
 import { assertExternalNoFree, getDeliveryNote, loadParty, orderedLines, type DeliveryCtx } from './service';
 
@@ -144,6 +145,22 @@ export async function postDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string) {
     });
   }
 
+  // Taslak satırlara girilen seri no'lar (seri takipli kartlar): kayıtta stok hareketine seri olayı olarak işlenir
+  const serialMap = await lineSerials(tx, 'delivery', stored.map((l) => l.id));
+  const serialIntent = {
+    byLine: new Map(stored.map((l) => [l.lineNo, serialMap.get(l.id) ?? []] as const)),
+    partyId: party.id,
+    returnKind: type === 'sales_return' ? ('return_in' as const) : type === 'purchase_return' ? ('return_out' as const) : undefined,
+  };
+  // İade irsaliyesi satırı orijinal satıra bağlıysa seri no'lar orijinal satırda çıkmış/girmiş olanlardan olmalı
+  const origSerials = await lineSerials(tx, 'delivery', sourceIds);
+  for (const l of stored) {
+    if (!l.sourceLineId || !origSerials.has(l.sourceLineId)) continue;
+    const allowed = new Set(origSerials.get(l.sourceLineId));
+    const bad = (serialMap.get(l.id) ?? []).find((s) => !allowed.has(s));
+    if (bad) throw unprocessable(`Satır ${l.lineNo}: ${bad} seri no'su orijinal irsaliye satırında yok`, 'SERIAL_NOT_ON_ORIGINAL');
+  }
+
   const year = isoYear(note.noteDate);
   const seq = await nextNumber(tx, ctx.companyId, `DLV:${type}`, year);
   const noteNo = formatDocumentNumber(meta.prefix, year, seq);
@@ -161,6 +178,7 @@ export async function postDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string) {
       sourceId: note.id,
     },
     planner.rows,
+    { intent: serialIntent },
   );
 
   // Satır başına stok defteri değeri ve eksi bakiye kapanış düzeltmesi (faturalamada pay dağıtımı için)

@@ -444,11 +444,19 @@ export const parties = pgTable(
     paymentTermDays: integer().notNull().default(0),
     notes: text(),
     isActive: boolean().notNull().default(true),
+    /** Cariye atanan varsayılan satış/alış fiyat listesi ve genel iskonto yüzdesi (X3; fiyat çözümleyicisi kullanır). */
+    salesPriceListId: uuid(),
+    purchasePriceListId: uuid(),
+    salesDiscountPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    purchaseDiscountPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     createdAt: createdAt(),
   },
   (t) => [
     unique('parties_company_code_uq').on(t.companyId, t.code),
     unique('parties_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'parties_sales_list_fk', columns: [t.salesPriceListId, t.companyId], foreignColumns: [priceLists.id, priceLists.companyId] }),
+    foreignKey({ name: 'parties_purchase_list_fk', columns: [t.purchasePriceListId, t.companyId], foreignColumns: [priceLists.id, priceLists.companyId] }),
+    check('parties_discount_ck', sql`${t.salesDiscountPct} between 0 and 100 and ${t.purchaseDiscountPct} between 0 and 100`),
     index('parties_name_idx').on(t.companyId, t.name),
     check('parties_kind_ck', sql`${t.kind} in ('customer','supplier','both')`),
     check('parties_term_ck', sql`${t.paymentTermDays} between 0 and 365`),
@@ -1993,6 +2001,8 @@ export const items = pgTable(
     minLevel: qty(),
     notes: text(),
     isActive: boolean().notNull().default(true),
+    /** Seri no takibi (X3): giriş/çıkış satırlarında miktar kadar seri no girilir. Hareketi olan kartta değiştirilemez (tetikleyici). */
+    tracksSerial: boolean().notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [
@@ -4513,5 +4523,213 @@ export const invoiceBatchItems = pgTable(
     index('invoice_batch_items_batch_idx').on(t.batchId),
     check('invoice_batch_items_status_ck', sql`${t.status} in ('created','failed')`),
     check('invoice_batch_items_result_ck', sql`(${t.status} = 'failed') = (${t.errorCode} is not null)`),
+  ],
+);
+
+
+// ---------------------------------------------------------------------------
+// Fiyat listeleri, cari özel fiyat/iskonto (X3)
+// ---------------------------------------------------------------------------
+
+/** Adlandırılmış fiyat listesi: satış ya da alış, tek para birimli, isteğe bağlı geçerlilik tarihli. Şirket varsayılanı tür başına en çok bir tane. */
+export const priceLists = pgTable(
+  'price_lists',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    /** sales | purchase */
+    kind: text().notNull(),
+    currencyCode: text()
+      .notNull()
+      .references(() => currencies.code),
+    validFrom: date({ mode: 'string' }),
+    validTo: date({ mode: 'string' }),
+    isActive: boolean().notNull().default(true),
+    /** Cari listesi yoksa kullanılan şirket varsayılanı (tür başına tek). */
+    isDefault: boolean().notNull().default(false),
+    notes: text(),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('price_lists_company_code_uq').on(t.companyId, t.code),
+    unique('price_lists_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('price_lists_default_uq')
+      .on(t.companyId, t.kind)
+      .where(sql`${t.isDefault}`),
+    check('price_lists_kind_ck', sql`${t.kind} in ('sales','purchase')`),
+    check('price_lists_valid_ck', sql`${t.validTo} is null or ${t.validFrom} is null or ${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
+/** Liste fiyat satırı: stok kartı başına birim fiyat, isteğe bağlı miktar kademesi (min_qty) ve geçerlilik aralığı. */
+export const priceListItems = pgTable(
+  'price_list_items',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    priceListId: uuid().notNull(),
+    itemId: uuid().notNull(),
+    /** Bu fiyatın başladığı en az miktar (0 = tüm miktarlar). */
+    minQty: qty().notNull().default('0'),
+    price: unitCost().notNull(),
+    validFrom: date({ mode: 'string' }),
+    validTo: date({ mode: 'string' }),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('price_list_items_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'price_list_items_list_fk', columns: [t.priceListId, t.companyId], foreignColumns: [priceLists.id, priceLists.companyId] }),
+    foreignKey({ name: 'price_list_items_item_fk', columns: [t.itemId, t.companyId], foreignColumns: [items.id, items.companyId] }),
+    index('price_list_items_lookup_idx').on(t.priceListId, t.itemId),
+    check('price_list_items_ck', sql`${t.price} >= 0 and ${t.minQty} >= 0 and (${t.validTo} is null or ${t.validFrom} is null or ${t.validTo} >= ${t.validFrom})`),
+  ],
+);
+
+/** Cari özel fiyat ve/veya kalem iskontosu: fiyat listesinden önce gelir. Fiyat boş olabilir (yalnızca iskonto). */
+export const partyPrices = pgTable(
+  'party_prices',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    partyId: uuid().notNull(),
+    itemId: uuid().notNull(),
+    /** sales | purchase */
+    kind: text().notNull(),
+    /** Fiyat doluysa fiyatın para birimi. */
+    currencyCode: text().references(() => currencies.code),
+    price: unitCost(),
+    discountPct: numeric({ precision: 7, scale: 4 }),
+    minQty: qty().notNull().default('0'),
+    validFrom: date({ mode: 'string' }),
+    validTo: date({ mode: 'string' }),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('party_prices_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'party_prices_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'party_prices_item_fk', columns: [t.itemId, t.companyId], foreignColumns: [items.id, items.companyId] }),
+    index('party_prices_lookup_idx').on(t.partyId, t.itemId, t.kind),
+    check('party_prices_kind_ck', sql`${t.kind} in ('sales','purchase')`),
+    check(
+      'party_prices_ck',
+      sql`(${t.price} is not null or ${t.discountPct} is not null) and (${t.price} is null or ${t.currencyCode} is not null) and ${t.price} >= 0 and ${t.discountPct} between 0 and 100 and ${t.minQty} >= 0 and (${t.validTo} is null or ${t.validFrom} is null or ${t.validTo} >= ${t.validFrom})`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Seri no takibi (X3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Seri no sicili: kart başına seri no ve güncel durum. Durum ve depo yalnızca seri hareketi (serial_events) eklenince,
+ * veritabanı tetikleyicisiyle değişir. pending = hareket yazılana dek geçici; void = girişi ters çevrilmiş (sicilden düşmüş) kayıt.
+ */
+export const itemSerials = pgTable(
+  'item_serials',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    itemId: uuid().notNull(),
+    serialNo: text().notNull(),
+    /** pending | in_stock | issued | returned | scrapped | void */
+    status: text().notNull(),
+    /** Yalnızca in_stock iken. */
+    warehouseId: uuid(),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('item_serials_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'item_serials_item_fk', columns: [t.itemId, t.companyId], foreignColumns: [items.id, items.companyId] }),
+    foreignKey({ name: 'item_serials_warehouse_fk', columns: [t.warehouseId, t.companyId], foreignColumns: [warehouses.id, warehouses.companyId] }),
+    uniqueIndex('item_serials_no_uq')
+      .on(t.companyId, t.itemId, t.serialNo)
+      .where(sql`${t.status} <> 'void'`),
+    index('item_serials_status_idx').on(t.companyId, t.itemId, t.status),
+    check('item_serials_status_ck', sql`${t.status} in ('pending','in_stock','issued','returned','scrapped','void')`),
+    check('item_serials_warehouse_ck', sql`(${t.status} = 'in_stock') = (${t.warehouseId} is not null)`),
+  ],
+);
+
+/** Seri hareketi: salt-eklenir geçmiş. Her satır bir stok belgesi satırına bağlıdır (stok hareketiyle aynı belge ve satır no). */
+export const serialEvents = pgTable(
+  'serial_events',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    seq: bigserial({ mode: 'number' }).notNull(),
+    serialId: uuid().notNull(),
+    itemId: uuid().notNull(),
+    /** receive | issue | return_in | return_out | scrap | transfer | reversal */
+    event: text().notNull(),
+    fromStatus: text().notNull(),
+    toStatus: text().notNull(),
+    fromWarehouseId: uuid(),
+    toWarehouseId: uuid(),
+    stockDocumentId: uuid().notNull(),
+    lineNo: integer().notNull(),
+    /** Giriş için tedarikçi, çıkış için müşteri (iade denetimi bunu kullanır). */
+    partyId: uuid(),
+    /** Ters hareket: tersine çevrilen hareket. */
+    reversalOfId: uuid(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('serial_events_seq_uq').on(t.seq),
+    unique('serial_events_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'serial_events_serial_fk', columns: [t.serialId, t.companyId], foreignColumns: [itemSerials.id, itemSerials.companyId] }),
+    foreignKey({ name: 'serial_events_doc_fk', columns: [t.stockDocumentId, t.companyId], foreignColumns: [stockDocuments.id, stockDocuments.companyId] }),
+    foreignKey({ name: 'serial_events_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    foreignKey({ name: 'serial_events_reversal_fk', columns: [t.reversalOfId, t.companyId], foreignColumns: [t.id, t.companyId] }),
+    uniqueIndex('serial_events_reversal_uq')
+      .on(t.reversalOfId)
+      .where(sql`${t.reversalOfId} is not null`),
+    index('serial_events_serial_idx').on(t.serialId, t.seq),
+    index('serial_events_doc_idx').on(t.stockDocumentId, t.lineNo),
+    check('serial_events_event_ck', sql`${t.event} in ('receive','issue','return_in','return_out','scrap','transfer','reversal')`),
+    check('serial_events_reversal_ck', sql`(${t.event} = 'reversal') = (${t.reversalOfId} is not null)`),
+  ],
+);
+
+/** Taslak irsaliye/fatura satırına girilen seri no'lar (kayıtta stok hareketine seri olayı olarak işlenir; kayıttan sonra satırla birlikte donar). */
+export const documentLineSerials = pgTable(
+  'document_line_serials',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    deliveryLineId: uuid(),
+    invoiceLineId: uuid(),
+    serialNo: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ name: 'document_line_serials_delivery_fk', columns: [t.deliveryLineId, t.companyId], foreignColumns: [deliveryNoteLines.id, deliveryNoteLines.companyId] }).onDelete('cascade'),
+    foreignKey({ name: 'document_line_serials_invoice_fk', columns: [t.invoiceLineId, t.companyId], foreignColumns: [invoiceLines.id, invoiceLines.companyId] }).onDelete('cascade'),
+    uniqueIndex('document_line_serials_delivery_uq')
+      .on(t.deliveryLineId, t.serialNo)
+      .where(sql`${t.deliveryLineId} is not null`),
+    uniqueIndex('document_line_serials_invoice_uq')
+      .on(t.invoiceLineId, t.serialNo)
+      .where(sql`${t.invoiceLineId} is not null`),
+    check('document_line_serials_one_ck', sql`(${t.deliveryLineId} is null) <> (${t.invoiceLineId} is null)`),
   ],
 );

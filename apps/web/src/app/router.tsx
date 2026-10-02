@@ -101,6 +101,18 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="sales.pricelists" />,
+                children: [
+                  { path: 'price-lists', ...page(() => import('../features/pricing/PriceListsPage'), 'PriceListsPage') },
+                  { path: 'price-lists/:id', ...page(() => import('../features/pricing/PriceListDetailPage'), 'PriceListDetailPage') },
+                  { path: 'party-prices', ...page(() => import('../features/pricing/PartyPricesPage'), 'PartyPricesPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="inventory.serials" />,
+                children: [{ path: 'inventory/serials', ...page(() => import('../features/inventory/SerialsPage'), 'SerialsPage') }],
+              },
+              {
                 element: <RequireModule module="core.treasury" />,
                 children: [
                   { path: 'treasury/accounts', ...page(() => import('../features/treasury/AccountsPage'), 'AccountsPage') },

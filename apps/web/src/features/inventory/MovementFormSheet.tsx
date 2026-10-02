@@ -19,6 +19,7 @@ import { errorMessage } from '../../lib/errors';
 import { useCMutation, useCompanyApi, useNavigation } from '../../lib/queries';
 import type { StockDocDetail, StockDocType } from '../../lib/types';
 import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../projects/common';
+import { SerialEntry } from './SerialEntry';
 import { STOCK_INVALIDATE, qtyText, useItemOptions, useUnitLabel, useWarehouses } from './common';
 
 export type MovementType = Exclude<StockDocType, 'count'>;
@@ -35,6 +36,8 @@ interface LineState {
   /** Proje boyutu (inşaat): yalnızca çıkış (sarf) ve fire satırlarında */
   projectId: string;
   wbsId: string;
+  /** Seri takipli kartta seri no'lar (X3) */
+  serials?: string[];
 }
 
 let lineKey = 1;
@@ -150,6 +153,7 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
             quantity: l.qty,
             ...(inbound ? { unitCost: l.unitCost, currency: l.currency, ...(l.currency !== base && l.fxRate ? { fxRate: l.fxRate } : {}) } : {}),
             ...(projectAllowed ? projectFields(l.projectId, l.wbsId) : {}),
+            ...(l.serials && l.serials.length > 0 ? { serials: l.serials } : {}),
           })),
         },
       }),
@@ -299,7 +303,7 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
                     value={l.itemId || null}
                     placeholder={t('inventory.mform.pickItem')}
                     aria-label={`${t('inventory.mform.item')} ${i + 1}`}
-                    onChange={(v) => patch(l.key, { itemId: v })}
+                    onChange={(v) => patch(l.key, { itemId: v, serials: [] })}
                   />
                   <MoneyInput value={l.qty} decimals={0} maxDecimals={4} aria-label={`${t('inventory.mform.quantity')} ${i + 1}`} placeholder={it ? unitLabel(it.unit) : t('inventory.mform.quantity')} onChange={(v) => patch(l.key, { qty: v })} />
                   {inbound ? (
@@ -344,6 +348,11 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
                     <X className="size-4" />
                   </button>
                 </div>
+                {it?.tracksSerial && (
+                  <div className="pl-1 text-[13px] text-muted">
+                    <SerialEntry label={String(i + 1)} serials={l.serials ?? []} quantity={l.qty} onChange={(serials) => patch(l.key, { serials })} />
+                  </div>
+                )}
                 {projectAllowed && (
                   <ProjectLineRow label={String(i + 1)} projectId={l.projectId} wbsId={l.wbsId} onChange={(v) => patch(l.key, v)} />
                 )}

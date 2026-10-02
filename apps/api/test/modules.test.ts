@@ -13,6 +13,7 @@ const treasuryOff = async (c: ReturnType<typeof client>) => {
 /** Fatura kapatılmadan önce ona bağlı satış teklif/sipariş modülü kapatılır (bağımlılık). */
 const invoicesOff = async (c: ReturnType<typeof client>) => {
   await put(c, 'invoices.orders', false);
+  await put(c, 'sales.pricelists', false);
   return put(c, 'core.invoices', false);
 };
 const navKeys = async (c: ReturnType<typeof client>) =>
@@ -35,6 +36,8 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     expect(m['core.ledger'].dependents).toEqual(expect.arrayContaining(['core.parties', 'core.inventory', 'core.invoices', 'core.treasury']));
     expect(m['invoices.orders']).toMatchObject({ enabled: true, requires: ['core.invoices', 'core.inventory'] });
     expect(m['core.invoices'].dependents).toContain('invoices.orders');
+    expect(m['sales.pricelists']).toMatchObject({ enabled: true, requires: ['core.invoices', 'core.inventory'] });
+    expect(m['inventory.serials']).toMatchObject({ enabled: true, requires: ['core.inventory'] });
     expect(m['treasury.cheques']).toMatchObject({ enabled: true, requires: ['core.treasury'] });
     expect(m['treasury.guarantees']).toMatchObject({ enabled: true, requires: ['core.treasury'] });
     expect(m['core.treasury'].dependents).toEqual(expect.arrayContaining(['treasury.cheques', 'treasury.guarantees']));
@@ -70,6 +73,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     expect((await c.get('/api/invoices?type=sales')).statusCode).toBe(200);
     // Teklif/sipariş modülünün istisnası da açınca silinir
     expect((await put(c, 'invoices.orders', true)).statusCode).toBe(200);
+    expect((await put(c, 'sales.pricelists', true)).statusCode).toBe(200);
 
     const rows = await asDb(handle, { companyId: company.id }, async (q) =>
       (await q(`select module from company_modules where company_id = $1`, [company.id])).rows,
@@ -98,6 +102,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
 
     // Sırayla: faturayı kapat → stoku kapat → faturayı açmayı dene (stok kapalı)
     expect((await invoicesOff(c)).statusCode).toBe(200);
+    expect((await put(c, 'inventory.serials', false)).statusCode).toBe(200);
     expect((await put(c, 'core.inventory', false)).statusCode).toBe(200);
     const d = await put(c, 'core.invoices', true);
     expect(d.statusCode).toBe(422);
@@ -179,7 +184,7 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
       conn.release();
     }
     const m = byKey(await c.get('/api/company/modules'));
-    for (const key of ['core.ledger', 'core.parties', 'core.inventory', 'core.invoices', 'invoices.orders', 'core.treasury']) {
+    for (const key of ['core.ledger', 'core.parties', 'core.inventory', 'core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'core.treasury']) {
       expect(m[key].enabled, key).toBe(false);
     }
     expect(m['core.settings'].enabled).toBe(true);

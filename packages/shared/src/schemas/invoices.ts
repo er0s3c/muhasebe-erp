@@ -206,6 +206,8 @@ export const invoiceLineSchema = z.object({
   orderLineId: uuid.nullable().optional(),
   /** Satış faturasında, faturalanan satış siparişi satırı (X2). */
   salesOrderLineId: uuid.nullable().optional(),
+  /** Seri takipli kartın doğrudan stok hareketi yapan satırında: miktar kadar seri no. */
+  serials: z.array(z.string().trim().min(1).max(60)).max(1000).optional(),
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
 

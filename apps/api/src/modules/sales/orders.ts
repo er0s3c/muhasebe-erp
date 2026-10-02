@@ -27,7 +27,7 @@ import { notFound, unprocessable } from '../../http/errors';
 import { requireActiveWarehouse } from '../inventory/warehouses';
 import { resolveVat } from '../invoices/service';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
-import { resolveSalePrice } from './pricing';
+import { resolvePrice } from './pricing';
 import { orderLineUsage, zeroUsage } from './usage';
 
 export interface SalesCtx {
@@ -71,17 +71,29 @@ async function prepareLines(tx: Tx, input: DraftInput, currency: string) {
     const description = l.description ?? item?.name;
     if (!description) throw unprocessable(`${label}: açıklama ya da stok kartı gerekli`, 'DESCRIPTION_REQUIRED');
     let unitPrice = l.unitPrice;
-    if (unitPrice === undefined) {
-      const price = item
-        ? await resolveSalePrice(tx, { item: { id: item.id, salePrice: item.salePrice, saleCurrency: item.saleCurrency }, partyId: input.partyId, date: input.docDate, currency })
+    let discountPct = l.discountPct;
+    if (unitPrice === undefined || discountPct === undefined) {
+      const res = item
+        ? await resolvePrice(tx, {
+            kind: 'sales',
+            item: { id: item.id, salePrice: item.salePrice, saleCurrency: item.saleCurrency, purchasePrice: item.purchasePrice, purchaseCurrency: item.purchaseCurrency },
+            partyId: input.partyId,
+            date: input.docDate,
+            currency,
+            quantity: l.quantity,
+          })
         : null;
-      if (price === null) {
-        throw unprocessable(
-          `${label}: birim fiyat girilmeli (${item ? `${item.code} kartında ${currency} cinsinden satış fiyatı yok` : 'kartsız satır'})`,
-          'SO_PRICE_REQUIRED',
-        );
+      if (unitPrice === undefined) {
+        if (!res || res.unitPrice === null) {
+          throw unprocessable(
+            `${label}: birim fiyat girilmeli (${item ? `${item.code} için ${currency} cinsinden fiyat bulunamadı` : 'kartsız satır'})`,
+            'SO_PRICE_REQUIRED',
+          );
+        }
+        unitPrice = res.unitPrice;
       }
-      unitPrice = price;
+      // İskonto girilmemişse çözümlenen iskonto (cari kalem/genel iskonto) uygulanır
+      discountPct ??= res?.discountPct;
     }
     const vatCode = l.vatCode ?? item?.vatCode ?? null;
     if (vatCode && !rates.has(vatCode)) throw unprocessable(`${label}: ${vatCode} KDV kodu ${input.docDate} tarihinde geçerli değil`, 'VAT_CODE_INVALID');
@@ -92,7 +104,7 @@ async function prepareLines(tx: Tx, input: DraftInput, currency: string) {
       quantity: dec(l.quantity).toFixed(4),
       unit: l.unit ?? item?.unit ?? null,
       unitPrice: dec(unitPrice).toFixed(6),
-      discountPct: dec(l.discountPct ?? '0').toFixed(4),
+      discountPct: dec(discountPct ?? '0').toFixed(4),
       vatCode,
       vatRate: vatCode ? rates.get(vatCode)! : '0.0000',
     });

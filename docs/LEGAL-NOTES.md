@@ -280,3 +280,10 @@ Teknik çalışma için [ARCHITECTURE.md](ARCHITECTURE.md) "Şantiye projeleri".
 - **Doğrulanmamıştır:** (1) iade irsaliyesi ve iade faturası ilişkisinin mevzuattaki biçimi (iade belgesi, orijinal fatura/irsaliye atfı, KDV düzeltmesi zamanlaması); sistem iade faturasını mevcut iade türüyle yazar, orijinal faturaya otomatik atıf yapmaz; (2) teklif ve sipariş çıktısı iç kullanım belgesidir; teklifin bağlayıcılığı, geçerlilik süresi ve sipariş koşulları hukuki metin değildir, imza blokları yalnızca yerleşimdir; (3) toplu faturalamada tek faturada birden çok irsaliyenin birleştirilmesi (irsaliye atfı, fatura tarihi/irsaliye tarihi sınırı) mevzuata uygunluğu doğrulanmamıştır; fatura tarihi kullanıcı girişidir; (4) Excel'den aktarılan faturalar sağlayıcı e-fatura/e-arşiv biçimi değildir, taslak olarak yazılır ve KDV oranları yalnızca Ayarlar'daki doğrulanmamış kodlardan çözülür.
 - **Kodda yasal değer yoktur:** KDV oranı, vade, fiyat ve tutarlar kullanıcı verisi ya da ayar tablosundandır.
 - **Kişisel veri (§5):** cari kartları mevcut veridir; yeni kişisel veri alanı eklenmedi, envantere yeni satır yok.
+
+## 18. Fiyat listeleri, cari özel fiyat/iskonto, seri no takibi (Faz X3)
+
+- **Doğrulanmamıştır:** seri no kaydı iç envanter takibidir; garanti/menşe/ithalat belgesi (gümrük beyanı, CE, garanti belgesi) yerine geçmez ve mevzuattaki seri no/izlenebilirlik yükümlülüklerini yerine getirdiği iddia edilmez. Fiyat listesi ve iskonto yalnızca fiyat önerisidir; fatura üzerindeki iskonto/KDV matrahı etkisinin vergi mevzuatındaki işlenişi (örn. iskontonun fatura içinde gösterilmesi) kullanıcı/mali müşavir sorumluluğundadır.
+- **Kodda yasal değer yoktur:** fiyat, iskonto yüzdesi, kademe, geçerlilik tarihi ve para birimi kullanıcı verisidir.
+- **Kişisel veri (§5):** yeni kişisel veri alanı yok; seri no ve fiyatlar cari/kart bağlantılı ticari veridir (seri geçmişinde cari adı mevcut cari kartından gelir).
+

@@ -43,6 +43,8 @@ const PG_RULE_CODES: Record<string, string> = {
   ERP03: 'INVOICE_RULE_VIOLATION',
   ERP04: 'DELIVERY_RULE_VIOLATION',
   ERP15: 'SALES_RULE_VIOLATION',
+  ERP16: 'PRICE_RULE_VIOLATION',
+  ERP17: 'SERIAL_RULE_VIOLATION',
 };
 
 /** Toplu işlemlerde tek kalemin hatasını raporlamak için: uygulama hatası, veritabanı kuralı ya da beklenmeyen hata. */
@@ -181,6 +183,16 @@ export function errorHandler(
     void reply
       .status(422)
       .send({ error: { code: 'SALES_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP16') {
+    // Fiyat listesi/cari özel fiyat kuralları (tür uyuşmazlığı, satırı olan listenin değişimi)
+    void reply.status(422).send({ error: { code: 'PRICE_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP17') {
+    // Seri no kuralları (çifte çıkış, yanlış depo, miktar/seri sayısı uyuşmazlığı, değişmez geçmiş)
+    void reply.status(422).send({ error: { code: 'SERIAL_RULE_VIOLATION', message: pg.message } });
     return;
   }
   if (pg?.code === '23505') {

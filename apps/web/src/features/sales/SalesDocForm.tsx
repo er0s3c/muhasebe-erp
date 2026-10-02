@@ -16,7 +16,7 @@ import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { moneyIn } from '../../lib/format';
 import { useCMutation, useCompanyApi, useCQuery } from '../../lib/queries';
-import type { ItemListRow, SalesDocDetail } from '../../lib/types';
+import type { ItemListRow, PriceResolution, SalesDocDetail } from '../../lib/types';
 import { useUnitLabel, useWarehouses } from '../inventory/common';
 import { usePartyOptions, useTaxRates, vatRateFor } from '../invoices/common';
 import { SALES_INVALIDATE } from './common';
@@ -29,6 +29,8 @@ interface LineState {
   unit: string;
   unitPrice: string;
   discountPct: string;
+  /** Fiyatın kaynağı (fiyat çözümleyici önerisi); kullanıcı fiyatı değiştirince silinir. */
+  priceNote?: string;
   vatCode: string;
 }
 
@@ -45,7 +47,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
   const navigate = useNavigate();
   const toast = useToast();
   const unitLabel = useUnitLabel();
-  const { company } = useCompanyApi();
+  const { company, call } = useCompanyApi();
   const base = company.baseCurrency;
 
   const { options: partyOptions, byId: partyById } = usePartyOptions('customer');
@@ -91,10 +93,34 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
   const effectiveCurrency = currency || partyById.get(partyId)?.currencyCode || base;
   const patch = (key: number, p: Partial<LineState>) => setLines((cur) => cur.map((l) => (l.key === key ? { ...l, ...p } : l)));
   const priceOf = (it: ItemListRow) => (it.salePrice && it.saleCurrency === effectiveCurrency ? trim(it.salePrice) : '');
+  /** Fiyat çözümleyici: cariye özel fiyat > cari listesi > varsayılan liste > kart; iskonto fiyattan sonra. Kullanıcı her zaman değiştirebilir. */
+  const suggest = async (key: number, itemId: string, qty: string) => {
+    if (!partyId || !itemId || !qty || dec(qty).lte(0)) return;
+    const qs = new URLSearchParams({ partyId, itemId, kind: 'sales', date: docDate, currency: effectiveCurrency, quantity: qty });
+    try {
+      const r = await call<PriceResolution>(`/api/price-resolution?${qs}`);
+      if (r.unitPrice === null && dec(r.discountPct).isZero()) return;
+      setLines((cur) =>
+        cur.map((l) =>
+          l.key === key && l.itemId === itemId
+            ? {
+                ...l,
+                ...(r.unitPrice !== null ? { unitPrice: trim(r.unitPrice) } : {}),
+                discountPct: dec(r.discountPct).isZero() ? '' : trim(r.discountPct),
+                priceNote: r.unitPrice !== null ? t(`pricing.source.${r.priceSource}`, { list: r.priceListName ?? '' }) + (dec(r.discountPct).isZero() ? '' : ` · ${t(`pricing.discountSource.${r.discountSource}`)}`) : '',
+              }
+            : l,
+        ),
+      );
+    } catch {
+      // Öneri alınamazsa kart fiyatı ve elle giriş geçerlidir
+    }
+  };
   const pickItem = (key: number, itemId: string) => {
     const it = itemById.get(itemId);
     if (!it) return;
-    patch(key, { itemId, description: it.name, unit: it.unit, unitPrice: priceOf(it), vatCode: it.vatCode ?? '' });
+    patch(key, { itemId, description: it.name, unit: it.unit, unitPrice: priceOf(it), priceNote: '', vatCode: it.vatCode ?? '' });
+    void suggest(key, itemId, lines.find((l) => l.key === key)?.quantity || '1');
   };
 
   const totals = useMemo(
@@ -241,7 +267,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
                       />
                       <Input className="col-span-2 lg:col-span-1" value={l.description} maxLength={300} aria-label={`${t('common.description')} ${i + 1}`} placeholder={l.itemId ? undefined : t('sales.form.freeText')} onChange={(e) => patch(l.key, { description: e.target.value })} />
                       <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('sales.form.quantity')} ${i + 1}`} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
-                      <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('sales.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => patch(l.key, { unitPrice: v })} />
+                      <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('sales.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => patch(l.key, { unitPrice: v, priceNote: '' })} />
                       <MoneyInput value={l.discountPct} decimals={0} maxDecimals={4} aria-label={`${t('sales.form.discount')} ${i + 1}`} placeholder="0" className="text-right" onChange={(v) => patch(l.key, { discountPct: v })} />
                       <Select className="px-2 pr-6" value={l.vatCode} aria-label={`${t('sales.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
                         <option value="">{t('sales.form.noVat')}</option>
@@ -260,6 +286,14 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
                         <X className="size-4" />
                       </button>
                     </div>
+                    {l.priceNote && (
+                      <p className="mt-1.5 pl-1 text-[13px] text-muted" data-testid="price-source">
+                        {t('pricing.priceFrom', { source: l.priceNote })}{' '}
+                        <button type="button" className="link" onClick={() => void suggest(l.key, l.itemId, l.quantity || '1')}>
+                          {t('pricing.refresh')}
+                        </button>
+                      </p>
+                    )}
                     {noCardPrice && <p className="mt-1.5 pl-1 text-[13px] text-warning">{t('sales.form.noCardPrice', { currency: effectiveCurrency })}</p>}
                   </div>
                 );

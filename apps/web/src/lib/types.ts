@@ -302,6 +302,7 @@ export interface Item {
   minLevel: string | null;
   notes: string | null;
   isActive: boolean;
+  tracksSerial: boolean;
 }
 
 export interface ItemListRow {
@@ -313,6 +314,7 @@ export interface ItemListRow {
   barcode: string | null;
   vatCode: string | null;
   isActive: boolean;
+  tracksSerial: boolean;
   minLevel: string | null;
   categoryId: string | null;
   categoryName: string | null;
@@ -533,6 +535,8 @@ export interface InvoiceListRow {
 
 export interface InvoiceLineRow {
   id: string;
+  /** Seri takipli kartta satıra girilen seri no'lar (X3). */
+  serials?: string[];
   lineNo: number;
   itemId: string | null;
   itemCode: string | null;
@@ -671,6 +675,8 @@ export interface DeliveryNoteLineRow {
   salesOrderLineId: string | null;
   salesOrderId: string | null;
   salesOrderNo: string | null;
+  /** Seri takipli kartta satıra girilen seri no'lar (X3). */
+  serials: string[];
 }
 
 export interface DeliveryNoteDetail {
@@ -2640,4 +2646,105 @@ export interface BankGuaranteeReport {
   byBank: { direction: GuaranteeDirection; bankName: string; currency: string; count: number; amount: string; commission: string }[];
   byProject: { direction: GuaranteeDirection; projectId: string | null; projectCode: string | null; projectName: string | null; currency: string; count: number; amount: string }[];
   closed: { direction: GuaranteeDirection; status: BankGuaranteeStatus; currency: string; count: number; amount: string }[];
+}
+
+
+// --- Fiyat listeleri ve seri no (X3) -------------------------------------------
+
+export type PriceKind = 'sales' | 'purchase';
+export type PriceSource = 'party_item' | 'party_list' | 'default_list' | 'item_card' | 'none';
+
+export interface PriceListRow {
+  id: string;
+  code: string;
+  name: string;
+  kind: PriceKind;
+  currencyCode: string;
+  validFrom: string | null;
+  validTo: string | null;
+  isActive: boolean;
+  isDefault: boolean;
+  notes: string | null;
+  itemCount: number;
+  partyCount: number;
+}
+
+export interface PriceListItemRow {
+  id: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unit: string;
+  minQty: string;
+  price: string;
+  validFrom: string | null;
+  validTo: string | null;
+}
+
+export interface PartyPriceRow {
+  id: string;
+  partyId: string;
+  partyCode: string;
+  partyName: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  kind: PriceKind;
+  currencyCode: string | null;
+  price: string | null;
+  discountPct: string | null;
+  minQty: string;
+  validFrom: string | null;
+  validTo: string | null;
+}
+
+export interface PartyPricing {
+  partyId: string;
+  salesPriceListId: string | null;
+  purchasePriceListId: string | null;
+  salesDiscountPct: string;
+  purchaseDiscountPct: string;
+}
+
+export interface PriceResolution {
+  unitPrice: string | null;
+  priceSource: PriceSource;
+  priceListId: string | null;
+  priceListName: string | null;
+  discountPct: string;
+  discountSource: 'party_item' | 'party_default' | 'none';
+  minQty: string | null;
+}
+
+export type SerialStatus = 'in_stock' | 'issued' | 'returned' | 'scrapped' | 'void';
+
+export interface SerialRow {
+  id: string;
+  serialNo: string;
+  status: SerialStatus;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  warehouseId: string | null;
+  warehouseName: string | null;
+}
+
+export interface SerialHistoryRow {
+  id: string;
+  event: string;
+  fromStatus: string;
+  toStatus: string;
+  docDate: string;
+  stockDocumentId: string;
+  stockDocumentNo: string;
+  fromWarehouse: string | null;
+  toWarehouse: string | null;
+  partyName: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  sourceNo: string | null;
+}
+
+export interface SerialLookup {
+  serials: (SerialRow & { supplier: string | null; customer: string | null; history: SerialHistoryRow[] })[];
 }

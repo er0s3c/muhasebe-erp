@@ -194,6 +194,7 @@ describe('Excel ile fatura içe aktarma (X2)', async () => {
     expect(tricked.rows[0].messages.map((m: any) => m.code)).toContain('PARTY_NOT_FOUND');
 
     await c.put('/api/company/modules/invoices.orders', { enabled: false });
+    await c.put('/api/company/modules/sales.pricelists', { enabled: false });
     expect((await c.put('/api/company/modules/core.invoices', { enabled: false })).statusCode).toBe(200);
     expect((await preview(c, 'sales_invoices', lines)).statusCode).toBe(403);
   });

@@ -63,20 +63,20 @@ describe('checkModuleToggle', () => {
 
   it('yaprak modüller (fatura, kasa/banka) serbestçe kapanıp açılır', () => {
     expect(check('invoices.orders', false)).toEqual({ ok: true });
-    expect(check('core.invoices', false, off('invoices.orders'))).toEqual({ ok: true });
+    expect(check('core.invoices', false, off('invoices.orders', 'sales.pricelists'))).toEqual({ ok: true });
     expect(check('treasury.cheques', false)).toEqual({ ok: true });
     expect(check('treasury.guarantees', false)).toEqual({ ok: true });
-    expect(check('core.invoices', true, off('core.invoices', 'invoices.orders'))).toEqual({ ok: true });
+    expect(check('core.invoices', true, off('core.invoices', 'invoices.orders', 'sales.pricelists'))).toEqual({ ok: true });
   });
 
   it('bağımlısı açık modül kapatılamaz ve hangi modüllerin engellediği söylenir', () => {
-    expect(check('core.inventory', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['core.invoices', 'invoices.orders'] });
+    expect(check('core.inventory', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials'] });
     const parties = check('core.parties', false);
     expect(parties).toMatchObject({ ok: false, reason: 'REQUIRED_BY' });
     expect(parties.ok === false && parties.modules.sort()).toEqual(['core.invoices', 'core.treasury']);
     // Bağımlılar önce kapatılırsa sıra serbest
-    expect(check('core.inventory', false, off('core.invoices', 'invoices.orders'))).toEqual({ ok: true });
-    expect(check('core.ledger', false, off('core.invoices', 'invoices.orders', 'core.treasury', 'core.parties', 'core.inventory', 'hr.payroll'))).toEqual({ ok: true });
+    expect(check('core.inventory', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials'))).toEqual({ ok: true });
+    expect(check('core.ledger', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'core.treasury', 'core.parties', 'core.inventory', 'hr.payroll'))).toEqual({ ok: true });
   });
 
   it('sosyal güvenlik çıktıları bordroya bağlıdır: bordro, bağımlısı açıkken kapatılamaz; bordro kapalıyken sosyal güvenlik açılamaz', () => {
@@ -99,7 +99,7 @@ describe('checkModuleToggle', () => {
   });
 
   it('satış teklif/sipariş modülü fatura ve stoğa bağlıdır: ikisi açıkken fatura kapatılamaz, kapalıyken sipariş açılamaz', () => {
-    expect(check('core.invoices', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['invoices.orders'] });
+    expect(check('core.invoices', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['invoices.orders', 'sales.pricelists'] });
     expect(check('invoices.orders', true, off('invoices.orders', 'core.invoices'))).toMatchObject({ ok: false, reason: 'MISSING_REQUIREMENT', modules: ['core.invoices'] });
     expect(check('invoices.orders', true, off('invoices.orders'))).toEqual({ ok: true });
   });
@@ -127,8 +127,8 @@ describe('describeModules', () => {
     const list = describeModules('CONSTRUCTION', off('core.treasury'));
     const by = Object.fromEntries(list.map((d) => [d.key, d]));
     expect(by['core.treasury']).toMatchObject({ enabled: false, override: false, sectorDefault: true, blocked: null });
-    expect(by['core.inventory']).toMatchObject({ enabled: true, override: null, dependents: ['core.invoices', 'invoices.orders'] });
-    expect(by['core.inventory']!.blocked).toEqual({ reason: 'REQUIRED_BY', modules: ['core.invoices', 'invoices.orders'] });
+    expect(by['core.inventory']).toMatchObject({ enabled: true, override: null, dependents: ['core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials'] });
+    expect(by['core.inventory']!.blocked).toEqual({ reason: 'REQUIRED_BY', modules: ['core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials'] });
     expect(by['core.settings']).toMatchObject({ locked: true, blocked: { reason: 'LOCKED', modules: [] } });
     expect(by['construction.projects']).toMatchObject({ enabled: true, sectorDefault: true, blocked: { reason: 'REQUIRED_BY', modules: ['construction.subcontracts', 'construction.procurement', 'construction.realestate'] } });
     expect(by['construction.subcontracts']).toMatchObject({ enabled: true, sectorDefault: true, blocked: null });

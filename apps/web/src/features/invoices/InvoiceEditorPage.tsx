@@ -218,6 +218,11 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                   <Td>
                     <span>{l.description}</span>
                     {l.itemCode && <span className="ml-2 font-mono text-xs text-muted">{l.itemCode}</span>}
+                    {l.serials && l.serials.length > 0 && (
+                      <span className="block text-xs text-muted" data-testid="line-serials">
+                        {t('serials.title')}: <span className="font-mono">{l.serials.join(', ')}</span>
+                      </span>
+                    )}
                     {l.accountCode && <span className="block text-xs text-muted">{t('invoices.form.account')}: {l.accountCode}</span>}
                     {l.projectId && (
                       <span className="block text-xs text-muted">

@@ -50,6 +50,24 @@ export const MODULES: readonly ModuleDef[] = [
     // Teklif/sipariş yevmiye yazmaz; irsaliye (stok) ve faturaya dönüştürülür ve oradan karşılanma miktarı türetilir.
     requires: ['core.invoices', 'core.inventory'],
   },
+  {
+    key: 'sales.pricelists',
+    labelKey: 'modules.salesPricelists',
+    label: 'Fiyat listeleri ve cari özel fiyat',
+    sectors: 'all',
+    status: 'available',
+    // Fiyat çözümleyicisi fatura/teklif/sipariş satırlarını besler; veri kapalıyken korunur, yalnızca ekranlar ve uçlar kapanır.
+    requires: ['core.invoices', 'core.inventory'],
+  },
+  {
+    key: 'inventory.serials',
+    labelKey: 'modules.inventorySerials',
+    label: 'Seri no takibi',
+    sectors: 'all',
+    status: 'available',
+    // Seri takipli kartların hareket kuralları veritabanında zorunludur; modül yalnızca sorgu/rapor ekranlarını ve uçlarını açar.
+    requires: ['core.inventory'],
+  },
   { key: 'core.treasury', labelKey: 'modules.treasury', label: 'Kasa ve banka', sectors: 'all', status: 'available', requires: ['core.ledger', 'core.parties'] },
   { key: 'core.settings', labelKey: 'modules.settings', label: 'Ayarlar', sectors: 'all', status: 'available', locked: true },
   {
@@ -289,6 +307,24 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'invoices.read',
   },
   {
+    key: 'price-lists',
+    labelKey: 'nav.priceLists',
+    path: '/price-lists',
+    icon: 'tag',
+    group: 'invoices',
+    module: 'sales.pricelists',
+    permission: 'invoices.read',
+  },
+  {
+    key: 'party-prices',
+    labelKey: 'nav.partyPrices',
+    path: '/party-prices',
+    icon: 'percent',
+    group: 'invoices',
+    module: 'sales.pricelists',
+    permission: 'invoices.read',
+  },
+  {
     key: 'batch-invoicing',
     labelKey: 'nav.batchInvoicing',
     path: '/invoices/batch',
@@ -376,6 +412,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     icon: 'arrow-left-right',
     group: 'stock',
     module: 'core.inventory',
+    permission: 'inventory.read',
+  },
+  {
+    key: 'serial-lookup',
+    labelKey: 'nav.serialLookup',
+    path: '/inventory/serials',
+    icon: 'scan-barcode',
+    group: 'stock',
+    module: 'inventory.serials',
     permission: 'inventory.read',
   },
   {

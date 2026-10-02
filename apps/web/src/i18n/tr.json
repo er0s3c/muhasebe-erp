@@ -102,7 +102,9 @@
     "hrForeign": "Yabancı işçi belge ve teminat takibi",
     "treasuryCheques": "Çek/senet portföyü ve takas",
     "treasuryGuarantees": "Banka teminat mektubu portföyü",
-    "invoicesOrders": "Satış teklif ve siparişi"
+    "invoicesOrders": "Satış teklif ve siparişi",
+    "salesPricelists": "Fiyat listeleri ve cari özel fiyat",
+    "inventorySerials": "Seri no takibi"
   },
   "nav": {
     "groups": {
@@ -145,6 +147,9 @@
     "salesQuotes": "Satış teklifleri",
     "salesOrders": "Satış siparişleri",
     "batchInvoicing": "Toplu faturalama",
+    "priceLists": "Fiyat listeleri",
+    "partyPrices": "Cari özel fiyatlar",
+    "serialLookup": "Seri no sorgula",
     "vatSummary": "KDV özeti",
     "accountMapping": "Hesap eşlemesi",
     "treasuryAccounts": "Hesaplar",
@@ -844,6 +849,8 @@
       "pricesHint": "Alış ve satış farklı para biriminde olabilir (örn. € ile al, £ veya ₺ ile sat). Fiyatlar bilgi amaçlıdır; faturada değiştirilebilir.",
       "minLevel": "Kritik stok seviyesi",
       "minLevelHint": "Eldeki miktar bu değere eşit veya altına düşünce uyarılır.",
+      "tracksSerial": "Seri no takibi",
+      "tracksSerialHint": "Giriş ve çıkışlarda miktar kadar seri no girilir. Hareketi olan kartta sonradan değiştirilemez.",
       "notes": "Notlar"
     },
     "detail": {
@@ -4705,7 +4712,10 @@
     "lineCount": "{{count}} satır",
     "source": {
       "order": "sipariş fiyatı",
-      "item": "kart fiyatı"
+      "item": "kart fiyatı",
+    "party_item": "cariye özel fiyat",
+    "party_list": "cari fiyat listesi",
+    "default_list": "varsayılan fiyat listesi"
     },
     "selected": "{{count}} irsaliye seçili",
     "run": "Seçilenleri faturala",
@@ -4722,5 +4732,152 @@
     "failed": "Başarısız",
     "posted": "kaydedildi",
     "draft": "taslak"
+  },
+  "pricing": {
+    "order": "Fiyat sırası: cariye özel kalem fiyatı, carinin fiyat listesi, şirket varsayılan listesi, stok kartı fiyatı. İskonto fiyattan sonra uygulanır; satırda her zaman elle değiştirebilirsiniz. Para birimi çevrilmez: belge para birimiyle aynı olmayan fiyat kullanılmaz.",
+    "priceFrom": "Fiyat: {{source}}",
+    "refresh": "Fiyatı güncelle",
+    "kinds": { "sales": "Satış", "purchase": "Alış" },
+    "source": {
+      "party_item": "cariye özel fiyat",
+      "party_list": "cari listesi: {{list}}",
+      "default_list": "varsayılan liste: {{list}}",
+      "item_card": "stok kartı",
+      "none": "—"
+    },
+    "discountSource": {
+      "party_item": "kalem iskontosu",
+      "party_default": "cari genel iskontosu",
+      "none": ""
+    },
+    "lists": {
+      "title": "Fiyat listeleri",
+      "subtitle": "Satış ve alış fiyat listeleri; cariye atanır ya da şirket varsayılanı olur.",
+      "add": "Yeni liste",
+      "newTitle": "Yeni fiyat listesi",
+      "empty": "Henüz fiyat listesi yok",
+      "emptyHint": "Liste oluşturup kalem fiyatlarını girin; cariye atayın ya da şirket varsayılanı yapın.",
+      "code": "Kod",
+      "name": "Ad",
+      "kind": "Tür",
+      "currency": "Para birimi",
+      "validity": "Geçerlilik",
+      "validFrom": "Başlangıç",
+      "validTo": "Bitiş",
+      "always": "süresiz",
+      "itemCount": "Kalem",
+      "partyCount": "Cari",
+      "default": "Varsayılan",
+      "makeDefault": "Şirket varsayılanı yap",
+      "created": "Fiyat listesi oluşturuldu",
+      "saved": "Fiyat listesi güncellendi",
+      "deleted": "Fiyat listesi silindi",
+      "notFound": "Fiyat listesi bulunamadı",
+      "back": "Fiyat listeleri"
+    },
+    "detail": {
+      "rows": "Fiyat satırları",
+      "rowsHint": "Kalem başına birim fiyat; miktar kademesi ve geçerlilik tarihi isteğe bağlıdır.",
+      "empty": "Listede henüz fiyat satırı yok",
+      "item": "Stok kartı",
+      "pickItem": "Kart seçin",
+      "price": "Birim fiyat",
+      "minQty": "En az miktar",
+      "minQtyHint": "Boş ya da 0: tüm miktarlar",
+      "validity": "Geçerlilik",
+      "addRow": "Fiyat satırı ekle",
+      "rowAdded": "Fiyat satırı eklendi",
+      "deleteRow": "Satırı sil",
+      "import": "Yapıştırarak toplu giriş",
+      "importHint": "Her satır: STOK KODU; fiyat  ya da  STOK KODU; en az miktar; fiyat. Aynı kalem ve kademe varsa fiyat güncellenir.",
+      "importRun": "İçe aktar",
+      "imported": "{{created}} satır eklendi, {{updated}} satır güncellendi",
+      "unknownItems": "Bilinmeyen stok kodları: {{list}}",
+      "adjust": "Yüzde ayarı",
+      "adjustPct": "Yüzde (zam +, indirim -)",
+      "adjustHint": "Fiyatlar bu oranda toplu değişir (2 ondalığa yuvarlanır).",
+      "adjusted": "{{n}} fiyat güncellendi",
+      "apply": "Uygula",
+      "copy": "Kopyala",
+      "copyHint": "Aynı tür ve para biriminde yeni liste oluşur; isteğe bağlı yüzde ayarı uygulanır.",
+      "activate": "Aktifleştir",
+      "deactivate": "Pasifleştir",
+      "delete": "Listeyi sil",
+      "deleteConfirm": "Liste ve fiyat satırları silinir. Cariye atanmış liste silinemez."
+    },
+    "party": {
+      "title": "Cari özel fiyatlar",
+      "subtitle": "Cariye özel kalem fiyatı ve iskontosu; fiyat listelerinden önce uygulanır.",
+      "add": "Özel fiyat ekle",
+      "saved": "Özel fiyat kaydedildi",
+      "empty": "Cariye özel fiyat tanımlı değil",
+      "party": "Cari",
+      "pickParty": "Cari seçin",
+      "allParties": "Tüm cariler",
+      "clearFilter": "Süzgeci kaldır",
+      "discount": "İskonto %",
+      "priceHint": "Boş bırakılırsa yalnızca iskonto uygulanır",
+      "delete": "Özel fiyatı sil"
+    },
+    "partyCard": {
+      "title": "Fiyat ve iskonto",
+      "hint": "Satır girişinde önerilen fiyat ve iskonto bu ayarlardan gelir.",
+      "salesList": "Satış fiyat listesi",
+      "purchaseList": "Alış fiyat listesi",
+      "salesDiscount": "Satış genel iskontosu %",
+      "purchaseDiscount": "Alış genel iskontosu %",
+      "noList": "Liste yok (şirket varsayılanı)",
+      "special": "Cariye özel fiyatlar",
+      "saved": "Fiyat ayarları kaydedildi"
+    }
+  },
+  "serials": {
+    "title": "Seri no sorgula",
+    "subtitle": "Seri takipli kartların sicili: durum, depo ve tedarikçiden müşteriye tam geçmiş.",
+    "tracked": "Seri takipli",
+    "search": "Seri no ara",
+    "searchPlaceholder": "Seri no (ya da bir kısmı)",
+    "statusLabel": "Durum",
+    "allStatuses": "Tüm durumlar",
+    "warehouse": "Depo",
+    "allWarehouses": "Tüm depolar",
+    "itemFiltered": "Yalnızca seçili kartın seri no'ları.",
+    "clearItem": "Süzgeci kaldır",
+    "serialNo": "Seri no",
+    "item": "Stok kartı",
+    "empty": "Seri no bulunamadı",
+    "emptyHint": "Seri takibi stok kartından açılır; giriş belgelerinde seri no girilir.",
+    "more": "{{shown}} / {{total}} kayıt gösteriliyor; aramayı daraltın.",
+    "historyTitle": "Seri no {{no}}",
+    "supplier": "Tedarikçi (giriş)",
+    "customer": "Müşteri (çıkış)",
+    "status": {
+      "in_stock": "Depoda",
+      "issued": "Müşteriye çıktı",
+      "returned": "Tedarikçiye iade",
+      "scrapped": "Fire/hurda",
+      "void": "İptal"
+    },
+    "events": {
+      "receive": "Giriş",
+      "issue": "Çıkış",
+      "return_in": "Müşteriden iade",
+      "return_out": "Tedarikçiye iade",
+      "scrap": "Fire/hurda",
+      "transfer": "Depo transferi",
+      "reversal": "Ters kayıt"
+    },
+    "hist": { "date": "Tarih", "event": "Hareket", "warehouse": "Depo", "party": "Cari", "document": "Belge" },
+    "entry": {
+      "count": "Seri no: {{n}}/{{qty}}",
+      "button": "Seri no gir",
+      "title": "Seri no'lar",
+      "help": "Her satıra bir seri no yazın ya da yapıştırın (virgül/noktalı virgül de olur); büyük harfe çevrilir.",
+      "placeholder": "SN-0001\nSN-0002",
+      "csv": "CSV/metin dosyası yükle:",
+      "apply": "{{n}} seri no'yu uygula",
+      "duplicates": "Yinelenen seri no: {{list}}",
+      "tooLong": "Bazı seri no'lar 60 karakterden uzun"
+    }
   }
 }

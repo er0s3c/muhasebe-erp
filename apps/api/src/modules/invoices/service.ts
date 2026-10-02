@@ -18,6 +18,7 @@ import type { Tx } from '../../db/client';
 import { trContains } from '../../db/search';
 import { accounts, invoiceLines, invoices, items, parties, taxRates, warehouses } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
+import { lineSerials, saveLineSerials } from '../inventory/serials';
 import { validateDimensions } from '../projects/dimension';
 import { uuidList } from '../inventory/balances';
 import { requireActiveWarehouse } from '../inventory/warehouses';
@@ -367,7 +368,7 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
       .returning({ id: invoices.id });
     invoiceId = row!.id;
   }
-  await tx.insert(invoiceLines).values(
+  const insertedLines = await tx.insert(invoiceLines).values(
     lines.map((l) => ({
       companyId: ctx.companyId,
       invoiceId: invoiceId!,
@@ -391,7 +392,18 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
       projectId: l.projectId,
       wbsId: l.wbsId,
     })),
-  );
+  ).returning({ id: invoiceLines.id, lineNo: invoiceLines.lineNo });
+  // Seri takipli kartın doğrudan stok hareketi yapan satırında seri no'lar (irsaliyeye bağlı satırda seri irsaliyededir)
+  const serialsByLine = new Map<string, readonly string[]>();
+  for (const r of insertedLines) {
+    const list = input.lines[r.lineNo - 1]?.serials;
+    if (!list || list.length === 0) continue;
+    if (lines[r.lineNo - 1]!.deliveryLineId) {
+      throw unprocessable(`Satır ${r.lineNo}: irsaliyeye bağlı satırda seri no girilmez; seri no'lar irsaliyededir`, 'SERIAL_ON_LINKED_LINE');
+    }
+    serialsByLine.set(r.id, list);
+  }
+  await saveLineSerials(tx, ctx.companyId, 'invoice', serialsByLine);
   return invoiceId;
 }
 
@@ -550,6 +562,7 @@ export async function getInvoice(tx: Tx, id: string) {
   const meta = INVOICE_TYPE_META[invoice.type];
   const canReturn = !meta.isReturn && invoice.status === 'posted' && invoice.type !== 'expense';
   const returned = canReturn ? await returnedTotals(tx, id) : new Map<string, { qty: MoneyValue; cost: MoneyValue }>();
+  const serialMap = await lineSerials(tx, 'invoice', lines.rows.map((l) => l.id));
   const returns = await tx
     .select({ id: invoices.id, invoiceNo: invoices.invoiceNo, status: invoices.status, type: invoices.type })
     .from(invoices)
@@ -562,6 +575,7 @@ export async function getInvoice(tx: Tx, id: string) {
       const r = returned.get(l.id);
       return {
         ...l,
+        serials: serialMap.get(l.id) ?? [],
         returnedQty: canReturn ? toDbAmount(r?.qty ?? 0) : null,
         returnableQty: canReturn ? toDbAmount(dec(l.quantity).minus(r?.qty ?? 0)) : null,
       };

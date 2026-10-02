@@ -17,6 +17,7 @@ import type { Tx } from '../../db/client';
 import { invoiceLines, invoices } from '../../db/schema';
 import { AppError, notFound, unprocessable } from '../../http/errors';
 import { loadItemStates, loadWarehouseQty, lockItems } from '../inventory/balances';
+import { lineSerials } from '../inventory/serials';
 import { insertDocument, loadStockableItems, reverseStockDocument, type StockCtx } from '../inventory/documents';
 import { StockPlanner, type DraftRow } from '../inventory/planner';
 import { createJournalEntry, reverseJournalEntry, type LedgerCtx } from '../ledger/journal';
@@ -310,6 +311,7 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
   const text = `${TYPE_LABEL[type]} ${invoiceNo} — ${party.name}`.slice(0, 300);
 
   let stockDocumentId: string | null = null;
+  const serialMap = await lineSerials(tx, 'invoice', stored.map((l) => l.id));
   if (planRows.length > 0) {
     const doc = await insertDocument(
       tx,
@@ -324,6 +326,13 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
         sourceId: inv.id,
       },
       planRows,
+      {
+        intent: {
+          byLine: new Map(stored.map((l) => [l.lineNo, serialMap.get(l.id) ?? []] as const)),
+          partyId: party.id,
+          returnKind: type === 'sales_return' ? 'return_in' : type === 'purchase_return' ? 'return_out' : undefined,
+        },
+      },
     );
     stockDocumentId = doc.id;
   }

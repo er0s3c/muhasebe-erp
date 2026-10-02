@@ -17,7 +17,7 @@ import { lockItems } from '../inventory/balances';
 import { lockDeliveryLines } from '../invoices/delivery-link';
 import { postInvoice } from '../invoices/posting';
 import { createInvoiceDraft, resolveVat, type InvoiceCtx } from '../invoices/service';
-import { resolveSalePrice } from './pricing';
+import { resolvePrice } from './pricing';
 import { lockOrderLines } from './usage';
 
 /**
@@ -41,6 +41,8 @@ interface Row extends Record<string, unknown> {
   item_sale_price: string | null;
   item_sale_currency: string;
   item_vat_code: string | null;
+  item_purchase_price: string | null;
+  item_purchase_currency: string;
   description: string;
   unit: string | null;
   remaining: string;
@@ -70,7 +72,7 @@ export interface BatchLine {
   vatCode: string | null;
   currency: string;
   vatIncluded: boolean;
-  priceSource: 'order' | 'item' | null;
+  priceSource: 'order' | 'item' | 'party_item' | 'party_list' | 'default_list' | null;
   inDraft: boolean;
 }
 
@@ -90,7 +92,7 @@ async function loadLines(tx: Tx, filter: { noteIds?: readonly string[]; from?: s
     select dl.id as line_id, dl.line_no, n.id as note_id, n.note_no, n.note_date::text as note_date,
            p.id as party_id, p.code as party_code, p.name as party_name, p.currency_code as party_currency,
            it.id as item_id, it.code as item_code, it.sale_price as item_sale_price, it.sale_currency as item_sale_currency,
-           it.vat_code as item_vat_code, dl.description, dl.unit, dl.quantity - coalesce(b.qty, 0) as remaining,
+           it.vat_code as item_vat_code, it.purchase_price as item_purchase_price, it.purchase_currency as item_purchase_currency, dl.description, dl.unit, dl.quantity - coalesce(b.qty, 0) as remaining,
            ol.id as so_line_id, ol.unit_price as so_unit_price, ol.discount_pct as so_discount, ol.vat_code as so_vat_code,
            o.currency_code as so_currency, o.vat_included as so_vat_included,
            exists (select 1 from invoice_lines x join invoices xi on xi.id = x.invoice_id
@@ -123,7 +125,7 @@ async function loadLines(tx: Tx, filter: { noteIds?: readonly string[]; from?: s
     let source: BatchLine['priceSource'] = null;
     let currency = r.party_currency;
     let vatIncluded = false;
-    let discountPct = '0';
+    let discountPct: string;
     let vatCode = r.item_vat_code;
     if (r.so_line_id) {
       unitPrice = r.so_unit_price;
@@ -133,13 +135,23 @@ async function loadLines(tx: Tx, filter: { noteIds?: readonly string[]; from?: s
       vatIncluded = r.so_vat_included ?? false;
       source = 'order';
     } else {
-      unitPrice = await resolveSalePrice(tx, {
-        item: { id: r.item_id, salePrice: r.item_sale_price, saleCurrency: r.item_sale_currency },
+      const res = await resolvePrice(tx, {
+        kind: 'sales',
+        item: {
+          id: r.item_id,
+          salePrice: r.item_sale_price,
+          saleCurrency: r.item_sale_currency,
+          purchasePrice: r.item_purchase_price,
+          purchaseCurrency: r.item_purchase_currency,
+        },
         partyId: r.party_id,
         date: r.note_date,
         currency,
+        quantity: dec(r.remaining).toFixed(4),
       });
-      if (unitPrice !== null) source = 'item';
+      unitPrice = res.unitPrice;
+      discountPct = res.discountPct;
+      if (res.priceSource !== 'none') source = res.priceSource === 'item_card' ? 'item' : res.priceSource;
     }
     if (unitPrice === null) {
       addIssue(

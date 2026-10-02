@@ -17,6 +17,7 @@ import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCompanyApi, useCQuery, useNavigation } from '../../lib/queries';
 import { formatDateTR } from '../../lib/format';
 import type { DeliveryNoteDetail, DeliveryNoteType, ReturnableLine } from '../../lib/types';
+import { SerialEntry } from '../inventory/SerialEntry';
 import { qtyText, useItemOptions, useUnitLabel, useWarehouses } from '../inventory/common';
 import { usePartyOptions } from '../invoices/common';
 import { DELIVERY_INVALIDATE } from './common';
@@ -35,6 +36,8 @@ interface LineState {
   maxQty: string;
   /** Siparişten gelen satırın sipariş satırı bağı (düzenlemede korunur). */
   salesOrderLineId: string;
+  /** Seri takipli kartta satırın seri no'ları (X3). */
+  serials?: string[];
 }
 
 let lineKey = 1;
@@ -97,6 +100,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
           sourceLineId: l.sourceLineId ?? '',
           maxQty: '',
           salesOrderLineId: l.salesOrderLineId ?? '',
+          serials: l.serials ?? [],
         }))
       : [emptyLine(base)],
   );
@@ -162,6 +166,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
       itemId,
       description: it.name,
       unit: it.unit,
+      serials: [],
       // Alışta kartın alış fiyatı hazır gelir (kendi para biriminde); satışta maliyet girilmez
       ...(hasCost && it.purchasePrice ? { unitCost: trim(it.purchasePrice), currency: it.purchaseCurrency, fxRate: '' } : {}),
     });
@@ -185,6 +190,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
       unit: l.unit || null,
       ...(isReturn && returnOfId && l.sourceLineId ? { sourceLineId: l.sourceLineId } : {}),
       ...(type === 'sales' && l.salesOrderLineId ? { salesOrderLineId: l.salesOrderLineId } : {}),
+      ...(l.serials && l.serials.length > 0 ? { serials: l.serials } : {}),
       ...(hasCost && l.unitCost !== ''
         ? { unitCost: l.unitCost, currency: l.currency || base, ...(l.currency !== base && l.fxRate ? { fxRate: l.fxRate } : {}) }
         : {}),
@@ -361,11 +367,16 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
                         <X className="size-4" />
                       </button>
                     </div>
-                    {(it && !inbound) || (hasCost && it && l.unitCost === '') || l.maxQty ? (
+                    {(it && !inbound) || (hasCost && it && l.unitCost === '') || l.maxQty || it?.tracksSerial ? (
                       <p className={cn('mt-1.5 pl-1 text-[13px]', short || (l.maxQty && dec(l.quantity || 0).gt(l.maxQty)) ? 'text-warning' : 'text-muted')}>
                         {!inbound && onHand !== null && (short ? t('deliveries.form.notEnough', { qty: qtyText(it!.onHand) || '0', unit: unitLabel(it!.unit) }) : t('deliveries.form.onHand', { qty: qtyText(it!.onHand) || '0', unit: unitLabel(it!.unit) }))}
                         {hasCost && l.unitCost === '' && t('deliveries.form.unitCostHint')}
                         {l.maxQty && <span className="ml-3">{t('deliveries.form.returnable', { qty: l.maxQty })}</span>}
+                        {it?.tracksSerial && (
+                          <span className="ml-3 inline-flex">
+                            <SerialEntry label={String(i + 1)} serials={l.serials ?? []} quantity={l.quantity} onChange={(serials) => patch(l.key, { serials })} />
+                          </span>
+                        )}
                       </p>
                     ) : null}
                   </div>

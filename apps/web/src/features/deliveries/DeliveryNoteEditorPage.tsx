@@ -221,6 +221,11 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
                   <Td>
                     <span>{l.description}</span>
                     <span className="ml-2 font-mono text-xs text-muted">{l.itemCode}</span>
+                    {l.serials && l.serials.length > 0 && (
+                      <span className="block text-xs text-muted" data-testid="line-serials">
+                        {t('serials.title')}: <span className="font-mono">{l.serials.join(', ')}</span>
+                      </span>
+                    )}
                     {l.salesOrderNo && (
                       <Link to={`/sales/docs/${l.salesOrderId}`} className="link ml-2 text-xs print:hidden">
                         {l.salesOrderNo}

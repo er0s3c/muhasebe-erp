@@ -470,6 +470,20 @@
       "when": 1790920304352,
       "tag": "0066_orders_returns_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1790923945471,
+      "tag": "0067_pricing_serials",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1790923950237,
+      "tag": "0068_pricing_serials_rules",
+      "breakpoints": true
     }
   ]
 }

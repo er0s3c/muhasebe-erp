@@ -43,6 +43,9 @@ export async function createItem(tx: Tx, companyId: string, input: CreateItemInp
   await assertBarcodeFree(tx, input.barcode);
   await assertVatCode(tx, input.vatCode);
   if (input.categoryId) await requireCategory(tx, input.categoryId);
+  if (input.tracksSerial && input.kind !== 'goods') {
+    throw unprocessable('Seri takibi yalnızca stoklu mal kartında açılır', 'SERIAL_ITEM_NOT_GOODS');
+  }
 
   const [row] = await tx
     .insert(items)
@@ -61,6 +64,7 @@ export async function createItem(tx: Tx, companyId: string, input: CreateItemInp
       saleCurrency: input.saleCurrency,
       minLevel: input.minLevel ?? null,
       notes: input.notes ?? null,
+      tracksSerial: input.tracksSerial ?? false,
     })
     .returning();
   return row!;
@@ -84,6 +88,9 @@ export async function updateItem(tx: Tx, id: string, input: UpdateItemInput) {
   if (input.kind && input.kind !== current.kind && (await hasMovements(tx, id))) {
     throw unprocessable('Hareketi olan kartın türü değiştirilemez', 'ITEM_KIND_IN_USE');
   }
+  if ((input.tracksSerial ?? current.tracksSerial) && (input.kind ?? current.kind) !== 'goods') {
+    throw unprocessable('Seri takibi yalnızca stoklu mal kartında açılır', 'SERIAL_ITEM_NOT_GOODS');
+  }
   if (input.barcode !== undefined) await assertBarcodeFree(tx, input.barcode, id);
   if (input.vatCode !== undefined) await assertVatCode(tx, input.vatCode);
   if (input.categoryId) await requireCategory(tx, input.categoryId);
@@ -91,7 +98,7 @@ export async function updateItem(tx: Tx, id: string, input: UpdateItemInput) {
   const values: Partial<typeof items.$inferInsert> = {};
   for (const key of [
     'name', 'kind', 'unit', 'categoryId', 'barcode', 'vatCode', 'purchasePrice', 'purchaseCurrency',
-    'salePrice', 'saleCurrency', 'minLevel', 'notes', 'isActive',
+    'salePrice', 'saleCurrency', 'minLevel', 'notes', 'isActive', 'tracksSerial',
   ] as const) {
     if (input[key] !== undefined) (values as Record<string, unknown>)[key] = input[key];
   }
@@ -182,7 +189,7 @@ export async function listItems(tx: Tx, q: ListItemsQuery) {
     ${where}`;
 
   const rows = await tx.execute<ListRow>(sql`
-    select i.id, i.code, i.name, i.kind, i.unit, i.barcode, i.is_active as "isActive", i.vat_code as "vatCode",
+    select i.id, i.code, i.name, i.kind, i.unit, i.barcode, i.is_active as "isActive", i.tracks_serial as "tracksSerial", i.vat_code as "vatCode",
            i.min_level as "minLevel", i.category_id as "categoryId", c.name as "categoryName",
            i.purchase_price as "purchasePrice", i.purchase_currency as "purchaseCurrency",
            i.sale_price as "salePrice", i.sale_currency as "saleCurrency",

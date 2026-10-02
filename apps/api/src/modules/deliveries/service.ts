@@ -21,6 +21,7 @@ import { conflict, notFound, unprocessable } from '../../http/errors';
 import { requireActiveWarehouse } from '../inventory/warehouses';
 import { invoicedTotals } from '../invoices/delivery-link';
 import { checkOrderLinks } from '../sales/usage';
+import { lineSerials, saveLineSerials } from '../inventory/serials';
 import { checkReturnLinks, returnedTotals } from './returns';
 
 export interface DeliveryCtx {
@@ -146,7 +147,16 @@ async function writeDraft(tx: Tx, ctx: DeliveryCtx, type: DeliveryNoteType, inpu
       .returning({ id: deliveryNotes.id });
     noteId = row!.id;
   }
-  await tx.insert(deliveryNoteLines).values(lines.map((l) => ({ ...l, companyId: ctx.companyId, noteId: noteId! })));
+  const inserted = await tx
+    .insert(deliveryNoteLines)
+    .values(lines.map((l) => ({ ...l, companyId: ctx.companyId, noteId: noteId! })))
+    .returning({ id: deliveryNoteLines.id, lineNo: deliveryNoteLines.lineNo });
+  const serialsByLine = new Map<string, readonly string[]>();
+  for (const r of inserted) {
+    const list = input.lines[r.lineNo - 1]?.serials;
+    if (list && list.length > 0) serialsByLine.set(r.id, list);
+  }
+  await saveLineSerials(tx, ctx.companyId, 'delivery', serialsByLine);
   return noteId;
 }
 
@@ -259,6 +269,7 @@ export async function getDeliveryNote(tx: Tx, id: string) {
     where l.note_id = ${id}
     order by l.line_no`);
 
+  const serialMap = await lineSerials(tx, 'delivery', lines.rows.map((l) => l.id));
   const totals = await invoicedTotals(tx, lines.rows.map((l) => l.id));
   // Orijinal (satış/alış) irsaliyede satır başına iade edilen ve iade edilebilir miktar
   const isOriginal = !DELIVERY_NOTE_TYPE_META[note.type].isReturn;
@@ -278,6 +289,7 @@ export async function getDeliveryNote(tx: Tx, id: string) {
     invoicedQty = invoicedQty.plus(inv?.qty ?? 0);
     return {
       ...l,
+      serials: serialMap.get(l.id) ?? [],
       invoicedQty: (inv?.qty ?? dec(0)).toFixed(4),
       remainingQty: q.minus(inv?.qty ?? 0).toFixed(4),
       returnedQty: isOriginal && note.status === 'posted' ? (returned.get(l.id)?.qty ?? dec(0)).toFixed(4) : null,

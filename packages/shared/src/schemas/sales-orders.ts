@@ -23,7 +23,7 @@ export const salesOrderLineSchema = z.object({
   unit: z.enum(ITEM_UNITS).nullable().optional(),
   /** Belge para biriminde birim fiyat; boşsa kartın satış fiyatı (fiyat listesi kancası, X3). */
   unitPrice: unitCostString.optional(),
-  discountPct: percentString.default('0'),
+  discountPct: percentString.optional(),
   vatCode: z.string().trim().max(20).nullable().optional(),
 });
 export type SalesOrderLineInput = z.infer<typeof salesOrderLineSchema>;
