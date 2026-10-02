@@ -11,6 +11,7 @@ import {
   type PayrollAdjustmentInput,
   type PayrollItemInput,
   type PayrollWarning,
+  ADVANCE_DEDUCTION_ITEM_CODE,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { costCodes, employees, journalEntries, payrollAdjustments, payrollItems, payrollLineAllocations, payrollLineItems, payrollLines, payrollRuns } from '../../db/schema';
@@ -21,6 +22,7 @@ import { requireMappings } from '../ledger/mappings';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { logPayrollAccess, resolveParams, termsAtMonthEnd, type PayrollCtx } from './config';
 import { buildPayrollJournal } from './journal';
+import { advanceItemTotal, deleteRunAdvanceDeductions, recordRunAdvanceSettlements, validateRunAdvanceDeductions } from '../employee-ledger/hooks';
 
 const ledgerCtx = (c: PayrollCtx): LedgerCtx => ({ companyId: c.companyId, userId: c.userId, baseCurrency: c.baseCurrency, reportingCurrency: c.reportingCurrency });
 const chunks = <T>(xs: readonly T[], n = 500): T[][] => {
@@ -307,6 +309,7 @@ export async function setAdjustment(tx: Tx, ctx: PayrollCtx, runId: string, inpu
   if (!emp) throw unprocessable('Personel bulunamadı', 'EMPLOYEE_NOT_FOUND');
   const [item] = await tx.select().from(payrollItems).where(eq(payrollItems.id, input.itemId));
   if (!item || !item.isActive) throw unprocessable('Bordro kalemi bulunamadı ya da pasif', 'PAYROLL_ITEM_NOT_FOUND');
+  if (item.code === ADVANCE_DEDUCTION_ITEM_CODE) throw unprocessable('Avans kesintisi Personel cari ekranından (avanslardan seçilerek) girilir', 'PAYROLL_ITEM_RESERVED');
   if (dec(input.amount).lte(0)) throw unprocessable('Tutar sıfırdan büyük olmalı', 'PAYROLL_AMOUNT');
   await tx
     .insert(payrollAdjustments)
@@ -321,6 +324,12 @@ export async function setAdjustment(tx: Tx, ctx: PayrollCtx, runId: string, inpu
 export async function removeAdjustment(tx: Tx, ctx: PayrollCtx, runId: string, adjustmentId: string) {
   const run = await lockRun(tx, runId);
   requireDraft(run);
+  const [adj] = await tx
+    .select({ code: payrollItems.code })
+    .from(payrollAdjustments)
+    .innerJoin(payrollItems, eq(payrollItems.id, payrollAdjustments.itemId))
+    .where(and(eq(payrollAdjustments.id, adjustmentId), eq(payrollAdjustments.runId, runId)));
+  if (adj?.code === ADVANCE_DEDUCTION_ITEM_CODE) throw unprocessable('Avans kesintisi Personel cari ekranından kaldırılır', 'PAYROLL_ITEM_RESERVED');
   const rows = await tx.delete(payrollAdjustments).where(and(eq(payrollAdjustments.id, adjustmentId), eq(payrollAdjustments.runId, runId))).returning({ id: payrollAdjustments.id });
   if (rows.length === 0) throw notFound('Bordro kalemi girişi');
   return calculateRun(tx, ctx, runId);
@@ -330,6 +339,7 @@ export async function deleteRun(tx: Tx, id: string) {
   const run = await lockRun(tx, id);
   requireDraft(run);
   await clearLines(tx, id);
+  await deleteRunAdvanceDeductions(tx, id);
   await tx.delete(payrollAdjustments).where(eq(payrollAdjustments.runId, id));
   await tx.delete(payrollRuns).where(eq(payrollRuns.id, id));
 }
@@ -451,7 +461,10 @@ export async function approveRun(tx: Tx, ctx: PayrollCtx, id: string) {
   const liab = (l: string) => sumBy('deduction', l).plus(sumBy('employer', l));
   const social = liab('social');
   const tax = liab('tax');
-  const other = liab('other');
+  // Personel avansından kesilen tutar "diğer kesinti borcu" değil, personel avansları alacağını kapatır (toplam değişmez, yalnız dağılım)
+  const adv = await validateRunAdvanceDeductions(tx, id, lines, items);
+  const advance = advanceItemTotal(items);
+  const other = liab('other').minus(advance);
   const net = lines.reduce((s, l) => s.plus(l.net), dec(0));
   const employerTotal = lines.reduce((s, l) => s.plus(l.employerTotal), dec(0));
 
@@ -465,7 +478,7 @@ export async function approveRun(tx: Tx, ctx: PayrollCtx, id: string) {
     groupMap.set(k, g);
   }
 
-  const keys = ['payroll_labor_cost' as const, ...(employerTotal.gt(0) ? (['payroll_employer_cost'] as const) : []), ...(net.gt(0) ? (['payroll_payable'] as const) : []), ...(social.gt(0) ? (['payroll_social_payable'] as const) : []), ...(tax.gt(0) ? (['payroll_tax_payable'] as const) : []), ...(other.gt(0) ? (['payroll_other_payable'] as const) : [])];
+  const keys = ['payroll_labor_cost' as const, ...(employerTotal.gt(0) ? (['payroll_employer_cost'] as const) : []), ...(net.gt(0) ? (['payroll_payable'] as const) : []), ...(social.gt(0) ? (['payroll_social_payable'] as const) : []), ...(tax.gt(0) ? (['payroll_tax_payable'] as const) : []), ...(other.gt(0) ? (['payroll_other_payable'] as const) : []), ...(advance.gt(0) ? (['employee_advance'] as const) : [])];
   const acc = (await requireMappings(tx, keys)) as Partial<Record<(typeof keys)[number], string>>;
 
   const text = `Bordro ${run.number} — ${run.month} (${lines.length} personel)`.slice(0, 300);
@@ -479,15 +492,18 @@ export async function approveRun(tx: Tx, ctx: PayrollCtx, id: string) {
       social: acc.payroll_social_payable ?? '',
       tax: acc.payroll_tax_payable ?? '',
       other: acc.payroll_other_payable ?? '',
+      advance: acc.employee_advance ?? '',
     },
     groups: [...groupMap.values()],
     net,
     social,
     tax,
     other,
+    advance,
   });
   const entry = await createJournalEntry(tx, ledgerCtx(ctx), { entryDate: end, description: text, lines: journalLines, post: true }, { source: { type: 'payroll_run', id } });
   await tx.update(payrollRuns).set({ status: 'approved', entryId: entry.id, approvedAt: new Date(), approvedBy: ctx.userId, updatedAt: new Date() }).where(eq(payrollRuns.id, fresh.id));
+  if (adv.rows.length > 0) await recordRunAdvanceSettlements(tx, ctx, id, run.number, end);
   return getRun(tx, id);
 }
 

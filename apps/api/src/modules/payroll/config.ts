@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import {
+  ADVANCE_DEDUCTION_ITEM_CODE,
   monthBounds,
   toDbAmount,
   type CreatePayrollItemInput,
@@ -185,6 +186,7 @@ export async function listItems(tx: Tx) {
 
 export async function createItem(tx: Tx, ctx: PayrollCtx, input: CreatePayrollItemInput) {
   const code = input.code.trim().toUpperCase();
+  if (code === ADVANCE_DEDUCTION_ITEM_CODE) throw conflict(`${code} kodu avans kesintisine ayrılmıştır`, 'PAYROLL_ITEM_RESERVED');
   const [dup] = await tx.select({ id: payrollItems.id }).from(payrollItems).where(eq(payrollItems.code, code));
   if (dup) throw conflict(`${code} kodlu bir bordro kalemi var`, 'PAYROLL_ITEM_EXISTS');
   const [row] = await tx
@@ -205,6 +207,7 @@ export async function createItem(tx: Tx, ctx: PayrollCtx, input: CreatePayrollIt
 export async function updateItem(tx: Tx, id: string, input: { name?: string; affectsSocialBase?: boolean; affectsTaxBase?: boolean; liability?: 'tax' | 'social' | 'other'; isActive?: boolean }) {
   const [cur] = await tx.select().from(payrollItems).where(eq(payrollItems.id, id)).for('update');
   if (!cur) throw notFound('Bordro kalemi');
+  if (cur.code === ADVANCE_DEDUCTION_ITEM_CODE) throw conflict('Avans kesintisi kalemi sistem kalemidir; değiştirilemez', 'PAYROLL_ITEM_RESERVED');
   const earning = cur.kind === 'earning';
   const [row] = await tx
     .update(payrollItems)

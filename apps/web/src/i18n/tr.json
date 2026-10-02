@@ -99,6 +99,7 @@
     "hrCore": "Personel, puantaj ve veri koruma",
     "hrPayroll": "Bordro",
     "hrSocialSecurity": "Sosyal güvenlik çıktıları",
+    "hrEmployeeLedger": "Personel cari ve avans takibi",
     "hrForeign": "Yabancı işçi belge ve teminat takibi",
     "treasuryCheques": "Çek/senet portföyü ve takas",
     "treasuryGuarantees": "Banka teminat mektubu portföyü",
@@ -188,6 +189,7 @@
     "payroll": "Bordro",
     "payrollSettings": "Bordro ayarları",
     "socialSecurity": "Sosyal güvenlik",
+    "employeeLedger": "Avans ve maaş cari",
     "socialSettings": "Sosyal güvenlik ayarları",
     "foreignWorkers": "Yabancı işçi belgeleri",
     "foreignSettings": "Yabancı işçi ayarları",
@@ -674,7 +676,8 @@
     "kinds": {
       "customer": "Müşteri",
       "supplier": "Tedarikçi",
-      "both": "Müşteri ve tedarikçi"
+      "both": "Müşteri ve tedarikçi",
+      "employee": "Personel"
     },
     "allKinds": "Tüm türler",
     "onlyWithBalance": "Yalnızca bakiyesi olanlar",
@@ -5164,6 +5167,171 @@
       "cardFilter": "Gider kartı",
       "allCards": "Tüm kartlar",
       "note": "Tutarlar defter para biriminde; KDV ve stopaj sizin girdiğiniz oranlarla hesaplanmıştır, doğrulanmamıştır."
+    }
+  },
+  "employeeLedger": {
+    "title": "Personel cari ve avans",
+    "subtitle": "Personel bakiyesi (kim kime borçlu), verilen avanslar, bordrodan avans kesintisi ve maaş ödemeleri. Avans ve maaş ödemeleri kasa/banka hareketi olarak kaydedilir.",
+    "notice": "Personel bakiyesi ücret verisi gibi hassastır: yalnızca bordro izni olan kullanıcılar görür, okuma erişim günlüğüne yazılır; dışa aktarmalar IBAN ve kimlik içermez. Hesap eşlemesi (personel avansları, ödenecek net ücret) ve avans kesintisi uygulaması mali müşavirce doğrulanmamıştır.",
+    "unverified": "doğrulanmadı",
+    "weOwe": "şirket borçlu",
+    "theyOwe": "personel borçlu",
+    "owedToEmployees": "Personele borcumuz",
+    "owedToEmployeesHint": "Ödenecek net ücret (avanslar düşüldükten sonra)",
+    "owedByEmployees": "Personelin bize borcu",
+    "owedByEmployeesHint": "Kapanmamış avanslar",
+    "pickEmployee": "Personel seçin",
+    "tabs": {
+      "balances": "Bakiyeler",
+      "advances": "Avans sicili",
+      "payments": "Maaş ödemeleri",
+      "settings": "Kesinti ayarı"
+    },
+    "status": {
+      "open": "Açık",
+      "partial": "Kısmen kapandı",
+      "settled": "Kapandı",
+      "cancelled": "İptal"
+    },
+    "kinds": {
+      "salary_net": "Net ücret (bordro)",
+      "salary_payment": "Maaş ödemesi",
+      "advance": "Avans",
+      "advance_deduction": "Bordrodan avans kesintisi",
+      "advance_repayment": "Avans geri ödemesi"
+    },
+    "buckets": {
+      "notDue": "Bugün",
+      "d1_30": "1–30 gün",
+      "d31_60": "31–60 gün",
+      "d61_90": "61–90 gün",
+      "d90plus": "90 günden eski"
+    },
+    "cols": {
+      "employee": "Personel",
+      "salaryNet": "Bordro net ücret",
+      "salaryPaid": "Ödenen maaş",
+      "advanceGiven": "Verilen avans",
+      "settled": "Kapanan",
+      "openAdvance": "Açık avans",
+      "net": "Net bakiye",
+      "number": "Avans no",
+      "date": "Tarih",
+      "purpose": "Amaç",
+      "amount": "Tutar",
+      "open": "Kalan",
+      "age": "Yaş (gün)",
+      "status": "Durum"
+    },
+    "balances": {
+      "empty": "Henüz personel hareketi yok."
+    },
+    "advances": {
+      "statusFilter": "Durum",
+      "outstanding": "Kalanı olanlar",
+      "all": "Tümü",
+      "give": "Avans ver",
+      "openTotal": "Toplam kalan",
+      "empty": "Bu süzgece uyan avans yok.",
+      "detail": "Ayrıntı",
+      "repay": "Geri ödeme al",
+      "cancel": "İptal et"
+    },
+    "give": {
+      "title": "Personele avans ver",
+      "desc": "Avans kasa/bankadan ödenir ve personel avansları hesabına yazılır (hesap eşlemesi doğrulanmamış varsayılandır).",
+      "account": "Ödeme hesabı",
+      "accountHint": "Yalnızca defter para birimindeki hesaplar",
+      "pickAccount": "Hesap seçin",
+      "project": "Proje (isteğe bağlı)",
+      "submit": "Avansı kaydet",
+      "done": "Avans kaydedildi"
+    },
+    "detail": {
+      "title": "Avans {{no}}",
+      "payment": "Ödeme hareketi: {{txn}}",
+      "settlements": "Kapamalar",
+      "noSettlements": "Henüz kesinti ya da geri ödeme yok.",
+      "reversed": "geri alındı",
+      "history": "Durum geçmişi"
+    },
+    "repay": {
+      "title": "Geri ödeme — {{no}}",
+      "desc": "Kalan avans: {{open}}. Tahsilat kasa/banka hareketi olarak kaydedilir.",
+      "account": "Tahsilat hesabı",
+      "note": "Not",
+      "submit": "Geri ödemeyi kaydet",
+      "done": "Geri ödeme kaydedildi"
+    },
+    "cancel": {
+      "title": "Avansı iptal et — {{no}}",
+      "desc": "Yalnızca hiç kapanmamış avans iptal edilir; ödeme hareketi ters kayıtla geri alınır.",
+      "reason": "İptal nedeni",
+      "done": "Avans iptal edildi"
+    },
+    "payments": {
+      "note": "Net maaş ödemesi kasa/banka çıkışı olarak kaydedilir ve personelin ödenmemiş net ücretini aşamaz. Bordronun \"ödendi\" işareti ayrıca elle verilir.",
+      "pay": "Maaş öde",
+      "empty": "Henüz maaş ödemesi yok.",
+      "title": "Net maaş ödemesi",
+      "desc": "Onaylı bordrodan doğan ödenmemiş net ücret ödenir.",
+      "nonePayable": "Ödenmemiş net ücreti olan personel yok (bordro onaylanmalı).",
+      "maxHint": "En çok {{max}}",
+      "done": "Maaş ödemesi kaydedildi",
+      "run": "Bordro",
+      "txn": "Hareket",
+      "posted": "Kayıtlı",
+      "cancelled": "İptal"
+    },
+    "settings": {
+      "title": "Avans kesintisi üst sınırı",
+      "desc": "İsteğe bağlı: bordrodan tek seferde kesilebilecek avansın, kesinti öncesi net ücrete oranı. Yasal bir sınır uygulamada gömülü değildir; boş bırakırsanız sınır yoktur. Değeri hukuki/mali müşavirinizle doğrulayın.",
+      "cap": "Üst sınır (%)",
+      "capHint": "Boş: sınır yok",
+      "source": "Kaynak / not",
+      "noCap": "Sınır yok",
+      "verified": "Doğrulandı: {{by}}",
+      "saved": "Ayar kaydedildi",
+      "verify": "Doğrulandı olarak işaretle",
+      "verifiedToast": "Doğrulandı"
+    },
+    "deduct": {
+      "short": "Avans kesintisi",
+      "open": "{{name}} için avans kesintisi",
+      "title": "Avans kesintisi — {{name}}",
+      "desc": "Kesinti bekleyen avanslardan düşülecek tutarı yazın; net ücret düşer, bordro onayında avans kapanır, bordro iptalinde geri açılır.",
+      "cap": "Kullanıcı üst sınırı: kesinti öncesi net ücretin %{{pct}}'i",
+      "none": "Kesinti bekleyen avans yok.",
+      "list": "Kesinti bekleyen avanslar",
+      "remaining": "kalan {{amount}}",
+      "amountFor": "{{no}} kesinti tutarı",
+      "total": "Toplam kesinti: {{amount}}",
+      "exceeds": "Bir avans için kalan tutardan fazla yazdınız.",
+      "clear": "Kesintiyi kaldır"
+    },
+    "statement": {
+      "title": "Personel cari ekstresi",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "opening": "Açılış",
+      "debit": "Borç",
+      "credit": "Alacak",
+      "closing": "Kapanış",
+      "kind": "Tür",
+      "ref": "Belge",
+      "description": "Açıklama",
+      "balance": "Bakiye",
+      "empty": "Bu aralıkta hareket yok.",
+      "openAdvances": "Açık avanslar",
+      "noOpenAdvances": "Açık avans yok."
+    },
+    "card": {
+      "title": "Personel cari",
+      "desc": "Maaş borcu ve avans bakiyesi; yalnızca ad cariye kopyalanır, kimlik ve IBAN personel kartında kalır.",
+      "open": "Personel carisini aç",
+      "openParty": "Cari aç",
+      "opened": "Personel carisi açıldı",
+      "noParty": "Personel carisi henüz açılmamış."
     }
   }
 }

@@ -301,6 +301,7 @@ describe('puantaj (Faz D2)', async () => {
     const w = await world('AttModul');
     // hr.core'a bağlı bordro modülü açıkken hr.core kapatılamaz: önce bordro kapatılır
     expect((await w.c.put('/api/company/modules/hr.core', { enabled: false })).statusCode).toBe(422);
+    expect((await w.c.put('/api/company/modules/hr.employee_ledger', { enabled: false })).statusCode).toBe(200);
     expect((await w.c.put('/api/company/modules/hr.socialsecurity', { enabled: false })).statusCode).toBe(200);
     expect((await w.c.put('/api/company/modules/hr.payroll', { enabled: false })).statusCode).toBe(200);
     // Yabancı işçi takibi (D5) da hr.core'a bağlıdır

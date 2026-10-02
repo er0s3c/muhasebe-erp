@@ -136,6 +136,16 @@ export const MODULES: readonly ModuleDef[] = [
     requires: ['core.ledger', 'hr.core'],
   },
   {
+    key: 'hr.employee_ledger',
+    labelKey: 'modules.hrEmployeeLedger',
+    label: 'Personel cari ve avans takibi',
+    sectors: 'all',
+    status: 'available',
+    // Avans ve maaş ödemeleri kasa/bankadan (core.treasury) yapılır, personel cari bağlantısı cari kartıdır (core.parties);
+    // bordrodan avans kesintisi ve ödenecek net ücret bakiyesi bordro verisidir (hr.payroll). Ücret hassas veridir: hr.payroll izni + erişim günlüğü.
+    requires: ['hr.payroll', 'core.treasury', 'core.parties'],
+  },
+  {
     key: 'hr.socialsecurity',
     labelKey: 'modules.hrSocialSecurity',
     label: 'Sosyal güvenlik çıktıları',
@@ -646,6 +656,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     icon: 'sliders-horizontal',
     group: 'hr',
     module: 'hr.payroll',
+    permission: 'hr.payroll',
+  },
+  {
+    key: 'employee-ledger',
+    labelKey: 'nav.employeeLedger',
+    path: '/hr/employee-ledger',
+    icon: 'hand-coins',
+    group: 'hr',
+    module: 'hr.employee_ledger',
     permission: 'hr.payroll',
   },
   {

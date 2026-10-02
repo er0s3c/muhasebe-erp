@@ -49,6 +49,7 @@ import {
   Ship,
   Users,
   Wallet,
+  HandCoins,
   Warehouse,
   type LucideIcon,
 } from 'lucide-react';
@@ -94,6 +95,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   truck: Truck,
   'package-check': PackageCheck,
   wallet: Wallet,
+  'hand-coins': HandCoins,
   landmark: Landmark,
   'book-marked': BookMarked,
   library: Library,

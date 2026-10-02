@@ -458,7 +458,7 @@ export const parties = pgTable(
     foreignKey({ name: 'parties_purchase_list_fk', columns: [t.purchasePriceListId, t.companyId], foreignColumns: [priceLists.id, priceLists.companyId] }),
     check('parties_discount_ck', sql`${t.salesDiscountPct} between 0 and 100 and ${t.purchaseDiscountPct} between 0 and 100`),
     index('parties_name_idx').on(t.companyId, t.name),
-    check('parties_kind_ck', sql`${t.kind} in ('customer','supplier','both')`),
+    check('parties_kind_ck', sql`${t.kind} in ('customer','supplier','both','employee')`),
     check('parties_term_ck', sql`${t.paymentTermDays} between 0 and 365`),
   ],
 );
@@ -936,7 +936,7 @@ export const employees = pgTable(
     department: text(),
     jobTitle: text(),
     projectId: uuid(),
-    /** İleride personel cari/avans (X5) için isteğe bağlı cari bağlantısı. */
+    /** Personel cari/avans (X5): isteğe bağlı cari bağlantısı (kind = 'employee'); kart başına tek cari, bağlandıktan sonra değişmez. */
     partyId: uuid(),
     note: text(),
     createdBy: uuid().references(() => users.id),
@@ -950,6 +950,7 @@ export const employees = pgTable(
     foreignKey({ name: 'employees_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
     foreignKey({ name: 'employees_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
     index('employees_status_idx').on(t.companyId, t.status),
+    uniqueIndex('employees_party_uq').on(t.companyId, t.partyId).where(sql`${t.partyId} is not null`),
     check('employees_status_ck', sql`${t.status} in ('active','left')`),
     check('employees_id_kind_ck', sql`${t.idKind} is null or ${t.idKind} in ('national_id','passport')`),
     check('employees_dates_ck', sql`${t.leaveDate} is null or ${t.hireDate} is null or ${t.leaveDate} >= ${t.hireDate}`),
@@ -1026,7 +1027,7 @@ export const personalDataAccessLog = pgTable(
       .notNull()
       .references(() => companies.id),
     employeeId: uuid().notNull(),
-    /** id_number | birth_date | iban | export | payroll (bordro/ücret görüntüleme) | social_security_no (açık okuma) | social_security (bildirim/profil görüntüleme) */
+    /** id_number | birth_date | iban | export | payroll (bordro/ücret görüntüleme) | social_security_no (açık okuma) | social_security (bildirim/profil görüntüleme) | employee_ledger (personel cari/avans görüntüleme) */
     field: text().notNull(),
     reason: text().notNull(),
     userId: uuid()
@@ -1037,7 +1038,7 @@ export const personalDataAccessLog = pgTable(
   (t) => [
     foreignKey({ name: 'personal_data_access_log_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
     index('personal_data_access_log_emp_idx').on(t.companyId, t.employeeId, t.createdAt),
-    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export','payroll','social_security_no','social_security','foreign_doc_no','foreign_docs')`),
+    check('personal_data_access_log_field_ck', sql`${t.field} in ('id_number','birth_date','iban','export','payroll','social_security_no','social_security','foreign_doc_no','foreign_docs','employee_ledger')`),
     check('personal_data_access_log_reason_ck', sql`length(btrim(${t.reason})) >= 3`),
   ],
 );
@@ -2261,7 +2262,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable','cheque_portfolio','note_portfolio','docs_in_collection','cheque_issued','note_payable','import_cost_clearing')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable','cheque_portfolio','note_portfolio','docs_in_collection','cheque_issued','note_payable','import_cost_clearing','employee_advance')`,
     ),
   ],
 );
@@ -5022,5 +5023,190 @@ export const expenseEntries = pgTable(
     check('expense_entries_payment_ck', sql`(${t.paymentKind} = 'treasury' and ${t.treasuryAccountId} is not null) or (${t.paymentKind} = 'party' and ${t.partyId} is not null and ${t.treasuryAccountId} is null)`),
     check('expense_entries_amounts_ck', sql`${t.net} > 0 and ${t.vat} >= 0 and ${t.withholding} >= 0 and ${t.gross} = ${t.net} + ${t.vat} and ${t.payable} = ${t.gross} - ${t.withholding} and ${t.payable} >= 0`),
     check('expense_entries_cancel_ck', sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null and ${t.cancelJournalEntryId} is not null)`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Personel cari ve avans takibi (Faz X5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Şirket başına personel cari ayarı: bordrodan avans kesintisinin isteğe bağlı üst sınırı (kullanıcı verisi; kodda yasal sınır YOKTUR,
+ * varsayılan sınırsız). Yüzde, avans kesintisi öncesi net ücrete uygulanır. Doğrulama alanları "doğrulanmadı" rozetini taşır.
+ */
+export const employeeLedgerSettings = pgTable(
+  'employee_ledger_settings',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    deductionCapPct: numeric({ precision: 7, scale: 4 }),
+    sourceNote: text(),
+    verifiedBy: text(),
+    verifiedAt: timestamp({ withTimezone: true }),
+    updatedBy: uuid().references(() => users.id),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('employee_ledger_settings_company_uq').on(t.companyId),
+    check('employee_ledger_settings_cap_ck', sql`${t.deductionCapPct} is null or (${t.deductionCapPct} > 0 and ${t.deductionCapPct} <= 100)`),
+  ],
+);
+
+/**
+ * Personel avansı: kasa/bankadan personele verilen ödeme (kasa/banka hareketi `treasury_txn_id`; yevmiye: borç personel avansları, alacak kasa/banka).
+ * Kapanan tutar `settled_amount` taksit satırlarından türetilir (tetikleyici); durum open → partial → settled, yalnız kapanmamış avans iptal edilir.
+ * Silinmez (ERP20).
+ */
+export const employeeAdvances = pgTable(
+  'employee_advances',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    number: text().notNull(),
+    employeeId: uuid().notNull(),
+    advanceDate: date({ mode: 'string' }).notNull(),
+    amount: numeric({ precision: 19, scale: 2 }).notNull(),
+    purpose: text().notNull(),
+    projectId: uuid(),
+    treasuryAccountId: uuid().notNull(),
+    treasuryTxnId: uuid().notNull(),
+    settledAmount: numeric({ precision: 19, scale: 2 }).notNull().default('0'),
+    /** open | partial | settled | cancelled */
+    status: text().notNull().default('open'),
+    cancelledAt: timestamp({ withTimezone: true }),
+    cancelledBy: uuid().references(() => users.id),
+    cancelReason: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('employee_advances_number_uq').on(t.companyId, t.number),
+    unique('employee_advances_id_company_uq').on(t.id, t.companyId),
+    unique('employee_advances_txn_uq').on(t.treasuryTxnId),
+    foreignKey({ name: 'employee_advances_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'employee_advances_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
+    foreignKey({ name: 'employee_advances_treasury_account_fk', columns: [t.treasuryAccountId, t.companyId], foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId] }),
+    foreignKey({ name: 'employee_advances_txn_fk', columns: [t.treasuryTxnId, t.companyId], foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId] }),
+    index('employee_advances_employee_idx').on(t.companyId, t.employeeId, t.advanceDate),
+    check('employee_advances_status_ck', sql`${t.status} in ('open','partial','settled','cancelled')`),
+    check('employee_advances_amount_ck', sql`${t.amount} > 0`),
+    check('employee_advances_settled_ck', sql`${t.settledAmount} >= 0 and ${t.settledAmount} <= ${t.amount}`),
+    check('employee_advances_cancel_ck', sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null)`),
+  ],
+);
+
+/**
+ * Avans kapama taksiti (yalnız eklenir): bordrodan kesinti (`payroll`, bordro onayında) ya da kasa/bankadan geri ödeme (`repayment`).
+ * Bordro iptali/geri ödeme iptali satırı SİLMEZ; `reversed_*` alanları bir kez doldurulur ve tutar kapanan toplamdan düşer (ERP20).
+ */
+export const employeeAdvanceSettlements = pgTable(
+  'employee_advance_settlements',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    advanceId: uuid().notNull(),
+    /** payroll | repayment */
+    kind: text().notNull(),
+    amount: numeric({ precision: 19, scale: 2 }).notNull(),
+    settledDate: date({ mode: 'string' }).notNull(),
+    payrollRunId: uuid(),
+    treasuryTxnId: uuid(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    reversedAt: timestamp({ withTimezone: true }),
+    reversedBy: uuid().references(() => users.id),
+    reverseReason: text(),
+  },
+  (t) => [
+    foreignKey({ name: 'employee_advance_settlements_advance_fk', columns: [t.advanceId, t.companyId], foreignColumns: [employeeAdvances.id, employeeAdvances.companyId] }),
+    foreignKey({ name: 'employee_advance_settlements_run_fk', columns: [t.payrollRunId, t.companyId], foreignColumns: [payrollRuns.id, payrollRuns.companyId] }),
+    foreignKey({ name: 'employee_advance_settlements_txn_fk', columns: [t.treasuryTxnId, t.companyId], foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId] }),
+    index('employee_advance_settlements_advance_idx').on(t.advanceId),
+    uniqueIndex('employee_advance_settlements_run_uq').on(t.advanceId, t.payrollRunId).where(sql`${t.payrollRunId} is not null`),
+    uniqueIndex('employee_advance_settlements_txn_uq').on(t.treasuryTxnId).where(sql`${t.treasuryTxnId} is not null`),
+    check('employee_advance_settlements_kind_ck', sql`${t.kind} in ('payroll','repayment')`),
+    check('employee_advance_settlements_amount_ck', sql`${t.amount} > 0`),
+    check('employee_advance_settlements_source_ck', sql`(${t.kind} = 'payroll' and ${t.payrollRunId} is not null and ${t.treasuryTxnId} is null) or (${t.kind} = 'repayment' and ${t.treasuryTxnId} is not null and ${t.payrollRunId} is null)`),
+    check('employee_advance_settlements_reverse_ck', sql`(${t.reversedAt} is null) = (${t.reverseReason} is null)`),
+  ],
+);
+
+/** Taslak bordroda seçilen avans kesintileri (plan). Bordro onayında taksite dönüşür; onaydan sonra değişmez (ERP20). */
+export const employeeAdvanceDeductions = pgTable(
+  'employee_advance_deductions',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    runId: uuid().notNull(),
+    advanceId: uuid().notNull(),
+    employeeId: uuid().notNull(),
+    amount: numeric({ precision: 19, scale: 2 }).notNull(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('employee_advance_deductions_uq').on(t.runId, t.advanceId),
+    foreignKey({ name: 'employee_advance_deductions_run_fk', columns: [t.runId, t.companyId], foreignColumns: [payrollRuns.id, payrollRuns.companyId] }),
+    foreignKey({ name: 'employee_advance_deductions_advance_fk', columns: [t.advanceId, t.companyId], foreignColumns: [employeeAdvances.id, employeeAdvances.companyId] }),
+    foreignKey({ name: 'employee_advance_deductions_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    check('employee_advance_deductions_amount_ck', sql`${t.amount} > 0`),
+  ],
+);
+
+/** Avans durum geçmişi (yalnız eklenir; tetikleyici yazar). */
+export const employeeAdvanceEvents = pgTable(
+  'employee_advance_events',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    advanceId: uuid().notNull(),
+    fromStatus: text(),
+    toStatus: text().notNull(),
+    settledAmount: numeric({ precision: 19, scale: 2 }).notNull(),
+    createdBy: uuid(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ name: 'employee_advance_events_advance_fk', columns: [t.advanceId, t.companyId], foreignColumns: [employeeAdvances.id, employeeAdvances.companyId] }),
+    index('employee_advance_events_advance_idx').on(t.advanceId, t.createdAt),
+  ],
+);
+
+/** Net maaş ödemesi: kasa/banka hareketi (diğer ödeme, karşı hesap "ödenecek net ücret") ile personel cari bağlantısı. Yalnız eklenir (ERP20). */
+export const employeeSalaryPayments = pgTable(
+  'employee_salary_payments',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    payrollRunId: uuid(),
+    treasuryTxnId: uuid().notNull(),
+    payDate: date({ mode: 'string' }).notNull(),
+    amount: numeric({ precision: 19, scale: 2 }).notNull(),
+    note: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('employee_salary_payments_txn_uq').on(t.treasuryTxnId),
+    foreignKey({ name: 'employee_salary_payments_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    foreignKey({ name: 'employee_salary_payments_run_fk', columns: [t.payrollRunId, t.companyId], foreignColumns: [payrollRuns.id, payrollRuns.companyId] }),
+    foreignKey({ name: 'employee_salary_payments_txn_fk', columns: [t.treasuryTxnId, t.companyId], foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId] }),
+    index('employee_salary_payments_employee_idx').on(t.companyId, t.employeeId, t.payDate),
+    check('employee_salary_payments_amount_ck', sql`${t.amount} > 0`),
   ],
 );

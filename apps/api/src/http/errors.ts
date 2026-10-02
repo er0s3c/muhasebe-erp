@@ -47,6 +47,7 @@ const PG_RULE_CODES: Record<string, string> = {
   ERP17: 'SERIAL_RULE_VIOLATION',
   ERP18: 'IMPORT_RULE_VIOLATION',
   ERP19: 'EXPENSE_RULE_VIOLATION',
+  ERP20: 'EMPLOYEE_LEDGER_RULE_VIOLATION',
 };
 
 /** Toplu işlemlerde tek kalemin hatasını raporlamak için: uygulama hatası, veritabanı kuralı ya da beklenmeyen hata. */
@@ -205,6 +206,11 @@ export function errorHandler(
   if (pg?.code === 'ERP19') {
     // Gider kartı/fişi kuralları (kaydedilmiş fiş değişmez, kartın hesabı gider hesabı olmalı)
     void reply.status(422).send({ error: { code: 'EXPENSE_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP20') {
+    // Personel cari ve avans kuralları (kapanan tutar sınırı, durum geçişi, yalnız eklenen taksit, silme yasağı, kasa/banka bağlantısı)
+    void reply.status(422).send({ error: { code: 'EMPLOYEE_LEDGER_RULE_VIOLATION', message: pg.message } });
     return;
   }
   if (pg?.code === '23505') {

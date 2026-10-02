@@ -43,7 +43,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Borç/alacak dekontu (mahsup) elle yevmiye ile | ✅ |
 | Devir işlemleri (yıl sonu ile birlikte) | ⏳ ⚠️ |
 | Cari özel fiyat/iskonto | ⏳ |
-| Personel cari ve avans takibi | ⏳ (X5; bordro D3'te kesinti kalemi olarak elle girilir) |
+| Personel cari ve avans takibi (personel carisi, avans ver/geri ödeme, bordrodan avans kesintisi, maaş ödemesi, kim kime borçlu listesi, avans sicili ve yaşlandırma, ekstre; ücret verisi gibi izinli + erişim günlüğü) | ✅ (X5) ⚠️ hesap eşlemesi (196) ve avans kesintisinin hukuki uygunluğu/üst sınırı doğrulanmadı (üst sınır kullanıcı parametresi); gider fişiyle avans mahsubu, personele masraf iadesi, döviz avans ❌ |
 
 ## Stok
 

@@ -498,6 +498,20 @@
       "when": 1790937715120,
       "tag": "0070_imports_expenses_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1790940888350,
+      "tag": "0071_employee_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1790940893214,
+      "tag": "0072_employee_ledger_rules",
+      "breakpoints": true
     }
   ]
 }

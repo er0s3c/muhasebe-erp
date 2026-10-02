@@ -165,7 +165,7 @@ export interface AccountLedgerData {
   closing: string;
 }
 
-export type PartyKind = 'customer' | 'supplier' | 'both';
+export type PartyKind = 'customer' | 'supplier' | 'both' | 'employee';
 
 export interface PartyListRow {
   id: string;
@@ -1994,6 +1994,8 @@ export interface EmployeeRow {
   jobTitle: string | null;
   projectId: string | null;
   projectCode: string | null;
+  /** Personel carisi (Faz X5); yalnızca bağlantı. */
+  partyId: string | null;
   note: string | null;
   createdAt: string;
 }
@@ -2924,4 +2926,132 @@ export interface ExpenseReport {
   byProject: (ExpenseGroup & { projectId: string | null; projectCode: string | null; projectName: string | null })[];
   byParty: (ExpenseGroup & { partyId: string | null; partyName: string | null })[];
   top: { id: string; entryNo: string; entryDate: string; description: string; cardName: string; partyName: string | null; net: string; gross: string }[];
+}
+
+// --- Personel cari ve avans (Faz X5) ------------------------------------------------------------------------------------
+
+export type AdvanceStatus = 'open' | 'partial' | 'settled' | 'cancelled';
+
+export interface EmployeeBalanceRow {
+  employeeId: string;
+  code: string;
+  fullName: string;
+  department: string | null;
+  partyId: string | null;
+  salaryNet: string;
+  salaryPaid: string;
+  advanceGiven: string;
+  advanceDeducted: string;
+  advanceRepaid: string;
+  /** Alacak − borç: pozitif ise şirket personele borçlu, negatif ise personel şirkete borçlu. */
+  net: string;
+  openAdvance: string;
+  unpaidSalary: string;
+}
+
+export interface EmployeeBalances {
+  asOf: string | null;
+  rows: EmployeeBalanceRow[];
+  totals: { owedToEmployees: string; owedByEmployees: string };
+}
+
+export interface AdvanceRegisterRow {
+  id: string;
+  number: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  advanceDate: string;
+  amount: string;
+  settled: string;
+  open: string;
+  purpose: string;
+  projectCode: string | null;
+  status: AdvanceStatus;
+  ageDays: number;
+  bucket: 'notDue' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90plus';
+}
+
+export interface AdvanceRegister {
+  asOf: string;
+  rows: AdvanceRegisterRow[];
+  totals: { open: string; buckets: Record<'notDue' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90plus', string> };
+}
+
+export interface AdvanceDetail {
+  advance: {
+    id: string;
+    number: string;
+    employeeId: string;
+    employeeCode: string;
+    employeeName: string;
+    advanceDate: string;
+    amount: string;
+    settledAmount: string;
+    openAmount: string;
+    purpose: string;
+    status: AdvanceStatus;
+    projectCode: string | null;
+    txnNo: string;
+    cancelReason: string | null;
+  };
+  settlements: { id: string; kind: 'payroll' | 'repayment'; amount: string; settledDate: string; note: string | null; reversedAt: string | null; reverseReason: string | null; runNumber: string | null; txnNo: string | null }[];
+  events: { fromStatus: AdvanceStatus | null; toStatus: AdvanceStatus; settledAmount: string; at: string; by: string | null }[];
+}
+
+export interface LedgerSettings {
+  deductionCapPct: string | null;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface OutstandingAdvance {
+  id: string;
+  number: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  advanceDate: string;
+  amount: string;
+  settledAmount: string;
+  remaining: string;
+  purpose: string;
+  status: AdvanceStatus;
+}
+
+export interface RunDeductionRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  advanceId: string;
+  advanceNumber: string;
+  amount: string;
+  advanceRemaining: string;
+}
+
+export interface EmployeeStatement {
+  employee: { id: string; code: string; fullName: string; partyId: string | null; partyCode: string | null };
+  from: string;
+  to: string;
+  opening: string;
+  lines: { date: string; kind: 'salary_net' | 'salary_payment' | 'advance' | 'advance_deduction' | 'advance_repayment'; ref: string; description: string; debit: string; credit: string; balance: string }[];
+  totals: { debit: string; credit: string };
+  closing: string;
+  openAdvances: AdvanceRegisterRow[];
+}
+
+export interface SalaryPaymentRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  payDate: string;
+  amount: string;
+  note: string | null;
+  txnNo: string;
+  txnId: string;
+  txnStatus: 'posted' | 'cancelled';
+  runNumber: string | null;
 }

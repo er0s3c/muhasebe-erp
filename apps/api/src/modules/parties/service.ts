@@ -17,7 +17,7 @@ import { buildAgingReport, computeOpenItems, type PartyAllocation, type PartyLin
 
 const PARTY_SEQUENCE = 'PARTY';
 
-async function generateCode(tx: Tx, companyId: string, taken?: ReadonlySet<string>): Promise<string> {
+export async function generateCode(tx: Tx, companyId: string, taken?: ReadonlySet<string>): Promise<string> {
   // Yıla bağlı olmayan sayaç: yıl = 0. `taken`: toplu içe aktarmada dosyadaki açık kodlar (çakışan numara atlanır)
   for (;;) {
     const n = await nextNumber(tx, companyId, PARTY_SEQUENCE, 0);
@@ -129,7 +129,8 @@ export async function getParty(tx: Tx, id: string) {
 }
 
 export async function listParties(tx: Tx, q: ListPartiesQuery) {
-  const conds: SQL[] = [];
+  // Personel carileri (Faz X5) cari listesinde görünmez: personel cari ekranından (ücret/avans izinleriyle) yönetilir
+  const conds: SQL[] = [sql`p.kind <> 'employee'`];
   if (q.query) conds.push(trContains(['p.name', 'p.code', "coalesce(p.tax_number, '')", "coalesce(p.phone, '')"], q.query));
   if (q.kind === 'customer') conds.push(sql`p.kind in ('customer','both')`);
   if (q.kind === 'supplier') conds.push(sql`p.kind in ('supplier','both')`);

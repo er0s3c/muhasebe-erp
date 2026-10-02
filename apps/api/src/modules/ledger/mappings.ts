@@ -53,6 +53,7 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   cheque_issued: 'Verilen çekler (ödenmemiş)',
   note_payable: 'Verilen borç senetleri (ödenmemiş)',
   import_cost_clearing: 'İthalat maliyetleri aktarım hesabı (stoğa eklenen gider karşılığı)',
+  employee_advance: 'Personele verilen avanslar (personel avansları)',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

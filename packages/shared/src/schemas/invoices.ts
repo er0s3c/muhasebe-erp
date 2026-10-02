@@ -96,6 +96,8 @@ export const ACCOUNT_MAPPING_KEYS = [
   'note_payable',
   // İthalat maliyet dağıtımı (Faz X4); varsayılan doğrulanmamıştır
   'import_cost_clearing',
+  // Personel avansları (Faz X5); varsayılan doğrulanmamıştır
+  'employee_advance',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -154,6 +156,8 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     note_payable: '321',
     // İthalat maliyetlerinin stoğa aktarılırken alacaklandırılan hesap: gideri ilk yazdığınız hesap (varsayılan genel yönetim gideri; satırda hesap seçilebilir). Doğrulanmamıştır.
     import_cost_clearing: '632',
+    // Personele verilen avanslar (alacak): genel Tekdüzen yapıda 195 iş avansları / 196 personel avansları; 196 seçildi. Doğrulanmamıştır.
+    employee_advance: '196',
   };
 }
 

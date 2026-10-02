@@ -13,13 +13,15 @@ export interface PayrollJournalInput {
   /** Defter para birimi (bordro daima defter para biriminde). */
   currency: string;
   description: string;
-  accounts: { labor: string; employer: string; payable: string; social: string; tax: string; other: string };
+  accounts: { labor: string; employer: string; payable: string; social: string; tax: string; other: string; advance?: string };
   groups: readonly PayrollCostGroup[];
   /** Karşı taraf toplamları: ödenecek net, sosyal güvenlik (işçi + işveren), vergi/fon, diğer kesintiler. */
   net: MoneyValue;
   social: MoneyValue;
   tax: MoneyValue;
   other: MoneyValue;
+  /** Personel avansından kesilen tutar (X5): personel avansları hesabına alacak; boş/sıfır ise yoktur. */
+  advance?: MoneyValue;
 }
 
 /**
@@ -53,11 +55,13 @@ export function buildPayrollJournal(i: PayrollJournalInput): AutoJournalLine[] {
     push('debit', i.accounts.labor, g.gross, { ...tag(g), description: 'Bordro işçilik gideri' });
     push('debit', i.accounts.employer, g.employer, { ...tag(g), description: 'Bordro işveren yükü' });
   }
-  const credits = i.net.plus(i.social).plus(i.tax).plus(i.other);
+  const advance = i.advance ?? dec(0);
+  const credits = i.net.plus(i.social).plus(i.tax).plus(i.other).plus(advance);
   if (!debits.eq(credits)) throw new Error(`Bordro yevmiyesi denkleşmiyor (borç ${debits.toFixed(2)}, alacak ${credits.toFixed(2)})`);
   push('credit', i.accounts.payable, i.net, { description: i.description });
   push('credit', i.accounts.social, i.social, { description: 'Ödenecek sosyal güvenlik' });
   push('credit', i.accounts.tax, i.tax, { description: 'Ödenecek vergi ve fonlar' });
   push('credit', i.accounts.other, i.other, { description: 'Diğer bordro kesintileri' });
+  push('credit', i.accounts.advance ?? '', advance, { description: 'Personel avansından kesinti' });
   return out;
 }

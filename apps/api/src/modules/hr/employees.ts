@@ -5,11 +5,12 @@ import {
   type UpdateEmployeeInput,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { employees, personalDataAccessLog, projects } from '../../db/schema';
+import { employees, parties, personalDataAccessLog, projects } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { nextNumber } from '../settings/numbering';
 import { employeeAttendanceRows } from './attendance';
 import { employeePayrollRows } from '../payroll/export-subject';
+import { employeeLedgerRows } from '../employee-ledger/reports';
 import { employeeSocialRows } from '../socialsecurity/export-subject';
 import { employeeForeignRows } from '../foreignworkers/export-subject';
 import { decryptField, encryptField, hashId, lastFour, maskTail } from './crypto';
@@ -49,6 +50,8 @@ export function toView(r: Row, projectCode?: string | null) {
     jobTitle: r.jobTitle,
     projectId: r.projectId,
     projectCode: projectCode ?? null,
+    /** Personel carisi (Faz X5; yalnızca bağlantı, hassas alan değildir). */
+    partyId: r.partyId,
     note: r.note,
     createdAt: r.createdAt,
   };
@@ -131,6 +134,10 @@ export async function updateEmployee(tx: Tx, ctx: HrCtx, id: string, input: Upda
     .update(employees)
     .set({ ...plain, ...sensitiveColumns(ctx, input, current), updatedAt: new Date() })
     .where(eq(employees.id, id));
+  // Personel carisi yalnızca adı taşır: kart adı değişirse cari adı da eşitlenir (başka alan kopyalanmaz)
+  if (current.partyId && plain.fullName && plain.fullName !== current.fullName) {
+    await tx.update(parties).set({ name: plain.fullName }).where(eq(parties.id, current.partyId));
+  }
   return getEmployee(tx, id);
 }
 
@@ -217,6 +224,7 @@ export async function exportEmployeeData(tx: Tx, ctx: HrCtx, id: string, reason:
     },
     attendance: await employeeAttendanceRows(tx, id),
     payroll: await employeePayrollRows(tx, id),
+    employeeLedger: await employeeLedgerRows(tx, id),
     socialSecurity: await employeeSocialRows(tx, id, ctx.secret),
     foreignWorker: await employeeForeignRows(tx, id, ctx.secret),
     accessLog: accessLog.rows,

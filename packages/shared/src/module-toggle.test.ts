@@ -75,15 +75,15 @@ describe('checkModuleToggle', () => {
     expect(check('core.inventory', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports'] });
     const parties = check('core.parties', false);
     expect(parties).toMatchObject({ ok: false, reason: 'REQUIRED_BY' });
-    expect(parties.ok === false && parties.modules.sort()).toEqual(['core.invoices', 'core.treasury', 'treasury.expenses']);
+    expect(parties.ok === false && parties.modules.sort()).toEqual(['core.invoices', 'core.treasury', 'hr.employee_ledger', 'treasury.expenses']);
     // Bağımlılar önce kapatılırsa sıra serbest
     expect(check('core.inventory', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports'))).toEqual({ ok: true });
-    expect(check('core.ledger', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports', 'treasury.expenses', 'core.treasury', 'core.parties', 'core.inventory', 'hr.payroll'))).toEqual({ ok: true });
+    expect(check('core.ledger', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports', 'treasury.expenses', 'hr.employee_ledger', 'core.treasury', 'core.parties', 'core.inventory', 'hr.payroll'))).toEqual({ ok: true });
   });
 
   it('sosyal güvenlik çıktıları bordroya bağlıdır: bordro, bağımlısı açıkken kapatılamaz; bordro kapalıyken sosyal güvenlik açılamaz', () => {
-    expect(check('hr.payroll', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['hr.socialsecurity'] });
-    expect(check('hr.payroll', false, off('hr.socialsecurity'))).toEqual({ ok: true });
+    expect(check('hr.payroll', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['hr.employee_ledger', 'hr.socialsecurity'] });
+    expect(check('hr.payroll', false, off('hr.socialsecurity', 'hr.employee_ledger'))).toEqual({ ok: true });
     expect(check('hr.socialsecurity', true, off('hr.socialsecurity', 'hr.payroll'))).toMatchObject({ ok: false });
   });
 
@@ -95,8 +95,8 @@ describe('checkModuleToggle', () => {
 
   it('kasa/banka, çek/senet ve teminat mektubu modülleri açıkken kapatılamaz; bunlar kapalıyken serbest', () => {
     const blocked = check('core.treasury', false);
-    expect(blocked.ok === false && blocked.modules.sort()).toEqual(['treasury.cheques', 'treasury.expenses', 'treasury.guarantees']);
-    expect(check('core.treasury', false, off('treasury.cheques', 'treasury.guarantees', 'treasury.expenses'))).toEqual({ ok: true });
+    expect(blocked.ok === false && blocked.modules.sort()).toEqual(['hr.employee_ledger', 'treasury.cheques', 'treasury.expenses', 'treasury.guarantees']);
+    expect(check('core.treasury', false, off('treasury.cheques', 'treasury.guarantees', 'treasury.expenses', 'hr.employee_ledger'))).toEqual({ ok: true });
     expect(check('treasury.cheques', true, off('core.treasury', 'treasury.cheques'))).toMatchObject({ ok: false });
   });
 

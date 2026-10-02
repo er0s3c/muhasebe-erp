@@ -66,7 +66,7 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
                p.credit_limit, p.is_active, p.notes,
                coalesce((select sum(l.debit_base - l.credit_base) from journal_lines l
                          join journal_entries e on e.id = l.entry_id and e.status = 'posted' where l.party_id = p.id), 0) as balance
-        from parties p order by p.name collate ${TR}`,
+        from parties p where p.kind <> 'employee' order by p.name collate ${TR}`,
   );
   tables.push(
     table(

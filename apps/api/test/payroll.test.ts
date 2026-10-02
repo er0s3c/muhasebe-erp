@@ -398,7 +398,7 @@ describe('bordro motoru (Faz D3)', async () => {
     });
     // Yeni anahtarlar veritabanı kısıtını geçer: ham ekleme (kısıt) ve geri doldurma INSERT'ü eşleme sayısını tutar
     const n = (await execAsOwner(`select count(*)::int as n from account_mappings where company_id = $1`, [w.company.id])).rows[0].n;
-    expect(n).toBe(41);
+    expect(n).toBe(42);
   });
 
   it('yetki ve modül: muhasebeci okur ve yönetir; şantiye şefi ve izleyici erişemez; hr.payroll modülü hr.core ve muhasebeye bağlı', async () => {
@@ -424,9 +424,10 @@ describe('bordro motoru (Faz D3)', async () => {
     // Modül bağımlılığı: hr.core kapatılamaz; bordro kapatılınca uçlar 403 MODULE_DISABLED
     expect((await w.c.put('/api/company/modules/hr.core', { enabled: false })).statusCode).toBe(422);
     expect((await w.c.put('/api/company/modules/core.ledger', { enabled: false })).statusCode).toBe(422);
-    // Sosyal güvenlik çıktıları (D4) bordroya bağlıdır: önce o kapatılır
+    // Sosyal güvenlik çıktıları (D4) ve personel cari (X5) bordroya bağlıdır: önce onlar kapatılır
     expect((await w.c.put('/api/company/modules/hr.payroll', { enabled: false })).statusCode).toBe(422);
     expect((await w.c.put('/api/company/modules/hr.socialsecurity', { enabled: false })).statusCode).toBe(200);
+    expect((await w.c.put('/api/company/modules/hr.employee_ledger', { enabled: false })).statusCode).toBe(200);
     expect((await w.c.put('/api/company/modules/hr.payroll', { enabled: false })).statusCode).toBe(200);
     const off = await w.c.get('/api/payroll/runs');
     expect(off.statusCode).toBe(403);

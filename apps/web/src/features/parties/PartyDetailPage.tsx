@@ -196,7 +196,7 @@ export function PartyDetailPage() {
           </dl>
         </Card>
       )}
-      {tab === 'card' && <PartyPricingCard partyId={party.id} kind={party.kind} />}
+      {tab === 'card' && party.kind !== 'employee' && <PartyPricingCard partyId={party.id} kind={party.kind} />}
 
       <PartyFormSheet open={editing} onOpenChange={setEditing} party={party} onSaved={() => undefined} />
 

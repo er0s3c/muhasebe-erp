@@ -15,8 +15,9 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { money } from '../../lib/format';
-import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { PayrollItemRow, PayrollLineRow, PayrollRunDetail } from '../../lib/types';
+import { AdvanceDeductionModal } from './AdvanceDeductionModal';
 import { formatParamValue, PAYROLL_INVALIDATE, PayrollStatusBadge, UnverifiedBadge, useWarningText } from './payroll-common';
 
 type DoneKey = 'payroll.run.approved' | 'payroll.run.paid' | 'payroll.run.unpaid' | 'payroll.run.cancelled';
@@ -36,6 +37,8 @@ export function PayrollRunPage() {
   const [paidAt, setPaidAt] = useState(todayIso());
   const [error, setError] = useState<Error | null>(null);
   const [adjusting, setAdjusting] = useState<PayrollLineRow | null>(null);
+  const [advancing, setAdvancing] = useState<PayrollLineRow | null>(null);
+  const ledgerOn = useModuleEnabled('hr.employee_ledger');
   const warningText = useWarningText();
 
   const act = useCMutation((v: { path: string; body?: unknown }, call) => call<PayrollRunDetail>(`/api/payroll/runs/${id}/${v.path}`, { method: 'POST', body: v.body ?? {} }), PAYROLL_INVALIDATE);
@@ -136,7 +139,7 @@ export function PayrollRunPage() {
               <Th num>{t('payroll.cols.deductions')}</Th>
               <Th num>{t('payroll.cols.net')}</Th>
               <Th num>{t('payroll.cols.employer')}</Th>
-              <Th className="w-40"><span className="sr-only">{t('common.actions')}</span></Th>
+              <Th className="w-60"><span className="sr-only">{t('common.actions')}</span></Th>
             </tr>
           </thead>
           <tbody>
@@ -167,6 +170,11 @@ export function PayrollRunPage() {
                       <Button size="sm" aria-label={t('payroll.adjust.open', { name: l.employeeName })} onClick={() => { setError(null); setAdjusting(l); }}>
                         <Plus className="size-4" aria-hidden />
                         {t('payroll.adjust.short')}
+                      </Button>
+                    )}
+                    {manage && draft && ledgerOn && (
+                      <Button size="sm" aria-label={t('employeeLedger.deduct.open', { name: l.employeeName })} onClick={() => setAdvancing(l)}>
+                        {t('employeeLedger.deduct.short')}
                       </Button>
                     )}
                     <Link to={`/hr/payroll/${run.id}/slip/${l.employeeId}`} className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-sm hover:bg-surface-2" aria-label={t('payroll.slip.open', { name: l.employeeName })}>
@@ -278,6 +286,7 @@ export function PayrollRunPage() {
         {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
       </Modal>
 
+      {advancing && <AdvanceDeductionModal runId={id} employeeId={advancing.employeeId} employeeName={advancing.employeeName} onClose={() => setAdvancing(null)} />}
       {adjusting && <AdjustModal runId={id} line={adjusting} detail={data} onClose={() => setAdjusting(null)} />}
     </div>
   );

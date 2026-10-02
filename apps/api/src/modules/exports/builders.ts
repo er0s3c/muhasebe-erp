@@ -24,6 +24,7 @@ import { listSubcontracts } from '../subcontracts/service';
 import { laborByProject, monthlySummary } from '../hr/attendance';
 import { listEmployees } from '../hr/employees';
 import { logPayrollAccess } from '../payroll/config';
+import { advanceRegister, employeeBalances, employeeStatement } from '../employee-ledger/reports';
 import { payrollCostByProject } from '../payroll/reports';
 import { getRun } from '../payroll/runs';
 import { logForeignAccess, listDocs } from '../foreignworkers/docs';
@@ -1086,6 +1087,92 @@ export async function payrollRegisterTable(ctx: BuildCtx, q: { id: string }): Pr
         warnings: l.warnings.length,
       })),
       totals: { gross: r.grossTotal, net: r.netTotal, employer: r.employerTotal },
+    },
+  ];
+}
+
+const LEDGER_NOTE = 'Personel cari: iç takip belgesi; avans kesintisi uygulaması doğrulanmadı';
+const ADVANCE_STATUS_LABEL: Record<string, string> = { open: 'Açık', partial: 'Kısmen kapandı', settled: 'Kapandı', cancelled: 'İptal' };
+const LEDGER_KIND_LABEL: Record<string, string> = { salary_net: 'Net ücret (bordro)', salary_payment: 'Maaş ödemesi', advance: 'Avans', advance_deduction: 'Bordrodan avans kesintisi', advance_repayment: 'Avans geri ödemesi' };
+
+/** Personel bakiye listesi (kim kime borçlu). Ücret verisi: hr.payroll + erişim günlüğü; İBAN/kimlik yoktur. */
+export async function employeeBalancesTable(ctx: BuildCtx, q: { asOf?: string }): Promise<ReportTable[]> {
+  const d = await employeeBalances(ctx.tx, { asOf: q.asOf });
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'personel-bakiyeleri',
+      title: 'Personel cari bakiyeleri',
+      sheet: 'Personel bakiyeleri',
+      subtitle: sub(ctx, `${formatDateTR(d.asOf ?? todayIso())} itibarıyla`, LEDGER_NOTE, 'kişisel veri: ücret bilgisi; + şirket personele borçlu, − personel şirkete borçlu'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('dept', 'Departman', 'text', 16),
+        col('salaryNet', `Bordro net ücret (${b})`, 'money'),
+        col('salaryPaid', `Ödenen maaş (${b})`, 'money'),
+        col('advanceGiven', `Verilen avans (${b})`, 'money'),
+        col('advanceDeducted', `Bordrodan kesilen (${b})`, 'money'),
+        col('advanceRepaid', `Geri ödenen (${b})`, 'money'),
+        col('openAdvance', `Açık avans (${b})`, 'money'),
+        col('net', `Net bakiye (${b})`, 'money'),
+      ],
+      rows: d.rows.map((r) => ({ code: r.code, name: r.fullName, dept: r.department, salaryNet: r.salaryNet, salaryPaid: r.salaryPaid, advanceGiven: r.advanceGiven, advanceDeducted: r.advanceDeducted, advanceRepaid: r.advanceRepaid, openAdvance: r.openAdvance, net: r.net })),
+      totals: { net: sum(d.rows.map((r) => r.net)).toFixed(2), openAdvance: sum(d.rows.map((r) => r.openAdvance)).toFixed(2) },
+    },
+  ];
+}
+
+/** Avans sicili: kalan tutar ve yaşlandırma. */
+export async function employeeAdvancesTable(ctx: BuildCtx, q: { status?: 'open' | 'partial' | 'settled' | 'cancelled' | 'outstanding'; employeeId?: string; asOf?: string }): Promise<ReportTable[]> {
+  const d = await advanceRegister(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'avans-sicili',
+      title: 'Personel avans sicili',
+      sheet: 'Avans sicili',
+      subtitle: sub(ctx, `${formatDateTR(d.asOf)} itibarıyla`, LEDGER_NOTE, 'kişisel veri: ücret bilgisi'),
+      columns: [
+        col('no', 'Avans no', 'text', 16),
+        col('date', 'Tarih', 'date'),
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('purpose', 'Amaç', 'text', 28),
+        col('project', 'Proje', 'text', 12),
+        col('amount', `Tutar (${b})`, 'money'),
+        col('settled', `Kapanan (${b})`, 'money'),
+        col('open', `Kalan (${b})`, 'money'),
+        col('age', 'Yaş (gün)', 'int'),
+        col('status', 'Durum', 'text', 14),
+      ],
+      rows: d.rows.map((r) => ({ no: r.number, date: r.advanceDate, code: r.employeeCode, name: r.employeeName, purpose: r.purpose, project: r.projectCode, amount: r.amount, settled: r.settled, open: r.open, age: r.ageDays, status: ADVANCE_STATUS_LABEL[r.status] ?? r.status })),
+      totals: { open: d.totals.open },
+    },
+  ];
+}
+
+/** Bir personelin cari ekstresi. */
+export async function employeeStatementTable(ctx: BuildCtx, q: { employeeId: string; from: string; to: string }): Promise<ReportTable[]> {
+  const d = await employeeStatement(ctx.tx, q.employeeId, { from: q.from, to: q.to });
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'personel-ekstresi',
+      title: `Personel cari ekstresi — ${d.employee.code} ${d.employee.fullName}`,
+      sheet: 'Personel ekstresi',
+      subtitle: sub(ctx, period(q.from, q.to), `Açılış ${d.opening}`, `Kapanış ${d.closing}`, LEDGER_NOTE, 'kişisel veri: ücret bilgisi'),
+      columns: [
+        col('date', 'Tarih', 'date'),
+        col('kind', 'Tür', 'text', 24),
+        col('ref', 'Belge', 'text', 16),
+        col('desc', 'Açıklama', 'text', 36),
+        col('debit', `Borç (${b})`, 'money'),
+        col('credit', `Alacak (${b})`, 'money'),
+        col('balance', `Bakiye (${b})`, 'money'),
+      ],
+      rows: d.lines.map((l) => ({ date: l.date, kind: LEDGER_KIND_LABEL[l.kind] ?? l.kind, ref: l.ref, desc: l.description, debit: l.debit, credit: l.credit, balance: l.balance })),
+      totals: { debit: d.totals.debit, credit: d.totals.credit },
     },
   ];
 }

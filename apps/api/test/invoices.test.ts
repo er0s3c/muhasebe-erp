@@ -425,7 +425,7 @@ describe('fatura', async () => {
   it('hesap eşlemesi: varsayılanlar, doğrulama, değişiklik faturaya yansır, eksik eşleme açık hata verir', async () => {
     const { company, c, ids, main } = await setup('Esleme');
     const list = (await c.get('/api/account-mappings')).json().mappings as any[];
-    expect(list).toHaveLength(41); // + KDV tevkifatı (borç/alacak), 6 bordro, 5 çek/senet ve 1 ithalat maliyeti aktarım eşlemesi
+    expect(list).toHaveLength(42); // + KDV tevkifatı (borç/alacak), 6 bordro, 5 çek/senet, 1 ithalat maliyeti aktarım ve 1 personel avansı eşlemesi
     expect(list.every((m) => m.accountId)).toBe(true);
     expect(Object.fromEntries(list.map((m) => [m.key, m.accountCode]))).toMatchObject({
       receivable: '120', payable: '320', sales_revenue: '600', sales_return: '610', cogs: '621', stock: '150',

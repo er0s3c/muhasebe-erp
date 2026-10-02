@@ -9,6 +9,7 @@ const treasuryOff = async (c: ReturnType<typeof client>) => {
   await put(c, 'treasury.cheques', false);
   await put(c, 'treasury.guarantees', false);
   await put(c, 'treasury.expenses', false);
+  await put(c, 'hr.employee_ledger', false);
   return put(c, 'core.treasury', false);
 };
 /** Fatura kapatılmadan önce ona bağlı satış teklif/sipariş modülü kapatılır (bağımlılık). */
@@ -42,9 +43,10 @@ describe('modül istisnaları (Ayarlar > Modüller)', () => {
     expect(m['inventory.serials']).toMatchObject({ enabled: true, requires: ['core.inventory'] });
     expect(m['inventory.imports']).toMatchObject({ enabled: true, requires: ['core.invoices', 'core.inventory'] });
     expect(m['treasury.expenses']).toMatchObject({ enabled: true, requires: ['core.treasury', 'core.parties'] });
+    expect(m['hr.employee_ledger']).toMatchObject({ enabled: true, requires: ['hr.payroll', 'core.treasury', 'core.parties'] });
     expect(m['treasury.cheques']).toMatchObject({ enabled: true, requires: ['core.treasury'] });
     expect(m['treasury.guarantees']).toMatchObject({ enabled: true, requires: ['core.treasury'] });
-    expect(m['core.treasury'].dependents).toEqual(expect.arrayContaining(['treasury.cheques', 'treasury.guarantees', 'treasury.expenses']));
+    expect(m['core.treasury'].dependents).toEqual(expect.arrayContaining(['treasury.cheques', 'treasury.guarantees', 'treasury.expenses', 'hr.employee_ledger']));
     expect(m['core.ledger'].blocked).toMatchObject({ reason: 'REQUIRED_BY' });
     expect(m['core.dashboard']).toMatchObject({ locked: true, blocked: { reason: 'LOCKED' } });
     // Proje modülü inşaat şirketinde açık; yalnızca muhasebeye bağlı

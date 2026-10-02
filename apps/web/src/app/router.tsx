@@ -185,6 +185,13 @@ export const router = createBrowserRouter([
                 ],
               },
               {
+                element: <RequireModule module="hr.employee_ledger" />,
+                children: [
+                  { path: 'hr/employee-ledger', ...page(() => import('../features/hr/EmployeeLedgerPage'), 'EmployeeLedgerPage') },
+                  { path: 'hr/employee-ledger/:id', ...page(() => import('../features/hr/EmployeeStatementPage'), 'EmployeeStatementPage') },
+                ],
+              },
+              {
                 element: <RequireModule module="hr.socialsecurity" />,
                 children: [
                   { path: 'hr/social-security', ...page(() => import('../features/hr/SocialSecurityPage'), 'SocialSecurityPage') },
