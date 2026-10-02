@@ -49,6 +49,7 @@ const PG_RULE_CODES: Record<string, string> = {
   ERP19: 'EXPENSE_RULE_VIOLATION',
   ERP20: 'EMPLOYEE_LEDGER_RULE_VIOLATION',
   ERP21: 'DIRECTORY_RULE_VIOLATION',
+  ERP22: 'CONSOLIDATION_RULE_VIOLATION',
 };
 
 /** Toplu işlemlerde tek kalemin hatasını raporlamak için: uygulama hatası, veritabanı kuralı ya da beklenmeyen hata. */
@@ -217,6 +218,11 @@ export function errorHandler(
   if (pg?.code === 'ERP21') {
     // Rehber kuralları (silme yasağı, anonimleştirme/birleştirme yolları, not yazarlığı, cari/personel bağlantı engelleri)
     void reply.status(422).send({ error: { code: 'DIRECTORY_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP22') {
+    // Konsolidasyon kuralları (grup/üye/eliminasyon korumaları: salt-eklenir eliminasyon, dengeli kayıt, üyelik şartı)
+    void reply.status(422).send({ error: { code: 'CONSOLIDATION_RULE_VIOLATION', message: pg.message } });
     return;
   }
   if (pg?.code === '23505') {

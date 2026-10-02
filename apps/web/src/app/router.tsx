@@ -136,6 +136,7 @@ export const router = createBrowserRouter([
                   { path: 'treasury/cash-forecast', ...page(() => import('../features/treasury/CashForecastPage'), 'CashForecastPage') },
                   { path: 'treasury/transactions', ...page(() => import('../features/treasury/TransactionsPage'), 'TransactionsPage') },
                   { path: 'reports/fx-differences', ...page(() => import('../features/reports/FxDifferencePage'), 'FxDifferencePage') },
+                  { path: 'reports/fx-position', ...page(() => import('../features/reports/FxPositionPage'), 'FxPositionPage') },
                 ],
               },
               {
@@ -183,6 +184,14 @@ export const router = createBrowserRouter([
                   { path: 'hr/payroll/:id', ...page(() => import('../features/hr/PayrollRunPage'), 'PayrollRunPage') },
                   { path: 'hr/payroll/:id/slip/:employeeId', ...page(() => import('../features/hr/PayrollSlipPage'), 'PayrollSlipPage') },
                 ],
+              },
+              {
+                element: <RequireModule module="reports.executive" />,
+                children: [{ path: 'reports/executive-summary', ...page(() => import('../features/reports/ExecutiveSummaryPage'), 'ExecutiveSummaryPage') }],
+              },
+              {
+                element: <RequireModule module="reports.consolidation" />,
+                children: [{ path: 'reports/consolidation', ...page(() => import('../features/consolidation/ConsolidationPage'), 'ConsolidationPage') }],
               },
               {
                 element: <RequireModule module="core.directory" />,

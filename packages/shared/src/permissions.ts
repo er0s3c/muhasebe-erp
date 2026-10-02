@@ -23,6 +23,8 @@ export const PERMISSIONS = [
   'treasury.manage',
   'treasury.post',
   'reports.read',
+  // Çoklu şirket konsolidasyonu (Faz X7): birden çok şirketin verisini bir arada gösterir; yalnızca sahip ve yönetici
+  'reports.consolidation',
   'data.export',
   'projects.read',
   'projects.manage',

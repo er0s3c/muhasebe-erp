@@ -15,7 +15,9 @@ const menuItem = 'flex cursor-pointer select-none items-center gap-2.5 rounded-m
 
 interface Props {
   /** Sunucudaki dışa aktarma raporu (`/api/exports/<anahtar>`). */
-  exportKey: string;
+  exportKey?: string;
+  /** Kullanıcı düzeyi (şirketsiz) uç: tam yol (örn. `/api/consolidation/groups/<id>/export/consolidated`); verilirse `exportKey` yok sayılır ve şirket başlığı gönderilmez. */
+  path?: string;
   /** Rapor sorgusu (ekrandaki süzgeçlerle aynı); boş değerler gönderilmez. */
   params?: Record<string, string | undefined | null>;
   formats?: readonly ExportFormat[];
@@ -28,7 +30,7 @@ interface Props {
  * Dışa aktar menüsü: Excel, CSV ve yazdır/PDF. Dosyalar sunucudan kimlikli istekle inip tarayıcıda kaydedilir;
  * içerik ekrandaki raporla aynı servisten gelir. PDF, tarayıcının yazdır penceresinden "PDF olarak kaydet"tir.
  */
-export function ExportMenu({ exportKey, params = {}, formats = ['xlsx', 'csv'], print = true, disabled }: Props) {
+export function ExportMenu({ exportKey, path, params = {}, formats = ['xlsx', 'csv'], print = true, disabled }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
   const company = useCompany();
@@ -39,8 +41,8 @@ export function ExportMenu({ exportKey, params = {}, formats = ['xlsx', 'csv'], 
     for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
     setBusy(true);
     try {
-      const { blob, filename } = await apiBlob(`/api/exports/${exportKey}?${qs}`, { companyId: company.id });
-      saveBlob(blob, filename ?? `${exportKey}.${format}`);
+      const { blob, filename } = await apiBlob(`${path ?? `/api/exports/${exportKey}`}?${qs}`, path ? {} : { companyId: company.id });
+      saveBlob(blob, filename ?? `${exportKey ?? 'rapor'}.${format}`);
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {

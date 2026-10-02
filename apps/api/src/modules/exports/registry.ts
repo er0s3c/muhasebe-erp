@@ -27,6 +27,8 @@ import {
   guaranteeListQuerySchema,
   fullDataQuerySchema,
   fxDifferencesQuerySchema,
+  fxPositionQuerySchema,
+  executiveSummaryQuerySchema,
   generalLedgerQuerySchema,
   isoDate,
   itemMovementsQuerySchema,
@@ -107,6 +109,7 @@ import {
   type BuildCtx,
 } from './builders';
 import { fullDataTables } from './full-data';
+import { executiveBuild, fxPositionBuild } from '../consolidation/builders';
 
 /** Dışa aktarılabilir rapor: kendi modül ve izniyle korunur (ekran raporuyla aynı). */
 export interface ExportDef {
@@ -375,6 +378,8 @@ export const EXPORTS: readonly ExportDef[] = [
     file: () => `degisiklik-emri-${todayIso()}`,
   }),
   def({ key: 'projects-summary', module: 'construction.projects', permission: 'projects.read', schema: z.object({ asOf: isoDate }), build: projectsSummaryTable, file: asOf('proje-ozeti') }),
+  def({ key: 'fx-position', module: 'core.treasury', permission: 'reports.read', schema: fxPositionQuerySchema, build: fxPositionBuild, file: asOf('doviz-pozisyonu') }),
+  def({ key: 'executive-summary', module: 'reports.executive', permission: 'reports.read', schema: executiveSummaryQuerySchema, build: executiveBuild, file: range('yonetici-ozeti') }),
   def({ key: 'full-data', module: 'core.settings', permission: 'data.export', schema: fullDataQuerySchema, build: fullDataTables, file: () => `tum-veriler-${todayIso()}`, formats: ['xlsx'] }),
 ];
 

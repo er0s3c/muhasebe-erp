@@ -3171,3 +3171,121 @@ export interface AgendaSummary {
   today: AgendaItem[];
   upcoming: AgendaItem[];
 }
+
+// --- Konsolidasyon, döviz pozisyonu, yönetici özeti (Faz X7) ------------------
+export type ConsolidationDenyReason = 'NOT_A_MEMBER' | 'ROLE_INSUFFICIENT' | 'MODULE_DISABLED' | 'LICENSE_SECTOR_MISMATCH';
+export interface ConsolidationGroup {
+  id: string;
+  name: string;
+  reportingCurrency: string;
+  isArchived: boolean;
+  members: { companyId: string; name: string | null; baseCurrency: string | null; status: 'ok' | ConsolidationDenyReason }[];
+}
+export interface ExcludedMember { companyId: string; reason: ConsolidationDenyReason }
+export interface ConsolidatedRow {
+  code: string;
+  name: string;
+  perCompany: Record<string, string>;
+  elimination: string;
+  consolidated: string;
+  unmapped: boolean;
+  presentIn: string[];
+}
+export interface StatementLine { key: string; label: string; values: Record<string, string>; kind: 'detail' | 'group' | 'subtotal' | 'total'; code?: string }
+export interface ConsolidatedReportData {
+  group: { id: string; name: string; reportingCurrency: string };
+  period: { from: string; to: string; closingDate: string; plMethod: string; mapLevel: string };
+  companies: { id: string; name: string; baseCurrency: string; closingRate: string; closingSource: string; plRate: string; plSource: string }[];
+  excluded: ExcludedMember[];
+  complete: boolean;
+  rows: ConsolidatedRow[];
+  unmapped: ConsolidatedRow[];
+  translationDiff: Record<string, string>;
+  totals: { perCompany: Record<string, string>; elimination: string; consolidated: string; translationDiff: string };
+  statements: { columns: string[]; balanceSheet: StatementLine[]; incomeStatement: StatementLine[]; difference: Record<string, string> };
+  eliminations: { id: string; description: string; kind: string; periodFrom: string; periodTo: string; lines: { accountCode: string; debit: string; credit: string }[] }[];
+  note: string;
+}
+export interface Elimination {
+  id: string;
+  periodFrom: string;
+  periodTo: string;
+  kind: string;
+  description: string;
+  voidedAt: string | null;
+  voidReason: string | null;
+  lines: { lineNo: number; accountCode: string; debit: string; credit: string; memo: string | null }[];
+}
+export interface FxPositionRow {
+  currency: string;
+  cash: string;
+  receivables: string;
+  payables: string;
+  net: string;
+  bookNet: string;
+  rate: string | null;
+  equivalent: string | null;
+  unrealized: string | null;
+}
+export interface CompanyFxPositionData {
+  company: { id: string; name: string; baseCurrency: string };
+  asOf: string;
+  rateDate: string;
+  rows: FxPositionRow[];
+  totals: { equivalent: string; unrealized: string } | null;
+  cashLines: { accountName: string; kind: string; currency: string; balance: string; book: string }[];
+  realized: { from: string; to: string; gain: string; loss: string; net: string };
+  note: string;
+}
+export interface GroupFxPositionData {
+  group: { id: string; name: string; reportingCurrency: string };
+  asOf: string;
+  rateDate: string;
+  rows: { currency: string; cash: string; receivables: string; payables: string; net: string; equivalent: string | null; unrealized: string | null; companies: number }[];
+  totals: { equivalent: string; unrealized: string } | null;
+  perCompany: CompanyFxPositionData[];
+  excluded: ExcludedMember[];
+  complete: boolean;
+  note: string;
+}
+export interface IncomeSummaryData {
+  netSales: string;
+  costOfSales: string;
+  grossProfit: string;
+  operatingExpenses: string;
+  otherIncome: string;
+  otherExpenses: string;
+  uncloseCosts: string;
+  revenue: string;
+  expenses: string;
+  profit: string;
+}
+export interface KpiData { grossMarginPct: string | null; netMarginPct: string | null; currentRatio: string | null; overdueReceivablesPct: string | null; dsoDays: string | null }
+export interface AgingSectionData { total: string; overdue: string; buckets: Record<'notDue' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90plus', string>; previousTotal: string | null }
+export interface ExecutiveSummaryData {
+  scope: { kind: 'company' | 'group'; id: string; name: string; currency: string; companies?: number };
+  period: { from: string; to: string };
+  compare: { from: string; to: string } | null;
+  income?: { current: IncomeSummaryData; previous: IncomeSummaryData | null; change: { revenue: string | null; expenses: string | null; profit: string | null } | null; currentAssets: string; shortLiabilities: string };
+  kpis?: { current: KpiData; previous: KpiData | null };
+  cash?: { total: string; approximate: boolean; accounts: number; previousTotal: string | null; byCurrency: { currency: string; balance: string }[] };
+  receivables?: AgingSectionData;
+  payables?: AgingSectionData;
+  stock?: { stockValue: string; itemCount: number; lowCount: number; previousValue: string | null };
+  topCustomers?: { name: string; net: string }[];
+  topSuppliers?: { name: string; net: string }[];
+  projects?: { count: number; contractedRevenue: string; eac: string; projectedProfit: string; marginPct: string | null; top: { name: string; projectedProfit: string; marginPct: string | null }[] };
+  hr?: { headcount: number; hires: number; leavers: number; payroll?: { gross: string; employer: string; cost: string; months: number } };
+  sectionCompanies?: Record<string, number>;
+  excluded?: ExcludedMember[];
+  complete?: boolean;
+  note: string;
+}
+export interface IntercompanyHint {
+  company: { id: string; name: string };
+  party: { id: string; code: string; name: string; taxNumber: string };
+  matchedCompany: { id: string; name: string };
+  receivable: string;
+  payable: string;
+  currency: string;
+}

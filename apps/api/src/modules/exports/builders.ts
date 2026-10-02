@@ -51,6 +51,8 @@ export interface BuildCtx {
   company: { name: string; baseCurrency: string; reportingCurrency: string | null };
   /** İsteği yapan kullanıcı (yalnızca kullanıcıya göre görünürlüğü olan raporlar için: ajanda). */
   user?: { id: string; role: Role };
+  /** Şirket kimliği, rol ve açık modüller (bölümleri izin/modüle göre kapılayan raporlar: yönetici özeti, döviz pozisyonu). */
+  access?: { companyId: string; role: Role; enabledModules: ReadonlySet<string> };
 }
 
 const CODE_IN_LABEL = /\(([A-Z]{3})\)$/;

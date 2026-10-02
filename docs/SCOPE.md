@@ -42,7 +42,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Fazla ödeme/avans yaşlandırmada ayrı gösterilir | ✅ |
 | Borç/alacak dekontu (mahsup) elle yevmiye ile | ✅ |
 | Devir işlemleri (yıl sonu ile birlikte) | ⏳ ⚠️ |
-| Cari özel fiyat/iskonto | ⏳ |
+| Cari özel fiyat/iskonto | ✅ (X3) |
 | Personel cari ve avans takibi (personel carisi, avans ver/geri ödeme, bordrodan avans kesintisi, maaş ödemesi, kim kime borçlu listesi, avans sicili ve yaşlandırma, ekstre; ücret verisi gibi izinli + erişim günlüğü) | ✅ (X5) ⚠️ hesap eşlemesi (196) ve avans kesintisinin hukuki uygunluğu/üst sınırı doğrulanmadı (üst sınır kullanıcı parametresi); gider fişiyle avans mahsubu, personele masraf iadesi, döviz avans ❌ |
 
 ## Stok
@@ -56,8 +56,10 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Stok değeri ↔ muhasebe (150–157) mutabakatı; stok hareketinden otomatik yevmiye | ✅ |
 | Stok durumu (tarih anı), kart ekstresi, kritik seviye | ✅ |
 | Stok kâr/zarar, satış ve alış raporu (cari/stok kartı/ay/fatura kırılımı), kambiyo raporu; hepsinde Excel/CSV/baskı | ✅ |
-| Seri no takibi, emanet stok, barkod yazdırma | ⏳ |
-| Fiyat listeleri, kampanya | ⏳ |
+| Seri no takibi | ✅ (X3) |
+| Emanet stok, barkod yazdırma, lot/parti | ⏳ |
+| Fiyat listeleri (kademe, geçerlilik, cari özel) | ✅ (X3) |
+| Kampanya | ⏳ |
 
 ## Fatura ve irsaliye
 
@@ -135,10 +137,11 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | İşlev | Durum |
 |---|---|
 | 13 haftalık nakit projeksiyonu (açık alacak/borç vadeleri + elle kalemler, haftalık kapanış bakiyesi) | ✅ (B4) |
-| Döviz pozisyon raporu | ⏳ |
+| Döviz pozisyon raporu (şirket ve grup: kasa/banka + açık alacak − açık borç, kur, karşılık, gerçekleşmemiş kur farkı tahmini; yevmiye yok; Excel/CSV/baskı) | ✅ (X7) ⚠️ değerleme yöntemi doğrulanmadı; kredi/teminat dahil değil |
 | Proje bütçe / gerçekleşen / tahmini toplam sapma analizi (EAC, CPI), Excel | ✅ (B1) |
 | Proje kârlılığı (sözleşmeli gelir, tanınmış gelir/maliyet, EAC, tahmini kâr; defter ve GBP raporlama) | ✅ (B4) |
-| Yönetici özet raporu | ⏳ |
+| Yönetici özet raporu (şirket ve grup: gelir/gider/kâr, nakit, alacak/borç yaşlandırma, stok, en büyük müşteri/tedarikçi, proje başlığı, İK toplamları, KPI + tanımları, önceki dönem/geçen yıl; izin ve modüle göre bölüm; A4 baskı, Excel) | ✅ (X7) ⚠️ KPI ve gelir/gider sınıflaması varsayılan, doğrulanmadı |
+| Çoklu şirket konsolidasyonu (kullanıcıya ait grup; üyelik + rol + modül her istekte doğrulanır; hesap koduna göre konsolide mizan/bilanço/gelir tablosu gösterimi; kullanıcı seçimli kur; elle eliminasyon; şirketler arası ipucu; Excel/CSV/baskı) | ✅ (X7) ⚠️ yöntem, kur ve eliminasyon doğrulanmadı; yasal konsolide tablo değil; azınlık payı/otomatik eliminasyon yok |
 
 ## Veri güvencesi
 

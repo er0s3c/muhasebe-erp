@@ -78,7 +78,7 @@ describe('checkModuleToggle', () => {
     expect(parties.ok === false && parties.modules.sort()).toEqual(['core.invoices', 'core.treasury', 'hr.employee_ledger', 'treasury.expenses']);
     // Bağımlılar önce kapatılırsa sıra serbest
     expect(check('core.inventory', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports'))).toEqual({ ok: true });
-    expect(check('core.ledger', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports', 'treasury.expenses', 'hr.employee_ledger', 'core.treasury', 'core.parties', 'core.inventory', 'hr.payroll'))).toEqual({ ok: true });
+    expect(check('core.ledger', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports', 'treasury.expenses', 'hr.employee_ledger', 'core.treasury', 'core.parties', 'core.inventory', 'hr.payroll', 'reports.executive', 'reports.consolidation'))).toEqual({ ok: true });
   });
 
   it('sosyal güvenlik çıktıları bordroya bağlıdır: bordro, bağımlısı açıkken kapatılamaz; bordro kapalıyken sosyal güvenlik açılamaz', () => {

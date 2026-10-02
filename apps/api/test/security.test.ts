@@ -394,9 +394,18 @@ describe('sözleşme testleri', async () => {
          where c.relnamespace = 'public'::regnamespace and c.relkind = 'r'
            and not exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'company_id' and not a.attisdropped)
          order by 1`);
+      // consolidation_*: kullanıcıya ait konsolidasyon grubu/eliminasyon tabloları (X7) — şirket verisi taşımaz, RLS `owner_user_id = app_user_id()` ile sahibine bağlıdır (aşağıda ayrıca doğrulanır)
       expect(global.rows.map((r) => r.relname)).toEqual([
-        'app_updates', 'companies', 'currencies', 'devices', 'license_state', 'organizations', 'refresh_tokens', 'security_events', 'user_mfa', 'user_tokens', 'users',
+        'app_updates', 'companies', 'consolidation_elimination_lines', 'consolidation_eliminations', 'consolidation_groups', 'consolidation_members', 'currencies', 'devices', 'license_state', 'organizations', 'refresh_tokens', 'security_events', 'user_mfa', 'user_tokens', 'users',
       ]);
+      const own = await q(`
+        select c.relname, c.relrowsecurity, (select count(*)::int from pg_policy p where p.polrelid = c.oid) as policies
+          from pg_class c where c.relnamespace = 'public'::regnamespace and c.relname like 'consolidation%' and c.relkind = 'r'`);
+      expect(own.rows).toHaveLength(4);
+      for (const t of own.rows) {
+        expect(t.relrowsecurity, `${t.relname} RLS`).toBe(true);
+        expect(t.policies, `${t.relname} politika`).toBeGreaterThan(0);
+      }
     });
   });
 

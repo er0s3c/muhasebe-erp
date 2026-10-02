@@ -126,6 +126,24 @@ export const MODULES: readonly ModuleDef[] = [
     requires: [],
   },
   {
+    key: 'reports.executive',
+    labelKey: 'modules.reportsExecutive',
+    label: 'Yönetici özet raporu',
+    sectors: 'all',
+    status: 'available',
+    // Yalnızca okur; bölümler (nakit, cari, stok, proje, İK) kendi modül ve izinlerine göre gelir, olmayan bölüm çıkarılır.
+    requires: ['core.ledger'],
+  },
+  {
+    key: 'reports.consolidation',
+    labelKey: 'modules.reportsConsolidation',
+    label: 'Çoklu şirket konsolidasyonu',
+    sectors: 'all',
+    status: 'available',
+    // Şirket bu modülü kapatırsa konsolidasyon gruplarına katılamaz ve oradan okunamaz (şirket çıkış anahtarı).
+    requires: ['core.ledger'],
+  },
+  {
     key: 'hr.core',
     labelKey: 'modules.hrCore',
     label: 'Personel, puantaj ve kişisel veri',
@@ -866,6 +884,33 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     group: 'reports',
     module: 'core.treasury',
     permission: 'reports.read',
+  },
+  {
+    key: 'executive-summary',
+    labelKey: 'nav.executiveSummary',
+    path: '/reports/executive-summary',
+    icon: 'bar-chart',
+    group: 'reports',
+    module: 'reports.executive',
+    permission: 'reports.read',
+  },
+  {
+    key: 'report-fx-position',
+    labelKey: 'nav.reportFxPosition',
+    path: '/reports/fx-position',
+    icon: 'repeat',
+    group: 'reports',
+    module: 'core.treasury',
+    permission: 'reports.read',
+  },
+  {
+    key: 'consolidation',
+    labelKey: 'nav.consolidation',
+    path: '/reports/consolidation',
+    icon: 'layers',
+    group: 'reports',
+    module: 'reports.consolidation',
+    permission: 'reports.consolidation',
   },
   {
     key: 'data-export',

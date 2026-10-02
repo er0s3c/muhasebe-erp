@@ -5397,3 +5397,104 @@ export const agendaItems = pgTable(
     check('agenda_items_done_ck', sql`(${t.status} = 'done') = (${t.completedAt} is not null)`),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Çoklu şirket konsolidasyonu (Faz X7)
+// ---------------------------------------------------------------------------
+// Bu tablolar KULLANICIYA aittir (şirkete değil): `company_id` sütunu bilerek yoktur; RLS `owner_user_id = app_user_id()`
+// ile sahibine açar. Üye şirket sütunu `member_company_id`dir ve şirket verisini okutmaz — şirket verisi yalnızca o şirketin
+// RLS bağlamında (app.company_id) tek tek okunur (bkz. docs/ARCHITECTURE.md, Faz X7).
+
+export const consolidationGroups = pgTable(
+  'consolidation_groups',
+  {
+    id: id(),
+    organizationId: uuid()
+      .notNull()
+      .references(() => organizations.id),
+    ownerUserId: uuid()
+      .notNull()
+      .references(() => users.id),
+    name: text().notNull(),
+    /** Rapor (grup) para birimi; eliminasyon tutarları bu para biriminde girilir, sonradan değişmez. */
+    reportingCurrency: text()
+      .notNull()
+      .references(() => currencies.code),
+    isArchived: boolean().notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('consolidation_groups_name_uq').on(t.ownerUserId, t.name),
+    check('consolidation_groups_name_ck', sql`length(btrim(${t.name})) >= 2`),
+  ],
+);
+
+export const consolidationMembers = pgTable(
+  'consolidation_members',
+  {
+    id: id(),
+    groupId: uuid()
+      .notNull()
+      .references(() => consolidationGroups.id),
+    memberCompanyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    addedAt: createdAt(),
+  },
+  (t) => [unique('consolidation_members_uq').on(t.groupId, t.memberCompanyId), index('consolidation_members_company_idx').on(t.memberCompanyId)],
+);
+
+/** Elle girilen eliminasyon (mahsup) kaydı başlığı. Salt eklenir; yalnızca iptal (void) bilgisi bir kez yazılır. Yöntem doğrulanmadı. */
+export const consolidationEliminations = pgTable(
+  'consolidation_eliminations',
+  {
+    id: id(),
+    groupId: uuid()
+      .notNull()
+      .references(() => consolidationGroups.id),
+    periodFrom: date({ mode: 'string' }).notNull(),
+    periodTo: date({ mode: 'string' }).notNull(),
+    /** intercompany_balance | intercompany_sales | other */
+    kind: text().notNull().default('intercompany_balance'),
+    description: text().notNull(),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    voidedAt: timestamp({ withTimezone: true }),
+    voidedBy: uuid().references(() => users.id),
+    voidReason: text(),
+  },
+  (t) => [
+    index('consolidation_eliminations_group_idx').on(t.groupId, t.periodFrom, t.periodTo),
+    check('consolidation_eliminations_kind_ck', sql`${t.kind} in ('intercompany_balance','intercompany_sales','other')`),
+    check('consolidation_eliminations_period_ck', sql`${t.periodFrom} <= ${t.periodTo}`),
+    check('consolidation_eliminations_desc_ck', sql`length(btrim(${t.description})) >= 2`),
+    check('consolidation_eliminations_void_ck', sql`(${t.voidedAt} is null) = (${t.voidedBy} is null) and (${t.voidedAt} is null) = (${t.voidReason} is null)`),
+  ],
+);
+
+export const consolidationEliminationLines = pgTable(
+  'consolidation_elimination_lines',
+  {
+    id: id(),
+    eliminationId: uuid()
+      .notNull()
+      .references(() => consolidationEliminations.id),
+    groupId: uuid()
+      .notNull()
+      .references(() => consolidationGroups.id),
+    lineNo: integer().notNull(),
+    /** Hesap kodu (şirket hesap planı kodu; şirketler arası kodla eşlenir). Grup para biriminde tutar. */
+    accountCode: text().notNull(),
+    debit: money().notNull().default('0'),
+    credit: money().notNull().default('0'),
+    memo: text(),
+  },
+  (t) => [
+    unique('consolidation_elimination_lines_uq').on(t.eliminationId, t.lineNo),
+    check('consolidation_elimination_lines_amount_ck', sql`${t.debit} >= 0 and ${t.credit} >= 0 and (${t.debit} > 0) <> (${t.credit} > 0)`),
+    check('consolidation_elimination_lines_code_ck', sql`${t.accountCode} ~ '^[0-9][0-9A-Za-z.]{0,19}$'`),
+  ],
+);
