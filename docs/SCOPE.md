@@ -12,7 +12,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Kullanıcılar, roller, yetki; denetim izi | ✅ |
 | Sektöre göre menü ve modül açma/kapama (Ayarlar > Modüller: bağımlılık korumalı, veri silinmez) | ✅ |
 | Genel bakış: kurulum kontrol listesi, özetler | ✅ |
-| Rehber: kişi/kurum defteri, ajanda, görüşme ve toplantı notları | ⏳ |
+| Rehber: kişi/kurum defteri, ajanda, görüşme ve toplantı notları (özel/paylaşılan not, takip görevi, birleştirme, vCard/CSV, ilgili kişi dışa aktarma ve anonimleştirme) | ✅ (X6) ⚠️ kişisel veri dayanağı/saklama süresi doğrulanmadı; tekrarlayan ajanda kalemi ve bildirim yok |
 | Özel kodlar (kayıtları kendi ölçütünle grupla) | ✅ |
 | Çalışma alanı ve şirket ayarları (unvan, vergi bilgileri) | ✅ |
 
@@ -42,8 +42,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Fazla ödeme/avans yaşlandırmada ayrı gösterilir | ✅ |
 | Borç/alacak dekontu (mahsup) elle yevmiye ile | ✅ |
 | Devir işlemleri (yıl sonu ile birlikte) | ⏳ ⚠️ |
-| Cari özel fiyat/iskonto | ⏳ |
-| Personel cari ve avans takibi | ⏳ (bordro ile) |
+| Cari özel fiyat/iskonto | ✅ (X3) |
+| Personel cari ve avans takibi (personel carisi, avans ver/geri ödeme, bordrodan avans kesintisi, maaş ödemesi, kim kime borçlu listesi, avans sicili ve yaşlandırma, ekstre; ücret verisi gibi izinli + erişim günlüğü) | ✅ (X5) ⚠️ hesap eşlemesi (196) ve avans kesintisinin hukuki uygunluğu/üst sınırı doğrulanmadı (üst sınır kullanıcı parametresi); gider fişiyle avans mahsubu, personele masraf iadesi, döviz avans ❌ |
 
 ## Stok
 
@@ -56,8 +56,10 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Stok değeri ↔ muhasebe (150–157) mutabakatı; stok hareketinden otomatik yevmiye | ✅ |
 | Stok durumu (tarih anı), kart ekstresi, kritik seviye | ✅ |
 | Stok kâr/zarar, satış ve alış raporu (cari/stok kartı/ay/fatura kırılımı), kambiyo raporu; hepsinde Excel/CSV/baskı | ✅ |
-| Seri no takibi, emanet stok, barkod yazdırma | ⏳ |
-| Fiyat listeleri, kampanya | ⏳ |
+| Seri no takibi | ✅ (X3) |
+| Emanet stok, barkod yazdırma, lot/parti | ⏳ |
+| Fiyat listeleri (kademe, geçerlilik, cari özel) | ✅ (X3) |
+| Kampanya | ⏳ |
 
 ## Fatura ve irsaliye
 
@@ -72,10 +74,12 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Satış (sevk) ve alış (mal kabul) irsaliyesi; stok hemen hareket eder, yevmiye faturada oluşur | ✅ ⚠️ yasal irsaliye biçimi doğrulanmadı |
 | Faturanın irsaliyeye bağlanması: kısmi ve çoklu faturalama, tekrar stok hareketi yok, alışta fiyat farkı düzeltmesi | ✅ |
 | Faturalanmamış irsaliye listesi, özeti ve stok mutabakatında açıklanan fark | ✅ |
-| İade irsaliyesi, sipariş/teklif, toplu faturalama sihirbazı | ⏳ |
-| Excel ile fatura/irsaliye içe aktarma | ⏳ |
-| Gider kartları ve gider raporları | ⏳ |
-| İthalat maliyet dağıtımı (navlun, gümrük, liman) | ⏳ Faz B |
+| İade irsaliyesi (satış/alış, orijinale bağlı miktar sınırı, iade faturasına bağlanır), satış teklifi ve siparişi (durum geçişleri veritabanında, teslim/fatura türetilir, irsaliye ve faturaya dönüşüm, yazdırma), toplu faturalama (önizleme, cari/irsaliye başına, kısmi hata raporu, çift faturalama koruması) | ✅ (X2) ⚠️ **sipariş/teklif çıktısı ve iade/toplu fatura mevzuat biçimi doğrulanmadı; cari özel fiyat X3** |
+| Excel ile fatura içe aktarma (taslak, cari/stok eşleme, mükerrer denetimi, şablon) | ✅ (X2) irsaliye içe aktarma ⏳ |
+| Fiyat listeleri (satış/alış, miktar kademesi, geçerlilik, kopyala/yüzde ayarı/toplu giriş), cariye özel fiyat ve iskonto, tek fiyat çözümleyici | ✅ (X3) ⚠️ döviz çevirisi yok: belge para birimiyle aynı para birimindeki fiyat kullanılır |
+| Seri no takibi (kart bayrağı, giriş/çıkış/iade/fire/transfer, ters belge, tam geçmiş sorgusu, dışa aktarma) | ✅ (X3) lot/parti ⏳; seri takipli kartın sayım farkı ve kısmi miktar ❌ |
+| Gider kartları (varsayılan hesap, KDV kodu, stopaj %, proje) ve hızlı gider fişi (kasa/banka ya da cari), kart/ay/proje/cari/en yüksek gider raporları, dışa aktarma | ✅ (X4) ⚠️ KDV/stopaj kullanıcı verisi, doğrulanmadı; döviz ve ek dosya yüklemesi ❌; alış faturası satırında kart seçimi ⏳ |
+| İthalat maliyet dağıtımı (ithalat dosyası; navlun, sigorta, gümrük vergisi, komisyon vb. kullanıcı girişi; değer/miktar/ağırlık/elle dağıtım; stok maliyeti + yevmiye; iptal; birim maliyet raporu) | ✅ (X4) ⚠️ muhasebe işlenişi ve aktarım hesabı doğrulanmadı; gümrük vergisi/oran hesabı yok (kullanıcı girer) |
 | e-Fatura entegrasyonu (resmî REST API v1.2.3; iç faturadan ayrı gönderim durumu) | ⏳ Faz C ⚠️ yetkilendirme/test erişimi gerekir |
 
 ## Kasa ve banka
@@ -86,8 +90,8 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Tahsilat/ödeme (fatura eşleştirmeli), virman, döviz alım-satım (ortalama maliyet), diğer tahsilat/ödeme (masraf, faiz), iptal (ters kayıt) | ✅ |
 | Kasa eksi bakiyeye düşmez (banka düşebilir) | ✅ ⚠️ kural doğrulanmadı |
 | Banka ekstresi içe aktarma (genel sütun eşleme), defter kayıtlarıyla eşleştirme (kesin/olası öneri, elle, otomatik), eşleşmeyen satırdan hareket oluşturma, mutabakat farkı | ✅ ⚠️ bankaya özgü biçimler doğrulanmadı |
-| Çek/senet portföyü ve takas | ⏳ |
-| Banka teminat mektupları | ⏳ Faz B |
+| Çek/senet portföyü ve takas: alınan/verilen çek ve senet, durum geçişleri (portföy/tahsil/ciro/karşılıksız/iade; verilen: ödeme/karşılıksız/iptal) veritabanında korunur ve salt-eklenir geçmişle izlenir, her değişiklik yevmiye yazar, cari kalemi kapatma/yeniden açma, toplu takas (tek yevmiye, tek banka satırı), vade analizi, vadesi gelenler, karşılıksız listesi, nakit projeksiyonu, xlsx/csv | ✅ (X1) ⚠️ **hesap eşlemeleri (101/121/108/103/321) ve çek/senedin yasal geçerliliği doğrulanmadı; yalnızca defter para birimi; reeskont, kısmi tahsil, protesto yok** |
+| Banka teminat mektupları: verilen/alınan, proje ve sözleşme bağlantısı, kullanıcı girişli komisyon (kodda oran yok), kullanıcı ayarlı süre uyarısı, iade/nakde çevrildi/süresi doldu, banka ve projeye göre rapor, xlsx/csv | ✅ (X1) ⚠️ **nazım takip: yevmiye/komisyon gideri yazmaz; süre, tutar ve komisyon doğrulanmadı** |
 
 ## Kur ve vergi
 
@@ -118,7 +122,11 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | **İnşaat:** yabancılara satış sınırları ve yasal süre takibi (89/2026 YGK ve sonrası) | ⏳ Faz C ⚠️ |
 | **İnşaat:** altyapı fonları ve harçlar (elektrik/su/belediye): tarihli, doğrulama alanlı tarifeler; alıcıdan tahsil edilen fon (satış sözleşmesine ek satır, 329 yükümlülük, fesihte iade); projenin ödediği fon tahmini | ✅ (B4) ⚠️ tutar/oranlar, 329 hesabı ve fonların vergi/hukuki niteliği doğrulanmadı |
 | **İK:** personel kartı, şifreli hassas alanlar (maskeli gösterim, gerekçeli açma, erişim günlüğü), kişisel veri envanteri/talepler/dışa aktarma | ✅ (D1) ⚠️ envanterdeki dayanak ve saklama süreleri doğrulanmadı |
-| **İnşaat:** puantaj, bordro, SGK çıktıları, yabancı işçi belge/teminat takibi | ⏳ Faz D (D2–D5) ⚠️ |
+| **İK:** puantaj: günlük devam/izin/mesai (gün türü + normal/fazla mesai saati), proje + iş kalemi + maliyet kodu etiketi, aylık çizelge ve günlük giriş, aylık kapanış (kapalı ay kilitli, gerekçeyle açılır), aylık özet, proje/iş kalemi başına işçilik saatleri | ✅ (D2) ⚠️ yasal çalışma süresi, fazla mesai, izin hakları ve resmî tatil takvimi **kodda yok / doğrulanmadı** (kullanıcı girer) |
+| **İK:** bordro motoru: tarihli, doğrulama alanlı, varsayılan KAPALI bordro parametreleri (kodda yasal oran yok), personel ücret şartı, ek ödeme/kesinti kalemleri, puantajdan brüt → kesinti → net ve işveren yükü, onayda proje/iş kalemi/maliyet koduna etiketli yevmiye, ödeme takibi, gerekçeli iptal, puantaj ay kilidiyle bağ, bordro pusulası (iç belge), bordro kaydı ve proje bazında bordro maliyeti | ✅ (D3) ⚠️ **tüm oranlar/çarpanlar/bölenler doğrulanmadı ve varsayılan kapalı; bordro resmî belge değildir**; gelir vergisi düz oran (dilimli yok); hesap eşlemeleri doğrulanmadı |
+| **İK:** sosyal güvenlik çıktıları: tarihli sosyal güvenlik profili (bordro tipi kodu serbest veri, sigorta dönemi, şifreli + maskeli numara), tarihli/doğrulama alanlı/varsayılan KAPALI prim desteği kuralları ve uygunluk beyanı, onaylı/ödenmiş bordrodan aylık bildirim (taslak → kesinleşmiş, bordro iptali ve puantaj ayı açma kilidi), xlsx/csv/yazdır çıktısı, aya/projeye göre prim özeti | ✅ (D4) ⚠️ **çıktı GENEL düzendir, resmî bildirim formatı değildir ve doğrulanmadı; bordro tipi, prim desteği oranı/koşulu ve gün/prim esası kuralları doğrulanmadı; sütunlar yapılandırılamaz** |
+| **İK:** yabancı işçi belge ve teminat takibi: kullanıcı yönetimli belge türleri, şifreli + maskeli belge numarası (gerekçeli açık okuma), son kullanma durumu (tarihli, doğrulanmamış uyarı günü), salt-eklenir yenileme geçmişi, tarihli kullanıcı parametresinden teminat kaydı ve tutulan teminat raporu, xlsx/csv dışa aktarma, kişi verisi dışa aktarma ve envanter tohumu. | ✅ (D5) | ⚠️ **teminat tutarı, geçerlilik/uyarı süreleri ve makam bilgisi doğrulanmadı ve kodda yok (tarihli kullanıcı parametresi); dosya yükleme, bildirim hatırlatması ve muhasebe bağlantısı yok** |
+| **İnşaat:** yabancı işçi belge/teminat takibi (D5) | ⏳ Faz D (D5) ⚠️ |
 | **İnşaat:** müteahhitlik sınıf karnesi ve kapasite kontrolü | ⏳ Faz C ⚠️ |
 | **Market:** hızlı satış (POS), barkod, gün sonu | ⏳ Faz E |
 | **Market:** terazi entegrasyonu, reyon/raf envanteri | ⏳ Faz E |
@@ -129,10 +137,11 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | İşlev | Durum |
 |---|---|
 | 13 haftalık nakit projeksiyonu (açık alacak/borç vadeleri + elle kalemler, haftalık kapanış bakiyesi) | ✅ (B4) |
-| Döviz pozisyon raporu | ⏳ |
+| Döviz pozisyon raporu (şirket ve grup: kasa/banka + açık alacak − açık borç, kur, karşılık, gerçekleşmemiş kur farkı tahmini; yevmiye yok; Excel/CSV/baskı) | ✅ (X7) ⚠️ değerleme yöntemi doğrulanmadı; kredi/teminat dahil değil |
 | Proje bütçe / gerçekleşen / tahmini toplam sapma analizi (EAC, CPI), Excel | ✅ (B1) |
 | Proje kârlılığı (sözleşmeli gelir, tanınmış gelir/maliyet, EAC, tahmini kâr; defter ve GBP raporlama) | ✅ (B4) |
-| Yönetici özet raporu | ⏳ |
+| Yönetici özet raporu (şirket ve grup: gelir/gider/kâr, nakit, alacak/borç yaşlandırma, stok, en büyük müşteri/tedarikçi, proje başlığı, İK toplamları, KPI + tanımları, önceki dönem/geçen yıl; izin ve modüle göre bölüm; A4 baskı, Excel) | ✅ (X7) ⚠️ KPI ve gelir/gider sınıflaması varsayılan, doğrulanmadı |
+| Çoklu şirket konsolidasyonu (kullanıcıya ait grup; üyelik + rol + modül her istekte doğrulanır; hesap koduna göre konsolide mizan/bilanço/gelir tablosu gösterimi; kullanıcı seçimli kur; elle eliminasyon; şirketler arası ipucu; Excel/CSV/baskı) | ✅ (X7) ⚠️ yöntem, kur ve eliminasyon doğrulanmadı; yasal konsolide tablo değil; azınlık payı/otomatik eliminasyon yok |
 
 ## Veri güvencesi
 

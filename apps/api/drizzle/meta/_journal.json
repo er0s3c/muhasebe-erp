@@ -386,6 +386,160 @@
       "when": 1790885093177,
       "tag": "0054_hr_core_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1790889309091,
+      "tag": "0055_attendance",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1790889318630,
+      "tag": "0056_attendance_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1790895406875,
+      "tag": "0057_payroll",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1790895411336,
+      "tag": "0058_payroll_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1790897648689,
+      "tag": "0059_social_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1790897652971,
+      "tag": "0060_social_security_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1790899321838,
+      "tag": "0061_foreign_workers",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1790899327032,
+      "tag": "0062_foreign_workers_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1790917800289,
+      "tag": "0063_cheques_guarantees",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1790917804667,
+      "tag": "0064_cheques_guarantees_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1790920302964,
+      "tag": "0065_orders_returns_batches",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1790920304352,
+      "tag": "0066_orders_returns_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1790923945471,
+      "tag": "0067_pricing_serials",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1790923950237,
+      "tag": "0068_pricing_serials_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1790937713141,
+      "tag": "0069_imports_expenses",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1790937715120,
+      "tag": "0070_imports_expenses_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1790940888350,
+      "tag": "0071_employee_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1790940893214,
+      "tag": "0072_employee_ledger_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1790943659960,
+      "tag": "0073_directory",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1790943665110,
+      "tag": "0074_directory_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1790955784771,
+      "tag": "0075_consolidation",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1790955789464,
+      "tag": "0076_consolidation_rules",
+      "breakpoints": true
     }
   ]
 }

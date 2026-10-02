@@ -1,4 +1,15 @@
 /** API yanıt tipleri (sunucu Drizzle satırlarının JSON hâli). Tutarlar her zaman string. */
+import type {
+  AttendanceDayType,
+  BankGuaranteeStatus,
+  ChequeAction,
+  ChequeDirection,
+  ChequeDocType,
+  ChequeStatus,
+  GuaranteeDirection,
+  GuaranteeExpiryState,
+  MaturityBucket,
+} from '@erp/shared';
 
 export interface Account {
   id: string;
@@ -154,7 +165,7 @@ export interface AccountLedgerData {
   closing: string;
 }
 
-export type PartyKind = 'customer' | 'supplier' | 'both';
+export type PartyKind = 'customer' | 'supplier' | 'both' | 'employee';
 
 export interface PartyListRow {
   id: string;
@@ -291,6 +302,7 @@ export interface Item {
   minLevel: string | null;
   notes: string | null;
   isActive: boolean;
+  tracksSerial: boolean;
 }
 
 export interface ItemListRow {
@@ -302,6 +314,7 @@ export interface ItemListRow {
   barcode: string | null;
   vatCode: string | null;
   isActive: boolean;
+  tracksSerial: boolean;
   minLevel: string | null;
   categoryId: string | null;
   categoryName: string | null;
@@ -522,6 +535,8 @@ export interface InvoiceListRow {
 
 export interface InvoiceLineRow {
   id: string;
+  /** Seri takipli kartta satıra girilen seri no'lar (X3). */
+  serials?: string[];
   lineNo: number;
   itemId: string | null;
   itemCode: string | null;
@@ -548,6 +563,9 @@ export interface InvoiceLineRow {
   deliveryNoteId: string | null;
   deliveryNoteNo: string | null;
   deliveryLineNo: number | null;
+  salesOrderLineId: string | null;
+  salesOrderId: string | null;
+  salesOrderNo: string | null;
   poLineId: string | null;
   orderCode: string | null;
   projectId: string | null;
@@ -610,7 +628,7 @@ export interface InvoiceSummary {
 
 // --- İrsaliye -------------------------------------------------------------
 
-export type DeliveryNoteType = 'sales' | 'purchase';
+export type DeliveryNoteType = 'sales' | 'purchase' | 'sales_return' | 'purchase_return';
 export type DeliveryNoteStatus = 'draft' | 'posted' | 'cancelled';
 export type DeliveryInvoicing = 'open' | 'partial' | 'invoiced';
 
@@ -650,6 +668,15 @@ export interface DeliveryNoteLineRow {
   adjustValue: string | null;
   invoicedQty: string;
   remainingQty: string;
+  /** İade irsaliyesinde orijinal satır; orijinal irsaliyede iade edilen/edilebilir miktar (kaydedilmişse). */
+  sourceLineId: string | null;
+  returnedQty: string | null;
+  returnableQty: string | null;
+  salesOrderLineId: string | null;
+  salesOrderId: string | null;
+  salesOrderNo: string | null;
+  /** Seri takipli kartta satıra girilen seri no'lar (X3). */
+  serials: string[];
 }
 
 export interface DeliveryNoteDetail {
@@ -659,6 +686,8 @@ export interface DeliveryNoteDetail {
     status: DeliveryNoteStatus;
     noteNo: string | null;
     externalNo: string | null;
+    returnOfId: string | null;
+    returnOfNo: string | null;
     noteDate: string;
     partyId: string;
     partyCode: string;
@@ -679,6 +708,149 @@ export interface DeliveryNoteDetail {
   };
   lines: DeliveryNoteLineRow[];
   invoices: { id: string; invoiceNo: string | null; status: InvoiceStatus; type: InvoiceType }[];
+  /** Orijinal irsaliyede: bu irsaliyeye kesilmiş iade irsaliyeleri. */
+  returns: { id: string; noteNo: string | null; status: DeliveryNoteStatus }[];
+}
+
+/** İade edilebilecek orijinal irsaliye satırı. */
+export interface ReturnableLine {
+  lineId: string;
+  lineNo: number;
+  noteId: string;
+  noteNo: string;
+  noteDate: string;
+  itemId: string;
+  itemCode: string;
+  description: string;
+  unit: string | null;
+  quantity: string;
+  returnedQty: string;
+  returnableQty: string;
+  invoicedQty: string;
+}
+
+// --- Satış teklifi ve siparişi (X2) ---------------------------------------
+
+export type SalesDocKind = 'quote' | 'order';
+export type SalesDocStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'converted' | 'confirmed' | 'closed' | 'cancelled';
+export type FulfilmentState = 'none' | 'partial' | 'full';
+export interface Fulfilment {
+  delivery: FulfilmentState | null;
+  invoicing: FulfilmentState;
+}
+
+export interface SalesDocListRow {
+  id: string;
+  kind: SalesDocKind;
+  status: SalesDocStatus;
+  docNo: string | null;
+  docDate: string;
+  validUntil: string | null;
+  deliveryDate: string | null;
+  partyId: string;
+  partyCode: string;
+  partyName: string;
+  currencyCode: string;
+  grossTotal: string;
+  quoteId: string | null;
+  expired: boolean;
+  fulfilment: Fulfilment | null;
+}
+
+export interface SalesDocLine {
+  id: string;
+  lineNo: number;
+  itemId: string | null;
+  itemCode: string | null;
+  isGoods: boolean;
+  description: string;
+  quantity: string;
+  unit: string | null;
+  unitPrice: string;
+  discountPct: string;
+  vatCode: string | null;
+  vatRate: string;
+  net: string;
+  vat: string;
+  gross: string;
+  /** Yalnızca siparişte. */
+  delivered?: string;
+  invoiced?: string;
+  remainingDeliverable?: string;
+  remainingInvoiceable?: string;
+  deliveredNotInvoiced?: string;
+}
+
+export interface SalesDocDetail {
+  doc: {
+    id: string;
+    kind: SalesDocKind;
+    status: SalesDocStatus;
+    docNo: string | null;
+    partyId: string;
+    partyCode: string;
+    partyName: string;
+    docDate: string;
+    validUntil: string | null;
+    deliveryDate: string | null;
+    currencyCode: string;
+    vatIncluded: boolean;
+    warehouseId: string | null;
+    warehouseName: string | null;
+    notes: string | null;
+    quoteId: string | null;
+    quoteNo: string | null;
+    orderId: string | null;
+    orderNo: string | null;
+    netTotal: string;
+    vatTotal: string;
+    grossTotal: string;
+    expired: boolean;
+    fulfilment: Fulfilment | null;
+  };
+  lines: SalesDocLine[];
+  events: { fromStatus: string | null; toStatus: string; reason: string | null; createdAt: string; userName: string | null }[];
+  notes: { id: string; noteNo: string | null; status: DeliveryNoteStatus; noteDate: string }[];
+  invoices: { id: string; invoiceNo: string | null; status: InvoiceStatus; invoiceDate: string }[];
+}
+
+// --- Toplu faturalama (X2) -------------------------------------------------
+
+export interface BatchPreviewNote {
+  noteId: string;
+  noteNo: string | null;
+  noteDate: string;
+  currency: string;
+  blocked: boolean;
+  issues: { code: string; message: string }[];
+  net: string;
+  vat: string;
+  gross: string;
+  lines: { lineId: string; itemCode: string; description: string; unit: string | null; quantity: string; unitPrice: string | null; discountPct: string; vatCode: string | null; priceSource: 'order' | 'item' | null }[];
+}
+
+export interface BatchPreview {
+  grouping: 'party' | 'note';
+  parties: { partyId: string; partyCode: string; partyName: string; notes: BatchPreviewNote[]; invoiceCount: number; pendingReturns: number }[];
+  totals: { notes: number; invoiceable: number; invoices: number };
+}
+
+export interface BatchResult {
+  batchId: string;
+  created: { partyId: string; partyName: string; invoiceId: string; invoiceNo: string | null; status: string; noteIds: string[]; gross: string }[];
+  failed: { partyId: string; partyName: string; noteIds: string[]; code: string; message: string }[];
+  skipped: { noteId: string; reason: string }[];
+}
+
+export interface BatchHistoryRow {
+  id: string;
+  invoiceDate: string;
+  grouping: 'party' | 'note';
+  post: boolean;
+  invoicesCreated: number;
+  invoicesFailed: number;
+  createdAt: string;
+  userName: string | null;
 }
 
 /** Faturaya eklenebilecek, kalan miktarı olan irsaliye satırı. */
@@ -1822,6 +1994,8 @@ export interface EmployeeRow {
   jobTitle: string | null;
   projectId: string | null;
   projectCode: string | null;
+  /** Personel carisi (Faz X5); yalnızca bağlantı. */
+  partyId: string | null;
   note: string | null;
   createdAt: string;
 }
@@ -1856,15 +2030,1262 @@ export interface DsrRow {
   employeeId: string | null;
   employeeCode: string | null;
   employeeName: string | null;
+  contactId: string | null;
+  contactName: string | null;
 }
 
 export interface AccessLogRow {
   id: string;
-  field: SensitiveField | 'export';
+  field: SensitiveField | 'export' | 'directory_export' | 'directory_anonymize';
   reason: string;
   at: string;
+  employeeId: string | null;
+  employeeCode: string | null;
+  employeeName: string | null;
+  contactId: string | null;
+  contactName: string | null;
+  by: string;
+}
+
+// --- Puantaj (Faz D2) ---
+
+export interface AttendanceEmployee {
+  id: string;
+  code: string;
+  fullName: string;
+  status: EmployeeStatus;
+  department: string | null;
+  jobTitle: string | null;
+  hireDate: string | null;
+  leaveDate: string | null;
+  projectId: string | null;
+}
+
+export interface AttendanceEntryRow {
+  id: string;
+  employeeId: string;
+  workDate: string;
+  dayType: AttendanceDayType;
+  normalHours: string;
+  overtimeHours: string;
+  projectId: string | null;
+  projectCode: string | null;
+  wbsId: string | null;
+  wbsCode: string | null;
+  costCodeId: string | null;
+  costCode: string | null;
+  note: string | null;
+}
+
+export interface AttendanceLock {
+  month: string;
+  closed: boolean;
+  closedAt: string | null;
+  closedBy: string | null;
+  closeNote: string | null;
+  reopenedAt: string | null;
+  reopenedBy: string | null;
+  reopenReason: string | null;
+  reopenCount: number;
+}
+
+export interface AttendanceSheetData {
+  month: string;
+  start: string;
+  end: string;
+  lock: AttendanceLock;
+  employees: AttendanceEmployee[];
+  entries: AttendanceEntryRow[];
+  missingHireDate: number;
+}
+
+export interface AttendanceSummaryRow {
+  employeeId: string;
+  code: string;
+  fullName: string;
+  department: string | null;
+  status: EmployeeStatus;
+  hireDate: string | null;
+  leaveDate: string | null;
+  days: Record<AttendanceDayType, number>;
+  entryDays: number;
+  missingDays: number;
+  normalHours: string;
+  overtimeHours: string;
+}
+
+export interface AttendanceSummary {
+  month: string;
+  lock: AttendanceLock;
+  rows: AttendanceSummaryRow[];
+  totals: { normalHours: string; overtimeHours: string; missingDays: number };
+}
+
+export interface AttendanceLaborRow {
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
+  costCode: string | null;
+  costCodeName: string | null;
+  personDays: number;
+  employees: number;
+  normalHours: string;
+  overtimeHours: string;
+}
+
+export interface AttendanceLabor {
+  from: string;
+  to: string;
+  rows: AttendanceLaborRow[];
+  totals: { personDays: number; normalHours: string; overtimeHours: string };
+}
+
+// --- Bordro (Faz D3) ---
+
+import type { PayrollParamKey, PayrollWarningCode } from '@erp/shared';
+
+export type PayrollRunStatus = 'draft' | 'approved' | 'paid' | 'cancelled';
+export type PayBasisKind = 'monthly' | 'daily' | 'hourly';
+
+export interface PayrollParamRow {
+  id: string;
+  key: PayrollParamKey;
+  value: string;
+  effectiveFrom: string;
+  enabled: boolean;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  supersedesId: string | null;
+}
+
+export interface PayrollItemRow {
+  id: string;
+  code: string;
+  name: string;
+  kind: 'earning' | 'deduction';
+  affectsSocialBase: boolean;
+  affectsTaxBase: boolean;
+  liability: 'tax' | 'social' | 'other';
+  isActive: boolean;
+}
+
+export interface PayTermRow {
+  id: string;
   employeeId: string;
   employeeCode: string;
   employeeName: string;
-  by: string;
+  effectiveFrom: string;
+  payBasis: PayBasisKind;
+  amount: string;
+  note: string | null;
+}
+
+export interface PayrollRunRow {
+  id: string;
+  number: string;
+  month: string;
+  description: string | null;
+  status: PayrollRunStatus;
+  employeeCount: number;
+  grossTotal: string;
+  deductionsTotal: string;
+  netTotal: string;
+  employerTotal: string;
+  paramsSnapshot: { key: PayrollParamKey; value: string; verified: boolean; paramId: string }[];
+  hasUnverifiedParams: boolean;
+  calculatedAt: string | null;
+  entryId: string | null;
+  entryNo?: string | null;
+  reversalEntryId: string | null;
+  approvedAt: string | null;
+  paidAt: string | null;
+  paidNote: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+}
+
+export interface PayrollWarningRow {
+  code: PayrollWarningCode;
+  keys?: PayrollParamKey[];
+  count?: number;
+}
+
+export interface PayrollLineItemRow {
+  kind: 'earning' | 'deduction' | 'employer';
+  source: 'manual' | 'param';
+  code: string;
+  label: string;
+  amount: string;
+  liability: string | null;
+  paramKey: PayrollParamKey | null;
+  rate: string | null;
+}
+
+export interface PayrollLineRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  department: string | null;
+  jobTitle: string | null;
+  ibanMasked: string | null;
+  payBasis: PayBasisKind;
+  rate: string;
+  normalHours: string;
+  overtimeHours: string;
+  hourDays: number;
+  annualLeaveDays: number;
+  sickLeaveDays: number;
+  unpaidLeaveDays: number;
+  absentDays: number;
+  scheduledPay: string;
+  absenceDeduction: string;
+  basePay: string;
+  overtimePay: string;
+  earningsTotal: string;
+  gross: string;
+  socialBase: string;
+  taxBase: string;
+  employeeSocial: string;
+  incomeTax: string;
+  otherDeductions: string;
+  deductionsTotal: string;
+  net: string;
+  employerSocial: string;
+  employerOther: string;
+  employerTotal: string;
+  warnings: PayrollWarningRow[];
+  items: PayrollLineItemRow[];
+  allocations: { projectCode: string | null; wbsCode: string | null; costCode: string | null; hours: string; grossAmount: string; employerAmount: string }[];
+}
+
+export interface PayrollAdjustmentRow {
+  id: string;
+  employeeId: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  kind: 'earning' | 'deduction';
+  amount: string;
+  note: string | null;
+}
+
+export interface PayrollRunDetail {
+  run: PayrollRunRow;
+  lines: PayrollLineRow[];
+  adjustments: PayrollAdjustmentRow[];
+  missingTerms: { id: string; code: string; fullName: string }[];
+  lock: AttendanceLock;
+}
+
+export interface PayrollSlip {
+  run: PayrollRunRow;
+  line: PayrollLineRow;
+  lock: AttendanceLock;
+  hireDate: string | null;
+}
+
+export interface PayrollCostRow {
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  wbsCode: string | null;
+  wbsName: string | null;
+  costCode: string | null;
+  costCodeName: string | null;
+  employees: number;
+  hours: string;
+  gross: string;
+  employer: string;
+  total: string;
+}
+
+export interface PayrollCostReport {
+  from: string;
+  to: string;
+  rows: PayrollCostRow[];
+  months: { month: string; number: string; status: PayrollRunStatus; employeeCount: number; gross: string; deductions: string; net: string; employer: string; cost: string; hasUnverifiedParams: boolean }[];
+  totals: { hours: string; gross: string; employer: string; total: string };
+  unverified: boolean;
+}
+
+// --- Sosyal güvenlik çıktıları (Faz D4) ---
+
+export type SocialDeclarationStatus = 'draft' | 'finalized';
+export type SocialWarningCode = 'no_profile' | 'no_ssn' | 'no_payroll_type' | 'insurance_outside_month' | 'zero_base' | 'support_rule_off' | 'no_days';
+
+export interface SocialProfileRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  effectiveFrom: string;
+  payrollTypeCode: string | null;
+  insuranceStart: string | null;
+  insuranceEnd: string | null;
+  hasSsn: boolean;
+  ssnMasked: string | null;
+  note: string | null;
+}
+
+export interface SupportRuleRow {
+  id: string;
+  code: string;
+  name: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  target: 'employer' | 'employee';
+  mode: 'percent_of_premium' | 'fixed_amount';
+  value: string;
+  enabled: boolean;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface SupportEligibilityRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  ruleCode: string;
+  validFrom: string;
+  validTo: string | null;
+  note: string | null;
+}
+
+export interface SocialDeclarationRow {
+  id: string;
+  number: string;
+  month: string;
+  status: SocialDeclarationStatus;
+  payrollRunId: string;
+  payrollRunNumber: string;
+  employeeCount: number;
+  premiumBaseTotal: string;
+  employeePremiumTotal: string;
+  employerPremiumTotal: string;
+  supportEmployeeTotal: string;
+  supportEmployerTotal: string;
+  supportSnapshot: { code: string; ruleId: string; name: string; target: string; mode: string; value: string; verified: boolean }[];
+  hasUnverifiedParams: boolean;
+  finalizedAt: string | null;
+  finalizeNote: string | null;
+  reopenReason: string | null;
+  reopenCount: number;
+  payrollRunStatus?: PayrollRunStatus | null;
+}
+
+export interface SocialDeclarationLine {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  payrollTypeCode: string | null;
+  insuranceStart: string | null;
+  insuranceEnd: string | null;
+  ssnMasked: string | null;
+  daysWorked: number;
+  annualLeaveDays: number;
+  sickLeaveDays: number;
+  unpaidLeaveDays: number;
+  absentDays: number;
+  premiumBase: string;
+  employeePremium: string;
+  employerPremium: string;
+  supportEmployee: string;
+  supportEmployer: string;
+  employeeDue: string;
+  employerDue: string;
+  supportCodes: string | null;
+  warnings: SocialWarningCode[];
+}
+
+export interface SocialDeclarationDetail {
+  declaration: SocialDeclarationRow;
+  lines: SocialDeclarationLine[];
+  totals: { count: number; premiumBase: string; employeePremium: string; employerPremium: string; supportEmployee: string; supportEmployer: string; supportTotal: string; employeeDue: string; employerDue: string };
+  lock: { closed: boolean };
+}
+
+export interface PremiumSummaryReport {
+  from: string;
+  to: string;
+  months: { id: string; number: string; month: string; status: SocialDeclarationStatus; employeeCount: number; premiumBase: string; employeePremium: string; employerPremium: string; supportEmployee: string; supportEmployer: string; employeeDue: string; employerDue: string; hasUnverifiedParams: boolean }[];
+  projects: { projectId: string | null; projectCode: string | null; projectName: string | null; employees: number; employeePremium: string; employerPremium: string; supportEmployee: string; supportEmployer: string; employeeDue: string; employerDue: string }[];
+  totals: { employeePremium: string; employerPremium: string; supportEmployee: string; supportEmployer: string; employeeDue: string; employerDue: string };
+  unverified: boolean;
+}
+
+// --- Yabancı işçi belge ve teminat takibi (Faz D5) ---
+
+export type ForeignDocStatus = 'valid' | 'expiring' | 'expired' | 'revoked';
+export type GuaranteeStatus = 'held' | 'refunded' | 'forfeited';
+export type ForeignParamKey = 'guarantee_amount' | 'expiry_warning_days';
+
+export interface ForeignDocTypeRow {
+  id: string;
+  code: string;
+  name: string;
+  active: boolean;
+}
+
+export interface ForeignParamRow {
+  id: string;
+  key: ForeignParamKey;
+  value: string;
+  currency: string | null;
+  effectiveFrom: string;
+  enabled: boolean;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface ForeignDocRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  nationality: string | null;
+  typeId: string;
+  typeName: string;
+  typeCode: string;
+  hasNumber: boolean;
+  numberMasked: string | null;
+  issuingAuthority: string | null;
+  issueDate: string | null;
+  expiryDate: string | null;
+  referenceNote: string | null;
+  note: string | null;
+  renewalCount: number;
+  revokedAt: string | null;
+  revokeReason: string | null;
+  status: ForeignDocStatus;
+  daysToExpiry: number | null;
+}
+
+export interface ForeignDocList {
+  asOf: string;
+  warning: { days: number | null; configured: boolean; verified: boolean };
+  summary: Record<ForeignDocStatus, number>;
+  docs: ForeignDocRow[];
+}
+
+export interface ForeignDocRenewalRow {
+  id: string;
+  prevIssueDate: string | null;
+  prevExpiryDate: string | null;
+  prevNumberMasked: string | null;
+  newIssueDate: string | null;
+  newExpiryDate: string | null;
+  newNumberMasked: string | null;
+  note: string | null;
+  renewedAt: string;
+}
+
+export interface GuaranteeRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  docId: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  amount: string;
+  currency: string;
+  paramVerified: boolean;
+  depositedDate: string;
+  depositReference: string | null;
+  status: GuaranteeStatus;
+  resolvedDate: string | null;
+  resolutionNote: string | null;
+}
+
+export interface GuaranteeReport {
+  byEmployee: { employeeId: string; employeeCode: string; employeeName: string; projectCode: string | null; projectName: string | null; currency: string; count: number; amount: string; unverified: number }[];
+  byProject: { projectId: string | null; projectCode: string | null; projectName: string | null; currency: string; employees: number; count: number; amount: string; unverified: number }[];
+  totals: { currency: string; held: string; refunded: string; forfeited: string }[];
+  unverified: boolean;
+}
+
+// --- Çek/senet portföyü ve banka teminat mektubu (Faz X1) -----------------------------------------------------
+
+export interface ChequeRow {
+  id: string;
+  direction: ChequeDirection;
+  docType: ChequeDocType;
+  docNo: string;
+  bankName: string;
+  branch: string | null;
+  partyId: string;
+  partyCode: string;
+  partyName: string;
+  amount: string;
+  currencyCode: string;
+  issueDate: string;
+  dueDate: string;
+  status: ChequeStatus;
+  holderPartyId: string | null;
+  holderName: string | null;
+  bankAccountId: string | null;
+  bankAccountName: string | null;
+  description: string | null;
+  entryId: string;
+  entryNo: string | null;
+  lastEventDate: string | null;
+}
+
+export interface ChequeList {
+  cheques: ChequeRow[];
+  summary: { direction: ChequeDirection; status: ChequeStatus; count: number; amount: string }[];
+  asOf: string;
+}
+
+export interface ChequeEventRow {
+  id: string;
+  fromStatus: ChequeStatus | null;
+  toStatus: ChequeStatus;
+  eventDate: string;
+  note: string | null;
+  batchNo: string | null;
+  action: string | null;
+  entryNo: string | null;
+  entryId: string;
+  partyName: string | null;
+  bankAccountName: string | null;
+}
+
+export interface ChequeDetail {
+  cheque: ChequeRow;
+  events: ChequeEventRow[];
+}
+
+export interface ChequeBatchRow {
+  id: string;
+  batchNo: string;
+  action: ChequeAction;
+  eventDate: string;
+  total: string;
+  docCount: number;
+  bankAccountName: string | null;
+  partyName: string | null;
+  entryNo: string | null;
+  entryId: string;
+  note: string | null;
+}
+
+export interface ChequeActionResult {
+  batch: { id: string; batchNo: string; action: ChequeAction; eventDate: string; total: string; docCount: number; entryId: string };
+  cheques: ChequeRow[];
+}
+
+export interface ChequeMaturityDirection {
+  count: number;
+  amount: string;
+  buckets: { bucket: MaturityBucket; count: number; amount: string }[];
+}
+export interface ChequeMaturity {
+  asOf: string;
+  received: ChequeMaturityDirection;
+  issued: ChequeMaturityDirection;
+  byParty: { direction: ChequeDirection; partyId: string; partyName: string; count: number; amount: string; overdue: string; earliestDue: string }[];
+}
+
+export interface ChequeDueReport {
+  from: string;
+  to: string;
+  days: number;
+  rows: { id: string; direction: ChequeDirection; docType: ChequeDocType; docNo: string; bankName: string; status: ChequeStatus; partyName: string; dueDate: string; amount: string; overdue: boolean }[];
+  totals: { received: string; issued: string };
+}
+
+export interface ChequeBouncedReport {
+  asOf: string;
+  rows: { id: string; direction: ChequeDirection; docType: ChequeDocType; docNo: string; bankName: string; partyName: string; amount: string; dueDate: string; bouncedDate: string | null; daysSince: number | null }[];
+  totals: { received: string; issued: string };
+}
+
+export interface BankGuaranteeRow {
+  id: string;
+  direction: GuaranteeDirection;
+  letterNo: string;
+  bankName: string;
+  branch: string | null;
+  partyId: string | null;
+  counterpartyName: string;
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+  subcontractId: string | null;
+  subcontractCode: string | null;
+  purpose: string | null;
+  amount: string;
+  currencyCode: string;
+  issueDate: string;
+  expiryDate: string | null;
+  commissionRate: string | null;
+  commissionAmount: string | null;
+  commissionNote: string | null;
+  note: string | null;
+  status: BankGuaranteeStatus;
+  resolvedDate: string | null;
+  resolutionNote: string | null;
+  expiryState: GuaranteeExpiryState | 'closed';
+  daysToExpiry: number | null;
+}
+
+export interface BankGuaranteeList {
+  guarantees: BankGuaranteeRow[];
+  asOf: string;
+  warningDays: number | null;
+  activeTotals: { direction: GuaranteeDirection; currency: string; count: number; amount: string }[];
+  expiring: number;
+  lapsed: number;
+}
+
+export interface BankGuaranteeReport {
+  byBank: { direction: GuaranteeDirection; bankName: string; currency: string; count: number; amount: string; commission: string }[];
+  byProject: { direction: GuaranteeDirection; projectId: string | null; projectCode: string | null; projectName: string | null; currency: string; count: number; amount: string }[];
+  closed: { direction: GuaranteeDirection; status: BankGuaranteeStatus; currency: string; count: number; amount: string }[];
+}
+
+
+// --- Fiyat listeleri ve seri no (X3) -------------------------------------------
+
+export type PriceKind = 'sales' | 'purchase';
+export type PriceSource = 'party_item' | 'party_list' | 'default_list' | 'item_card' | 'none';
+
+export interface PriceListRow {
+  id: string;
+  code: string;
+  name: string;
+  kind: PriceKind;
+  currencyCode: string;
+  validFrom: string | null;
+  validTo: string | null;
+  isActive: boolean;
+  isDefault: boolean;
+  notes: string | null;
+  itemCount: number;
+  partyCount: number;
+}
+
+export interface PriceListItemRow {
+  id: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unit: string;
+  minQty: string;
+  price: string;
+  validFrom: string | null;
+  validTo: string | null;
+}
+
+export interface PartyPriceRow {
+  id: string;
+  partyId: string;
+  partyCode: string;
+  partyName: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  kind: PriceKind;
+  currencyCode: string | null;
+  price: string | null;
+  discountPct: string | null;
+  minQty: string;
+  validFrom: string | null;
+  validTo: string | null;
+}
+
+export interface PartyPricing {
+  partyId: string;
+  salesPriceListId: string | null;
+  purchasePriceListId: string | null;
+  salesDiscountPct: string;
+  purchaseDiscountPct: string;
+}
+
+export interface PriceResolution {
+  unitPrice: string | null;
+  priceSource: PriceSource;
+  priceListId: string | null;
+  priceListName: string | null;
+  discountPct: string;
+  discountSource: 'party_item' | 'party_default' | 'none';
+  minQty: string | null;
+}
+
+export type SerialStatus = 'in_stock' | 'issued' | 'returned' | 'scrapped' | 'void';
+
+export interface SerialRow {
+  id: string;
+  serialNo: string;
+  status: SerialStatus;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  warehouseId: string | null;
+  warehouseName: string | null;
+}
+
+export interface SerialHistoryRow {
+  id: string;
+  event: string;
+  fromStatus: string;
+  toStatus: string;
+  docDate: string;
+  stockDocumentId: string;
+  stockDocumentNo: string;
+  fromWarehouse: string | null;
+  toWarehouse: string | null;
+  partyName: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  sourceNo: string | null;
+}
+
+export interface SerialLookup {
+  serials: (SerialRow & { supplier: string | null; customer: string | null; history: SerialHistoryRow[] })[];
+}
+
+// --- İthalat maliyet dağıtımı ve gider kartları (Faz X4) -----------------------------------------------------------------
+
+export type ImportFileStatus = 'draft' | 'allocated' | 'posted' | 'cancelled';
+export type ImportMethod = 'value' | 'quantity' | 'weight' | 'manual';
+export type ImportCostKind = 'freight' | 'insurance' | 'customs_duty' | 'other_tax' | 'brokerage' | 'other';
+
+export interface ImportFileRow {
+  id: string;
+  code: string;
+  name: string;
+  reference: string | null;
+  status: ImportFileStatus;
+  fileDate: string;
+  postDate: string | null;
+  lineCount: number;
+  goodsValue: string;
+  costTotal: string;
+}
+
+export interface ImportSource {
+  kind: 'invoice' | 'delivery';
+  sourceLineId: string;
+  docNo: string;
+  docDate: string;
+  partyId: string;
+  partyName: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unit: string;
+  quantity: string;
+  value: string;
+  usedIn: string | null;
+}
+
+export interface ImportFileLine {
+  id: string;
+  lineNo: number;
+  sourceKind: 'invoice' | 'delivery';
+  sourceLineId: string;
+  sourceDocNo: string;
+  sourceDate: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  unit: string;
+  warehouseName: string;
+  quantity: string;
+  valueBase: string;
+  weight: string | null;
+  allocated: string;
+  stockedAmount: string | null;
+  cogsAmount: string | null;
+}
+
+export interface ImportCostLine {
+  id: string;
+  lineNo: number;
+  kind: ImportCostKind;
+  kindLabel: string;
+  description: string;
+  partyId: string | null;
+  partyName: string | null;
+  invoiceId: string | null;
+  invoiceNo: string | null;
+  currencyCode: string;
+  amount: string;
+  fxRate: string | null;
+  amountBase: string;
+  method: ImportMethod;
+  creditAccountId: string | null;
+  creditAccountCode: string | null;
+  reference: string | null;
+}
+
+export interface ImportFileDetail {
+  file: {
+    id: string;
+    code: string;
+    name: string;
+    reference: string | null;
+    description: string | null;
+    method: ImportMethod;
+    fileDate: string;
+    status: ImportFileStatus;
+    postDate: string | null;
+    journalEntryId: string | null;
+    journalEntryNo: string | null;
+    cancelJournalEntryNo: string | null;
+    stockDocumentNo: string | null;
+    cancelReason: string | null;
+  };
+  lines: ImportFileLine[];
+  costLines: ImportCostLine[];
+  allocations: { costLineId: string; fileLineId: string; amount: string }[];
+  events: { action: string; fromStatus: string | null; toStatus: string; note: string | null; createdAt: string; userName: string | null }[];
+  totals: { goodsValue: string; costTotal: string; landedValue: string };
+}
+
+export interface ImportReport {
+  file: { id: string; code: string; name: string; reference: string | null; status: ImportFileStatus; statusLabel: string; fileDate: string; postDate: string | null };
+  byLine: { lineNo: number; sourceDocNo: string; itemId: string; itemCode: string; itemName: string; unit: string; quantity: string; weight: string | null; goodsValue: string; allocated: string; landedValue: string; unitBefore: string | null; unitAfter: string | null; uplift: string | null; stockedAmount: string | null; cogsAmount: string | null }[];
+  byItem: { itemId: string; itemCode: string; itemName: string; unit: string; quantity: string; goodsValue: string; allocated: string; landedValue: string; unitBefore: string | null; unitAfter: string | null }[];
+  byCost: { kind: ImportCostKind; kindLabel: string; amount: string }[];
+  totals: { goodsValue: string; costTotal: string; landedValue: string; allocated: string };
+}
+
+export interface ExpenseCard {
+  id: string;
+  code: string;
+  name: string;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  taxCode: string | null;
+  withholdingRate: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  wbsId: string | null;
+  costCodeId: string | null;
+  costCodeCode: string | null;
+  notes: string | null;
+  isActive: boolean;
+  entryCount: number;
+}
+
+export interface ExpenseEntry {
+  id: string;
+  entryNo: string;
+  entryDate: string;
+  status: 'posted' | 'cancelled';
+  description: string;
+  cardId: string;
+  cardCode: string;
+  cardName: string;
+  accountCode: string;
+  partyId: string | null;
+  partyName: string | null;
+  paymentKind: 'treasury' | 'party';
+  treasuryAccountId: string | null;
+  treasuryAccountName: string | null;
+  dueDate: string | null;
+  net: string;
+  vatCode: string | null;
+  vatRate: string;
+  vat: string;
+  withholdingRate: string;
+  withholding: string;
+  gross: string;
+  payable: string;
+  documentRef: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  journalEntryId: string;
+  journalEntryNo: string | null;
+  cancelReason: string | null;
+}
+
+export interface ExpenseGroup {
+  count: number;
+  net: string;
+  vat: string;
+  withholding: string;
+  gross: string;
+}
+
+export interface ExpenseReport {
+  from: string;
+  to: string;
+  totals: ExpenseGroup;
+  byCard: (ExpenseGroup & { cardId: string; cardCode: string; cardName: string; accountCode: string })[];
+  byMonth: (ExpenseGroup & { month: string })[];
+  byProject: (ExpenseGroup & { projectId: string | null; projectCode: string | null; projectName: string | null })[];
+  byParty: (ExpenseGroup & { partyId: string | null; partyName: string | null })[];
+  top: { id: string; entryNo: string; entryDate: string; description: string; cardName: string; partyName: string | null; net: string; gross: string }[];
+}
+
+// --- Personel cari ve avans (Faz X5) ------------------------------------------------------------------------------------
+
+export type AdvanceStatus = 'open' | 'partial' | 'settled' | 'cancelled';
+
+export interface EmployeeBalanceRow {
+  employeeId: string;
+  code: string;
+  fullName: string;
+  department: string | null;
+  partyId: string | null;
+  salaryNet: string;
+  salaryPaid: string;
+  advanceGiven: string;
+  advanceDeducted: string;
+  advanceRepaid: string;
+  /** Alacak − borç: pozitif ise şirket personele borçlu, negatif ise personel şirkete borçlu. */
+  net: string;
+  openAdvance: string;
+  unpaidSalary: string;
+}
+
+export interface EmployeeBalances {
+  asOf: string | null;
+  rows: EmployeeBalanceRow[];
+  totals: { owedToEmployees: string; owedByEmployees: string };
+}
+
+export interface AdvanceRegisterRow {
+  id: string;
+  number: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  advanceDate: string;
+  amount: string;
+  settled: string;
+  open: string;
+  purpose: string;
+  projectCode: string | null;
+  status: AdvanceStatus;
+  ageDays: number;
+  bucket: 'notDue' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90plus';
+}
+
+export interface AdvanceRegister {
+  asOf: string;
+  rows: AdvanceRegisterRow[];
+  totals: { open: string; buckets: Record<'notDue' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90plus', string> };
+}
+
+export interface AdvanceDetail {
+  advance: {
+    id: string;
+    number: string;
+    employeeId: string;
+    employeeCode: string;
+    employeeName: string;
+    advanceDate: string;
+    amount: string;
+    settledAmount: string;
+    openAmount: string;
+    purpose: string;
+    status: AdvanceStatus;
+    projectCode: string | null;
+    txnNo: string;
+    cancelReason: string | null;
+  };
+  settlements: { id: string; kind: 'payroll' | 'repayment'; amount: string; settledDate: string; note: string | null; reversedAt: string | null; reverseReason: string | null; runNumber: string | null; txnNo: string | null }[];
+  events: { fromStatus: AdvanceStatus | null; toStatus: AdvanceStatus; settledAmount: string; at: string; by: string | null }[];
+}
+
+export interface LedgerSettings {
+  deductionCapPct: string | null;
+  sourceNote: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
+export interface OutstandingAdvance {
+  id: string;
+  number: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  advanceDate: string;
+  amount: string;
+  settledAmount: string;
+  remaining: string;
+  purpose: string;
+  status: AdvanceStatus;
+}
+
+export interface RunDeductionRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  advanceId: string;
+  advanceNumber: string;
+  amount: string;
+  advanceRemaining: string;
+}
+
+export interface EmployeeStatement {
+  employee: { id: string; code: string; fullName: string; partyId: string | null; partyCode: string | null };
+  from: string;
+  to: string;
+  opening: string;
+  lines: { date: string; kind: 'salary_net' | 'salary_payment' | 'advance' | 'advance_deduction' | 'advance_repayment'; ref: string; description: string; debit: string; credit: string; balance: string }[];
+  totals: { debit: string; credit: string };
+  closing: string;
+  openAdvances: AdvanceRegisterRow[];
+}
+
+export interface SalaryPaymentRow {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  payDate: string;
+  amount: string;
+  note: string | null;
+  txnNo: string;
+  txnId: string;
+  txnStatus: 'posted' | 'cancelled';
+  runNumber: string | null;
+}
+
+// --- Rehber, ajanda ve görüşme notları (Faz X6) ---
+
+export interface DirContact {
+  id: string;
+  fullName: string;
+  title: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  phone: string | null;
+  phone2: string | null;
+  email: string | null;
+  email2: string | null;
+  address: string | null;
+  partyId: string | null;
+  partyCode: string | null;
+  partyName: string | null;
+  employeeId: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  tags: string[];
+  note: string | null;
+  isArchived: boolean;
+  mergedIntoId: string | null;
+  anonymizedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DirDuplicate {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  isArchived: boolean;
+  matchedOn: 'phone' | 'email';
+}
+
+export interface DirOrg {
+  id: string;
+  name: string;
+  category: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  web: string | null;
+  partyId: string | null;
+  partyName: string | null;
+  note: string | null;
+  isArchived: boolean;
+  contactCount: number;
+  createdAt: string;
+}
+
+export type DirNoteKind = 'call' | 'meeting' | 'email' | 'other';
+
+export interface DirNote {
+  id: string;
+  contactId: string | null;
+  contactName: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  kind: DirNoteKind;
+  noteDate: string;
+  summary: string;
+  visibility: 'private' | 'shared';
+  projectId: string | null;
+  projectCode: string | null;
+  authorId: string;
+  authorName: string;
+  clearedAt: string | null;
+  editedAt: string | null;
+  createdAt: string;
+  mine: boolean;
+}
+
+export type AgendaBucketKey = 'overdue' | 'today' | 'upcoming' | 'later' | 'closed';
+
+export interface AgendaItem {
+  id: string;
+  kind: 'task' | 'appointment';
+  title: string;
+  description: string | null;
+  dueDate: string;
+  allDay: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  remindBeforeMinutes: number | null;
+  status: 'open' | 'done' | 'cancelled';
+  completedAt: string | null;
+  ownerId: string | null;
+  ownerName: string | null;
+  contactId: string | null;
+  contactName: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  partyId: string | null;
+  partyName: string | null;
+  projectId: string | null;
+  projectCode: string | null;
+  sourceNoteId: string | null;
+  createdBy: string | null;
+  bucket?: AgendaBucketKey;
+}
+
+export interface AgendaSummary {
+  asOf: string;
+  counts: { overdue: number; today: number; upcoming: number };
+  overdue: AgendaItem[];
+  today: AgendaItem[];
+  upcoming: AgendaItem[];
+}
+
+// --- Konsolidasyon, döviz pozisyonu, yönetici özeti (Faz X7) ------------------
+export type ConsolidationDenyReason = 'NOT_A_MEMBER' | 'ROLE_INSUFFICIENT' | 'MODULE_DISABLED' | 'LICENSE_SECTOR_MISMATCH';
+export interface ConsolidationGroup {
+  id: string;
+  name: string;
+  reportingCurrency: string;
+  isArchived: boolean;
+  members: { companyId: string; name: string | null; baseCurrency: string | null; status: 'ok' | ConsolidationDenyReason }[];
+}
+export interface ExcludedMember { companyId: string; reason: ConsolidationDenyReason }
+export interface ConsolidatedRow {
+  code: string;
+  name: string;
+  perCompany: Record<string, string>;
+  elimination: string;
+  consolidated: string;
+  unmapped: boolean;
+  presentIn: string[];
+}
+export interface StatementLine { key: string; label: string; values: Record<string, string>; kind: 'detail' | 'group' | 'subtotal' | 'total'; code?: string }
+export interface ConsolidatedReportData {
+  group: { id: string; name: string; reportingCurrency: string };
+  period: { from: string; to: string; closingDate: string; plMethod: string; mapLevel: string };
+  companies: { id: string; name: string; baseCurrency: string; closingRate: string; closingSource: string; plRate: string; plSource: string }[];
+  excluded: ExcludedMember[];
+  complete: boolean;
+  rows: ConsolidatedRow[];
+  unmapped: ConsolidatedRow[];
+  translationDiff: Record<string, string>;
+  totals: { perCompany: Record<string, string>; elimination: string; consolidated: string; translationDiff: string };
+  statements: { columns: string[]; balanceSheet: StatementLine[]; incomeStatement: StatementLine[]; difference: Record<string, string> };
+  eliminations: { id: string; description: string; kind: string; periodFrom: string; periodTo: string; lines: { accountCode: string; debit: string; credit: string }[] }[];
+  note: string;
+}
+export interface Elimination {
+  id: string;
+  periodFrom: string;
+  periodTo: string;
+  kind: string;
+  description: string;
+  voidedAt: string | null;
+  voidReason: string | null;
+  lines: { lineNo: number; accountCode: string; debit: string; credit: string; memo: string | null }[];
+}
+export interface FxPositionRow {
+  currency: string;
+  cash: string;
+  receivables: string;
+  payables: string;
+  net: string;
+  bookNet: string;
+  rate: string | null;
+  equivalent: string | null;
+  unrealized: string | null;
+}
+export interface CompanyFxPositionData {
+  company: { id: string; name: string; baseCurrency: string };
+  asOf: string;
+  rateDate: string;
+  rows: FxPositionRow[];
+  totals: { equivalent: string; unrealized: string } | null;
+  cashLines: { accountName: string; kind: string; currency: string; balance: string; book: string }[];
+  realized: { from: string; to: string; gain: string; loss: string; net: string };
+  note: string;
+}
+export interface GroupFxPositionData {
+  group: { id: string; name: string; reportingCurrency: string };
+  asOf: string;
+  rateDate: string;
+  rows: { currency: string; cash: string; receivables: string; payables: string; net: string; equivalent: string | null; unrealized: string | null; companies: number }[];
+  totals: { equivalent: string; unrealized: string } | null;
+  perCompany: CompanyFxPositionData[];
+  excluded: ExcludedMember[];
+  complete: boolean;
+  note: string;
+}
+export interface IncomeSummaryData {
+  netSales: string;
+  costOfSales: string;
+  grossProfit: string;
+  operatingExpenses: string;
+  otherIncome: string;
+  otherExpenses: string;
+  uncloseCosts: string;
+  revenue: string;
+  expenses: string;
+  profit: string;
+}
+export interface KpiData { grossMarginPct: string | null; netMarginPct: string | null; currentRatio: string | null; overdueReceivablesPct: string | null; dsoDays: string | null }
+export interface AgingSectionData { total: string; overdue: string; buckets: Record<'notDue' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90plus', string>; previousTotal: string | null }
+export interface ExecutiveSummaryData {
+  scope: { kind: 'company' | 'group'; id: string; name: string; currency: string; companies?: number };
+  period: { from: string; to: string };
+  compare: { from: string; to: string } | null;
+  income?: { current: IncomeSummaryData; previous: IncomeSummaryData | null; change: { revenue: string | null; expenses: string | null; profit: string | null } | null; currentAssets: string; shortLiabilities: string };
+  kpis?: { current: KpiData; previous: KpiData | null };
+  cash?: { total: string; approximate: boolean; accounts: number; previousTotal: string | null; byCurrency: { currency: string; balance: string }[] };
+  receivables?: AgingSectionData;
+  payables?: AgingSectionData;
+  stock?: { stockValue: string; itemCount: number; lowCount: number; previousValue: string | null };
+  topCustomers?: { name: string; net: string }[];
+  topSuppliers?: { name: string; net: string }[];
+  projects?: { count: number; contractedRevenue: string; eac: string; projectedProfit: string; marginPct: string | null; top: { name: string; projectedProfit: string; marginPct: string | null }[] };
+  hr?: { headcount: number; hires: number; leavers: number; payroll?: { gross: string; employer: string; cost: string; months: number } };
+  sectionCompanies?: Record<string, number>;
+  excluded?: ExcludedMember[];
+  complete?: boolean;
+  note: string;
+}
+export interface IntercompanyHint {
+  company: { id: string; name: string };
+  party: { id: string; code: string; name: string; taxNumber: string };
+  matchedCompany: { id: string; name: string };
+  receivable: string;
+  payable: string;
+  currency: string;
 }

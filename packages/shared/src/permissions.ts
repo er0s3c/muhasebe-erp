@@ -23,6 +23,8 @@ export const PERMISSIONS = [
   'treasury.manage',
   'treasury.post',
   'reports.read',
+  // Çoklu şirket konsolidasyonu (Faz X7): birden çok şirketin verisini bir arada gösterir; yalnızca sahip ve yönetici
+  'reports.consolidation',
   'data.export',
   'projects.read',
   'projects.manage',
@@ -41,6 +43,12 @@ export const PERMISSIONS = [
   'hr.manage',
   'hr.sensitive',
   'privacy.manage',
+  // Bordro (Faz D3): ücret verisi hr.sensitive'ten ayrı, ayrı izinle açılır
+  'hr.payroll',
+  'hr.payroll_manage',
+  // Rehber ve ajanda (Faz X6): üçüncü kişilerin kişisel verisi içerir; izleyici rolüne verilmez
+  'directory.read',
+  'directory.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -90,6 +98,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'realestate.manage',
     'realestate.approve',
     'hr.read',
+    'hr.payroll',
+    'hr.payroll_manage',
+    'directory.read',
   ],
   // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
   // Faturayı taslak olarak hazırlar; muhasebeleştirmeyi (invoices.post) muhasebeci yapar.
@@ -104,6 +115,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'invoices.manage',
     'deliveries.read',
     'deliveries.manage',
+    'directory.read',
+    'directory.manage',
   ],
   // Şantiye sorumlusu: malzeme sarfı/transferi/sayım girer, stok kartı açmaz; mal kabul (alış irsaliyesi)
   // ve sevk irsaliyesi işler, faturaya dokunmaz.
@@ -122,6 +135,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'procurement.read',
     'procurement.manage',
     'realestate.read',
+    'directory.read',
+    'directory.manage',
   ],
   viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'deliveries.read', 'treasury.read', 'reports.read', 'projects.read', 'subcontracts.read', 'procurement.read', 'realestate.read'],
 };

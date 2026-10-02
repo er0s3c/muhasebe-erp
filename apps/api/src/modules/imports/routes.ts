@@ -40,6 +40,7 @@ function toPreview(kind: ImportKind, plan: PlanResult): ImportPreview {
     rows: plan.rows,
     general: plan.general,
     summary: plan.summary,
+    unmatched: plan.unmatched,
     // Önce doğrula sonra yaz: tek bir hata bile varsa hiçbir kayıt yazılmaz
     canCommit: !generalErrors && counts.error === 0 && counts.ok > 0,
   };

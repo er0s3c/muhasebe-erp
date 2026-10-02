@@ -17,7 +17,7 @@ import { buildAgingReport, computeOpenItems, type PartyAllocation, type PartyLin
 
 const PARTY_SEQUENCE = 'PARTY';
 
-async function generateCode(tx: Tx, companyId: string, taken?: ReadonlySet<string>): Promise<string> {
+export async function generateCode(tx: Tx, companyId: string, taken?: ReadonlySet<string>): Promise<string> {
   // Yıla bağlı olmayan sayaç: yıl = 0. `taken`: toplu içe aktarmada dosyadaki açık kodlar (çakışan numara atlanır)
   for (;;) {
     const n = await nextNumber(tx, companyId, PARTY_SEQUENCE, 0);
@@ -129,7 +129,8 @@ export async function getParty(tx: Tx, id: string) {
 }
 
 export async function listParties(tx: Tx, q: ListPartiesQuery) {
-  const conds: SQL[] = [];
+  // Personel carileri (Faz X5) cari listesinde görünmez: personel cari ekranından (ücret/avans izinleriyle) yönetilir
+  const conds: SQL[] = [sql`p.kind <> 'employee'`];
   if (q.query) conds.push(trContains(['p.name', 'p.code', "coalesce(p.tax_number, '')", "coalesce(p.phone, '')"], q.query));
   if (q.kind === 'customer') conds.push(sql`p.kind in ('customer','both')`);
   if (q.kind === 'supplier') conds.push(sql`p.kind in ('supplier','both')`);
@@ -314,7 +315,14 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
         where e.entry_date <= ${asOf}::date
           ${partyId ? sql`and w.party_id = ${partyId}` : sql``}`)
     : { rows: [] as { party_id: string; charge_line_id: string; settle_line_id: string; amount: string; amount_base: string }[] };
-  for (const a of [...allocs.rows, ...writeoffs.rows]) {
+  // Çek/senet kaydı ve cirosunun kalem kapatması (Faz X1): olay tarihinde geçerlidir
+  const chequeAllocs = await tx.execute<{ party_id: string; charge_line_id: string; settle_line_id: string; amount: string; amount_base: string }>(sql`
+    select a.party_id, a.charge_line_id, a.settle_line_id, a.amount, a.amount_base
+    from cheque_allocations a
+    join cheque_events ev on ev.id = a.event_id
+    where a.control = ${type} and ev.event_date <= ${asOf}::date
+      ${partyId ? sql`and a.party_id = ${partyId}` : sql``}`);
+  for (const a of [...allocs.rows, ...writeoffs.rows, ...chequeAllocs.rows]) {
     byParty.get(a.party_id)?.allocations.push({
       chargeLineId: a.charge_line_id,
       settleLineId: a.settle_line_id,

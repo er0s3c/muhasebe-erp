@@ -27,6 +27,7 @@ interface FormState {
   saleCurrency: string;
   minLevel: string;
   notes: string;
+  tracksSerial: boolean;
 }
 
 /** "12.500000" -> "12.5" */
@@ -46,6 +47,7 @@ const fromItem = (i: Item): FormState => ({
   saleCurrency: i.saleCurrency,
   minLevel: trim(i.minLevel),
   notes: i.notes ?? '',
+  tracksSerial: i.tracksSerial,
 });
 
 interface Props {
@@ -64,7 +66,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
   const editing = !!item;
   const empty: FormState = {
     name: '', code: '', kind: 'goods', unit: 'adet', categoryId: '', barcode: '', vatCode: '',
-    purchasePrice: '', purchaseCurrency: company.baseCurrency, salePrice: '', saleCurrency: company.baseCurrency, minLevel: '', notes: '',
+    purchasePrice: '', purchaseCurrency: company.baseCurrency, salePrice: '', saleCurrency: company.baseCurrency, minLevel: '', notes: '', tracksSerial: false,
   };
   const [f, setF] = useState<FormState>(empty);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +107,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
             saleCurrency: f.saleCurrency,
             minLevel: goods && f.minLevel ? f.minLevel : null,
             notes: f.notes,
+            tracksSerial: goods && f.tracksSerial,
           },
         });
         return res.item;
@@ -124,6 +127,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           ...(f.salePrice ? { salePrice: f.salePrice } : {}),
           saleCurrency: f.saleCurrency,
           ...(goods && f.minLevel ? { minLevel: f.minLevel } : {}),
+          ...(goods && f.tracksSerial ? { tracksSerial: true } : {}),
           notes: f.notes,
         },
       });
@@ -257,6 +261,15 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           <Field label={t('inventory.form.minLevel')} hint={t('inventory.form.minLevelHint')} error={errors.minLevel}>
             {(id) => <MoneyInput id={id} value={f.minLevel} onChange={(v) => set('minLevel', v)} decimals={0} maxDecimals={4} />}
           </Field>
+        )}
+        {goods && (
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4" checked={f.tracksSerial} onChange={(e) => set('tracksSerial', e.target.checked)} />
+            <span>
+              {t('inventory.form.tracksSerial')}
+              <span className="block text-xs text-muted">{t('inventory.form.tracksSerialHint')}</span>
+            </span>
+          </label>
         )}
         <Field label={t('inventory.form.notes')} error={errors.notes}>
           {(id) => <Textarea id={id} value={f.notes} onChange={(e) => set('notes', e.target.value)} maxLength={1000} />}

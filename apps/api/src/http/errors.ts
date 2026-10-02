@@ -37,6 +37,30 @@ function pgError(err: unknown): { code?: string; message: string; constraint?: s
   return null;
 }
 
+const PG_RULE_CODES: Record<string, string> = {
+  ERP01: 'LEDGER_RULE_VIOLATION',
+  ERP02: 'STOCK_RULE_VIOLATION',
+  ERP03: 'INVOICE_RULE_VIOLATION',
+  ERP04: 'DELIVERY_RULE_VIOLATION',
+  ERP15: 'SALES_RULE_VIOLATION',
+  ERP16: 'PRICE_RULE_VIOLATION',
+  ERP17: 'SERIAL_RULE_VIOLATION',
+  ERP18: 'IMPORT_RULE_VIOLATION',
+  ERP19: 'EXPENSE_RULE_VIOLATION',
+  ERP20: 'EMPLOYEE_LEDGER_RULE_VIOLATION',
+  ERP21: 'DIRECTORY_RULE_VIOLATION',
+  ERP22: 'CONSOLIDATION_RULE_VIOLATION',
+};
+
+/** Toplu işlemlerde tek kalemin hatasını raporlamak için: uygulama hatası, veritabanı kuralı ya da beklenmeyen hata. */
+export function describeError(err: unknown): { code: string; message: string } {
+  if (err instanceof AppError) return { code: err.code, message: err.message };
+  const pg = pgError(err);
+  if (pg?.code && PG_RULE_CODES[pg.code]) return { code: PG_RULE_CODES[pg.code]!, message: pg.message };
+  if (pg?.code === '40001' || pg?.code === '40P01') return { code: 'RETRY', message: 'Eşzamanlı işlem çakışması; yeniden deneyin' };
+  return { code: 'ERROR', message: 'Beklenmeyen hata' };
+}
+
 export function errorHandler(
   err: FastifyError | Error,
   req: FastifyRequest,
@@ -146,10 +170,59 @@ export function errorHandler(
     return;
   }
   if (pg?.code === 'ERP13') {
-    // İnsan kaynakları/kişisel veri kuralları (personel silinmez, erişim günlüğü değişmez, sonuçlanmış talep)
+    // İnsan kaynakları/kişisel veri/puantaj kuralları (personel silinmez, erişim günlüğü değişmez, sonuçlanmış talep, kapalı puantaj ayı, çalışma aralığı)
     void reply
       .status(422)
       .send({ error: { code: 'HR_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP14') {
+    // Çek/senet ve teminat mektubu kuralları (geçersiz durum geçişi, değişmez geçmiş, eşleştirme aşımı, sonuçlanmış mektup)
+    void reply
+      .status(422)
+      .send({ error: { code: 'CHEQUE_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP15') {
+    // Satış teklif/sipariş ve toplu faturalama kuralları (geçersiz durum geçişi, donmuş belge, sipariş miktarı aşımı, çift toplu faturalama)
+    void reply
+      .status(422)
+      .send({ error: { code: 'SALES_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP16') {
+    // Fiyat listesi/cari özel fiyat kuralları (tür uyuşmazlığı, satırı olan listenin değişimi)
+    void reply.status(422).send({ error: { code: 'PRICE_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP17') {
+    // Seri no kuralları (çifte çıkış, yanlış depo, miktar/seri sayısı uyuşmazlığı, değişmez geçmiş)
+    void reply.status(422).send({ error: { code: 'SERIAL_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP18') {
+    // İthalat maliyet dağıtımı kuralları (durum geçişi, taslak dışı değişiklik, dağıtım toplamı, kaynak satır)
+    void reply.status(422).send({ error: { code: 'IMPORT_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP19') {
+    // Gider kartı/fişi kuralları (kaydedilmiş fiş değişmez, kartın hesabı gider hesabı olmalı)
+    void reply.status(422).send({ error: { code: 'EXPENSE_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP20') {
+    // Personel cari ve avans kuralları (kapanan tutar sınırı, durum geçişi, yalnız eklenen taksit, silme yasağı, kasa/banka bağlantısı)
+    void reply.status(422).send({ error: { code: 'EMPLOYEE_LEDGER_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP21') {
+    // Rehber kuralları (silme yasağı, anonimleştirme/birleştirme yolları, not yazarlığı, cari/personel bağlantı engelleri)
+    void reply.status(422).send({ error: { code: 'DIRECTORY_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP22') {
+    // Konsolidasyon kuralları (grup/üye/eliminasyon korumaları: salt-eklenir eliminasyon, dengeli kayıt, üyelik şartı)
+    void reply.status(422).send({ error: { code: 'CONSOLIDATION_RULE_VIOLATION', message: pg.message } });
     return;
   }
   if (pg?.code === '23505') {

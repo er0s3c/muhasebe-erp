@@ -1,17 +1,27 @@
 import { sql, type SQL } from 'drizzle-orm';
-import { formatDateTR, type FullDataQuery } from '@erp/shared';
+import { formatDateTR, hasPermission, type FullDataQuery } from '@erp/shared';
 import { TR } from '../../db/search';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ReportTable, TableColumn } from '../../files/table';
 import { BOOK_EXPORT_MAX_LINES, countBookLines, journalBook } from '../ledger/books';
 import { TXN_LABEL } from '../treasury/posting';
-import { INVOICE_TYPE_LABEL, col, journalBookColumns, unitLabel, PARTY_KIND_LABEL, STOCK_DOC_LABEL, type BuildCtx } from './builders';
+import { INVOICE_TYPE_LABEL, col, directoryContactsTable, directoryOrganizationsTable, journalBookColumns, unitLabel, PARTY_KIND_LABEL, STOCK_DOC_LABEL, type BuildCtx } from './builders';
 
 /** Sayfa başına en çok satır: büyük şirketlerde tarih süzgeci kullanılmalıdır. */
 export const FULL_DATA_SHEET_MAX_ROWS = 100_000;
 
 const STATUS_LABEL: Record<string, string> = { draft: 'Taslak', posted: 'Kaydedildi', cancelled: 'İptal' };
 const bool = (v: unknown) => (v ? 'Evet' : 'Hayır');
+const PAYROLL_STATUS: Record<string, string> = { draft: 'Taslak', approved: 'Onaylı', paid: 'Ödendi', cancelled: 'İptal' };
+const ATTENDANCE_DAY_LABEL: Record<string, string> = {
+  worked: 'Çalıştı',
+  absent: 'Devamsız',
+  annual_leave: 'Yıllık izin',
+  sick_leave: 'Hastalık izni',
+  unpaid_leave: 'Ücretsiz izin',
+  public_holiday: 'Resmî tatil',
+  weekly_rest: 'Hafta tatili',
+};
 
 /** İsteğe bağlı tarih aralığı koşulu. */
 function between(column: string, q: FullDataQuery): SQL {
@@ -56,7 +66,7 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
                p.credit_limit, p.is_active, p.notes,
                coalesce((select sum(l.debit_base - l.credit_base) from journal_lines l
                          join journal_entries e on e.id = l.entry_id and e.status = 'posted' where l.party_id = p.id), 0) as balance
-        from parties p order by p.name collate ${TR}`,
+        from parties p where p.kind <> 'employee' order by p.name collate ${TR}`,
   );
   tables.push(
     table(
@@ -191,7 +201,122 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
         col('warehouse', 'Depo', 'text', 18), col('plate', 'Plaka', 'text', 12), col('line', 'Satır', 'int'), col('item', 'Stok kodu', 'text', 14), col('description', 'Açıklama', 'text', 32),
         col('qty', 'Miktar', 'qty'), col('unit', 'Birim', 'text', 8), col('unitCost', 'Birim maliyet', 'money'), col('currency', 'Para birimi', 'text', 8), col('value', `Stok değeri (${b})`, 'money'),
       ],
-      notes.map((r) => ({ date: s(r.date), no: s(r.note_no), external: s(r.external_no), type: r.type === 'sales' ? 'Satış (sevk)' : 'Alış (mal kabul)', status: STATUS_LABEL[String(r.status)] ?? s(r.status), party: s(r.party), warehouse: s(r.warehouse), plate: s(r.vehicle_plate), line: Number(r.line_no), item: s(r.item_code), description: s(r.description), qty: s(r.quantity), unit: unitLabel(s(r.unit)), unitCost: s(r.unit_cost), currency: s(r.currency_code), value: s(r.stock_value) })),
+      notes.map((r) => ({ date: s(r.date), no: s(r.note_no), external: s(r.external_no), type: ({ sales: 'Satış (sevk)', purchase: 'Alış (mal kabul)', sales_return: 'Satış iadesi', purchase_return: 'Alış iadesi' } as Record<string, string>)[String(r.type)] ?? s(r.type), status: STATUS_LABEL[String(r.status)] ?? s(r.status), party: s(r.party), warehouse: s(r.warehouse), plate: s(r.vehicle_plate), line: Number(r.line_no), item: s(r.item_code), description: s(r.description), qty: s(r.quantity), unit: unitLabel(s(r.unit)), unitCost: s(r.unit_cost), currency: s(r.currency_code), value: s(r.stock_value) })),
+    ),
+  );
+
+  // Satış teklif ve siparişleri (başlık + satır tek sayfada)
+  const salesDocs = await query(
+    'Satış teklif ve siparişleri',
+    sql`select o.doc_date::text as date, o.doc_no, o.kind, o.status, p.name as party, o.currency_code, o.valid_until::text as valid_until,
+               l.line_no, i.code as item_code, l.description, l.quantity, l.unit, l.unit_price, l.discount_pct, l.vat_code, l.net, l.vat, l.gross
+        from sales_orders o
+        join parties p on p.id = o.party_id
+        join sales_order_lines l on l.order_id = o.id
+        left join items i on i.id = l.item_id
+        where true ${between('o.doc_date', q)}
+        order by o.doc_date, o.doc_no nulls last, o.created_at, l.line_no`,
+  );
+  tables.push(
+    table(
+      'Satış teklif ve siparişleri',
+      'Satış teklif ve siparişleri',
+      [
+        col('date', 'Tarih', 'date'), col('no', 'No', 'text', 16), col('kind', 'Tür', 'text', 10), col('status', 'Durum', 'text', 14), col('party', 'Cari', 'text', 32), col('currency', 'Para birimi', 'text', 8),
+        col('valid', 'Geçerlilik', 'date'), col('line', 'Satır', 'int'), col('item', 'Stok kodu', 'text', 14), col('description', 'Açıklama', 'text', 32), col('qty', 'Miktar', 'qty'), col('unit', 'Birim', 'text', 8),
+        col('price', 'Birim fiyat', 'money'), col('discount', 'İskonto %', 'money'), col('vatCode', 'KDV kodu', 'text', 10), col('net', 'Net', 'money'), col('vat', 'KDV', 'money'), col('gross', 'Brüt', 'money'),
+      ],
+      salesDocs.map((r) => ({ date: s(r.date), no: s(r.doc_no), kind: r.kind === 'quote' ? 'Teklif' : 'Sipariş', status: s(r.status), party: s(r.party), currency: s(r.currency_code), valid: s(r.valid_until), line: Number(r.line_no), item: s(r.item_code), description: s(r.description), qty: s(r.quantity), unit: unitLabel(s(r.unit)), price: s(r.unit_price), discount: s(r.discount_pct), vatCode: s(r.vat_code), net: s(r.net), vat: s(r.vat), gross: s(r.gross) })),
+    ),
+  );
+
+  // Fiyat listeleri (başlık + fiyat satırı tek sayfada) ve cari özel fiyatlar (X3)
+  const priceRows = await query(
+    'Fiyat listeleri',
+    sql`select l.code, l.name, l.kind, l.currency_code, l.is_active, l.is_default, l.valid_from::text as list_from, l.valid_to::text as list_to,
+               i.code as item_code, i.name as item_name, x.min_qty, x.price, x.valid_from::text as valid_from, x.valid_to::text as valid_to
+        from price_lists l
+        left join price_list_items x on x.price_list_id = l.id
+        left join items i on i.id = x.item_id
+        order by l.kind, l.code, i.code, x.min_qty`,
+  );
+  tables.push(
+    table(
+      'Fiyat listeleri',
+      'Fiyat listeleri',
+      [
+        col('code', 'Liste kodu', 'text', 14), col('name', 'Liste adı', 'text', 28), col('kind', 'Tür', 'text', 8), col('currency', 'Para birimi', 'text', 8), col('active', 'Aktif', 'text', 8), col('def', 'Varsayılan', 'text', 10),
+        col('listFrom', 'Liste başlangıç', 'date'), col('listTo', 'Liste bitiş', 'date'), col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 28),
+        col('minQty', 'En az miktar', 'qty'), col('price', 'Birim fiyat', 'money'), col('from', 'Fiyat başlangıç', 'date'), col('to', 'Fiyat bitiş', 'date'),
+      ],
+      priceRows.map((r) => ({ code: s(r.code), name: s(r.name), kind: r.kind === 'sales' ? 'Satış' : 'Alış', currency: s(r.currency_code), active: bool(r.is_active), def: bool(r.is_default), listFrom: s(r.list_from), listTo: s(r.list_to), item: s(r.item_code), itemName: s(r.item_name), minQty: s(r.min_qty), price: s(r.price), from: s(r.valid_from), to: s(r.valid_to) })),
+    ),
+  );
+  const partyPriceRows = await query(
+    'Cari özel fiyatlar',
+    sql`select p.code as party_code, p.name as party, x.kind, i.code as item_code, i.name as item_name, x.currency_code, x.price, x.discount_pct, x.min_qty, x.valid_from::text as valid_from, x.valid_to::text as valid_to
+        from party_prices x join parties p on p.id = x.party_id join items i on i.id = x.item_id
+        order by p.code, x.kind, i.code, x.min_qty`,
+  );
+  tables.push(
+    table(
+      'Cari özel fiyatlar',
+      'Cari özel fiyatlar',
+      [
+        col('partyCode', 'Cari kodu', 'text', 14), col('party', 'Cari', 'text', 28), col('kind', 'Tür', 'text', 8), col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 28), col('currency', 'Para birimi', 'text', 8),
+        col('price', 'Birim fiyat', 'money'), col('discount', 'İskonto %', 'money'), col('minQty', 'En az miktar', 'qty'), col('from', 'Başlangıç', 'date'), col('to', 'Bitiş', 'date'),
+      ],
+      partyPriceRows.map((r) => ({ partyCode: s(r.party_code), party: s(r.party), kind: r.kind === 'sales' ? 'Satış' : 'Alış', item: s(r.item_code), itemName: s(r.item_name), currency: s(r.currency_code), price: s(r.price), discount: s(r.discount_pct), minQty: s(r.min_qty), from: s(r.valid_from), to: s(r.valid_to) })),
+    ),
+  );
+
+  // Seri no sicili (güncel durum) ve hareket geçmişi (X3)
+  const serialRows = await query(
+    'Seri no sicili',
+    sql`select i.code as item_code, i.name as item_name, s.serial_no, s.status, w.name as warehouse,
+               (select p.name from serial_events e join parties p on p.id = e.party_id where e.serial_id = s.id and e.event = 'receive' order by e.seq desc limit 1) as supplier,
+               (select p.name from serial_events e join parties p on p.id = e.party_id where e.serial_id = s.id and e.event = 'issue' order by e.seq desc limit 1) as customer
+        from item_serials s join items i on i.id = s.item_id left join warehouses w on w.id = s.warehouse_id
+        where s.status <> 'pending'
+        order by i.code, s.serial_no`,
+  );
+  tables.push(
+    table(
+      'Seri no sicili',
+      'Seri no sicili',
+      [col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 28), col('serial', 'Seri no', 'text', 24), col('status', 'Durum', 'text', 16), col('warehouse', 'Depo', 'text', 18), col('supplier', 'Tedarikçi (son giriş)', 'text', 28), col('customer', 'Müşteri (son çıkış)', 'text', 28)],
+      serialRows.map((r) => ({ item: s(r.item_code), itemName: s(r.item_name), serial: s(r.serial_no), status: ({ in_stock: 'Depoda', issued: 'Müşteriye çıktı', returned: 'Tedarikçiye iade', scrapped: 'Fire/hurda', void: 'İptal (giriş ters)' } as Record<string, string>)[String(r.status)] ?? s(r.status), warehouse: s(r.warehouse), supplier: s(r.supplier), customer: s(r.customer) })),
+    ),
+  );
+
+  // İthalat dosyaları (mal satırı + dağıtılan ek maliyet) ve gider fişleri (X4)
+  const importRows = await query(
+    'İthalat dosyaları',
+    sql`select f.code, f.name, f.reference, f.status, f.file_date::text as file_date, f.post_date::text as post_date, l.source_doc_no, i.code as item_code, i.name as item_name,
+               l.quantity, l.value_base, coalesce((select sum(a.amount) from import_allocations a where a.file_line_id = l.id), 0) as allocated, l.stocked_amount, l.cogs_amount
+        from import_files f join import_file_lines l on l.import_file_id = f.id join items i on i.id = l.item_id
+        order by f.code, l.line_no`,
+  );
+  tables.push(
+    table(
+      'İthalat dosyaları',
+      'İthalat dosyaları',
+      [col('code', 'Dosya no', 'text', 16), col('name', 'Ad', 'text', 26), col('ref', 'Referans', 'text', 16), col('status', 'Durum', 'text', 12), col('fileDate', 'Dosya tarihi', 'date'), col('postDate', 'Kayıt tarihi', 'date'), col('doc', 'Kaynak belge', 'text', 16), col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 26), col('qty', 'Miktar', 'qty'), col('goods', 'Mal değeri', 'money'), col('alloc', 'Dağıtılan ek maliyet', 'money'), col('stocked', 'Stok maliyetine', 'money'), col('cogs', 'Satılan mal maliyetine', 'money')],
+      importRows.map((r) => ({ code: s(r.code), name: s(r.name), ref: s(r.reference), status: ({ draft: 'Taslak', allocated: 'Dağıtıldı', posted: 'Muhasebeleşti', cancelled: 'İptal' } as Record<string, string>)[String(r.status)] ?? s(r.status), fileDate: s(r.file_date), postDate: s(r.post_date), doc: s(r.source_doc_no), item: s(r.item_code), itemName: s(r.item_name), qty: s(r.quantity), goods: s(r.value_base), alloc: s(r.allocated), stocked: s(r.stocked_amount), cogs: s(r.cogs_amount) })),
+    ),
+  );
+  const expenseRows = await query(
+    'Gider fişleri',
+    sql`select e.entry_no, e.entry_date::text as entry_date, e.status, c.code as card_code, c.name as card_name, e.description, p.name as party, pr.code as project_code, e.document_ref, e.net, e.vat, e.withholding, e.gross
+        from expense_entries e join expense_cards c on c.id = e.card_id left join parties p on p.id = e.party_id left join projects pr on pr.id = e.project_id
+        order by e.entry_date, e.entry_no`,
+  );
+  tables.push(
+    table(
+      'Gider fişleri',
+      'Gider fişleri',
+      [col('no', 'Fiş no', 'text', 16), col('date', 'Tarih', 'date'), col('status', 'Durum', 'text', 10), col('card', 'Gider kartı', 'text', 24), col('desc', 'Açıklama', 'text', 30), col('party', 'Cari', 'text', 24), col('project', 'Proje', 'text', 12), col('ref', 'Belge referansı', 'text', 18), col('net', 'KDV hariç', 'money'), col('vat', 'KDV', 'money'), col('wh', 'Stopaj', 'money'), col('gross', 'Brüt', 'money')],
+      expenseRows.map((r) => ({ no: s(r.entry_no), date: s(r.entry_date), status: r.status === 'posted' ? 'Kayıtlı' : 'İptal', card: `${s(r.card_code)} ${s(r.card_name)}`, desc: s(r.description), party: s(r.party), project: s(r.project_code), ref: s(r.document_ref), net: s(r.net), vat: s(r.vat), wh: s(r.withholding), gross: s(r.gross) })),
     ),
   );
 
@@ -402,6 +527,82 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
         'Kişisel veri içerir; kimlik ve IBAN maskelidir',
       ),
     );
+  }
+
+  // Puantaj (kişisel veri: personel kodu/adı + gün türü ve saatler; kimlik içermez)
+  const attRows = await query(
+    'Puantaj',
+    sql`select e.code, e.full_name, a.work_date::text as work_date, a.day_type, a.normal_hours::text as normal_hours, a.overtime_hours::text as overtime_hours,
+               p.code as project, w.code as wbs, c.code as cost_code, a.note
+          from attendance_entries a
+          join employees e on e.id = a.employee_id
+          left join projects p on p.id = a.project_id
+          left join project_wbs w on w.id = a.wbs_id
+          left join cost_codes c on c.id = a.cost_code_id
+         where true ${between('a.work_date', q)}
+         order by a.work_date, e.code`,
+  );
+  if (attRows.length > 0) {
+    tables.push(
+      table(
+        'Puantaj',
+        'Puantaj',
+        [col('code', 'Personel kodu', 'text', 12), col('name', 'Ad soyad', 'text', 28), col('date', 'Tarih', 'date'), col('type', 'Gün türü', 'text', 16), col('normal', 'Normal saat', 'qty'), col('overtime', 'Fazla mesai saati', 'qty'), col('project', 'Proje', 'text', 12), col('wbs', 'İş kalemi', 'text', 12), col('costCode', 'Maliyet kodu', 'text', 12), col('note', 'Not', 'text', 28)],
+        attRows.map((r) => ({ code: s(r.code), name: s(r.full_name), date: s(r.work_date), type: ATTENDANCE_DAY_LABEL[String(r.day_type)] ?? s(r.day_type), normal: s(r.normal_hours), overtime: s(r.overtime_hours), project: s(r.project), wbs: s(r.wbs), costCode: s(r.cost_code), note: s(r.note) })),
+        `Kişisel veri içerir · ${scope}`,
+      ),
+    );
+  }
+
+  // Bordro: yalnızca çalıştırma düzeyi toplamlar. Personel bazında ücret/kesinti/net ayrıntısı bu dosyada YOKTUR (maskelenir):
+  // o ayrıntı hr.payroll izniyle bordro kaydından ve erişim günlüğüyle alınır.
+  const payRows = await query(
+    'Bordro',
+    sql`select number, month, status, employee_count, gross_total::text as gross, deductions_total::text as deductions, net_total::text as net,
+               employer_total::text as employer, has_unverified_params
+          from payroll_runs
+         where true ${q.from ? sql`and month >= ${q.from.slice(0, 7)}` : sql``} ${q.to ? sql`and month <= ${q.to.slice(0, 7)}` : sql``}
+         order by month, number`,
+  );
+  if (payRows.length > 0) {
+    tables.push(
+      table(
+        'Bordro',
+        'Bordro',
+        [col('number', 'Numara', 'text', 16), col('month', 'Ay', 'text', 10), col('status', 'Durum', 'text', 10), col('count', 'Personel', 'int'), col('gross', `Brüt toplam (${b})`, 'money'), col('ded', `Kesinti toplamı (${b})`, 'money'), col('net', `Net toplam (${b})`, 'money'), col('employer', `İşveren yükü (${b})`, 'money'), col('unverified', 'Doğrulanmamış oran', 'text', 18)],
+        payRows.map((r) => ({ number: s(r.number), month: s(r.month), status: PAYROLL_STATUS[String(r.status)] ?? s(r.status), count: Number(r.employee_count), gross: s(r.gross), ded: s(r.deductions), net: s(r.net), employer: s(r.employer), unverified: bool(r.has_unverified_params) })),
+        'Taslak / iç belge — resmî bordro değildir · personel bazında ücret ayrıntısı maskelenir (dahil değil)',
+      ),
+    );
+  }
+
+  // Sosyal güvenlik bildirimi: yalnızca bildirim düzeyi toplamlar; personel bazında prim/numara ayrıntısı bu dosyada YOKTUR (maskelenir).
+  const socRows = await query(
+    'Sosyal güvenlik',
+    sql`select number, month, status, employee_count, employee_premium_total::text as emp, employer_premium_total::text as er,
+               support_employee_total::text as se, support_employer_total::text as sr
+          from social_declarations
+         where true ${q.from ? sql`and month >= ${q.from.slice(0, 7)}` : sql``} ${q.to ? sql`and month <= ${q.to.slice(0, 7)}` : sql``}
+         order by month`,
+  );
+  if (socRows.length > 0) {
+    tables.push(
+      table(
+        'Sosyal güvenlik',
+        'Sosyal güvenlik',
+        [col('number', 'Numara', 'text', 16), col('month', 'Ay', 'text', 10), col('status', 'Durum', 'text', 12), col('count', 'Personel', 'int'), col('emp', `İşçi primi (${b})`, 'money'), col('er', `İşveren primi (${b})`, 'money'), col('se', `İşçi prim desteği (${b})`, 'money'), col('sr', `İşveren prim desteği (${b})`, 'money')],
+        socRows.map((r) => ({ number: s(r.number), month: s(r.month), status: r.status === 'finalized' ? 'Kesinleşmiş' : 'Taslak', count: Number(r.employee_count), emp: s(r.emp), er: s(r.er), se: s(r.se), sr: s(r.sr) })),
+        'Genel düzen — resmî bildirim formatı değildir, doğrulanmadı · personel bazında ayrıntı ve sosyal güvenlik no maskelenir (dahil değil)',
+      ),
+    );
+  }
+
+  // Rehber (X6): üçüncü kişilerin kişisel verisi → yalnızca rehber yönetim izni olanların dosyasına girer; görüşme notları dahil değildir
+  if (ctx.user && hasPermission(ctx.user.role, 'directory.manage')) {
+    const [contacts] = await directoryContactsTable(ctx, { archived: 'all' });
+    if (contacts && contacts.rows.length > 0) tables.push({ ...contacts, key: 'rehber', title: 'Rehber', sheet: 'Rehber' });
+    const [orgs] = await directoryOrganizationsTable(ctx, { archived: 'all' });
+    if (orgs && orgs.rows.length > 0) tables.push({ ...orgs, key: 'rehber-kurumlari', title: 'Rehber kurumları', sheet: 'Rehber kurumları' });
   }
 
   return tables;

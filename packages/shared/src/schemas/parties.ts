@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { currencyCode, isoDate, moneyString, uuid } from './common';
 
 export const PARTY_KINDS = ['customer', 'supplier', 'both'] as const;
-export type PartyKind = (typeof PARTY_KINDS)[number];
+/**
+ * Cari türü. 'employee' (Faz X5): personel carisi; yalnızca personel kartından açılır, müşteri/tedarikçi cari hesabında
+ * kullanılamaz (`partyKindFits` hep false), kullanıcı cari formunda seçilmez.
+ */
+export type PartyKind = (typeof PARTY_KINDS)[number] | 'employee';
 
 /** Cari kontrol hesabı türü: alacak tarafı (müşteri) ya da borç tarafı (tedarikçi). */
 export const PARTY_CONTROL_TYPES = ['receivable', 'payable'] as const;

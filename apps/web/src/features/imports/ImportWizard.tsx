@@ -26,7 +26,9 @@ import { apiBlob } from '../../lib/api';
 import { saveBlob } from '../../lib/download';
 import { errorMessage } from '../../lib/errors';
 import { useCompanyApi, useCQuery } from '../../lib/queries';
-import type { Account } from '../../lib/types';
+import type { Account, ItemListRow } from '../../lib/types';
+import { Combobox } from '../../components/ui/Combobox';
+import { usePartyOptions } from '../invoices/common';
 
 type Step = 'file' | 'map' | 'preview' | 'done';
 const STEPS = ['file', 'map', 'preview', 'done'] as const;
@@ -34,7 +36,8 @@ const STEPS = ['file', 'map', 'preview', 'done'] as const;
 /** Karşı hesap seçeneği gereken türler; yalnızca bu türlerde hesap listesi yüklenir. */
 const NEEDS_OFFSET: readonly ImportKind[] = ['party_openings', 'ledger_openings'];
 const NEEDS_DATE: readonly ImportKind[] = ['party_openings', 'stock_openings', 'ledger_openings'];
-const NEEDS_SKIP: readonly ImportKind[] = ['parties', 'items'];
+const NEEDS_INVOICE: readonly ImportKind[] = ['sales_invoices', 'purchase_invoices'];
+const NEEDS_SKIP: readonly ImportKind[] = ['parties', 'items', 'sales_invoices', 'purchase_invoices', 'directory_contacts'];
 const NEEDS_CLOSING: readonly ImportKind[] = ['bank_statement'];
 /** Önizleme tablosunda gösterilen en çok satır (yanıt zaten tüm satırları taşır; DOM'u şişirmemek için). */
 const SHOW_ROWS = 500;
@@ -86,6 +89,10 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
   const [offsetAccountId, setOffsetAccountId] = useState('');
   const [plugDifference, setPlugDifference] = useState(true);
   const [closingBalance, setClosingBalance] = useState('');
+  const [vatIncluded, setVatIncluded] = useState(false);
+  /** Eşleşmeyen cari/stok metinleri için kullanıcının seçtiği kayıtlar (dosyadaki metin → kayıt kimliği). */
+  const [partyMap, setPartyMap] = useState<Record<string, string>>({});
+  const [itemMap, setItemMap] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [filter, setFilter] = useState<'all' | 'error' | 'skip'>('all');
   const [result, setResult] = useState<ImportCommitResult | null>(null);
@@ -111,6 +118,8 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
     setFilter('all');
     setResult(null);
     setClosingBalance('');
+    setPartyMap({});
+    setItemMap({});
     if (fileInput.current) fileInput.current.value = '';
   };
   const close = (o: boolean) => {
@@ -132,6 +141,7 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
     ...(NEEDS_DATE.includes(kind) ? { openingDate } : {}),
     ...(NEEDS_OFFSET.includes(kind) && offsetAccountId ? { offsetAccountId } : {}),
     ...(kind === 'ledger_openings' ? { plugDifference } : {}),
+    ...(NEEDS_INVOICE.includes(kind) ? { vatIncluded, partyMap, itemMap } : {}),
   });
 
   /** Eşlenmiş sütunlardan alan anahtarlı satırlar; hiçbir eşli hücresi dolu olmayan satır atılır. */
@@ -212,11 +222,11 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
   const bankAmountMissing = kind === 'bank_statement' && ['amount', 'moneyIn', 'moneyOut'].every((k) => mapping[k] === null || mapping[k] === undefined);
   const canPreview = !missingRequired.length && !openingAmountMissing && !bankAmountMissing && (!NEEDS_DATE.includes(kind) || openingDate !== '');
 
-  const runPreview = async () => {
+  const runPreview = async (override?: { partyMap?: Record<string, string>; itemMap?: Record<string, string> }) => {
     setBusy(true);
     setError(null);
     try {
-      const res = await call<ImportPreview>(`/api/imports/${kind}/preview`, { method: 'POST', body: { rows: mappedRows(), options: options() } });
+      const res = await call<ImportPreview>(`/api/imports/${kind}/preview`, { method: 'POST', body: { rows: mappedRows(), options: { ...options(), ...override } } });
       setPreview(res);
       setFilter(res.counts.error > 0 ? 'error' : 'all');
       setStep('preview');
@@ -258,6 +268,16 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
     return list.slice(0, SHOW_ROWS);
   }, [preview, filter]);
   const filteredTotal = preview ? (filter === 'all' ? preview.rows.length : preview.rows.filter((r) => r.status === filter).length) : 0;
+
+  /** Eşleşmeyen bir cari/stok metni için kayıt seçilince eşleme yazılır ve ön izleme yenilenir. */
+  const resolve = (field: 'party' | 'item', text: string, id: string) => {
+    if (!id) return;
+    const nextParty = field === 'party' ? { ...partyMap, [text]: id } : partyMap;
+    const nextItem = field === 'item' ? { ...itemMap, [text]: id } : itemMap;
+    setPartyMap(nextParty);
+    setItemMap(nextItem);
+    void runPreview({ partyMap: nextParty, itemMap: nextItem });
+  };
 
   const stepIndex = STEPS.indexOf(step);
   const title = `${IMPORT_KIND_LABELS[kind]} — ${t('imports.button')}`;
@@ -466,6 +486,14 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
                   {(id) => <Input id={id} inputMode="decimal" value={closingBalance} onChange={(e) => setClosingBalance(e.target.value)} placeholder="0,00" />}
                 </Field>
               )}
+              {NEEDS_INVOICE.includes(kind) && (
+                <div className="flex items-end pb-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input type="checkbox" className="size-4" checked={vatIncluded} onChange={(e) => setVatIncluded(e.target.checked)} />
+                    {t('imports.map.vatIncluded')}
+                  </label>
+                </div>
+              )}
               {NEEDS_OFFSET.includes(kind) && (
                 <Field label={t('imports.map.offsetAccount')}>
                   {(id) => (
@@ -553,6 +581,10 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
               <Callout tone="warning">{t('imports.preview.nothing')}</Callout>
             ))}
 
+          {preview.unmatched && preview.unmatched.length > 0 && (
+            <UnmatchedPanel kind={kind} unmatched={preview.unmatched} busy={busy} onPick={resolve} />
+          )}
+
           <SegmentedTabs
             value={filter}
             onChange={setFilter}
@@ -630,9 +662,13 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
             <ul className="flex flex-col gap-1 text-sm">
               {result.entries.map((e) => (
                 <li key={e.id}>
-                  <span className="text-muted">{e.type === 'journal' ? t('imports.done.journal') : t('imports.done.stock')}: </span>
+                  <span className="text-muted">{e.type === 'journal' ? t('imports.done.journal') : e.type === 'invoice' ? t('imports.done.invoice') : t('imports.done.stock')}: </span>
                   {e.type === 'journal' ? (
                     <Link to={`/accounting/journal?open=${e.id}`} className="link font-mono text-[13px]" onClick={() => close(false)}>
+                      {e.no}
+                    </Link>
+                  ) : e.type === 'invoice' ? (
+                    <Link to={`/invoices/${e.id}`} className="link font-mono text-[13px]" onClick={() => close(false)}>
                       {e.no}
                     </Link>
                   ) : (
@@ -643,8 +679,58 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
             </ul>
           )}
           {result.entries.some((e) => e.type === 'journal') && <p className="text-xs text-muted">{t('imports.done.undoHint')}</p>}
+          {result.entries.some((e) => e.type === 'invoice') && <p className="text-xs text-muted">{t('imports.done.draftHint')}</p>}
         </div>
       )}
     </Sheet>
+  );
+}
+
+/** Eşleşmeyen cari/stok metinleri: kullanıcı kayıt seçer (aranabilir liste; öneriler üstte), ön izleme yenilenir. */
+function UnmatchedPanel({
+  kind,
+  unmatched,
+  busy,
+  onPick,
+}: {
+  kind: ImportKind;
+  unmatched: NonNullable<ImportPreview['unmatched']>;
+  busy: boolean;
+  onPick: (field: 'party' | 'item', text: string, id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const hasParty = unmatched.some((u) => u.field === 'party');
+  const hasItem = unmatched.some((u) => u.field === 'item');
+  const { options: partyOptions } = usePartyOptions(kind === 'sales_invoices' ? 'customer' : 'supplier', hasParty);
+  const { data: itemData } = useCQuery<{ items: ItemListRow[] }>(['items', 'options', 'import'], '/api/items?limit=500&active=true', { enabled: hasItem });
+  const itemOptions = (itemData?.items ?? []).map((i) => ({ value: i.id, label: `${i.code} — ${i.name}`, keywords: `${i.code} ${i.barcode ?? ''}` }));
+  return (
+    <div className="rounded-2xl border border-border p-4" data-testid="import-unmatched">
+      <h3 className="text-base">{t('imports.unmatched.title')}</h3>
+      <p className="mt-1 text-[13px] text-muted">{t('imports.unmatched.hint')}</p>
+      <ul className="mt-3 flex flex-col gap-3">
+        {unmatched.map((u) => (
+          <li key={`${u.field}:${u.text}`} className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+            <div className="text-sm">
+              <Badge tone="neutral">{t(`imports.unmatched.${u.field}`)}</Badge> <span className="ml-1 font-medium">{u.text}</span>
+              <span className="ml-2 text-xs text-muted">{t('imports.unmatched.rows', { count: u.rows })}</span>
+              {u.candidates.length > 0 && (
+                <span className="block text-xs text-muted">
+                  {t('imports.unmatched.suggestions')}: {u.candidates.map((c) => c.label).join(' · ')}
+                </span>
+              )}
+            </div>
+            <Combobox
+              options={u.field === 'party' ? partyOptions : itemOptions}
+              value={null}
+              placeholder={t('imports.unmatched.pick')}
+              aria-label={`${t(`imports.unmatched.${u.field}`)}: ${u.text}`}
+              disabled={busy}
+              onChange={(id) => onPick(u.field, u.text, id)}
+            />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

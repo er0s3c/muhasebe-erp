@@ -13,11 +13,14 @@ import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { DeliveryInvoicing, DeliveryNoteListRow, DeliveryNoteStatus, DeliveryNoteType, DeliverySummary } from '../../lib/types';
 import { DeliveryInvoicingBadge, DeliveryStatusBadge } from './common';
+import { NOTE_LIST } from './DeliveryNoteForm';
 
 const PAGE = 100;
 
 export const SalesDeliveryNotesPage = () => <DeliveryNotesPage type="sales" />;
 export const PurchaseDeliveryNotesPage = () => <DeliveryNotesPage type="purchase" />;
+export const SalesReturnNotesPage = () => <DeliveryNotesPage type="sales_return" />;
+export const PurchaseReturnNotesPage = () => <DeliveryNotesPage type="purchase_return" />;
 
 const INVOICING_VALUES = ['open', 'partial', 'invoiced'] as const;
 
@@ -29,7 +32,10 @@ function DeliveryNotesPage({ type }: { type: DeliveryNoteType }) {
   const [params] = useSearchParams();
   const year = todayIso().slice(0, 4);
   const initialInvoicing = (INVOICING_VALUES as readonly string[]).includes(params.get('invoicing') ?? '') ? (params.get('invoicing') as DeliveryInvoicing) : '';
-  const side = type === 'sales' ? 'sales' : 'purchases';
+  const side = NOTE_LIST[type].key;
+  /** Bekleyen (faturalanmamış) özet yalnızca satış/alış irsaliyesi için; iade irsaliyelerinde yok. */
+  const summarySide = type === 'sales' ? 'sales' : type === 'purchase' ? 'purchases' : null;
+  const isReturn = type === 'sales_return' || type === 'purchase_return';
 
   const [status, setStatus] = useState<DeliveryNoteStatus | ''>('');
   const [invoicing, setInvoicing] = useState<DeliveryInvoicing | ''>(initialInvoicing);
@@ -55,7 +61,7 @@ function DeliveryNotesPage({ type }: { type: DeliveryNoteType }) {
   const { data, isPending } = useCQuery<{ notes: DeliveryNoteListRow[]; total: number }>(['delivery-notes', 'list', qs.toString()], `/api/delivery-notes?${qs}`);
   const { data: summary } = useCQuery<DeliverySummary>(['delivery-summary'], '/api/delivery-notes/summary');
   const filtered = !!(status || invoicing || query);
-  const open = summary?.[side];
+  const open = summarySide ? summary?.[summarySide] : undefined;
 
   const newButton = (
     <Button variant="primary" onClick={() => navigate(`/delivery-notes/new?type=${type}`)}>
@@ -151,7 +157,7 @@ function DeliveryNotesPage({ type }: { type: DeliveryNoteType }) {
                   <Th className="w-24" num>
                     {t('deliveries.lineCol')}
                   </Th>
-                  <Th className="w-40">{t('deliveries.invoicingCol')}</Th>
+                  <Th className="w-40">{isReturn ? t('deliveries.creditCol') : t('deliveries.invoicingCol')}</Th>
                   <Th className="w-28">{t('common.status')}</Th>
                 </tr>
               </thead>

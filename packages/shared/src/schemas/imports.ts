@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { isoDate, uuid } from './common';
+import { directoryImportOptionsSchema } from './directory';
 
 /** İçe aktarılabilen veri türleri. */
-export const IMPORT_KINDS = ['parties', 'items', 'party_openings', 'stock_openings', 'ledger_openings', 'bank_statement'] as const;
+export const IMPORT_KINDS = ['parties', 'items', 'party_openings', 'stock_openings', 'ledger_openings', 'bank_statement', 'sales_invoices', 'purchase_invoices', 'directory_contacts'] as const;
 export type ImportKind = (typeof IMPORT_KINDS)[number];
 
 export const IMPORT_KIND_LABELS: Record<ImportKind, string> = {
@@ -12,6 +13,9 @@ export const IMPORT_KIND_LABELS: Record<ImportKind, string> = {
   stock_openings: 'Stok açılışı',
   ledger_openings: 'Genel mizan açılışı',
   bank_statement: 'Banka ekstresi',
+  sales_invoices: 'Satış faturaları',
+  purchase_invoices: 'Alış faturaları',
+  directory_contacts: 'Rehber kişileri',
 };
 
 /** Sınırlar (API ve arayüz aynı değerleri kullanır). */
@@ -49,7 +53,43 @@ const f = (key: string, label: string, required: boolean, synonyms: readonly str
   hint,
 });
 
+/**
+ * Fatura içe aktarma sütunları (X2): tek düz tablo, her satır bir fatura kalemidir; aynı "Belge no"yu taşıyan satırlar tek faturada
+ * toplanır (üst bilgi ilk satırdan alınır, sonraki satırlarda boş bırakılabilir ama çelişemez). Cari: kod, vergi no ya da ünvan.
+ */
+const invoiceImportFields = (side: 'sales' | 'purchases'): readonly ImportFieldDef[] => [
+  f('docNo', 'Belge no', true, ['fatura no', 'fatura numarası', 'belge numarası', 'fatura', 'no'], side === 'sales' ? 'SF-0001' : 'TED-2026-118', 'Aynı numaralı satırlar tek faturada toplanır; mükerrer kontrolü (cari + numara) için de kullanılır'),
+  f('date', 'Fatura tarihi', true, ['tarih', 'düzenleme tarihi', 'belge tarihi'], '15.03.2026'),
+  f('dueDate', 'Vade tarihi', false, ['vade', 'vadesi'], '14.04.2026', 'Boşsa carinin vade günü'),
+  f('party', 'Cari', true, ['cari kodu', 'cari kod', 'cari adı', 'cari ünvan', 'ünvan', 'müşteri', 'tedarikçi', 'müşteri adı', 'firma'], side === 'sales' ? 'CR-000101' : 'Demir Çelik A.Ş.', 'Cari kodu ya da tam ünvanı (Vergi no sütunu varsa önce o aranır)'),
+  f('taxNumber', 'Vergi no', false, ['vergi numarası', 'vergi kimlik no', 'vkn', 'tckn', 'vergi no/tc kimlik no'], '1234567890', 'Carinin vergi numarası: kodla/ünvanla eşleşmeyen satırlar için'),
+  f('currencyCode', 'Para birimi', false, ['döviz', 'döviz cinsi', 'pb'], 'TRY', 'Boşsa carinin para birimi'),
+  f('fxRate', 'Kur', false, ['döviz kuru', 'kur değeri'], '', 'Dövizli faturada; boşsa fatura tarihindeki kayıtlı kur'),
+  f('description', 'Fatura açıklaması', false, ['açıklama', 'not', 'notlar'], ''),
+  f('item', 'Stok kartı', false, ['stok kodu', 'stok adı', 'ürün kodu', 'ürün adı', 'kod', 'barkod', 'malzeme', 'ürün'], 'ST-000101', 'Stok kodu, barkod ya da tam ad; boşsa serbest (hizmet/gider) satır'),
+  f('lineDescription', 'Kalem açıklaması', false, ['kalem', 'satır açıklaması', 'hizmet', 'malzeme adı'], 'Çimento 50 kg', 'Stok kartı yoksa zorunlu'),
+  f('quantity', 'Miktar', true, ['adet', 'miktarı', 'mik'], '10'),
+  f('unit', 'Birim', false, ['ölçü birimi', 'ölçü'], 'adet', 'Boşsa kartın birimi'),
+  f('unitPrice', 'Birim fiyat', true, ['fiyat', 'birim fiyatı', 'birim bedel', 'liste fiyatı'], '240,00', 'Belge para biriminde; "KDV dahil" seçeneğine göre KDV dahil/hariç'),
+  f('discountPct', 'İskonto %', false, ['iskonto', 'indirim', 'iskonto oranı'], '0'),
+  f('vatCode', 'KDV kodu', false, ['kdv', 'kdv oranı', 'kdv %'], 'KDV-16', 'Ayarlar > KDV oranları kodu ya da oran (16); boşsa kartın KDV kodu'),
+];
+
 export const IMPORT_FIELDS: Record<ImportKind, readonly ImportFieldDef[]> = {
+  sales_invoices: invoiceImportFields('sales'),
+  purchase_invoices: invoiceImportFields('purchases'),
+  directory_contacts: [
+    f('fullName', 'Ad soyad', true, ['ad', 'adı soyadı', 'isim', 'kişi', 'yetkili', 'ad soyad / ünvan'], 'Ahmet Yılmaz'),
+    f('title', 'Unvan', false, ['görev', 'pozisyon', 'meslek'], 'Şube müdürü'),
+    f('organization', 'Kurum', false, ['firma', 'şirket', 'kurum adı', 'organizasyon'], 'Örnek Bankası', 'Mevcut kurum adıyla eşleşir; yoksa yeni kurum açılır'),
+    f('phone', 'Telefon', false, ['tel', 'telefon no', 'gsm', 'cep', 'cep telefonu'], '0392 222 00 00'),
+    f('phone2', 'Telefon 2', false, ['tel 2', 'ikinci telefon', 'telefon2', 'cep 2'], ''),
+    f('email', 'E-posta', false, ['eposta', 'e-mail', 'email', 'mail'], 'ahmet@ornek.com'),
+    f('email2', 'E-posta 2', false, ['eposta 2', 'ikinci e-posta', 'email2'], ''),
+    f('address', 'Adres', false, ['adres bilgisi'], 'Lefkoşa'),
+    f('tags', 'Etiketler', false, ['etiket', 'grup', 'kategori'], 'banka, kredi', 'Virgül ya da noktalı virgülle ayrılır'),
+    f('note', 'Not', false, ['notlar', 'açıklama'], ''),
+  ],
   parties: [
     f('code', 'Kod', false, ['cari kod', 'cari kodu', 'hesap kodu', 'müşteri kodu'], 'CR-000101', 'Boşsa otomatik verilir'),
     f('name', 'Ünvan', true, ['ünvan / ad soyad', 'ad soyad', 'ad', 'adı', 'cari adı', 'cari ünvan', 'firma', 'firma adı', 'müşteri adı', 'isim', 'hesap adı'], 'Demir Çelik A.Ş.'),
@@ -188,13 +228,28 @@ export const bankStatementOptionsSchema = z.object({
   mapping: z.record(z.string().max(64), z.string().max(200)).optional(),
 });
 
+/** Fatura içe aktarma: tüm faturalar TASLAK olarak yazılır (kayıt ve yevmiye faturalar ekranından). */
+export const invoicesImportOptionsSchema = z.object({
+  numberFormat,
+  /** Birim fiyatlar KDV dahil mi? */
+  vatIncluded: z.boolean().default(false),
+  /** Aynı cari + belge no'lu mevcut fatura varsa o fatura atlanır (kapalıysa hata). */
+  skipDuplicates: z.boolean().default(true),
+  /** Kullanıcının çözdüğü eşleşmeyenler: dosyadaki metin → cari/stok kartı kimliği. */
+  partyMap: z.record(z.string().max(300), uuid).default({}),
+  itemMap: z.record(z.string().max(300), uuid).default({}),
+});
+
 export const IMPORT_OPTION_SCHEMAS = {
+  sales_invoices: invoicesImportOptionsSchema,
+  purchase_invoices: invoicesImportOptionsSchema,
   parties: partiesImportOptionsSchema,
   items: itemsImportOptionsSchema,
   party_openings: partyOpeningsOptionsSchema,
   stock_openings: stockOpeningsOptionsSchema,
   ledger_openings: ledgerOpeningsOptionsSchema,
   bank_statement: bankStatementOptionsSchema,
+  directory_contacts: directoryImportOptionsSchema,
 } as const satisfies Record<ImportKind, z.ZodType>;
 
 export const importRunSchema = z.object({
@@ -232,6 +287,17 @@ export interface ImportPreview {
   /** Ön izleme özeti (yeni kayıt sayısı, toplamlar…). */
   summary: { label: string; value: string }[];
   canCommit: boolean;
+  /** Eşleşmeyen cari/stok metinleri ve öneriler: arayüz kullanıcıdan seçtirir, seçim seçeneklere (partyMap/itemMap) yazılır. */
+  unmatched?: ImportUnmatched[];
+}
+
+export interface ImportUnmatched {
+  field: 'party' | 'item';
+  /** Dosyadaki metin (eşleme anahtarı). */
+  text: string;
+  /** Bu metni taşıyan satır sayısı. */
+  rows: number;
+  candidates: { id: string; label: string }[];
 }
 
 export interface ImportCommitResult {
@@ -240,5 +306,5 @@ export interface ImportCommitResult {
   skipped: number;
   summary: { label: string; value: string }[];
   /** Oluşan yevmiye/belge kayıtları (varsa) */
-  entries: { type: 'journal' | 'stock'; id: string; no: string }[];
+  entries: { type: 'journal' | 'stock' | 'invoice'; id: string; no: string }[];
 }

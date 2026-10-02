@@ -81,6 +81,23 @@ export const ACCOUNT_MAPPING_KEYS = [
   // KDV tevkifatı (Faz B kapanışı); varsayılanlar doğrulanmamıştır
   'vat_withholding_payable',
   'vat_withholding_receivable',
+  // Bordro (Faz D3); varsayılanlar doğrulanmamıştır
+  'payroll_labor_cost',
+  'payroll_employer_cost',
+  'payroll_payable',
+  'payroll_social_payable',
+  'payroll_tax_payable',
+  'payroll_other_payable',
+  // Çek/senet portföyü (Faz X1); varsayılanlar doğrulanmamıştır
+  'cheque_portfolio',
+  'note_portfolio',
+  'docs_in_collection',
+  'cheque_issued',
+  'note_payable',
+  // İthalat maliyet dağıtımı (Faz X4); varsayılan doğrulanmamıştır
+  'import_cost_clearing',
+  // Personel avansları (Faz X5); varsayılan doğrulanmamıştır
+  'employee_advance',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -122,6 +139,25 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     // KDV tevkifatı: taşeronda idareye ödenecek tevkifat borcu, işverende işverence tevkif edilen KDV alacağı
     vat_withholding_payable: '360',
     vat_withholding_receivable: '136',
+    // Bordro: direkt işçilik gideri (brüt ücret), işveren yükü gideri, ödenecek net ücret (personele borçlar),
+    // ödenecek sosyal güvenlik (361), ödenecek vergi ve fonlar (360), diğer kesintiler/çeşitli borçlar (336)
+    payroll_labor_cost: '720',
+    payroll_employer_cost: '720',
+    payroll_payable: '335',
+    payroll_social_payable: '361',
+    payroll_tax_payable: '360',
+    payroll_other_payable: '336',
+    // Çek/senet: alınan çekler (101), alacak senetleri (121), tahsile verilen çek/senetler (108 diğer hazır değerler),
+    // verilen çekler ve ödeme emirleri (103), borç senetleri (321). Doğrulanmamıştır: tahsildeki belge hesabı uygulamaya göre değişir.
+    cheque_portfolio: '101',
+    note_portfolio: '121',
+    docs_in_collection: '108',
+    cheque_issued: '103',
+    note_payable: '321',
+    // İthalat maliyetlerinin stoğa aktarılırken alacaklandırılan hesap: gideri ilk yazdığınız hesap (varsayılan genel yönetim gideri; satırda hesap seçilebilir). Doğrulanmamıştır.
+    import_cost_clearing: '632',
+    // Personele verilen avanslar (alacak): genel Tekdüzen yapıda 195 iş avansları / 196 personel avansları; 196 seçildi. Doğrulanmamıştır.
+    employee_advance: '196',
   };
 }
 
@@ -176,6 +212,10 @@ export const invoiceLineSchema = z.object({
   wbsId: uuid.nullable().optional(),
   /** Alış faturasında, faturalanan sipariş satırı (üçlü eşleştirme: sipariş – mal kabul – fatura). */
   orderLineId: uuid.nullable().optional(),
+  /** Satış faturasında, faturalanan satış siparişi satırı (X2). */
+  salesOrderLineId: uuid.nullable().optional(),
+  /** Seri takipli kartın doğrudan stok hareketi yapan satırında: miktar kadar seri no. */
+  serials: z.array(z.string().trim().min(1).max(60)).max(1000).optional(),
 });
 export type InvoiceLineInput = z.infer<typeof invoiceLineSchema>;
 
@@ -227,8 +267,11 @@ function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx)
       if (l.sourceLineId && !doc.returnOfId) {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'sourceLineId'], message: 'Satır bağı için orijinal fatura seçilmeli' });
       }
-      if (l.deliveryLineId && doc.type !== 'sales' && doc.type !== 'purchase') {
-        ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'İrsaliye bağı yalnızca satış ve alış faturasında kullanılır' });
+      if (l.deliveryLineId && doc.type === 'expense') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'deliveryLineId'], message: 'İrsaliye bağı gider faturasında kullanılamaz' });
+      }
+      if (l.salesOrderLineId && doc.type !== 'sales') {
+        ctx.addIssue({ code: 'custom', path: ['lines', i, 'salesOrderLineId'], message: 'Sipariş bağı yalnızca satış faturasında kullanılır' });
       }
       if (l.orderLineId && doc.type !== 'purchase') {
         ctx.addIssue({ code: 'custom', path: ['lines', i, 'orderLineId'], message: 'Sipariş bağı yalnızca alış faturasında kullanılır' });

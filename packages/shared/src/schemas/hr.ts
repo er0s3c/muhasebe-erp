@@ -59,12 +59,16 @@ export const exportEmployeeDataSchema = z.object({ reason: text(300).min(3, 'Ger
 
 export const DSR_KINDS = ['access', 'export', 'correction', 'erasure'] as const;
 export type DsrKind = (typeof DSR_KINDS)[number];
-export const createDsrSchema = z.object({
-  employeeId: z.string().uuid().nullable().optional(),
-  requesterName: text(200).min(2, 'Talep eden gerekli'),
-  kind: z.enum(DSR_KINDS),
-  description: optText(1000),
-});
+export const createDsrSchema = z
+  .object({
+    employeeId: z.string().uuid().nullable().optional(),
+    /** Rehber kişisi (X6): talep personele ya da rehber kişisine yönelir, ikisine birden değil. */
+    contactId: z.string().uuid().nullable().optional(),
+    requesterName: text(200).min(2, 'Talep eden gerekli'),
+    kind: z.enum(DSR_KINDS),
+    description: optText(1000),
+  })
+  .refine((v) => !(v.employeeId && v.contactId), { message: 'Talep personele ya da rehber kişisine yönelir, ikisine birden değil', path: ['contactId'] });
 export const resolveDsrSchema = z.object({
   outcome: z.enum(['completed', 'rejected']),
   resolutionNote: text(1000).min(3, 'Sonuç notu gerekli'),

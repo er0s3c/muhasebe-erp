@@ -16,8 +16,9 @@ import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCompanyApi, useCQuery } from '../../lib/queries';
-import type { AccountMapping, DeliveryNoteDetail, InvoiceableOrderLine, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
+import type { AccountMapping, PriceResolution, DeliveryNoteDetail, InvoiceableOrderLine, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
 import { useUnitLabel, useWarehouses } from '../inventory/common';
+import { SerialEntry } from '../inventory/SerialEntry';
 import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../projects/common';
 import { INVOICE_INVALIDATE, useLineAccountOptions, usePartyOptions, useTaxRates, vatRateFor } from './common';
 import { DeliveryPicker } from './DeliveryPicker';
@@ -48,6 +49,12 @@ interface LineState {
   /** Alış faturasında bağlı sipariş satırı (üçlü eşleştirme) ve görünen sipariş kodu */
   orderLineId: string;
   orderCode: string;
+  /** Satış faturasında bağlı satış siparişi satırı (X2; düzenlemede korunur). */
+  salesOrderLineId: string;
+  /** Seri takipli kartın doğrudan stok hareketi yapan satırında seri no'lar (X3). */
+  serials?: string[];
+  /** Fiyatın kaynağı (fiyat çözümleyici önerisi); kullanıcı fiyatı değiştirince silinir. */
+  priceNote?: string;
 }
 
 let lineKey = 1;
@@ -72,6 +79,7 @@ const emptyLine = (vatCode = ''): LineState => ({
   wbsId: '',
   orderLineId: '',
   orderCode: '',
+  salesOrderLineId: '',
 });
 
 interface DeliverySource {
@@ -102,7 +110,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const navigate = useNavigate();
   const toast = useToast();
   const unitLabel = useUnitLabel();
-  const { company } = useCompanyApi();
+  const { company, call } = useCompanyApi();
   const base = company.baseCurrency;
   const meta = INVOICE_TYPE_META[type];
   const salesSide = meta.side === 'sales';
@@ -163,6 +171,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         wbsId: l.wbsId ?? '',
         orderLineId: l.poLineId ?? '',
         orderCode: l.orderCode ?? '',
+        salesOrderLineId: l.salesOrderLineId ?? '',
+        serials: l.serials ?? [],
       }));
     }
     if (original) {
@@ -190,6 +200,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           wbsId: '',
           orderLineId: '',
           orderCode: '',
+          salesOrderLineId: '',
         }));
     }
     return [emptyLine()];
@@ -327,9 +338,37 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       ];
     });
 
+  /** Fiyat çözümleyici (cari özel fiyat > cari listesi > varsayılan liste > kart) ve iskonto önerisi; kullanıcı her zaman değiştirebilir. */
+  const suggest = async (key: number, itemId: string, qty: string) => {
+    if (!partyId || !itemId || !/^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) || !qty || dec(qty).lte(0)) return;
+    const qs = new URLSearchParams({ partyId, itemId, kind: salesSide ? 'sales' : 'purchase', date: invoiceDate, currency, quantity: qty });
+    try {
+      const r = await call<PriceResolution>(`/api/price-resolution?${qs}`);
+      if (r.unitPrice === null && dec(r.discountPct).isZero()) return;
+      setLines((cur) =>
+        cur.map((l) =>
+          l.key === key && l.itemId === itemId
+            ? {
+                ...l,
+                ...(r.unitPrice !== null ? { unitPrice: trim(r.unitPrice) } : {}),
+                discountPct: dec(r.discountPct).isZero() ? '' : trim(r.discountPct),
+                priceNote:
+                  r.unitPrice !== null
+                    ? t(`pricing.source.${r.priceSource}`, { list: r.priceListName ?? '' }) + (dec(r.discountPct).isZero() ? '' : ` · ${t(`pricing.discountSource.${r.discountSource}`)}`)
+                    : '',
+              }
+            : l,
+        ),
+      );
+    } catch {
+      // Öneri alınamazsa kart fiyatı ve elle giriş geçerlidir
+    }
+  };
+
   const pickItem = (key: number, itemId: string) => {
     const it = itemById.get(itemId);
     if (!it) return;
+    void suggest(key, itemId, lines.find((l) => l.key === key)?.quantity || '1');
     // Fiyat yalnızca kartın fiyat para birimi fatura para birimiyle aynıysa hazır gelir (çevrim yapılmaz)
     const price = salesSide ? { v: it.salePrice, c: it.saleCurrency } : { v: it.purchasePrice, c: it.purchaseCurrency };
     patch(key, {
@@ -337,6 +376,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       description: it.name,
       unit: it.unit,
       unitPrice: price.v && price.c === currency ? trim(price.v) : '',
+      priceNote: '',
+      serials: [],
       vatCode: it.vatCode ?? '',
       accountId: '',
       // Stoklu kalem projeye doğrudan yazılmaz (malzeme stoktan projeye sarf edilir)
@@ -370,6 +411,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       sourceLineId: l.sourceLineId || null,
       deliveryLineId: l.deliveryLineId || null,
       orderLineId: l.orderLineId || null,
+      ...(l.serials && l.serials.length > 0 && !l.deliveryLineId ? { serials: l.serials } : {}),
+      ...(type === 'sales' && l.salesOrderLineId ? { salesOrderLineId: l.salesOrderLineId } : {}),
       // Proje yalnızca stoksuz (serbest/hizmet) satırda ve alış tarafında gönderilir
       ...(projectAllowed && (!l.itemId || itemById.get(l.itemId)?.kind === 'service') ? projectFields(l.projectId, l.wbsId) : {}),
     })),
@@ -539,7 +582,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                       />
                       <Input className="col-span-2 lg:col-span-1" value={l.description} maxLength={300} aria-label={`${t('common.description')} ${i + 1}`} placeholder={t('common.description')} onChange={(e) => patch(l.key, { description: e.target.value })} />
                       <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.quantity')} ${i + 1}`} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
-                      <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('invoices.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => patch(l.key, { unitPrice: v })} />
+                      <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('invoices.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => patch(l.key, { unitPrice: v, priceNote: '' })} />
                       <MoneyInput value={l.discountPct} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.discount')} ${i + 1}`} placeholder="%" className="text-right" onChange={(v) => patch(l.key, { discountPct: v })} />
                       <Select className="px-2 pr-6" value={l.vatCode} aria-label={`${t('invoices.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
                         <option value="">{t('invoices.form.noVat')}</option>
@@ -570,7 +613,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         onChange={(v) => patch(l.key, v)}
                       />
                     )}
-                    {free || l.returnable || l.deliveryLineId || l.orderLineId ? (
+                    {free || l.returnable || l.deliveryLineId || l.orderLineId || l.priceNote || (it?.tracksSerial && !l.deliveryLineId) ? (
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 pl-1 text-[13px] text-muted">
                         {free && (
                           <span className="flex items-center gap-2">
@@ -584,6 +627,24 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                               onChange={(v) => patch(l.key, { accountId: v })}
                             />
                           </span>
+                        )}
+                        {l.priceNote && (
+                          <span data-testid="price-source">
+                            {t('pricing.priceFrom', { source: l.priceNote })}
+                          </span>
+                        )}
+                        {it && !l.sourceLineId && !l.deliveryLineId && partyId && (
+                          <button type="button" className="link" onClick={() => void suggest(l.key, l.itemId, l.quantity || '1')}>
+                            {t('pricing.refresh')}
+                          </button>
+                        )}
+                        {it?.tracksSerial && !l.deliveryLineId && (
+                          <SerialEntry
+                            label={String(i + 1)}
+                            serials={l.serials ?? []}
+                            quantity={l.quantity}
+                            onChange={(serials) => patch(l.key, { serials })}
+                          />
                         )}
                         {l.orderLineId && <span>{t('procurement.match.fromOrder', { code: l.orderCode })}</span>}
                         {l.returnable && <span>{t('invoices.form.returnable', { qty: l.returnable })}</span>}
@@ -610,7 +671,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                   {t('procurement.match.pickerButton')}
                 </Button>
               )}
-              {(type === 'sales' || type === 'purchase') && canDelivery && !returnOfId && (
+              {type !== 'expense' && canDelivery && (!returnOfId || meta.isReturn) && (
                 <Button size="sm" disabled={!partyId} onClick={() => setPickerOpen(true)}>
                   <Truck className="size-3.5" aria-hidden />
                   {t('deliveries.picker.button')}

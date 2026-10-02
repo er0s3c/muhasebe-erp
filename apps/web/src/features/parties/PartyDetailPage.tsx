@@ -24,6 +24,8 @@ import { useCompany } from '../../lib/session';
 import type { OpenItem, OpenItemsData, PartyDetail, PartyStatementData } from '../../lib/types';
 import { BalanceText } from './BalanceText';
 import { PartyFormSheet } from './PartyFormSheet';
+import { PartyPricingCard } from '../pricing/PartyPricingCard';
+import { RelatedContacts } from '../directory/RelatedContacts';
 
 type Tab = 'statement' | 'openItems' | 'card';
 
@@ -195,6 +197,8 @@ export function PartyDetailPage() {
           </dl>
         </Card>
       )}
+      {tab === 'card' && party.kind !== 'employee' && <PartyPricingCard partyId={party.id} kind={party.kind} />}
+      {tab === 'card' && party.kind !== 'employee' && <div className="mt-5"><RelatedContacts partyId={party.id} /></div>}
 
       <PartyFormSheet open={editing} onOpenChange={setEditing} party={party} onSaved={() => undefined} />
 

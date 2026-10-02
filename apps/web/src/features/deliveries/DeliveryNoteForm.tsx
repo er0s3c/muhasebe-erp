@@ -1,7 +1,7 @@
 import { ArrowLeft, Plus, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { DELIVERY_NOTE_TYPE_META, dec, todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -14,8 +14,10 @@ import { useToast } from '../../components/ui/Toast';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { useCan, useCMutation, useCompanyApi, useNavigation } from '../../lib/queries';
-import type { DeliveryNoteDetail, DeliveryNoteType } from '../../lib/types';
+import { useCan, useCMutation, useCompanyApi, useCQuery, useNavigation } from '../../lib/queries';
+import { formatDateTR } from '../../lib/format';
+import type { DeliveryNoteDetail, DeliveryNoteType, ReturnableLine } from '../../lib/types';
+import { SerialEntry } from '../inventory/SerialEntry';
 import { qtyText, useItemOptions, useUnitLabel, useWarehouses } from '../inventory/common';
 import { usePartyOptions } from '../invoices/common';
 import { DELIVERY_INVALIDATE } from './common';
@@ -29,10 +31,25 @@ interface LineState {
   unitCost: string;
   currency: string;
   fxRate: string;
+  /** İade irsaliyesinde, iade edilen orijinal irsaliye satırı ve en çok iade edilebilir miktar. */
+  sourceLineId: string;
+  maxQty: string;
+  /** Siparişten gelen satırın sipariş satırı bağı (düzenlemede korunur). */
+  salesOrderLineId: string;
+  /** Seri takipli kartta satırın seri no'ları (X3). */
+  serials?: string[];
 }
 
 let lineKey = 1;
-const emptyLine = (currency: string): LineState => ({ key: lineKey++, itemId: '', description: '', quantity: '1', unit: '', unitCost: '', currency, fxRate: '' });
+const emptyLine = (currency: string): LineState => ({ key: lineKey++, itemId: '', description: '', quantity: '1', unit: '', unitCost: '', currency, fxRate: '', sourceLineId: '', maxQty: '', salesOrderLineId: '' });
+
+/** Tür → liste yolu ve çeviri anahtarı. */
+export const NOTE_LIST: Record<DeliveryNoteType, { path: string; key: 'sales' | 'purchases' | 'salesReturns' | 'purchaseReturns' }> = {
+  sales: { path: '/delivery-notes/sales', key: 'sales' },
+  purchase: { path: '/delivery-notes/purchases', key: 'purchases' },
+  sales_return: { path: '/delivery-notes/sales-returns', key: 'salesReturns' },
+  purchase_return: { path: '/delivery-notes/purchase-returns', key: 'purchaseReturns' },
+};
 
 /** "12.5000" -> "12.5"; "3.0000" -> "3" */
 const trim = (v: string) => (v.includes('.') ? v.replace(/0+$/, '').replace(/\.$/, '') : v);
@@ -47,6 +64,12 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
   const base = company.baseCurrency;
   const meta = DELIVERY_NOTE_TYPE_META[type];
   const inbound = meta.inbound;
+  const isReturn = meta.isReturn;
+  /** Maliyet yalnızca alış irsaliyesinde girilir; dış numara alış ve alış iadesinde. */
+  const hasCost = type === 'purchase';
+  const showExternal = type === 'purchase' || type === 'purchase_return';
+  const [params] = useSearchParams();
+  const presetOriginal = !initial && isReturn ? params.get('returnOf') : null;
   const canPost = useCan()('deliveries.post');
   const allowNegative = useNavigation().data?.company.allowNegativeStock ?? false;
 
@@ -62,6 +85,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
   const [vehiclePlate, setVehiclePlate] = useState(initial?.note.vehiclePlate ?? '');
   const [driverName, setDriverName] = useState(initial?.note.driverName ?? '');
   const [description, setDescription] = useState(initial?.note.description ?? '');
+  const [returnOfId, setReturnOfId] = useState(initial?.note.returnOfId ?? '');
   const [lines, setLines] = useState<LineState[]>(() =>
     initial
       ? initial.lines.map((l) => ({
@@ -73,12 +97,63 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
           unitCost: l.unitCost ? trim(l.unitCost) : '',
           currency: l.currencyCode ?? base,
           fxRate: l.fxRate && l.currencyCode !== base ? trim(l.fxRate) : '',
+          sourceLineId: l.sourceLineId ?? '',
+          maxQty: '',
+          salesOrderLineId: l.salesOrderLineId ?? '',
+          serials: l.serials ?? [],
         }))
       : [emptyLine(base)],
   );
   const [error, setError] = useState<Error | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // İade: iade edilebilir orijinal irsaliye satırları (cari seçilince); orijinal seçilince satırlar hazır gelir
+  const returnable = useCQuery<{ lines: ReturnableLine[] }>(
+    ['delivery-returnable', type, partyId],
+    `/api/delivery-notes/returnable-lines?type=${type}&partyId=${partyId}`,
+    { enabled: isReturn && !!partyId },
+  );
+  const originals = [...new Map((returnable.data?.lines ?? []).map((l) => [l.noteId, l])).values()];
+  const pickOriginal = (noteId: string) => {
+    setReturnOfId(noteId);
+    if (!noteId) return;
+    const mine = (returnable.data?.lines ?? []).filter((l) => l.noteId === noteId);
+    setLines(
+      mine.map((l) => ({
+        ...emptyLine(base),
+        itemId: l.itemId,
+        description: l.description,
+        quantity: trim(l.returnableQty),
+        unit: l.unit ?? '',
+        sourceLineId: l.lineId,
+        maxQty: trim(l.returnableQty),
+      })),
+    );
+  };
+  // "İade irsaliyesi oluştur" bağlantısı: orijinal irsaliyeden cari ve satırlar hazır gelir (bir kez)
+  const presetQ = useCQuery<DeliveryNoteDetail>(['delivery-note', presetOriginal], presetOriginal ? `/api/delivery-notes/${presetOriginal}` : null);
+  const [preset, setPreset] = useState(!presetOriginal);
+  useEffect(() => {
+    if (preset || !presetQ.data) return;
+    setPartyId(presetQ.data.note.partyId);
+    setWarehouseId(presetQ.data.note.warehouseId);
+    setReturnOfId(presetQ.data.note.id);
+    setLines(
+      presetQ.data.lines
+        .filter((l) => l.returnableQty && Number(l.returnableQty) > 0)
+        .map((l) => ({
+          ...emptyLine(base),
+          itemId: l.itemId,
+          description: l.description,
+          quantity: trim(l.returnableQty!),
+          unit: l.unit ?? '',
+          sourceLineId: l.id,
+          maxQty: trim(l.returnableQty!),
+        })),
+    );
+    setPreset(true);
+  }, [preset, presetQ.data, base]);
 
   const effectiveWh = warehouseId || defaultWh?.id || '';
   const { byId: itemById, options: itemOptions } = useItemOptions(true, effectiveWh || undefined);
@@ -91,8 +166,9 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
       itemId,
       description: it.name,
       unit: it.unit,
+      serials: [],
       // Alışta kartın alış fiyatı hazır gelir (kendi para biriminde); satışta maliyet girilmez
-      ...(inbound && it.purchasePrice ? { unitCost: trim(it.purchasePrice), currency: it.purchaseCurrency, fxRate: '' } : {}),
+      ...(hasCost && it.purchasePrice ? { unitCost: trim(it.purchasePrice), currency: it.purchaseCurrency, fxRate: '' } : {}),
     });
   };
 
@@ -100,7 +176,8 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
     ...(initial ? {} : { type }),
     partyId,
     noteDate,
-    externalNo: inbound ? externalNo.trim() || undefined : undefined,
+    externalNo: showExternal ? externalNo.trim() || undefined : undefined,
+    returnOfId: isReturn && returnOfId ? returnOfId : null,
     warehouseId: effectiveWh || null,
     vehiclePlate: vehiclePlate.trim() || undefined,
     driverName: driverName.trim() || undefined,
@@ -111,7 +188,10 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
       description: l.description.trim() || undefined,
       quantity: l.quantity,
       unit: l.unit || null,
-      ...(inbound && l.unitCost !== ''
+      ...(isReturn && returnOfId && l.sourceLineId ? { sourceLineId: l.sourceLineId } : {}),
+      ...(type === 'sales' && l.salesOrderLineId ? { salesOrderLineId: l.salesOrderLineId } : {}),
+      ...(l.serials && l.serials.length > 0 ? { serials: l.serials } : {}),
+      ...(hasCost && l.unitCost !== ''
         ? { unitCost: l.unitCost, currency: l.currency || base, ...(l.currency !== base && l.fxRate ? { fxRate: l.fxRate } : {}) }
         : {}),
     })),
@@ -131,7 +211,8 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
     setFieldError(null);
     if (!partyId) return setFieldError(t('deliveries.form.partyRequired'));
     if (lines.some((l) => !l.itemId || !l.quantity || dec(l.quantity).lte(0))) return setFieldError(t('deliveries.form.linesRequired'));
-    if (post && inbound && !externalNo.trim()) return setFieldError(t('deliveries.form.externalRequired'));
+    if (post && hasCost && !externalNo.trim()) return setFieldError(t('deliveries.form.externalRequired'));
+    if (lines.some((l) => l.maxQty && dec(l.quantity).gt(l.maxQty))) return setFieldError(t('deliveries.form.returnQtyExceeded'));
     save.mutate(post, {
       onSuccess: (res) => {
         toast.success(post ? t('deliveries.form.postedMsg', { no: res.note.noteNo ?? '' }) : t('deliveries.form.savedMsg'));
@@ -141,11 +222,11 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
     });
   };
 
-  const listPath = inbound ? '/delivery-notes/purchases' : '/delivery-notes/sales';
-  const side = inbound ? 'purchases' : 'sales';
+  const listPath = NOTE_LIST[type].path;
+  const side = NOTE_LIST[type].key;
   if (!whData) return <PageLoading />;
 
-  const gridCols = inbound
+  const gridCols = hasCost
     ? 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_96px_minmax(0,1fr)_88px_minmax(0,0.8fr)_32px]'
     : 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_120px_32px]';
 
@@ -167,9 +248,37 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
 
         <Card className="p-5">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label={inbound ? t('deliveries.form.supplier') : t('deliveries.form.customer')} required className="sm:col-span-2">
-              {(id) => <Combobox id={id} options={partyOptions} value={partyId || null} placeholder={t('deliveries.form.pickParty')} onChange={setPartyId} />}
+            <Field label={meta.partyKind === 'supplier' ? t('deliveries.form.supplier') : t('deliveries.form.customer')} required className="sm:col-span-2">
+              {(id) => (
+                <Combobox
+                  id={id}
+                  options={partyOptions}
+                  value={partyId || null}
+                  placeholder={t('deliveries.form.pickParty')}
+                  onChange={(v) => {
+                    setPartyId(v);
+                    if (isReturn) setReturnOfId('');
+                  }}
+                />
+              )}
             </Field>
+            {isReturn && (
+              <Field label={t('deliveries.form.returnOf')} className="sm:col-span-2" hint={t('deliveries.form.returnOfHint')}>
+                {(id) => (
+                  <Select id={id} value={returnOfId} disabled={!partyId} onChange={(e) => pickOriginal(e.target.value)}>
+                    <option value="">{t('deliveries.form.returnFree')}</option>
+                    {returnOfId && !originals.some((o) => o.noteId === returnOfId) && (
+                      <option value={returnOfId}>{initial?.note.returnOfNo ?? presetQ.data?.note.noteNo ?? returnOfId}</option>
+                    )}
+                    {originals.map((o) => (
+                      <option key={o.noteId} value={o.noteId}>
+                        {o.noteNo} · {formatDateTR(o.noteDate)}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+            )}
             <Field label={t('deliveries.form.noteDate')} required>
               {(id) => <Input id={id} type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} />}
             </Field>
@@ -184,8 +293,8 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
                 </Select>
               )}
             </Field>
-            {inbound && (
-              <Field label={t('deliveries.form.externalNo')} required>
+            {showExternal && (
+              <Field label={t('deliveries.form.externalNo')} required={hasCost}>
                 {(id) => <Input id={id} value={externalNo} maxLength={40} onChange={(e) => setExternalNo(e.target.value)} />}
               </Field>
             )}
@@ -207,7 +316,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
               <span>{t('deliveries.form.item')}</span>
               <span>{t('common.description')}</span>
               <span className="text-right">{t('deliveries.form.quantity')}</span>
-              {inbound && (
+              {hasCost && (
                 <>
                   <span className="text-right">{t('deliveries.form.unitCost')}</span>
                   <span>{t('deliveries.form.currency')}</span>
@@ -230,11 +339,12 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
                         value={l.itemId || null}
                         placeholder={t('deliveries.form.pickItem')}
                         aria-label={`${t('deliveries.form.item')} ${i + 1}`}
+                        disabled={!!l.sourceLineId}
                         onChange={(v) => pickItem(l.key, v)}
                       />
                       <Input className="col-span-2 lg:col-span-1" value={l.description} maxLength={300} aria-label={`${t('common.description')} ${i + 1}`} placeholder={t('common.description')} onChange={(e) => patch(l.key, { description: e.target.value })} />
                       <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('deliveries.form.quantity')} ${i + 1}`} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
-                      {inbound && (
+                      {hasCost && (
                         <>
                           <MoneyInput value={l.unitCost} maxDecimals={6} aria-label={`${t('deliveries.form.unitCost')} ${i + 1}`} className="text-right" onChange={(v) => patch(l.key, { unitCost: v })} />
                           <Select
@@ -257,10 +367,16 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
                         <X className="size-4" />
                       </button>
                     </div>
-                    {(it && !inbound) || (inbound && it && l.unitCost === '') ? (
-                      <p className={cn('mt-1.5 pl-1 text-[13px]', short ? 'text-warning' : 'text-muted')}>
+                    {(it && !inbound) || (hasCost && it && l.unitCost === '') || l.maxQty || it?.tracksSerial ? (
+                      <p className={cn('mt-1.5 pl-1 text-[13px]', short || (l.maxQty && dec(l.quantity || 0).gt(l.maxQty)) ? 'text-warning' : 'text-muted')}>
                         {!inbound && onHand !== null && (short ? t('deliveries.form.notEnough', { qty: qtyText(it!.onHand) || '0', unit: unitLabel(it!.unit) }) : t('deliveries.form.onHand', { qty: qtyText(it!.onHand) || '0', unit: unitLabel(it!.unit) }))}
-                        {inbound && l.unitCost === '' && t('deliveries.form.unitCostHint')}
+                        {hasCost && l.unitCost === '' && t('deliveries.form.unitCostHint')}
+                        {l.maxQty && <span className="ml-3">{t('deliveries.form.returnable', { qty: l.maxQty })}</span>}
+                        {it?.tracksSerial && (
+                          <span className="ml-3 inline-flex">
+                            <SerialEntry label={String(i + 1)} serials={l.serials ?? []} quantity={l.quantity} onChange={(serials) => patch(l.key, { serials })} />
+                          </span>
+                        )}
                       </p>
                     ) : null}
                   </div>

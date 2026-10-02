@@ -132,6 +132,8 @@ export const createItemSchema = z.object({
   /** Kritik stok seviyesi: eldeki miktar bu değere eşit veya altına düşünce uyarılır. */
   minLevel: quantityString.optional(),
   notes: optionalText(1000),
+  /** Seri no takibi (X3): giriş/çıkışta miktar kadar seri no girilir; yalnızca mal kartında. */
+  tracksSerial: z.boolean().optional(),
 });
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 
@@ -149,6 +151,7 @@ export const updateItemSchema = z.object({
   minLevel: quantityString.nullable().optional(),
   notes: clearableText(1000),
   isActive: z.boolean().optional(),
+  tracksSerial: z.boolean().optional(),
 });
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
 
@@ -187,6 +190,8 @@ export const stockLineSchema = z.object({
   projectId: uuid.optional(),
   /** Projenin yaprak iş kalemi; projesiz verilemez. */
   wbsId: uuid.optional(),
+  /** Seri takipli kartta: miktar kadar seri no (giriş, çıkış, fire, transfer). */
+  serials: z.array(z.string().trim().min(1).max(60)).max(1000).optional(),
 });
 export type StockLineInput = z.infer<typeof stockLineSchema>;
 

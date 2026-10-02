@@ -12,7 +12,7 @@ import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR } from '../../lib/format';
-import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { EmployeeRow, SensitiveField } from '../../lib/types';
 import { EmployeeFormSheet } from './EmployeeFormSheet';
 import { EmployeeStatusBadge, HR_INVALIDATE } from './common';
@@ -41,6 +41,8 @@ export function EmployeePage() {
 
   const reveal = useCMutation((v: { field: SensitiveField; reason: string }, call) => call<{ field: SensitiveField; value: string }>(`/api/employees/${id}/reveal`, { method: 'POST', body: v }), [['privacy']]);
   const terminate = useCMutation((_: void, call) => call(`/api/employees/${id}/terminate`, { method: 'POST', body: { leaveDate } }), HR_INVALIDATE);
+  const ledgerOn = useModuleEnabled('hr.employee_ledger');
+  const openParty = useCMutation((_: void, call) => call(`/api/employee-ledger/employees/${id}/open-party`, { method: 'POST', body: {} }), [...HR_INVALIDATE, ['employee-ledger']]);
   const rehire = useCMutation((_: void, call) => call(`/api/employees/${id}/rehire`, { method: 'POST', body: {} }), HR_INVALIDATE);
 
   if (error instanceof ApiError && error.status === 404) {
@@ -143,6 +145,25 @@ export function EmployeePage() {
           {row(t('hr.form.note'), e.note)}
         </dl>
       </Card>
+
+      {ledgerOn && can('hr.payroll') && (
+        <Card>
+          <CardHeader title={t('employeeLedger.card.title')} description={t('employeeLedger.card.desc')} />
+          <div className="flex flex-wrap items-center gap-3 p-4">
+            {e.partyId ? (
+              <Link to={`/hr/employee-ledger/${e.id}`} className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-sm hover:bg-surface-2">
+                {t('employeeLedger.card.open')}
+              </Link>
+            ) : can('hr.payroll_manage') ? (
+              <Button loading={openParty.isPending} onClick={() => openParty.mutate(undefined, { onSuccess: () => toast.success(t('employeeLedger.card.opened')), onError: setActionError })}>
+                {t('employeeLedger.card.openParty')}
+              </Button>
+            ) : (
+              <span className="text-sm text-muted">{t('employeeLedger.card.noParty')}</span>
+            )}
+          </div>
+        </Card>
+      )}
 
       <EmployeeFormSheet open={editing} onOpenChange={setEditing} edit={e} onSaved={() => undefined} />
 

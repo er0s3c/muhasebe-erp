@@ -1,4 +1,4 @@
-import { formatDateTR, ITEM_UNIT_LABELS, sum, todayIso, type ItemUnit, type TreasuryTxnType } from '@erp/shared';
+import { formatDateTR, hasPermission, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type Role, type TreasuryTxnType, type ContactListQuery, type AgendaListQuery } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -8,6 +8,10 @@ import { itemStatement } from '../inventory/items';
 import { stockStatus } from '../inventory/reports';
 import { itemProfitability, salesReport } from '../invoices/analytics';
 import { vatSummary } from '../invoices/reports';
+import { listDeliveryNotes } from '../deliveries/service';
+import { listSalesDocs } from '../sales/orders';
+import { listPriceListItems, listPriceLists, listPartyPrices } from '../sales/pricelists';
+import { listSerials } from '../inventory/serials';
 import { reconciliation } from '../bank-statements/service';
 import { partyAging, partyOpenItems, partyStatement } from '../parties/service';
 import { cashForecast } from '../cash/forecast';
@@ -17,8 +21,26 @@ import { getContract, listContracts, listInstallments } from '../realestate/cont
 import { listUnits } from '../realestate/units';
 import { listProgress } from '../subcontracts/progress';
 import { listSubcontracts } from '../subcontracts/service';
+import { laborByProject, monthlySummary } from '../hr/attendance';
 import { listEmployees } from '../hr/employees';
+import { listAgenda } from '../directory/agenda';
+import { listContacts, listOrganizations } from '../directory/service';
+import { logPayrollAccess } from '../payroll/config';
+import { advanceRegister, employeeBalances, employeeStatement } from '../employee-ledger/reports';
+import { payrollCostByProject } from '../payroll/reports';
+import { getRun } from '../payroll/runs';
+import { logForeignAccess, listDocs } from '../foreignworkers/docs';
+import { guaranteeReport, listGuarantees } from '../foreignworkers/guarantees';
+import { logSocialAccess } from '../socialsecurity/config';
+import { getDeclaration } from '../socialsecurity/declarations';
+import { premiumSummary } from '../socialsecurity/reports';
 import { getVariation, listVariations } from '../subcontracts/variations';
+import { listGuarantees as listBankGuarantees } from '../cheques/guarantees';
+import { chequeMaturity, chequesBounced, chequesDue } from '../cheques/reports';
+import { listCheques } from '../cheques/service';
+import { expenseReport } from '../expenses/reports';
+import { listExpenseEntries } from '../expenses/service';
+import { importFileReport, importLandedByItem, listImportFiles } from '../landed/service';
 import { fxDifferences } from '../treasury/fx-report';
 import { TXN_LABEL } from '../treasury/posting';
 import { treasuryStatement } from '../treasury/reports';
@@ -27,6 +49,10 @@ import { treasuryStatement } from '../treasury/reports';
 export interface BuildCtx {
   tx: Tx;
   company: { name: string; baseCurrency: string; reportingCurrency: string | null };
+  /** İsteği yapan kullanıcı (yalnızca kullanıcıya göre görünürlüğü olan raporlar için: ajanda). */
+  user?: { id: string; role: Role };
+  /** Şirket kimliği, rol ve açık modüller (bölümleri izin/modüle göre kapılayan raporlar: yönetici özeti, döviz pozisyonu). */
+  access?: { companyId: string; role: Role; enabledModules: ReadonlySet<string> };
 }
 
 const CODE_IN_LABEL = /\(([A-Z]{3})\)$/;
@@ -930,6 +956,526 @@ export async function employeesTable(ctx: BuildCtx, q: { status?: string }): Pro
   ];
 }
 
+// --- Puantaj (D2) --------------------------------------------------------------------------------------
+
+const MONTH_NAMES_TR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+export const monthLabelTR = (month: string) => `${MONTH_NAMES_TR[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
+
+/** Aylık puantaj özeti: personel başına gün türüne göre gün ve toplam saat (saatler `qty` biçimli, 2 ondalık). */
+export async function attendanceSummaryTable(ctx: BuildCtx, q: { month: string }): Promise<ReportTable[]> {
+  const d = await monthlySummary(ctx.tx, q.month);
+  return [
+    {
+      key: 'puantaj-ozeti',
+      title: `Puantaj özeti — ${monthLabelTR(q.month)}`,
+      sheet: 'Puantaj özeti',
+      subtitle: sub(ctx, d.lock.closed ? 'Ay kapalı' : 'Ay açık (kapanmadı)', 'kişisel veri: personel kayıtları'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('dept', 'Departman', 'text', 16),
+        col('worked', 'Çalıştı (gün)', 'int'),
+        col('absent', 'Devamsız (gün)', 'int'),
+        col('annual', 'Yıllık izin (gün)', 'int'),
+        col('sick', 'Hastalık izni (gün)', 'int'),
+        col('unpaid', 'Ücretsiz izin (gün)', 'int'),
+        col('holiday', 'Resmî tatil (gün)', 'int'),
+        col('rest', 'Hafta tatili (gün)', 'int'),
+        col('missing', 'Kaydı olmayan (gün)', 'int'),
+        col('normal', 'Normal saat', 'qty'),
+        col('overtime', 'Fazla mesai saati', 'qty'),
+      ],
+      rows: d.rows.map((r) => ({
+        code: r.code,
+        name: r.fullName,
+        dept: r.department,
+        worked: r.days.worked,
+        absent: r.days.absent,
+        annual: r.days.annual_leave,
+        sick: r.days.sick_leave,
+        unpaid: r.days.unpaid_leave,
+        holiday: r.days.public_holiday,
+        rest: r.days.weekly_rest,
+        missing: r.missingDays,
+        normal: r.normalHours,
+        overtime: r.overtimeHours,
+      })),
+      totals: { normal: d.totals.normalHours, overtime: d.totals.overtimeHours, missing: d.totals.missingDays },
+    },
+  ];
+}
+
+/** İşçilik saatleri: proje / iş kalemi / maliyet koduna göre (yalnızca saatli günler). */
+export async function attendanceLaborTable(ctx: BuildCtx, q: { from: string; to: string; projectId?: string }): Promise<ReportTable[]> {
+  const d = await laborByProject(ctx.tx, q);
+  return [
+    {
+      key: 'iscilik-saatleri',
+      title: 'İşçilik saatleri',
+      sheet: 'İşçilik saatleri',
+      subtitle: sub(ctx, period(q.from, q.to), 'etiketsiz saatler ayrı satırdadır'),
+      columns: [
+        col('project', 'Proje', 'text', 26),
+        col('wbs', 'İş kalemi', 'text', 26),
+        col('costCode', 'Maliyet kodu', 'text', 20),
+        col('days', 'Kişi-gün', 'int'),
+        col('emps', 'Personel', 'int'),
+        col('normal', 'Normal saat', 'qty'),
+        col('overtime', 'Fazla mesai saati', 'qty'),
+      ],
+      rows: d.rows.map((r) => ({
+        project: r.projectCode ? `${r.projectCode} — ${r.projectName}` : 'Etiketsiz',
+        wbs: r.wbsCode ? `${r.wbsCode} — ${r.wbsName}` : null,
+        costCode: r.costCode ? `${r.costCode} — ${r.costCodeName}` : null,
+        days: r.personDays,
+        emps: r.employees,
+        normal: r.normalHours,
+        overtime: r.overtimeHours,
+      })),
+      totals: { days: d.totals.personDays, normal: d.totals.normalHours, overtime: d.totals.overtimeHours },
+    },
+  ];
+}
+
+// --- Bordro (D3) ----------------------------------------------------------------------------------------
+
+const PAYROLL_STATUS_LABEL: Record<string, string> = { draft: 'Taslak', approved: 'Onaylı', paid: 'Ödendi', cancelled: 'İptal' };
+const PAY_BASIS_LABEL: Record<string, string> = { monthly: 'Aylık', daily: 'Günlük', hourly: 'Saatlik' };
+/** Her bordro çıktısının değişmez uyarısı: iç belge ve doğrulanmamış oranlar. */
+const PAYROLL_NOTE = 'Taslak / iç belge — resmî bordro değildir';
+
+/**
+ * Bordro kaydı (tek çalıştırma, personel başına). İBAN maskelidir (son 4 hane); ücret verisi okuma erişim günlüğüne yazılır.
+ * Oranlar doğrulanmamış parametrelerden geldiyse başlıkta ⚠ uyarısı vardır.
+ */
+export async function payrollRegisterTable(ctx: BuildCtx, q: { id: string }): Promise<ReportTable[]> {
+  const d = await getRun(ctx.tx, q.id);
+  await logPayrollAccess(ctx.tx, d.lines.map((l) => l.employeeId), 'Bordro kaydı dışa aktarma');
+  const r = d.run;
+  const b = ctx.company.baseCurrency;
+  const warn = r.hasUnverifiedParams ? '⚠ doğrulanmamış oranlar kullanıldı' : r.paramsSnapshot.length === 0 ? 'yasal oran uygulanmadı (parametre yok)' : 'parametreler doğrulanmış';
+  return [
+    {
+      key: 'bordro-kaydi',
+      title: `Bordro kaydı — ${r.number} (${monthLabelTR(r.month)})`,
+      sheet: 'Bordro kaydı',
+      subtitle: sub(ctx, PAYROLL_NOTE, PAYROLL_STATUS_LABEL[r.status] ?? r.status, warn, 'kişisel veri: ücret bilgisi, İBAN maskeli'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('dept', 'Departman', 'text', 16),
+        col('basis', 'Ücret türü', 'text', 10),
+        col('normal', 'Normal saat', 'qty'),
+        col('overtime', 'Fazla mesai saati', 'qty'),
+        col('gross', `Brüt (${b})`, 'money'),
+        col('social', `İşçi primi (${b})`, 'money'),
+        col('tax', `Gelir vergisi (${b})`, 'money'),
+        col('other', `Diğer kesinti (${b})`, 'money'),
+        col('net', `Net (${b})`, 'money'),
+        col('employer', `İşveren yükü (${b})`, 'money'),
+        col('iban', 'İBAN (maskeli)', 'text', 20),
+        col('warnings', 'Uyarı', 'int'),
+      ],
+      rows: d.lines.map((l) => ({
+        code: l.employeeCode,
+        name: l.employeeName,
+        dept: l.department,
+        basis: PAY_BASIS_LABEL[l.payBasis] ?? l.payBasis,
+        normal: l.normalHours,
+        overtime: l.overtimeHours,
+        gross: l.gross,
+        social: l.employeeSocial,
+        tax: l.incomeTax,
+        other: l.otherDeductions,
+        net: l.net,
+        employer: l.employerTotal,
+        iban: l.ibanMasked,
+        warnings: l.warnings.length,
+      })),
+      totals: { gross: r.grossTotal, net: r.netTotal, employer: r.employerTotal },
+    },
+  ];
+}
+
+const LEDGER_NOTE = 'Personel cari: iç takip belgesi; avans kesintisi uygulaması doğrulanmadı';
+const ADVANCE_STATUS_LABEL: Record<string, string> = { open: 'Açık', partial: 'Kısmen kapandı', settled: 'Kapandı', cancelled: 'İptal' };
+const LEDGER_KIND_LABEL: Record<string, string> = { salary_net: 'Net ücret (bordro)', salary_payment: 'Maaş ödemesi', advance: 'Avans', advance_deduction: 'Bordrodan avans kesintisi', advance_repayment: 'Avans geri ödemesi' };
+
+/** Personel bakiye listesi (kim kime borçlu). Ücret verisi: hr.payroll + erişim günlüğü; İBAN/kimlik yoktur. */
+export async function employeeBalancesTable(ctx: BuildCtx, q: { asOf?: string }): Promise<ReportTable[]> {
+  const d = await employeeBalances(ctx.tx, { asOf: q.asOf });
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'personel-bakiyeleri',
+      title: 'Personel cari bakiyeleri',
+      sheet: 'Personel bakiyeleri',
+      subtitle: sub(ctx, `${formatDateTR(d.asOf ?? todayIso())} itibarıyla`, LEDGER_NOTE, 'kişisel veri: ücret bilgisi; + şirket personele borçlu, − personel şirkete borçlu'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('dept', 'Departman', 'text', 16),
+        col('salaryNet', `Bordro net ücret (${b})`, 'money'),
+        col('salaryPaid', `Ödenen maaş (${b})`, 'money'),
+        col('advanceGiven', `Verilen avans (${b})`, 'money'),
+        col('advanceDeducted', `Bordrodan kesilen (${b})`, 'money'),
+        col('advanceRepaid', `Geri ödenen (${b})`, 'money'),
+        col('openAdvance', `Açık avans (${b})`, 'money'),
+        col('net', `Net bakiye (${b})`, 'money'),
+      ],
+      rows: d.rows.map((r) => ({ code: r.code, name: r.fullName, dept: r.department, salaryNet: r.salaryNet, salaryPaid: r.salaryPaid, advanceGiven: r.advanceGiven, advanceDeducted: r.advanceDeducted, advanceRepaid: r.advanceRepaid, openAdvance: r.openAdvance, net: r.net })),
+      totals: { net: sum(d.rows.map((r) => r.net)).toFixed(2), openAdvance: sum(d.rows.map((r) => r.openAdvance)).toFixed(2) },
+    },
+  ];
+}
+
+/** Avans sicili: kalan tutar ve yaşlandırma. */
+export async function employeeAdvancesTable(ctx: BuildCtx, q: { status?: 'open' | 'partial' | 'settled' | 'cancelled' | 'outstanding'; employeeId?: string; asOf?: string }): Promise<ReportTable[]> {
+  const d = await advanceRegister(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'avans-sicili',
+      title: 'Personel avans sicili',
+      sheet: 'Avans sicili',
+      subtitle: sub(ctx, `${formatDateTR(d.asOf)} itibarıyla`, LEDGER_NOTE, 'kişisel veri: ücret bilgisi'),
+      columns: [
+        col('no', 'Avans no', 'text', 16),
+        col('date', 'Tarih', 'date'),
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('purpose', 'Amaç', 'text', 28),
+        col('project', 'Proje', 'text', 12),
+        col('amount', `Tutar (${b})`, 'money'),
+        col('settled', `Kapanan (${b})`, 'money'),
+        col('open', `Kalan (${b})`, 'money'),
+        col('age', 'Yaş (gün)', 'int'),
+        col('status', 'Durum', 'text', 14),
+      ],
+      rows: d.rows.map((r) => ({ no: r.number, date: r.advanceDate, code: r.employeeCode, name: r.employeeName, purpose: r.purpose, project: r.projectCode, amount: r.amount, settled: r.settled, open: r.open, age: r.ageDays, status: ADVANCE_STATUS_LABEL[r.status] ?? r.status })),
+      totals: { open: d.totals.open },
+    },
+  ];
+}
+
+/** Bir personelin cari ekstresi. */
+export async function employeeStatementTable(ctx: BuildCtx, q: { employeeId: string; from: string; to: string }): Promise<ReportTable[]> {
+  const d = await employeeStatement(ctx.tx, q.employeeId, { from: q.from, to: q.to });
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'personel-ekstresi',
+      title: `Personel cari ekstresi — ${d.employee.code} ${d.employee.fullName}`,
+      sheet: 'Personel ekstresi',
+      subtitle: sub(ctx, period(q.from, q.to), `Açılış ${d.opening}`, `Kapanış ${d.closing}`, LEDGER_NOTE, 'kişisel veri: ücret bilgisi'),
+      columns: [
+        col('date', 'Tarih', 'date'),
+        col('kind', 'Tür', 'text', 24),
+        col('ref', 'Belge', 'text', 16),
+        col('desc', 'Açıklama', 'text', 36),
+        col('debit', `Borç (${b})`, 'money'),
+        col('credit', `Alacak (${b})`, 'money'),
+        col('balance', `Bakiye (${b})`, 'money'),
+      ],
+      rows: d.lines.map((l) => ({ date: l.date, kind: LEDGER_KIND_LABEL[l.kind] ?? l.kind, ref: l.ref, desc: l.description, debit: l.debit, credit: l.credit, balance: l.balance })),
+      totals: { debit: d.totals.debit, credit: d.totals.credit },
+    },
+  ];
+}
+
+/** Aylık bordro maliyeti: proje / iş kalemi / maliyet koduna göre (onaylı ve ödenmiş bordro). */
+export async function payrollCostTable(ctx: BuildCtx, q: { from: string; to: string }): Promise<ReportTable[]> {
+  const d = await payrollCostByProject(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'bordro-maliyeti',
+      title: 'Bordro maliyeti (proje bazında)',
+      sheet: 'Bordro maliyeti',
+      subtitle: sub(ctx, `${monthLabelTR(q.from)} – ${monthLabelTR(q.to)}`, PAYROLL_NOTE, d.unverified ? '⚠ doğrulanmamış oranlar kullanıldı' : 'onaylı ve ödenmiş bordro'),
+      columns: [
+        col('project', 'Proje', 'text', 26),
+        col('wbs', 'İş kalemi', 'text', 26),
+        col('costCode', 'Maliyet kodu', 'text', 20),
+        col('emps', 'Personel', 'int'),
+        col('hours', 'Saat', 'qty'),
+        col('gross', `Brüt ücret (${b})`, 'money'),
+        col('employer', `İşveren yükü (${b})`, 'money'),
+        col('total', `Toplam maliyet (${b})`, 'money'),
+      ],
+      rows: d.rows.map((r) => ({
+        project: r.projectCode ? `${r.projectCode} — ${r.projectName}` : 'Etiketsiz',
+        wbs: r.wbsCode ? `${r.wbsCode} — ${r.wbsName}` : null,
+        costCode: r.costCode ? `${r.costCode} — ${r.costCodeName}` : null,
+        emps: r.employees,
+        hours: r.hours,
+        gross: r.gross,
+        employer: r.employer,
+        total: r.total,
+      })),
+      totals: { hours: d.totals.hours, gross: d.totals.gross, employer: d.totals.employer, total: d.totals.total },
+    },
+  ];
+}
+
+// --- Sosyal güvenlik çıktıları (D4) -----------------------------------------------------------------------
+
+/**
+ * Her sosyal güvenlik çıktısının değişmez uyarısı. Sütun düzeni sistemin GENEL düzenidir (sabit; yapılandırılamaz): hiçbir resmî
+ * kurumun dosya biçimini taklit etmez ya da iddia etmez; biçim doğrulanmamıştır.
+ */
+const SOCIAL_NOTE = 'Genel düzen — resmî bildirim formatı değildir, doğrulanmadı';
+const SOCIAL_STATUS_LABEL: Record<string, string> = { draft: 'Taslak', finalized: 'Kesinleşmiş' };
+
+/** Aylık sosyal güvenlik bildirimi (tek ay, personel başına). Sosyal güvenlik numarası maskelidir (son 4 hane); okuma günlüğe yazılır. */
+export async function socialDeclarationTable(ctx: BuildCtx, q: { id: string }): Promise<ReportTable[]> {
+  const d = await getDeclaration(ctx.tx, q.id, { log: false });
+  await logSocialAccess(ctx.tx, d.lines.map((l) => l.employeeId), 'Sosyal güvenlik bildirimi dışa aktarma');
+  const x = d.declaration;
+  const b = ctx.company.baseCurrency;
+  const warn = x.hasUnverifiedParams ? '⚠ doğrulanmamış oran/kural kullanıldı' : x.supportSnapshot.length === 0 ? 'prim desteği uygulanmadı' : 'parametreler doğrulanmış';
+  return [
+    {
+      key: 'sosyal-guvenlik-bildirimi',
+      title: `Aylık sosyal güvenlik bildirimi — ${x.number} (${monthLabelTR(x.month)})`,
+      sheet: 'Aylık bildirim',
+      subtitle: sub(ctx, SOCIAL_NOTE, SOCIAL_STATUS_LABEL[x.status] ?? x.status, `Kaynak bordro ${x.payrollRunNumber}`, warn, 'kişisel veri: sosyal güvenlik no maskeli'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 28),
+        col('type', 'Bordro tipi', 'text', 14),
+        col('insStart', 'Sigorta başlangıç', 'date'),
+        col('insEnd', 'Sigorta bitiş', 'date'),
+        col('ssn', 'Sosyal güvenlik no (maskeli)', 'text', 18),
+        col('days', 'Çalışılan gün', 'int'),
+        col('annual', 'Yıllık izin günü', 'int'),
+        col('sick', 'Hastalık izni günü', 'int'),
+        col('unpaid', 'Ücretsiz izin günü', 'int'),
+        col('absent', 'Devamsızlık günü', 'int'),
+        col('base', `Prime esas kazanç (${b})`, 'money'),
+        col('empPrem', `İşçi primi (${b})`, 'money'),
+        col('erPrem', `İşveren primi (${b})`, 'money'),
+        col('supEmp', `İşçi prim desteği (${b})`, 'money'),
+        col('supEr', `İşveren prim desteği (${b})`, 'money'),
+        col('empDue', `İşçi ödenecek (${b})`, 'money'),
+        col('erDue', `İşveren ödenecek (${b})`, 'money'),
+        col('supCodes', 'Destek kuralı', 'text', 14),
+        col('warnings', 'Uyarı', 'int'),
+      ],
+      rows: d.lines.map((l) => ({
+        code: l.employeeCode,
+        name: l.employeeName,
+        type: l.payrollTypeCode,
+        insStart: l.insuranceStart,
+        insEnd: l.insuranceEnd,
+        ssn: l.ssnMasked,
+        days: l.daysWorked,
+        annual: l.annualLeaveDays,
+        sick: l.sickLeaveDays,
+        unpaid: l.unpaidLeaveDays,
+        absent: l.absentDays,
+        base: l.premiumBase,
+        empPrem: l.employeePremium,
+        erPrem: l.employerPremium,
+        supEmp: l.supportEmployee,
+        supEr: l.supportEmployer,
+        empDue: l.employeeDue,
+        erDue: l.employerDue,
+        supCodes: l.supportCodes,
+        warnings: l.warnings.length,
+      })),
+      totals: {
+        base: d.totals.premiumBase,
+        empPrem: d.totals.employeePremium,
+        erPrem: d.totals.employerPremium,
+        supEmp: d.totals.supportEmployee,
+        supEr: d.totals.supportEmployer,
+        empDue: d.totals.employeeDue,
+        erDue: d.totals.employerDue,
+      },
+    },
+  ];
+}
+
+/** Prim özeti: aya ve projeye göre. Toplamlara yalnızca kesinleşmiş bildirimler girer. */
+export async function socialPremiumSummaryTable(ctx: BuildCtx, q: { from: string; to: string }): Promise<ReportTable[]> {
+  const d = await premiumSummary(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  const subtitle = sub(ctx, `${monthLabelTR(q.from)} – ${monthLabelTR(q.to)}`, SOCIAL_NOTE, d.unverified ? '⚠ doğrulanmamış oran/kural kullanıldı' : 'toplamlar kesinleşmiş bildirimlerdendir');
+  return [
+    {
+      key: 'prim-ozeti-ay',
+      title: 'Sosyal güvenlik prim özeti (aya göre)',
+      sheet: 'Aya göre',
+      subtitle,
+      columns: [
+        col('month', 'Ay', 'text', 10),
+        col('number', 'Bildirim', 'text', 16),
+        col('status', 'Durum', 'text', 12),
+        col('emps', 'Personel', 'int'),
+        col('empPrem', `İşçi primi (${b})`, 'money'),
+        col('erPrem', `İşveren primi (${b})`, 'money'),
+        col('supEmp', `İşçi prim desteği (${b})`, 'money'),
+        col('supEr', `İşveren prim desteği (${b})`, 'money'),
+        col('empDue', `İşçi ödenecek (${b})`, 'money'),
+        col('erDue', `İşveren ödenecek (${b})`, 'money'),
+      ],
+      rows: d.months.map((m) => ({
+        month: m.month,
+        number: m.number,
+        status: SOCIAL_STATUS_LABEL[m.status] ?? m.status,
+        emps: m.employeeCount,
+        empPrem: m.employeePremium,
+        erPrem: m.employerPremium,
+        supEmp: m.supportEmployee,
+        supEr: m.supportEmployer,
+        empDue: m.employeeDue,
+        erDue: m.employerDue,
+      })),
+      totals: { empPrem: d.totals.employeePremium, erPrem: d.totals.employerPremium, supEmp: d.totals.supportEmployee, supEr: d.totals.supportEmployer, empDue: d.totals.employeeDue, erDue: d.totals.employerDue },
+    },
+    {
+      key: 'prim-ozeti-proje',
+      title: 'Sosyal güvenlik prim özeti (projeye göre, kesinleşmiş bildirimler)',
+      sheet: 'Projeye göre',
+      subtitle,
+      columns: [
+        col('project', 'Proje', 'text', 28),
+        col('emps', 'Personel', 'int'),
+        col('empPrem', `İşçi primi (${b})`, 'money'),
+        col('erPrem', `İşveren primi (${b})`, 'money'),
+        col('supEmp', `İşçi prim desteği (${b})`, 'money'),
+        col('supEr', `İşveren prim desteği (${b})`, 'money'),
+        col('empDue', `İşçi ödenecek (${b})`, 'money'),
+        col('erDue', `İşveren ödenecek (${b})`, 'money'),
+      ],
+      rows: d.projects.map((p) => ({
+        project: p.projectCode ? `${p.projectCode} — ${p.projectName}` : 'Etiketsiz',
+        emps: p.employees,
+        empPrem: p.employeePremium,
+        erPrem: p.employerPremium,
+        supEmp: p.supportEmployee,
+        supEr: p.supportEmployer,
+        empDue: p.employeeDue,
+        erDue: p.employerDue,
+      })),
+      totals: { empPrem: d.totals.employeePremium, erPrem: d.totals.employerPremium, supEmp: d.totals.supportEmployee, supEr: d.totals.supportEmployer, empDue: d.totals.employeeDue, erDue: d.totals.employerDue },
+    },
+  ];
+}
+
+// --- Yabancı işçi belge ve teminat takibi (D5) -------------------------------------------------------------
+
+const FOREIGN_NOTE = 'Süre/tutar/makam bilgileri kullanıcı girişidir, doğrulanmadı';
+const FOREIGN_DOC_STATUS_LABEL: Record<string, string> = { valid: 'Geçerli', expiring: 'Dolmak üzere', expired: 'Süresi dolmuş', revoked: 'İptal' };
+const GUARANTEE_STATUS_LABEL: Record<string, string> = { held: 'Tutuluyor', refunded: 'İade edildi', forfeited: 'İrat kaydedildi' };
+
+/** Belge kaydı (süzgeçli): belge numarası MASKELİDİR (son 4 hane); okuma erişim günlüğüne yazılır. */
+export async function foreignDocsTable(ctx: BuildCtx, q: ForeignDocListQuery): Promise<ReportTable[]> {
+  const d = await listDocs(ctx.tx, q);
+  await logForeignAccess(ctx.tx, d.docs.map((x) => x.employeeId), 'Yabancı işçi belge kaydı dışa aktarma');
+  const warn = d.warning.configured ? `uyarı günü ${d.warning.days}${d.warning.verified ? '' : ' (⚠ doğrulanmadı)'}` : 'uyarı günü tanımsız: "dolmak üzere" üretilmedi';
+  return [
+    {
+      key: 'yabanci-isci-belgeleri',
+      title: 'Yabancı işçi belge kaydı',
+      sheet: 'Belgeler',
+      subtitle: sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`, warn, FOREIGN_NOTE, 'kişisel veri: belge numarası maskeli'),
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 26),
+        col('nat', 'Uyruk', 'text', 14),
+        col('type', 'Belge türü', 'text', 18),
+        col('no', 'Belge no (maskeli)', 'text', 16),
+        col('auth', 'Veren makam', 'text', 22),
+        col('issue', 'Veriliş', 'date'),
+        col('expiry', 'Son kullanma', 'date'),
+        col('days', 'Kalan gün', 'int'),
+        col('status', 'Durum', 'text', 14),
+        col('renewals', 'Yenileme', 'int'),
+        col('ref', 'Ek belge atfı', 'text', 24),
+      ],
+      rows: d.docs.map((x) => ({
+        code: x.employeeCode,
+        name: x.employeeName,
+        nat: x.nationality,
+        type: x.typeName,
+        no: x.numberMasked,
+        auth: x.issuingAuthority,
+        issue: x.issueDate,
+        expiry: x.expiryDate,
+        days: x.daysToExpiry,
+        status: FOREIGN_DOC_STATUS_LABEL[x.status] ?? x.status,
+        renewals: x.renewalCount,
+        ref: x.referenceNote,
+      })),
+    },
+  ];
+}
+
+/** Teminat kaydı + tutulan teminat özeti (personel ve projeye göre; para birimleri ayrı, kur çevrimi yok). */
+export async function foreignGuaranteesTable(ctx: BuildCtx, q: { employeeId?: string; projectId?: string; status?: string }): Promise<ReportTable[]> {
+  const g = await listGuarantees(ctx.tx, q);
+  const r = await guaranteeReport(ctx.tx, { projectId: q.projectId });
+  const sb = sub(ctx, FOREIGN_NOTE, r.unverified ? '⚠ doğrulanmamış parametreden gelen tutar içerir' : 'tutarlar doğrulanmış parametreden', 'kasa/yevmiye bağlantısı yok: yalnızca takip');
+  return [
+    {
+      key: 'yabanci-isci-teminat-kaydi',
+      title: 'Yabancı işçi teminat kaydı',
+      sheet: 'Teminatlar',
+      subtitle: sb,
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 26),
+        col('project', 'Proje', 'text', 22),
+        col('amount', 'Tutar', 'money'),
+        col('cur', 'Para birimi', 'text', 8),
+        col('dep', 'Yatırma', 'date'),
+        col('ref', 'Makbuz/dekont', 'text', 18),
+        col('status', 'Durum', 'text', 14),
+        col('res', 'İade/irat tarihi', 'date'),
+        col('ver', 'Parametre', 'text', 14),
+      ],
+      rows: g.guarantees.map((x) => ({
+        code: x.employeeCode,
+        name: x.employeeName,
+        project: x.projectCode ? `${x.projectCode} — ${x.projectName}` : null,
+        amount: x.amount,
+        cur: x.currency,
+        dep: x.depositedDate,
+        ref: x.depositReference,
+        status: GUARANTEE_STATUS_LABEL[x.status] ?? x.status,
+        res: x.resolvedDate,
+        ver: x.paramVerified ? 'doğrulanmış' : 'doğrulanmadı',
+      })),
+    },
+    {
+      key: 'yabanci-isci-teminat-ozeti',
+      title: 'Tutulan teminat özeti (personel ve projeye göre)',
+      sheet: 'Tutulan teminat',
+      subtitle: sb,
+      columns: [
+        col('code', 'Kod', 'text', 10),
+        col('name', 'Ad soyad', 'text', 26),
+        col('project', 'Proje', 'text', 22),
+        col('count', 'Kayıt', 'int'),
+        col('amount', 'Tutulan tutar', 'money'),
+        col('cur', 'Para birimi', 'text', 8),
+        col('unv', 'Doğrulanmamış kayıt', 'int'),
+      ],
+      rows: r.byEmployee.map((x) => ({
+        code: x.employeeCode as string,
+        name: x.employeeName as string,
+        project: x.projectCode ? `${x.projectCode as string} — ${x.projectName as string}` : null,
+        count: Number(x.count),
+        amount: x.amount as string,
+        cur: x.currency as string,
+        unv: Number(x.unverified),
+      })),
+    },
+  ];
+}
+
 // --- Gayrimenkul satışı (B3) ---------------------------------------------------------------------------
 
 const UNIT_STATUS_LABEL: Record<string, string> = { available: 'Satışa açık', reserved: 'Rezerve', sold: 'Satıldı', handed_over: 'Teslim edildi' };
@@ -1169,6 +1715,458 @@ export async function cashForecastTable(ctx: BuildCtx, q: { from?: string; weeks
         col('overdue', 'Gecikmiş', 'text', 10),
       ],
       rows: d.items.map((i) => ({ date: i.date, week: i.week, source: i.source === 'receivable' ? 'Alacak' : i.source === 'payable' ? 'Borç' : i.direction === 'in' ? 'Elle giriş' : 'Elle çıkış', party: i.partyName, description: i.description, currency: i.currencyCode, amount: i.direction === 'in' ? i.amount : `${i.amount}`, amountBase: i.direction === 'in' ? i.amountBase : (-Number(i.amountBase)).toFixed(2), overdue: i.overdue ? 'Evet' : null })),
+    },
+  ];
+}
+
+// --- Çek/senet portföyü ve banka teminat mektubu (X1) ----------------------------------------------------------------
+
+const CHEQUE_STATUS_LABEL: Record<string, string> = {
+  portfolio: 'Portföyde',
+  in_collection: 'Tahsilde',
+  collected: 'Tahsil edildi',
+  bounced: 'Karşılıksız',
+  endorsed: 'Ciro edildi',
+  returned: 'İade edildi',
+  issued: 'Düzenlendi',
+  paid: 'Ödendi',
+  cancelled: 'İptal',
+};
+const CHEQUE_DIR_LABEL: Record<string, string> = { received: 'Alınan', issued: 'Verilen' };
+const CHEQUE_TYPE_LABEL: Record<string, string> = { cheque: 'Çek', note: 'Senet' };
+const BUCKET_LABEL: Record<string, string> = { overdue: 'Vadesi geçmiş', d0_7: '0–7 gün', d8_30: '8–30 gün', d31_60: '31–60 gün', d61_90: '61–90 gün', d90p: '90+ gün' };
+const GUARANTEE_NOTE = 'Komisyon, süre ve tutar bilgileri kullanıcı girişidir; hesap eşlemeleri ve hukuki geçerlilik doğrulanmadı';
+const BANK_GUARANTEE_STATUS_LABEL: Record<string, string> = { active: 'Aktif', returned: 'İade edildi', liquidated: 'Nakde çevrildi', expired: 'Süresi doldu' };
+
+const chequeColumns = (b: string) => [
+  col('direction', 'Yön', 'text', 10),
+  col('type', 'Tür', 'text', 8),
+  col('no', 'Numara', 'text', 16),
+  col('bank', 'Banka', 'text', 20),
+  col('party', 'Cari', 'text', 28),
+  col('issue', 'Düzenleme', 'date'),
+  col('due', 'Vade', 'date'),
+  col('amount', `Tutar (${b})`, 'money'),
+  col('status', 'Durum', 'text', 14),
+];
+
+export async function chequesTable(ctx: BuildCtx, q: ChequeListQuery): Promise<ReportTable[]> {
+  const d = await listCheques(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'cek-senet-portfoyu',
+      title: 'Çek/senet portföyü',
+      sheet: 'Portföy',
+      subtitle: sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`),
+      columns: chequeColumns(b),
+      rows: d.cheques.map((c) => ({ direction: CHEQUE_DIR_LABEL[c.direction], type: CHEQUE_TYPE_LABEL[c.docType], no: c.docNo, bank: c.bankName, party: c.partyName, issue: c.issueDate, due: c.dueDate, amount: c.amount, status: CHEQUE_STATUS_LABEL[c.status] ?? c.status })),
+      totals: { amount: sum(d.cheques.map((c) => c.amount)).toFixed(2) },
+    },
+  ];
+}
+
+export async function chequeMaturityTable(ctx: BuildCtx, q: ChequeMaturityQuery): Promise<ReportTable[]> {
+  const d = await chequeMaturity(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  const subtitle = sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`, 'portföyde/tahsilde olan alınan ve ödenmemiş verilen belgeler');
+  return [
+    {
+      key: 'cek-vade-analizi',
+      title: 'Çek/senet vade analizi',
+      sheet: 'Vade kovaları',
+      subtitle,
+      columns: [col('direction', 'Yön', 'text', 12), col('bucket', 'Vade', 'text', 16), col('count', 'Adet', 'int'), col('amount', `Tutar (${b})`, 'money')],
+      rows: (['received', 'issued'] as const).flatMap((dir) => d[dir].buckets.map((k) => ({ direction: CHEQUE_DIR_LABEL[dir], bucket: BUCKET_LABEL[k.bucket], count: k.count, amount: k.amount }))),
+    },
+    {
+      key: 'cek-vade-cari',
+      title: 'Çek/senet vade analizi (cariye göre)',
+      sheet: 'Cariye göre',
+      subtitle,
+      columns: [col('direction', 'Yön', 'text', 12), col('party', 'Cari', 'text', 30), col('count', 'Adet', 'int'), col('amount', `Tutar (${b})`, 'money'), col('overdue', `Vadesi geçmiş (${b})`, 'money'), col('earliest', 'En erken vade', 'date')],
+      rows: d.byParty.map((p) => ({ direction: CHEQUE_DIR_LABEL[p.direction], party: p.partyName, count: p.count, amount: p.amount, overdue: p.overdue, earliest: p.earliestDue })),
+    },
+  ];
+}
+
+export async function chequesDueTable(ctx: BuildCtx, q: ChequeDueQuery): Promise<ReportTable[]> {
+  const d = await chequesDue(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'vadesi-gelen-cek-senet',
+      title: 'Vadesi gelen çek/senetler',
+      sheet: 'Vadesi gelen',
+      subtitle: sub(ctx, `${formatDateTR(d.from)} – ${formatDateTR(d.to)} (vadesi geçmişler dahil)`),
+      columns: [col('direction', 'Yön', 'text', 10), col('type', 'Tür', 'text', 8), col('no', 'Numara', 'text', 16), col('party', 'Cari', 'text', 28), col('due', 'Vade', 'date'), col('amount', `Tutar (${b})`, 'money'), col('status', 'Durum', 'text', 14), col('overdue', 'Vadesi geçmiş', 'text', 14)],
+      rows: d.rows.map((r) => ({ direction: CHEQUE_DIR_LABEL[r.direction], type: CHEQUE_TYPE_LABEL[r.docType], no: r.docNo, party: r.partyName, due: r.dueDate, amount: r.amount, status: CHEQUE_STATUS_LABEL[r.status] ?? r.status, overdue: r.overdue ? 'Evet' : '' })),
+    },
+  ];
+}
+
+export async function chequesBouncedTable(ctx: BuildCtx, q: { direction?: 'received' | 'issued' }): Promise<ReportTable[]> {
+  const d = await chequesBounced(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'karsiliksiz-cek-senet',
+      title: 'Karşılıksız çek/senetler',
+      sheet: 'Karşılıksız',
+      subtitle: sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`, 'cariye yeniden açılan alacak/borç tutarıdır'),
+      columns: [col('direction', 'Yön', 'text', 10), col('type', 'Tür', 'text', 8), col('no', 'Numara', 'text', 16), col('bank', 'Banka', 'text', 20), col('party', 'Cari', 'text', 28), col('due', 'Vade', 'date'), col('bounced', 'Karşılıksız tarihi', 'date'), col('days', 'Geçen gün', 'int'), col('amount', `Tutar (${b})`, 'money')],
+      rows: d.rows.map((r) => ({ direction: CHEQUE_DIR_LABEL[r.direction], type: CHEQUE_TYPE_LABEL[r.docType], no: r.docNo, bank: r.bankName, party: r.partyName, due: r.dueDate, bounced: r.bouncedDate, days: r.daysSince, amount: r.amount })),
+    },
+  ];
+}
+
+export async function bankGuaranteesTable(ctx: BuildCtx, q: BankGuaranteeListQuery): Promise<ReportTable[]> {
+  const d = await listBankGuarantees(ctx.tx, q);
+  const warn = d.warningDays === null ? 'uyarı günü tanımsız: "dolmak üzere" üretilmedi' : `uyarı günü ${d.warningDays}`;
+  return [
+    {
+      key: 'banka-teminat-mektuplari',
+      title: 'Banka teminat mektupları',
+      sheet: 'Mektuplar',
+      subtitle: sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`, warn, GUARANTEE_NOTE),
+      columns: [
+        col('direction', 'Yön', 'text', 10),
+        col('no', 'Mektup no', 'text', 16),
+        col('bank', 'Banka', 'text', 20),
+        col('party', 'Karşı taraf', 'text', 26),
+        col('project', 'Proje', 'text', 22),
+        col('contract', 'Sözleşme', 'text', 14),
+        col('purpose', 'Amaç', 'text', 22),
+        col('amount', 'Tutar', 'money'),
+        col('currency', 'Para birimi', 'text', 8),
+        col('issue', 'Düzenleme', 'date'),
+        col('expiry', 'Son kullanma', 'date'),
+        col('days', 'Kalan gün', 'int'),
+        col('rate', 'Komisyon oranı (%)', 'rate'),
+        col('commission', 'Komisyon tutarı', 'money'),
+        col('status', 'Durum', 'text', 14),
+      ],
+      rows: d.guarantees.map((g) => ({
+        direction: g.direction === 'given' ? 'Verilen' : 'Alınan',
+        no: g.letterNo,
+        bank: g.bankName,
+        party: g.counterpartyName,
+        project: g.projectCode ? `${g.projectCode} — ${g.projectName}` : null,
+        contract: g.subcontractCode,
+        purpose: g.purpose,
+        amount: g.amount,
+        currency: g.currencyCode,
+        issue: g.issueDate,
+        expiry: g.expiryDate,
+        days: g.daysToExpiry,
+        rate: g.commissionRate,
+        commission: g.commissionAmount,
+        status: g.expiryState === 'lapsed' ? 'Süresi geçmiş (kapatılmadı)' : g.expiryState === 'expiring' ? 'Dolmak üzere' : (BANK_GUARANTEE_STATUS_LABEL[g.status] ?? g.status),
+      })),
+    },
+  ];
+}
+
+const SALES_STATUS_LABEL: Record<string, string> = {
+  draft: 'Taslak', sent: 'Gönderildi', accepted: 'Kabul edildi', rejected: 'Reddedildi', converted: 'Siparişe dönüştü',
+  confirmed: 'Onaylandı', closed: 'Kapatıldı', cancelled: 'İptal',
+};
+const FULFIL_LABEL: Record<string, string> = { none: 'Yok', partial: 'Kısmen', full: 'Tamam' };
+const DELIVERY_TYPE_LABEL: Record<string, string> = {
+  sales: 'Satış irsaliyesi', purchase: 'Alış irsaliyesi', sales_return: 'Satış iade irsaliyesi', purchase_return: 'Alış iade irsaliyesi',
+};
+const DELIVERY_STATUS_LABEL: Record<string, string> = { draft: 'Taslak', posted: 'Kaydedildi', cancelled: 'İptal' };
+const INVOICING_LABEL: Record<string, string> = { open: 'Faturalanmadı', partial: 'Kısmen', invoiced: 'Faturalandı' };
+
+const EXPORT_PAGE = 500;
+const EXPORT_MAX = 20000;
+
+/** Teklif ve sipariş listesi (türetilmiş teslim/fatura durumuyla). */
+export async function salesDocsTable(ctx: BuildCtx, q: Omit<ListSalesDocsQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const docs: Awaited<ReturnType<typeof listSalesDocs>>['docs'] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listSalesDocs(ctx.tx, { ...q, limit: EXPORT_PAGE, offset });
+    docs.push(...page.docs);
+    if (page.docs.length < EXPORT_PAGE) break;
+  }
+  const title = q.kind === 'quote' ? 'Satış teklifleri' : q.kind === 'order' ? 'Satış siparişleri' : 'Satış teklif ve siparişleri';
+  return [
+    {
+      key: 'satis-teklif-siparis',
+      title,
+      sheet: 'Liste',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [
+        col('docNo', 'No', 'text', 16),
+        col('kind', 'Tür', 'text', 10),
+        col('date', 'Tarih', 'date'),
+        col('party', 'Cari', 'text', 30),
+        col('currency', 'Para birimi', 'text', 10),
+        col('gross', 'Toplam (KDV dahil)', 'money'),
+        col('status', 'Durum', 'text', 16),
+        col('delivery', 'Teslim', 'text', 10),
+        col('invoicing', 'Fatura', 'text', 10),
+        col('valid', 'Geçerlilik', 'date'),
+      ],
+      rows: docs.map((d) => ({
+        docNo: d.docNo ?? '', kind: d.kind === 'quote' ? 'Teklif' : 'Sipariş', date: d.docDate, party: d.partyName, currency: d.currencyCode,
+        gross: d.grossTotal, status: SALES_STATUS_LABEL[d.status] ?? d.status,
+        delivery: d.fulfilment?.delivery ? FULFIL_LABEL[d.fulfilment.delivery] : '', invoicing: d.fulfilment ? FULFIL_LABEL[d.fulfilment.invoicing] : '',
+        valid: d.validUntil,
+      })),
+    },
+  ];
+}
+
+/** İrsaliye listesi (satış, alış ve iade irsaliyeleri; faturalama durumuyla). */
+export async function deliveryNotesTable(ctx: BuildCtx, q: Omit<ListDeliveryNotesQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const notes: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listDeliveryNotes(ctx.tx, { ...q, limit: EXPORT_PAGE, offset });
+    notes.push(...page.notes);
+    if (page.notes.length < EXPORT_PAGE) break;
+  }
+  return [
+    {
+      key: 'irsaliyeler',
+      title: 'İrsaliyeler',
+      sheet: 'İrsaliyeler',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [
+        col('noteNo', 'No', 'text', 16),
+        col('type', 'Tür', 'text', 20),
+        col('date', 'Tarih', 'date'),
+        col('party', 'Cari', 'text', 30),
+        col('warehouse', 'Depo', 'text', 16),
+        col('lines', 'Satır', 'int'),
+        col('qty', 'Miktar', 'qty'),
+        col('invoicing', 'Faturalama', 'text', 14),
+        col('status', 'Durum', 'text', 12),
+      ],
+      rows: notes.map((n) => ({
+        noteNo: (n.noteNo as string | null) ?? '', type: DELIVERY_TYPE_LABEL[String(n.type)] ?? String(n.type), date: String(n.noteDate), party: String(n.partyName),
+        warehouse: String(n.warehouseName), lines: Number(n.lineCount), qty: String(n.totalQty),
+        invoicing: n.invoicing ? (INVOICING_LABEL[String(n.invoicing)] ?? '') : '', status: DELIVERY_STATUS_LABEL[String(n.status)] ?? String(n.status),
+      })),
+    },
+  ];
+}
+
+
+const SERIAL_STATUS_LABEL: Record<string, string> = { in_stock: 'Depoda', issued: 'Müşteriye çıktı', returned: 'Tedarikçiye iade', scrapped: 'Fire/hurda' };
+
+/** Seri no listesi (kart, depo, durum filtresiyle). */
+export async function serialsTable(ctx: BuildCtx, q: Omit<ListSerialsQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listSerials(ctx.tx, { ...q, limit: EXPORT_PAGE, offset });
+    rows.push(...page.serials);
+    if (page.serials.length < EXPORT_PAGE) break;
+  }
+  return [
+    {
+      key: 'seri-no',
+      title: 'Seri no listesi',
+      sheet: 'Seri no',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 30), col('serial', 'Seri no', 'text', 26), col('status', 'Durum', 'text', 18), col('warehouse', 'Depo', 'text', 18)],
+      rows: rows.map((r) => ({ item: String(r.itemCode), itemName: String(r.itemName), serial: String(r.serialNo), status: SERIAL_STATUS_LABEL[String(r.status)] ?? String(r.status), warehouse: (r.warehouseName as string | null) ?? '' })),
+    },
+  ];
+}
+
+/** Bir fiyat listesinin satırları (bakım için dışa aktarma; toplu giriş biçimiyle uyumlu sütunlar). */
+export async function priceListItemsTable(ctx: BuildCtx, q: { listId: string }): Promise<ReportTable[]> {
+  const list = (await listPriceLists(ctx.tx, {})).lists.find((l) => l.id === q.listId);
+  if (!list) throw unprocessable('Fiyat listesi bulunamadı', 'PRICE_LIST_NOT_FOUND');
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listPriceListItems(ctx.tx, q.listId, { limit: EXPORT_PAGE, offset });
+    rows.push(...page.items);
+    if (page.items.length < EXPORT_PAGE) break;
+  }
+  return [
+    {
+      key: 'fiyat-listesi',
+      title: `Fiyat listesi: ${String(list.code)} ${String(list.name)}`,
+      sheet: 'Fiyat listesi',
+      subtitle: sub(ctx, `${list.kind === 'sales' ? 'Satış' : 'Alış'} · ${String(list.currencyCode)}`),
+      columns: [col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 30), col('minQty', 'En az miktar', 'qty'), col('price', `Birim fiyat (${String(list.currencyCode)})`, 'money'), col('from', 'Başlangıç', 'date'), col('to', 'Bitiş', 'date')],
+      rows: rows.map((r) => ({ item: String(r.itemCode), itemName: String(r.itemName), minQty: String(r.minQty), price: String(r.price), from: (r.validFrom as string | null) ?? '', to: (r.validTo as string | null) ?? '' })),
+    },
+  ];
+}
+
+/** Cari özel fiyat ve iskontolar. */
+export async function partyPricesTable(ctx: BuildCtx, q: { partyId?: string }): Promise<ReportTable[]> {
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < EXPORT_MAX; offset += EXPORT_PAGE) {
+    const page = await listPartyPrices(ctx.tx, { partyId: q.partyId, limit: EXPORT_PAGE, offset });
+    rows.push(...page.prices);
+    if (page.prices.length < EXPORT_PAGE) break;
+  }
+  return [
+    {
+      key: 'cari-ozel-fiyat',
+      title: 'Cari özel fiyat ve iskontolar',
+      sheet: 'Cari özel fiyat',
+      subtitle: sub(ctx, formatDateTR(todayIso())),
+      columns: [col('party', 'Cari', 'text', 28), col('kind', 'Tür', 'text', 8), col('item', 'Stok kodu', 'text', 14), col('itemName', 'Stok adı', 'text', 28), col('currency', 'Para birimi', 'text', 8), col('price', 'Birim fiyat', 'money'), col('discount', 'İskonto %', 'money'), col('minQty', 'En az miktar', 'qty'), col('from', 'Başlangıç', 'date'), col('to', 'Bitiş', 'date')],
+      rows: rows.map((r) => ({ party: String(r.partyName), kind: r.kind === 'sales' ? 'Satış' : 'Alış', item: String(r.itemCode), itemName: String(r.itemName), currency: (r.currencyCode as string | null) ?? '', price: (r.price as string | null) ?? '', discount: (r.discountPct as string | null) ?? '', minQty: String(r.minQty), from: (r.validFrom as string | null) ?? '', to: (r.validTo as string | null) ?? '' })),
+    },
+  ];
+}
+
+
+// --- İthalat maliyet dağıtımı ve gider raporları (Faz X4) ------------------------------------------------------------------
+
+const LANDED_NOTE = 'Ek maliyet tutarları kullanıcı girişidir; yasal oran/vergi hesabı yapılmaz, hesap eşlemesi doğrulanmadı';
+const EXPENSE_NOTE = 'KDV ve stopaj oranları kullanıcı verisidir; hesap eşlemeleri ve vergi uygulaması doğrulanmadı';
+
+export async function importFilesTable(ctx: BuildCtx, q: Omit<ListImportFilesQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const d = await listImportFiles(ctx.tx, { ...q, limit: 5000, offset: 0 });
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'ithalat-dosyalari',
+      title: 'İthalat dosyaları',
+      sheet: 'Dosyalar',
+      subtitle: sub(ctx, LANDED_NOTE),
+      columns: [col('code', 'Dosya no', 'text', 16), col('name', 'Ad', 'text', 30), col('reference', 'Referans', 'text', 18), col('fileDate', 'Dosya tarihi', 'date'), col('postDate', 'Kayıt tarihi', 'date'), col('status', 'Durum', 'text', 14), col('lines', 'Mal satırı', 'int'), col('goods', `Mal değeri (${b})`, 'money'), col('cost', `Ek maliyet (${b})`, 'money')],
+      rows: d.files.map((f) => ({ code: f.code as string, name: f.name as string, reference: (f.reference as string | null) ?? null, fileDate: f.fileDate as string, postDate: (f.postDate as string | null) ?? null, status: IMPORT_FILE_STATUS_LABELS[f.status as keyof typeof IMPORT_FILE_STATUS_LABELS], lines: f.lineCount as number, goods: f.goodsValue as string, cost: f.costTotal as string })),
+      totals: { goods: sum(d.files.map((f) => f.goodsValue as string)).toFixed(2), cost: sum(d.files.map((f) => f.costTotal as string)).toFixed(2) },
+    },
+  ];
+}
+
+export async function importFileReportTable(ctx: BuildCtx, q: { id: string }): Promise<ReportTable[]> {
+  const r = await importFileReport(ctx.tx, q.id);
+  const b = ctx.company.baseCurrency;
+  const subtitle = sub(ctx, `${r.file.code} — ${r.file.name}`, `Durum: ${r.file.statusLabel}`, LANDED_NOTE);
+  return [
+    {
+      key: `ithalat-maliyet-${r.file.code}`,
+      title: `İthalat maliyet dağıtımı: ${r.file.code}`,
+      sheet: 'Satırlar',
+      subtitle,
+      columns: [col('no', 'Sıra', 'int'), col('doc', 'Kaynak belge', 'text', 18), col('item', 'Kart', 'text', 14), col('name', 'Ad', 'text', 28), col('qty', 'Miktar', 'qty'), col('weight', 'Ağırlık', 'qty'), col('goods', `Mal değeri (${b})`, 'money'), col('alloc', `Dağıtılan (${b})`, 'money'), col('landed', `Toplam maliyet (${b})`, 'money'), col('before', `Birim maliyet önce (${b})`, 'money'), col('after', `Birim maliyet sonra (${b})`, 'money'), col('uplift', 'Artış %', 'rate')],
+      rows: r.byLine.map((l) => ({ no: l.lineNo, doc: l.sourceDocNo, item: l.itemCode, name: l.itemName, qty: l.quantity, weight: l.weight, goods: l.goodsValue, alloc: l.allocated, landed: l.landedValue, before: l.unitBefore, after: l.unitAfter, uplift: l.uplift })),
+      totals: { goods: r.totals.goodsValue, alloc: r.totals.allocated, landed: r.totals.landedValue },
+    },
+    {
+      key: 'ithalat-maliyet-kartlar',
+      title: `İthalat maliyeti: kart bazında (${r.file.code})`,
+      sheet: 'Kartlar',
+      subtitle,
+      columns: [col('item', 'Kart', 'text', 14), col('name', 'Ad', 'text', 28), col('qty', 'Miktar', 'qty'), col('goods', `Mal değeri (${b})`, 'money'), col('alloc', `Dağıtılan (${b})`, 'money'), col('landed', `Toplam maliyet (${b})`, 'money'), col('before', `Birim maliyet önce (${b})`, 'money'), col('after', `Birim maliyet sonra (${b})`, 'money')],
+      rows: r.byItem.map((i) => ({ item: i.itemCode, name: i.itemName, qty: i.quantity, goods: i.goodsValue, alloc: i.allocated, landed: i.landedValue, before: i.unitBefore, after: i.unitAfter })),
+      totals: { goods: r.totals.goodsValue, alloc: r.totals.allocated, landed: r.totals.landedValue },
+    },
+    {
+      key: 'ithalat-maliyet-turleri',
+      title: `İthalat maliyeti: maliyet türleri (${r.file.code})`,
+      sheet: 'Maliyet türleri',
+      subtitle,
+      columns: [col('kind', 'Tür', 'text', 28), col('amount', `Tutar (${b})`, 'money')],
+      rows: r.byCost.map((k) => ({ kind: k.kindLabel, amount: k.amount })),
+      totals: { amount: sum(r.byCost.map((k) => k.amount)).toFixed(2) },
+    },
+  ];
+}
+
+export async function importLandedItemsTable(ctx: BuildCtx, q: { from?: string; to?: string; itemId?: string }): Promise<ReportTable[]> {
+  const d = await importLandedByItem(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  return [
+    {
+      key: 'ithalat-maliyet-kart-bazinda',
+      title: 'İthalat maliyeti: kart bazında (muhasebeleşmiş dosyalar)',
+      sheet: 'Kartlar',
+      subtitle: sub(ctx, q.from && q.to ? period(q.from, q.to) : 'Tüm tarihler', LANDED_NOTE),
+      columns: [col('item', 'Kart', 'text', 14), col('name', 'Ad', 'text', 28), col('files', 'Dosya', 'int'), col('qty', 'Miktar', 'qty'), col('goods', `Mal değeri (${b})`, 'money'), col('alloc', `Ek maliyet (${b})`, 'money'), col('stocked', `Stok maliyetine (${b})`, 'money'), col('cogs', `Satılan mal maliyetine (${b})`, 'money'), col('before', `Birim maliyet önce (${b})`, 'money'), col('after', `Birim maliyet sonra (${b})`, 'money')],
+      rows: d.items.map((i) => ({ item: i.itemCode, name: i.itemName, files: i.fileCount, qty: i.quantity, goods: i.goodsValue, alloc: i.allocated, stocked: i.stocked, cogs: i.cogs, before: i.unitBefore, after: i.unitAfter })),
+      totals: { goods: sum(d.items.map((i) => i.goodsValue)).toFixed(2), alloc: sum(d.items.map((i) => i.allocated)).toFixed(2), stocked: sum(d.items.map((i) => i.stocked)).toFixed(2), cogs: sum(d.items.map((i) => i.cogs)).toFixed(2) },
+    },
+  ];
+}
+
+export async function expenseEntriesTable(ctx: BuildCtx, q: Omit<ListExpenseEntriesQuery, 'limit' | 'offset'>): Promise<ReportTable[]> {
+  const d = await listExpenseEntries(ctx.tx, { ...q, limit: 5000, offset: 0 });
+  const b = ctx.company.baseCurrency;
+  const live = d.entries.filter((e) => e.status === 'posted');
+  return [
+    {
+      key: 'gider-fisleri',
+      title: 'Gider fişleri',
+      sheet: 'Gider fişleri',
+      subtitle: sub(ctx, q.from && q.to ? period(q.from, q.to) : 'Tüm tarihler', EXPENSE_NOTE),
+      columns: [col('no', 'Fiş no', 'text', 16), col('date', 'Tarih', 'date'), col('card', 'Gider kartı', 'text', 24), col('desc', 'Açıklama', 'text', 30), col('party', 'Cari', 'text', 24), col('project', 'Proje', 'text', 14), col('ref', 'Belge referansı', 'text', 18), col('net', `KDV hariç (${b})`, 'money'), col('vat', `KDV (${b})`, 'money'), col('wh', `Stopaj (${b})`, 'money'), col('gross', `Brüt (${b})`, 'money'), col('status', 'Durum', 'text', 10)],
+      rows: d.entries.map((e) => ({ no: e.entryNo as string, date: e.entryDate as string, card: e.cardName as string, desc: e.description as string, party: (e.partyName as string | null) ?? null, project: (e.projectCode as string | null) ?? null, ref: (e.documentRef as string | null) ?? null, net: e.net as string, vat: e.vat as string, wh: e.withholding as string, gross: e.gross as string, status: e.status === 'posted' ? 'Kayıtlı' : 'İptal' })),
+      totals: { net: sum(live.map((e) => e.net as string)).toFixed(2), vat: sum(live.map((e) => e.vat as string)).toFixed(2), wh: sum(live.map((e) => e.withholding as string)).toFixed(2), gross: sum(live.map((e) => e.gross as string)).toFixed(2) },
+    },
+  ];
+}
+
+export async function expenseReportTables(ctx: BuildCtx, q: ExpenseReportQuery): Promise<ReportTable[]> {
+  const r = await expenseReport(ctx.tx, q);
+  const b = ctx.company.baseCurrency;
+  const subtitle = sub(ctx, period(q.from, q.to), 'iptal edilen fişler hariç', EXPENSE_NOTE);
+  const money = (label: string, key: string) => col(key, `${label} (${b})`, 'money');
+  const amounts = [col('count', 'Adet', 'int'), money('KDV hariç', 'net'), money('KDV', 'vat'), money('Stopaj', 'withholding'), money('Brüt', 'gross')];
+  const tot = { net: r.totals.net, vat: r.totals.vat, withholding: r.totals.withholding, gross: r.totals.gross };
+  return [
+    { key: 'gider-kartlara-gore', title: 'Giderler: gider kartına göre', sheet: 'Kartlara göre', subtitle, columns: [col('card', 'Gider kartı', 'text', 28), col('account', 'Hesap', 'text', 10), ...amounts], rows: r.byCard.map((x) => ({ card: `${x.cardCode} ${x.cardName}`, account: x.accountCode, count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
+    { key: 'gider-aylik', title: 'Giderler: aylık eğilim', sheet: 'Aylık', subtitle, columns: [col('month', 'Ay', 'text', 10), ...amounts], rows: r.byMonth.map((x) => ({ month: x.month, count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
+    { key: 'gider-projelere-gore', title: 'Giderler: projeye göre', sheet: 'Projelere göre', subtitle, columns: [col('project', 'Proje', 'text', 28), ...amounts], rows: r.byProject.map((x) => ({ project: x.projectId ? `${x.projectCode} ${x.projectName}` : 'Projesiz', count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
+    { key: 'gider-cariye-gore', title: 'Giderler: cariye göre', sheet: 'Cariye göre', subtitle, columns: [col('party', 'Cari', 'text', 28), ...amounts], rows: r.byParty.map((x) => ({ party: x.partyName ?? 'Cari belirtilmemiş', count: x.count, net: x.net, vat: x.vat, withholding: x.withholding, gross: x.gross })), totals: tot },
+    { key: 'gider-en-yuksek', title: `Giderler: en yüksek ${q.top} fiş`, sheet: 'En yüksek', subtitle, columns: [col('no', 'Fiş no', 'text', 16), col('date', 'Tarih', 'date'), col('card', 'Gider kartı', 'text', 24), col('desc', 'Açıklama', 'text', 30), col('party', 'Cari', 'text', 24), money('KDV hariç', 'net'), money('Brüt', 'gross')], rows: r.top.map((x) => ({ no: x.entryNo as string, date: x.entryDate as string, card: x.cardName as string, desc: x.description as string, party: (x.partyName as string | null) ?? null, net: x.net as string, gross: x.gross as string })) },
+  ];
+}
+
+const DIRECTORY_NOTE = 'Rehber üçüncü kişilerin kişisel verisini içerir (telefon, e-posta, adres); görüşme notları ve serbest not alanı dosyaya DAHİL DEĞİLDİR; kimlik no ve doğum tarihi rehberde tutulmaz';
+
+export async function directoryContactsTable(ctx: BuildCtx, q: Partial<ContactListQuery>): Promise<ReportTable[]> {
+  const { contacts } = await listContacts(ctx.tx, q);
+  return [
+    {
+      key: 'rehber-kisiler',
+      title: 'Rehber: kişiler',
+      sheet: 'Kişiler',
+      subtitle: sub(ctx, DIRECTORY_NOTE),
+      columns: [col('name', 'Ad soyad', 'text', 28), col('title', 'Unvan', 'text', 20), col('org', 'Kurum', 'text', 28), col('phone', 'Telefon', 'text', 18), col('phone2', 'Telefon 2', 'text', 18), col('email', 'E-posta', 'text', 28), col('email2', 'E-posta 2', 'text', 28), col('address', 'Adres', 'text', 32), col('tags', 'Etiketler', 'text', 24), col('party', 'Cari', 'text', 24), col('project', 'Proje', 'text', 14), col('status', 'Durum', 'text', 10)],
+      rows: contacts.map((c) => ({ name: c.fullName as string, title: (c.title as string | null) ?? null, org: (c.organizationName as string | null) ?? null, phone: (c.phone as string | null) ?? null, phone2: (c.phone2 as string | null) ?? null, email: (c.email as string | null) ?? null, email2: (c.email2 as string | null) ?? null, address: (c.address as string | null) ?? null, tags: ((c.tags as string[]) ?? []).join(', ') || null, party: (c.partyName as string | null) ?? null, project: (c.projectCode as string | null) ?? null, status: c.anonymizedAt ? 'Anonim' : c.mergedIntoId ? 'Birleştirildi' : c.isArchived ? 'Arşiv' : 'Etkin' })),
+    },
+  ];
+}
+
+export async function directoryOrganizationsTable(ctx: BuildCtx, q: { q?: string; category?: string; archived: 'active' | 'archived' | 'all'; partyId?: string }): Promise<ReportTable[]> {
+  const { organizations } = await listOrganizations(ctx.tx, q);
+  return [
+    {
+      key: 'rehber-kurumlar',
+      title: 'Rehber: kurumlar',
+      sheet: 'Kurumlar',
+      subtitle: sub(ctx, DIRECTORY_NOTE),
+      columns: [col('name', 'Kurum', 'text', 32), col('category', 'Kategori', 'text', 18), col('phone', 'Telefon', 'text', 18), col('email', 'E-posta', 'text', 28), col('web', 'Web', 'text', 26), col('address', 'Adres', 'text', 32), col('party', 'Cari', 'text', 24), col('contacts', 'Kişi sayısı', 'int'), col('status', 'Durum', 'text', 10)],
+      rows: organizations.map((o) => ({ name: o.name as string, category: o.category as string, phone: (o.phone as string | null) ?? null, email: (o.email as string | null) ?? null, web: (o.web as string | null) ?? null, address: (o.address as string | null) ?? null, party: (o.partyName as string | null) ?? null, contacts: Number(o.contactCount ?? 0), status: o.isArchived ? 'Arşiv' : 'Etkin' })),
+    },
+  ];
+}
+
+const AGENDA_STATUS_LABEL: Record<string, string> = { open: 'Açık', done: 'Bitti', cancelled: 'İptal' };
+
+/** Ajanda dışa aktarma: yalnızca isteği yapanın görebildiği kalemler (kendi + şirket; rehber yöneticisi hepsi). */
+export async function agendaTable(ctx: BuildCtx, q: Partial<AgendaListQuery>): Promise<ReportTable[]> {
+  if (!ctx.user) throw unprocessable('Kullanıcı bağlamı yok', 'EXPORT_NO_USER');
+  const { items } = await listAgenda(ctx.tx, { companyId: '', userId: ctx.user.id, canManage: hasPermission(ctx.user.role, 'directory.manage') }, { scope: 'all', ...q } as AgendaListQuery);
+  return [
+    {
+      key: 'ajanda',
+      title: 'Ajanda',
+      sheet: 'Ajanda',
+      subtitle: sub(ctx, 'Hatırlatma ofseti yalnızca veridir; bildirim gönderilmez'),
+      columns: [col('date', 'Tarih', 'date'), col('time', 'Saat', 'text', 12), col('kind', 'Tür', 'text', 12), col('title', 'Başlık', 'text', 36), col('status', 'Durum', 'text', 10), col('owner', 'Sahibi', 'text', 22), col('contact', 'Kişi', 'text', 24), col('org', 'Kurum', 'text', 24), col('party', 'Cari', 'text', 24), col('project', 'Proje', 'text', 14), col('remind', 'Hatırlatma (dk önce)', 'int')],
+      rows: items.map((i) => ({ date: i.dueDate as string, time: i.allDay ? 'Tüm gün' : `${i.startTime}${i.endTime ? `–${i.endTime}` : ''}`, kind: i.kind === 'appointment' ? 'Randevu' : 'Görev', title: i.title as string, status: AGENDA_STATUS_LABEL[i.status as string] ?? (i.status as string), owner: (i.ownerName as string | null) ?? 'Şirket', contact: (i.contactName as string | null) ?? null, org: (i.organizationName as string | null) ?? null, party: (i.partyName as string | null) ?? null, project: (i.projectCode as string | null) ?? null, remind: (i.remindBeforeMinutes as number | null) ?? null })),
     },
   ];
 }

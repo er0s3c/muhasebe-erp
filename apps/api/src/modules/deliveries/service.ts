@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import {
+  DELIVERY_EXTERNAL_NO_TYPES,
   DELIVERY_NOTE_TYPE_META,
   INVOICE_TYPE_META,
   dec,
@@ -19,6 +20,9 @@ import { deliveryNoteLines, deliveryNotes, items, parties, warehouses } from '..
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { requireActiveWarehouse } from '../inventory/warehouses';
 import { invoicedTotals } from '../invoices/delivery-link';
+import { checkOrderLinks } from '../sales/usage';
+import { lineSerials, saveLineSerials } from '../inventory/serials';
+import { checkReturnLinks, returnedTotals } from './returns';
 
 export interface DeliveryCtx {
   companyId: string;
@@ -74,8 +78,8 @@ async function prepareLines(tx: Tx, type: DeliveryNoteType, lines: readonly Deli
     }
     if (!item.isActive) throw unprocessable(`${label}: ${item.code} ${item.name} kartı pasif`, 'ITEM_INACTIVE');
     const costGiven = l.unitCost !== undefined || l.currency !== undefined || l.fxRate !== undefined;
-    if (type === 'sales' && costGiven) {
-      throw unprocessable(`${label}: satış irsaliyesinde maliyet girilmez; ortalama maliyet kullanılır`, 'DELIVERY_COST_NOT_ALLOWED');
+    if (type !== 'purchase' && costGiven) {
+      throw unprocessable(`${label}: bu irsaliye türünde maliyet girilmez; stok defteri maliyeti kullanılır`, 'DELIVERY_COST_NOT_ALLOWED');
     }
     if (type === 'purchase' && l.unitCost === undefined && (l.currency !== undefined || l.fxRate !== undefined)) {
       throw unprocessable(`${label}: para birimi/kur için birim maliyet de girilmeli`, 'DELIVERY_COST_INCOMPLETE');
@@ -91,6 +95,8 @@ async function prepareLines(tx: Tx, type: DeliveryNoteType, lines: readonly Deli
       unitCost: priced ? dec(l.unitCost!).toFixed(6) : null,
       currencyCode: currency,
       fxRate: priced && currency !== baseCurrency && l.fxRate ? toDbRate(l.fxRate) : null,
+      sourceLineId: l.sourceLineId ?? null,
+      salesOrderLineId: l.salesOrderLineId ?? null,
     };
   });
 }
@@ -99,16 +105,29 @@ type DraftInput = Omit<CreateDeliveryNoteInput, 'type' | 'post'> | Omit<UpdateDe
 
 async function writeDraft(tx: Tx, ctx: DeliveryCtx, type: DeliveryNoteType, input: DraftInput, id?: string) {
   const party = await loadParty(tx, input.partyId, type);
-  if (type === 'sales' && input.externalNo) {
-    throw unprocessable('Dış numara yalnızca alış irsaliyesinde girilir', 'EXTERNAL_NO_NOT_ALLOWED');
+  if (!DELIVERY_EXTERNAL_NO_TYPES.includes(type) && input.externalNo) {
+    throw unprocessable('Dış numara yalnızca alış ve alış iade irsaliyesinde girilir', 'EXTERNAL_NO_NOT_ALLOWED');
+  }
+  const isReturn = DELIVERY_NOTE_TYPE_META[type].isReturn;
+  if (input.returnOfId && !isReturn) {
+    throw unprocessable('Orijinal irsaliye yalnızca iade irsaliyesinde seçilir', 'RETURN_NOT_ALLOWED');
+  }
+  if (!isReturn && input.lines.some((l) => l.sourceLineId)) {
+    throw unprocessable('Satır bağı yalnızca iade irsaliyesinde kullanılır', 'RETURN_NOT_ALLOWED');
+  }
+  if (type !== 'sales' && input.lines.some((l) => l.salesOrderLineId)) {
+    throw unprocessable('Sipariş bağı yalnızca satış irsaliyesinde kullanılır', 'SO_LINK_TYPE');
   }
   const lines = await prepareLines(tx, type, input.lines, ctx.baseCurrency);
+  await checkReturnLinks(tx, type, party.id, input.returnOfId, lines.map((l) => ({ lineNo: l.lineNo, itemId: l.itemId, quantity: l.quantity, sourceLineId: l.sourceLineId })), id);
+  await checkOrderLinks(tx, 'delivery', party.id, lines.map((l) => ({ lineNo: l.lineNo, itemId: l.itemId, quantity: l.quantity, salesOrderLineId: l.salesOrderLineId })));
   const warehouseId = input.warehouseId ?? (await defaultWarehouseId(tx));
   await requireActiveWarehouse(tx, warehouseId, 'Depo');
 
   const header = {
     noteDate: input.noteDate,
     externalNo: input.externalNo ?? null,
+    returnOfId: input.returnOfId ?? null,
     partyId: party.id,
     warehouseId,
     vehiclePlate: input.vehiclePlate ?? null,
@@ -128,7 +147,16 @@ async function writeDraft(tx: Tx, ctx: DeliveryCtx, type: DeliveryNoteType, inpu
       .returning({ id: deliveryNotes.id });
     noteId = row!.id;
   }
-  await tx.insert(deliveryNoteLines).values(lines.map((l) => ({ ...l, companyId: ctx.companyId, noteId: noteId! })));
+  const inserted = await tx
+    .insert(deliveryNoteLines)
+    .values(lines.map((l) => ({ ...l, companyId: ctx.companyId, noteId: noteId! })))
+    .returning({ id: deliveryNoteLines.id, lineNo: deliveryNoteLines.lineNo });
+  const serialsByLine = new Map<string, readonly string[]>();
+  for (const r of inserted) {
+    const list = input.lines[r.lineNo - 1]?.serials;
+    if (list && list.length > 0) serialsByLine.set(r.id, list);
+  }
+  await saveLineSerials(tx, ctx.companyId, 'delivery', serialsByLine);
   return noteId;
 }
 
@@ -168,6 +196,8 @@ interface HeadRow extends Record<string, unknown> {
   status: string;
   noteNo: string | null;
   externalNo: string | null;
+  returnOfId: string | null;
+  returnOfNo: string | null;
   noteDate: string;
   partyId: string;
   partyCode: string;
@@ -200,11 +230,16 @@ interface LineRow extends Record<string, unknown> {
   fxRate: string | null;
   stockValue: string | null;
   adjustValue: string | null;
+  sourceLineId: string | null;
+  salesOrderLineId: string | null;
+  salesOrderNo: string | null;
+  salesOrderId: string | null;
 }
 
 export async function getDeliveryNote(tx: Tx, id: string) {
   const head = await tx.execute<HeadRow>(sql`
     select n.id, n.type, n.status, n.note_no as "noteNo", n.external_no as "externalNo",
+           n.return_of_id as "returnOfId", ro.note_no as "returnOfNo",
            n.note_date::text as "noteDate", n.party_id as "partyId", p.code as "partyCode", p.name as "partyName",
            n.warehouse_id as "warehouseId", w.name as "warehouseName",
            n.vehicle_plate as "vehiclePlate", n.driver_name as "driverName", n.description,
@@ -215,6 +250,7 @@ export async function getDeliveryNote(tx: Tx, id: string) {
     from delivery_notes n
     join parties p on p.id = n.party_id
     join warehouses w on w.id = n.warehouse_id
+    left join delivery_notes ro on ro.id = n.return_of_id
     left join stock_documents sd on sd.id = n.stock_document_id
     left join stock_documents csd on csd.id = n.cancel_stock_document_id
     where n.id = ${id}`);
@@ -224,12 +260,26 @@ export async function getDeliveryNote(tx: Tx, id: string) {
   const lines = await tx.execute<LineRow>(sql`
     select l.id, l.line_no as "lineNo", l.item_id as "itemId", it.code as "itemCode", l.description, l.quantity, l.unit,
            l.unit_cost as "unitCost", l.currency_code as "currencyCode", l.fx_rate as "fxRate",
-           l.stock_value as "stockValue", l.adjust_value as "adjustValue"
+           l.stock_value as "stockValue", l.adjust_value as "adjustValue",
+           l.source_line_id as "sourceLineId", l.sales_order_line_id as "salesOrderLineId",
+           so.doc_no as "salesOrderNo", so.id as "salesOrderId"
     from delivery_note_lines l join items it on it.id = l.item_id
+    left join sales_order_lines sol on sol.id = l.sales_order_line_id
+    left join sales_orders so on so.id = sol.order_id
     where l.note_id = ${id}
     order by l.line_no`);
 
+  const serialMap = await lineSerials(tx, 'delivery', lines.rows.map((l) => l.id));
   const totals = await invoicedTotals(tx, lines.rows.map((l) => l.id));
+  // Orijinal (satış/alış) irsaliyede satır başına iade edilen ve iade edilebilir miktar
+  const isOriginal = !DELIVERY_NOTE_TYPE_META[note.type].isReturn;
+  const returned = isOriginal && note.status === 'posted' ? await returnedTotals(tx, lines.rows.map((l) => l.id)) : new Map();
+  const returns = isOriginal
+    ? (
+        await tx.execute<{ id: string; noteNo: string | null; status: string }>(sql`
+          select id, note_no as "noteNo", status from delivery_notes where return_of_id = ${id} order by created_at`)
+      ).rows
+    : [];
   let qtyTotal = dec(0);
   let invoicedQty = dec(0);
   const outLines = lines.rows.map((l) => {
@@ -239,8 +289,11 @@ export async function getDeliveryNote(tx: Tx, id: string) {
     invoicedQty = invoicedQty.plus(inv?.qty ?? 0);
     return {
       ...l,
+      serials: serialMap.get(l.id) ?? [],
       invoicedQty: (inv?.qty ?? dec(0)).toFixed(4),
       remainingQty: q.minus(inv?.qty ?? 0).toFixed(4),
+      returnedQty: isOriginal && note.status === 'posted' ? (returned.get(l.id)?.qty ?? dec(0)).toFixed(4) : null,
+      returnableQty: isOriginal && note.status === 'posted' ? q.minus(returned.get(l.id)?.qty ?? 0).toFixed(4) : null,
     };
   });
 
@@ -259,6 +312,7 @@ export async function getDeliveryNote(tx: Tx, id: string) {
     note: { ...note, invoicing },
     lines: outLines,
     invoices: invoices.rows.map((r) => ({ id: r.id, invoiceNo: r.invoiceNo, status: r.status, type: r.type })),
+    returns,
   };
 }
 

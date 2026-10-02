@@ -17,6 +17,7 @@ import {
   createTreasuryAccountSchema,
   createTreasuryTransactionSchema,
   isoYear,
+  monthBounds,
   todayIso,
   toDbRate,
   type CreateDeliveryNoteInput,
@@ -62,6 +63,8 @@ import { terminateContract } from '../modules/realestate/termination';
 import { createFeeSchedule, verifyFeeSchedule } from '../modules/realestate/fees';
 import { bulkCreateUnits } from '../modules/realestate/units';
 import { createForecastItem } from '../modules/cash/forecast';
+import { closeMonth, saveAttendance } from '../modules/hr/attendance';
+import { createEmployee } from '../modules/hr/employees';
 import { getOrder, issueOrder } from '../modules/procurement/orders';
 import { createReceipt } from '../modules/procurement/receipts';
 import { createRequest, submitRequest } from '../modules/procurement/requests';
@@ -647,6 +650,67 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
 }
 
 /**
+ * Demo puantaj: dört kurgusal personel, geçen ayın tamamı (iş günü 8 saat, bir kişide fazla mesai, izin ve hastalık günleri,
+ * hafta sonu "hafta tatili"), saatler ilk açık projenin iş kalemine ve işçilik maliyet koduna etiketli; geçen ay kapalıdır.
+ * Kimlik/IBAN girilmediğinden şifreleme anahtarı kullanılmaz.
+ */
+async function seedAttendance(tx: Tx, ctx: LedgerCtx): Promise<string> {
+  const d = new Date(`${today}T00:00:00Z`);
+  const prev = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
+  const month = `${prev.getUTCFullYear()}-${pad(prev.getUTCMonth() + 1)}`;
+  const { start, days } = monthBounds(month);
+  const hireDate = addDays(start, -40);
+
+  const tagRows = await tx.execute<{ project_id: string; wbs_id: string; cost_code_id: string | null }>(sql`
+    select p.id as project_id,
+           (select w.id from project_wbs w where w.project_id = p.id and w.is_active
+               and not exists (select 1 from project_wbs c where c.parent_id = w.id) order by w.code limit 1) as wbs_id,
+           (select c.id from cost_codes c where c.kind = 'labor' and c.is_active order by c.code limit 1) as cost_code_id
+      from projects p where p.status in ('planned', 'active', 'on_hold') order by p.code limit 1`);
+  const tag = tagRows.rows[0];
+
+  const people: [name: string, title: string][] = [
+    ['Hasan Öztürk', 'Kalıp ustası'],
+    ['Murat Aksoy', 'Demirci'],
+    ['Emre Çelik', 'Şantiye işçisi'],
+    ['Zeynep Arslan', 'Şantiye teknikeri'],
+  ];
+  const hr = { companyId: ctx.companyId, userId: ctx.userId, secret: 'demo' };
+  const ids: string[] = [];
+  for (const [fullName, jobTitle] of people) {
+    const e = await createEmployee(tx, hr, { fullName, jobTitle, department: 'Şantiye', hireDate });
+    ids.push(e.employee.id);
+  }
+
+  const entries: Parameters<typeof saveAttendance>[2]['entries'] = [];
+  for (let day = 1; day <= days; day++) {
+    const workDate = `${month}-${pad(day)}`;
+    const weekday = new Date(`${workDate}T00:00:00Z`).getUTCDay();
+    ids.forEach((employeeId, i) => {
+      if (weekday === 0 || weekday === 6) {
+        entries.push({ employeeId, workDate, dayType: 'weekly_rest', normalHours: '0', overtimeHours: '0' });
+      } else if (i === 1 && (day === 5 || day === 6)) {
+        entries.push({ employeeId, workDate, dayType: 'annual_leave', normalHours: '0', overtimeHours: '0' });
+      } else if (i === 2 && day === 12) {
+        entries.push({ employeeId, workDate, dayType: 'sick_leave', normalHours: '0', overtimeHours: '0' });
+      } else {
+        entries.push({
+          employeeId,
+          workDate,
+          dayType: 'worked',
+          normalHours: '8',
+          overtimeHours: i === 0 && day % 7 === 3 ? '2' : '0',
+          ...(tag?.wbs_id ? { projectId: tag.project_id, wbsId: tag.wbs_id, ...(tag.cost_code_id ? { costCodeId: tag.cost_code_id } : {}) } : {}),
+        });
+      }
+    });
+  }
+  await saveAttendance(tx, { companyId: ctx.companyId, userId: ctx.userId }, { entries, clear: [] });
+  await closeMonth(tx, { companyId: ctx.companyId, userId: ctx.userId }, month, 'Demo: ay kapatıldı');
+  return `puantaj: ${people.length} personel, ${month} ayı (${entries.length} gün, kapalı)`;
+}
+
+/**
  * TL banka hesabı için örnek ekstre: defterdeki (ters çevrilmemiş) banka satırlarından üretilir; bazı satırların tarihi
  * bir gün kayar (öneride "1 gün fark"), iki defter kaydı ekstrede yoktur ("eşleşmemiş defter kaydı") ve üç ekstre satırının
  * defterde karşılığı yoktur ("hareket oluştur" için). Kesin eşleşmeler uygulanır; olası ve öneri olmayan satırlar açık kalır.
@@ -850,6 +914,7 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
     const treasury = await seedTreasury(tx, ctx, partyId, acc);
     const treasurySummary = `${treasury.summary}; ${await seedBankStatement(tx, ctx, { ...company, sector: company.sector as Sector }, treasury.bankTlId)}`;
     const projectSummary = await seedProjects(tx, ctx, partyId, acc, treasury.cashId, treasury.bankTlId);
+    const attendanceSummary = await seedAttendance(tx, ctx);
 
     // Geçmiş aylar kapansın (yılın ilk yarısı)
     for (let m = 1; m <= 6; m++) {
@@ -858,7 +923,7 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
       if (p && date(m, last) < today) await closePeriod(tx, p.id, userId);
     }
 
-    log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary}, ${treasurySummary}, ${projectSummary})`);
+    log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary}, ${treasurySummary}, ${projectSummary}, ${attendanceSummary})`);
     log(`  Giriş:  ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
     log('  Ekip:   muhasebe@ornek.local (muhasebeci), izleyici@ornek.local (izleyici) — aynı şifre');
   });

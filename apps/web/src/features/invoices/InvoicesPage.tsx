@@ -1,7 +1,7 @@
-import { Plus, Receipt, Search } from 'lucide-react';
+import { Layers, Plus, Receipt, Search, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { invoiceTypesOf, todayIso, type InvoiceSide } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
@@ -13,6 +13,7 @@ import { cn } from '../../lib/cn';
 import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import type { InvoiceListRow, InvoiceStatus, InvoiceType } from '../../lib/types';
+import { ImportWizard } from '../imports/ImportWizard';
 import { InvoiceStatusBadge, InvoiceTypeBadge } from './common';
 
 const PAGE = 100;
@@ -24,6 +25,7 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const canManage = useCan()('invoices.manage');
+  const [importing, setImporting] = useState(false);
   const year = todayIso().slice(0, 4);
   const types = invoiceTypesOf(side);
   const [type, setType] = useState<InvoiceType | ''>('');
@@ -57,7 +59,29 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
 
   return (
     <>
-      <PageHeader title={t(`invoices.${side}.title`)} description={t(`invoices.${side}.subtitle`)} actions={canManage && newButtons} />
+      <PageHeader
+        title={t(`invoices.${side}.title`)}
+        description={t(`invoices.${side}.subtitle`)}
+        actions={
+          canManage && (
+            <>
+              <Button variant="secondary" onClick={() => setImporting(true)}>
+                <Upload className="size-4" aria-hidden />
+                {t('invoices.importExcel')}
+              </Button>
+              {side === 'sales' && (
+                <Link to="/invoices/batch">
+                  <Button variant="secondary" tabIndex={-1}>
+                    <Layers className="size-4" aria-hidden />
+                    {t('batch.title')}
+                  </Button>
+                </Link>
+              )}
+              {newButtons}
+            </>
+          )
+        }
+      />
 
       <div className="mb-5 flex flex-wrap items-end gap-4">
         <SegmentedTabs
@@ -154,6 +178,7 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
           )}
         </>
       )}
+      <ImportWizard kind={side === 'sales' ? 'sales_invoices' : 'purchase_invoices'} open={importing} onOpenChange={setImporting} />
     </>
   );
 }

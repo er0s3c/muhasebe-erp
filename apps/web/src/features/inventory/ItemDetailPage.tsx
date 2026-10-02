@@ -78,6 +78,11 @@ export function ItemDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-heading">{item.name}</h1>
             {!goods && <Badge>{t('inventory.kinds.service')}</Badge>}
+            {item.tracksSerial && (
+              <Link to={`/inventory/serials?itemId=${item.id}`} aria-label={t('serials.tracked')}>
+                <Badge tone="brand">{t('serials.tracked')}</Badge>
+              </Link>
+            )}
             {!item.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
             {stock.isLow && <Badge tone="warning">{t('inventory.detail.lowBadge')}</Badge>}
           </div>

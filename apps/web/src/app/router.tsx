@@ -84,9 +84,49 @@ export const router = createBrowserRouter([
                   { path: 'invoices/:id', ...page(() => import('../features/invoices/InvoiceEditorPage'), 'InvoiceEditorPage') },
                   { path: 'delivery-notes/sales', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'SalesDeliveryNotesPage') },
                   { path: 'delivery-notes/purchases', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'PurchaseDeliveryNotesPage') },
+                  { path: 'delivery-notes/sales-returns', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'SalesReturnNotesPage') },
+                  { path: 'delivery-notes/purchase-returns', ...page(() => import('../features/deliveries/DeliveryNotesPage'), 'PurchaseReturnNotesPage') },
+                  { path: 'invoices/batch', ...page(() => import('../features/invoices/BatchInvoicingPage'), 'BatchInvoicingPage') },
                   { path: 'delivery-notes/new', ...page(() => import('../features/deliveries/DeliveryNoteEditorPage'), 'DeliveryNoteEditorPage') },
                   { path: 'delivery-notes/:id', ...page(() => import('../features/deliveries/DeliveryNoteEditorPage'), 'DeliveryNoteEditorPage') },
                 ],
+              },
+              {
+                element: <RequireModule module="invoices.orders" />,
+                children: [
+                  { path: 'sales/quotes', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesQuotesPage') },
+                  { path: 'sales/orders', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesOrdersPage') },
+                  { path: 'sales/docs/new', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage') },
+                  { path: 'sales/docs/:id', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="sales.pricelists" />,
+                children: [
+                  { path: 'price-lists', ...page(() => import('../features/pricing/PriceListsPage'), 'PriceListsPage') },
+                  { path: 'price-lists/:id', ...page(() => import('../features/pricing/PriceListDetailPage'), 'PriceListDetailPage') },
+                  { path: 'party-prices', ...page(() => import('../features/pricing/PartyPricesPage'), 'PartyPricesPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="inventory.imports" />,
+                children: [
+                  { path: 'inventory/imports', ...page(() => import('../features/landed/ImportFilesPage'), 'ImportFilesPage') },
+                  { path: 'inventory/imports/new', ...page(() => import('../features/landed/ImportFilePage'), 'ImportFilePage') },
+                  { path: 'inventory/imports/:id', ...page(() => import('../features/landed/ImportFilePage'), 'ImportFilePage') },
+                ],
+              },
+              {
+                element: <RequireModule module="treasury.expenses" />,
+                children: [
+                  { path: 'treasury/expenses', ...page(() => import('../features/expenses/ExpenseEntriesPage'), 'ExpenseEntriesPage') },
+                  { path: 'treasury/expense-cards', ...page(() => import('../features/expenses/ExpenseCardsPage'), 'ExpenseCardsPage') },
+                  { path: 'treasury/expense-reports', ...page(() => import('../features/expenses/ExpenseReportPage'), 'ExpenseReportPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="inventory.serials" />,
+                children: [{ path: 'inventory/serials', ...page(() => import('../features/inventory/SerialsPage'), 'SerialsPage') }],
               },
               {
                 element: <RequireModule module="core.treasury" />,
@@ -96,7 +136,16 @@ export const router = createBrowserRouter([
                   { path: 'treasury/cash-forecast', ...page(() => import('../features/treasury/CashForecastPage'), 'CashForecastPage') },
                   { path: 'treasury/transactions', ...page(() => import('../features/treasury/TransactionsPage'), 'TransactionsPage') },
                   { path: 'reports/fx-differences', ...page(() => import('../features/reports/FxDifferencePage'), 'FxDifferencePage') },
+                  { path: 'reports/fx-position', ...page(() => import('../features/reports/FxPositionPage'), 'FxPositionPage') },
                 ],
+              },
+              {
+                element: <RequireModule module="treasury.cheques" />,
+                children: [{ path: 'treasury/cheques', ...page(() => import('../features/treasury/ChequesPage'), 'ChequesPage') }],
+              },
+              {
+                element: <RequireModule module="treasury.guarantees" />,
+                children: [{ path: 'treasury/guarantees', ...page(() => import('../features/treasury/GuaranteesPage'), 'GuaranteesPage') }],
               },
               {
                 element: <RequireModule module="core.inventory" />,
@@ -123,7 +172,57 @@ export const router = createBrowserRouter([
                 children: [
                   { path: 'hr/employees', ...page(() => import('../features/hr/EmployeesPage'), 'EmployeesPage') },
                   { path: 'hr/employees/:id', ...page(() => import('../features/hr/EmployeePage'), 'EmployeePage') },
+                  { path: 'hr/attendance', ...page(() => import('../features/hr/AttendancePage'), 'AttendancePage') },
                   { path: 'hr/privacy', ...page(() => import('../features/hr/PrivacyPage'), 'PrivacyPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="hr.payroll" />,
+                children: [
+                  { path: 'hr/payroll', ...page(() => import('../features/hr/PayrollPage'), 'PayrollPage') },
+                  { path: 'hr/payroll/settings', ...page(() => import('../features/hr/PayrollSettingsPage'), 'PayrollSettingsPage') },
+                  { path: 'hr/payroll/:id', ...page(() => import('../features/hr/PayrollRunPage'), 'PayrollRunPage') },
+                  { path: 'hr/payroll/:id/slip/:employeeId', ...page(() => import('../features/hr/PayrollSlipPage'), 'PayrollSlipPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="reports.executive" />,
+                children: [{ path: 'reports/executive-summary', ...page(() => import('../features/reports/ExecutiveSummaryPage'), 'ExecutiveSummaryPage') }],
+              },
+              {
+                element: <RequireModule module="reports.consolidation" />,
+                children: [{ path: 'reports/consolidation', ...page(() => import('../features/consolidation/ConsolidationPage'), 'ConsolidationPage') }],
+              },
+              {
+                element: <RequireModule module="core.directory" />,
+                children: [
+                  { path: 'directory/contacts', ...page(() => import('../features/directory/ContactsPage'), 'ContactsPage') },
+                  { path: 'directory/contacts/:id', ...page(() => import('../features/directory/ContactDetailPage'), 'ContactDetailPage') },
+                  { path: 'directory/organizations', ...page(() => import('../features/directory/OrganizationsPage'), 'OrganizationsPage') },
+                  { path: 'directory/organizations/:id', ...page(() => import('../features/directory/OrganizationDetailPage'), 'OrganizationDetailPage') },
+                  { path: 'agenda', ...page(() => import('../features/directory/AgendaPage'), 'AgendaPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="hr.employee_ledger" />,
+                children: [
+                  { path: 'hr/employee-ledger', ...page(() => import('../features/hr/EmployeeLedgerPage'), 'EmployeeLedgerPage') },
+                  { path: 'hr/employee-ledger/:id', ...page(() => import('../features/hr/EmployeeStatementPage'), 'EmployeeStatementPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="hr.socialsecurity" />,
+                children: [
+                  { path: 'hr/social-security', ...page(() => import('../features/hr/SocialSecurityPage'), 'SocialSecurityPage') },
+                  { path: 'hr/social-security/settings', ...page(() => import('../features/hr/SocialSettingsPage'), 'SocialSettingsPage') },
+                  { path: 'hr/social-security/:id', ...page(() => import('../features/hr/SocialDeclarationPage'), 'SocialDeclarationPage') },
+                ],
+              },
+              {
+                element: <RequireModule module="hr.foreign" />,
+                children: [
+                  { path: 'hr/foreign-workers', ...page(() => import('../features/hr/ForeignWorkersPage'), 'ForeignWorkersPage') },
+                  { path: 'hr/foreign-workers/settings', ...page(() => import('../features/hr/ForeignSettingsPage'), 'ForeignSettingsPage') },
                 ],
               },
               {

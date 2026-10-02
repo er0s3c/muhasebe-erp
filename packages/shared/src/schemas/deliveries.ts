@@ -5,8 +5,11 @@ import type { InvoiceSide, InvoiceType } from './invoices';
 
 // --- İrsaliye türleri --------------------------------------------------------
 
-/** Satış (sevk) irsaliyesi stoktan çıkar, alış (mal kabul) irsaliyesi stoğa girer. İade irsaliyesi yok. */
-export const DELIVERY_NOTE_TYPES = ['sales', 'purchase'] as const;
+/**
+ * Satış (sevk) irsaliyesi stoktan çıkar, alış (mal kabul) irsaliyesi stoğa girer. İade irsaliyeleri (X2): satış iadesi müşteriden
+ * mal geri alır (stoğa girer, orijinal satışın maliyetiyle), alış iadesi tedarikçiye mal geri gönderir (stoktan çıkar).
+ */
+export const DELIVERY_NOTE_TYPES = ['sales', 'purchase', 'sales_return', 'purchase_return'] as const;
 export type DeliveryNoteType = (typeof DELIVERY_NOTE_TYPES)[number];
 
 export const DELIVERY_NOTE_STATUSES = ['draft', 'posted', 'cancelled'] as const;
@@ -24,18 +27,28 @@ export interface DeliveryNoteTypeMeta {
   partyKind: 'customer' | 'supplier';
   /** Stoğa giriş mi (alış) çıkış mı (satış)? */
   inbound: boolean;
-  /** Bu irsaliyenin bağlanabileceği fatura türü. */
-  invoiceType: Extract<InvoiceType, 'sales' | 'purchase'>;
+  /** Bu irsaliyenin bağlanabileceği fatura türü (iade irsaliyesi iade faturasına bağlanır). */
+  invoiceType: Extract<InvoiceType, 'sales' | 'purchase' | 'sales_return' | 'purchase_return'>;
+  isReturn: boolean;
+  /** İade irsaliyesinin bağlanabileceği orijinal irsaliye türü. */
+  returnOf?: 'sales' | 'purchase';
+  /** Orijinal irsaliyenin iade türü. */
+  returnType?: Extract<DeliveryNoteType, 'sales_return' | 'purchase_return'>;
 }
 
 export const DELIVERY_NOTE_TYPE_META: Record<DeliveryNoteType, DeliveryNoteTypeMeta> = {
-  sales: { prefix: 'SIR', side: 'sales', partyKind: 'customer', inbound: false, invoiceType: 'sales' },
-  purchase: { prefix: 'AIR', side: 'purchases', partyKind: 'supplier', inbound: true, invoiceType: 'purchase' },
+  sales: { prefix: 'SIR', side: 'sales', partyKind: 'customer', inbound: false, invoiceType: 'sales', isReturn: false, returnType: 'sales_return' },
+  purchase: { prefix: 'AIR', side: 'purchases', partyKind: 'supplier', inbound: true, invoiceType: 'purchase', isReturn: false, returnType: 'purchase_return' },
+  sales_return: { prefix: 'SIRI', side: 'sales', partyKind: 'customer', inbound: true, invoiceType: 'sales_return', isReturn: true, returnOf: 'sales' },
+  purchase_return: { prefix: 'AIRI', side: 'purchases', partyKind: 'supplier', inbound: false, invoiceType: 'purchase_return', isReturn: true, returnOf: 'purchase' },
 };
+
+/** Tedarikçi (dış) numarası girilebilen irsaliye türleri. */
+export const DELIVERY_EXTERNAL_NO_TYPES: readonly DeliveryNoteType[] = ['purchase', 'purchase_return'];
 
 /** Faturanın bağlanabileceği irsaliye türü (fatura türü → irsaliye türü). */
 export const deliveryTypeForInvoice = (type: InvoiceType): DeliveryNoteType | null =>
-  type === 'sales' ? 'sales' : type === 'purchase' ? 'purchase' : null;
+  type === 'expense' ? null : (type as DeliveryNoteType);
 
 // --- Giriş -------------------------------------------------------------------
 
@@ -58,14 +71,22 @@ export const deliveryLineSchema = z.object({
   currency: currencyCode.optional(),
   /** Verilmezse irsaliye tarihindeki kayıtlı kur kullanılır. */
   fxRate: rateString.optional(),
+  /** İade irsaliyesinde, iade edilen orijinal irsaliye satırı (isteğe bağlı; verilirse iade miktarı sınırlanır). */
+  sourceLineId: uuid.nullable().optional(),
+  /** Satış irsaliyesinde, karşılanan satış siparişi satırı (X2). */
+  salesOrderLineId: uuid.nullable().optional(),
+  /** Seri takipli kartta: miktar kadar seri no (kayıtta stok hareketine işlenir). */
+  serials: z.array(z.string().trim().min(1).max(60)).max(1000).optional(),
 });
 export type DeliveryLineInput = z.infer<typeof deliveryLineSchema>;
 
 const deliveryBase = z.object({
   partyId: uuid,
   noteDate: isoDate,
-  /** Alış irsaliyesinde tedarikçinin irsaliye numarası (kaydetmede zorunlu). */
+  /** Alış irsaliyesinde tedarikçinin irsaliye numarası (kaydetmede zorunlu; alış iadesinde isteğe bağlı). */
   externalNo: optionalText(40),
+  /** İade irsaliyesi: bağlı orijinal irsaliye (isteğe bağlı). */
+  returnOfId: uuid.nullable().optional(),
   /** Boşsa varsayılan depo. */
   warehouseId: uuid.nullable().optional(),
   vehiclePlate: optionalText(20),
@@ -77,19 +98,32 @@ const deliveryBase = z.object({
 });
 type DeliveryBase = z.infer<typeof deliveryBase>;
 
-/** Tür bilindiğinde satır biçimi: satışta maliyet/dış numara girilmez. */
+/** Tür bilindiğinde satır biçimi: yalnızca alış irsaliyesinde maliyet girilir; dış numara yalnızca alış/alış iadesinde. */
 export function refineDelivery(doc: DeliveryBase & { type?: DeliveryNoteType }, ctx: z.RefinementCtx) {
-  if (doc.type !== 'sales') return;
-  if (doc.externalNo) {
-    ctx.addIssue({ code: 'custom', path: ['externalNo'], message: 'Dış numara yalnızca alış irsaliyesinde girilir' });
+  if (!doc.type) return;
+  const meta = DELIVERY_NOTE_TYPE_META[doc.type];
+  if (doc.externalNo && !DELIVERY_EXTERNAL_NO_TYPES.includes(doc.type)) {
+    ctx.addIssue({ code: 'custom', path: ['externalNo'], message: 'Dış numara yalnızca alış ve alış iade irsaliyesinde girilir' });
+  }
+  if (doc.returnOfId && !meta.isReturn) {
+    ctx.addIssue({ code: 'custom', path: ['returnOfId'], message: 'Orijinal irsaliye yalnızca iade irsaliyesinde seçilir' });
   }
   doc.lines.forEach((l, i) => {
-    if (l.unitCost !== undefined || l.currency !== undefined || l.fxRate !== undefined) {
+    if (doc.type !== 'purchase' && (l.unitCost !== undefined || l.currency !== undefined || l.fxRate !== undefined)) {
       ctx.addIssue({
         code: 'custom',
         path: ['lines', i, 'unitCost'],
-        message: 'Satış irsaliyesinde maliyet girilmez; ortalama maliyet kullanılır',
+        message: 'Bu irsaliye türünde maliyet girilmez; stok defteri maliyeti kullanılır',
       });
+    }
+    if (l.sourceLineId && !meta.isReturn) {
+      ctx.addIssue({ code: 'custom', path: ['lines', i, 'sourceLineId'], message: 'Satır bağı yalnızca iade irsaliyesinde kullanılır' });
+    }
+    if (l.sourceLineId && !doc.returnOfId) {
+      ctx.addIssue({ code: 'custom', path: ['lines', i, 'sourceLineId'], message: 'Satır bağı için orijinal irsaliye seçilmeli' });
+    }
+    if (l.salesOrderLineId && doc.type !== 'sales') {
+      ctx.addIssue({ code: 'custom', path: ['lines', i, 'salesOrderLineId'], message: 'Sipariş bağı yalnızca satış irsaliyesinde kullanılır' });
     }
   });
 }
@@ -128,3 +162,12 @@ export const openDeliveryLinesQuerySchema = z.object({
   partyId: uuid,
 });
 export type OpenDeliveryLinesQuery = z.infer<typeof openDeliveryLinesQuerySchema>;
+
+/** İade edilebilecek orijinal irsaliye satırları (teslim edilen − önceki kaydedilmiş iadeler). */
+export const returnableLinesQuerySchema = z.object({
+  /** İade türü; orijinal irsaliye türü buradan çıkar. */
+  type: z.enum(['sales_return', 'purchase_return']),
+  partyId: uuid,
+  noteId: uuid.optional(),
+});
+export type ReturnableLinesQuery = z.infer<typeof returnableLinesQuerySchema>;

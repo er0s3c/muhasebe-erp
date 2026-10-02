@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../../db/client';
 import { dataSubjectRequests, personalDataInventory, users } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
+import { assertRefs } from '../directory/service';
 
 interface Seed {
   key: string;
@@ -31,7 +32,21 @@ export const INVENTORY_SEED: readonly Seed[] = [
   { key: 'employees.iban', tableName: 'employees', fieldName: 'iban_enc', category: 'financial', purpose: 'Maaş ve avans ödemesi', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD, isSensitive: true },
   { key: 'employees.contact', tableName: 'employees', fieldName: 'phone, email, address', category: 'contact', purpose: 'İletişim', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
   { key: 'employees.employment', tableName: 'employees', fieldName: 'hire_date, leave_date, department, job_title, project_id', category: 'employment', purpose: 'İstihdam ve işçilik maliyeti takibi', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
+  { key: 'attendance.entries', tableName: 'attendance_entries', fieldName: 'work_date, normal_hours, overtime_hours, project_id, wbs_id, cost_code_id, note', category: 'employment', purpose: 'Günlük puantaj: çalışma saatleri, fazla mesai ve işçilik maliyetinin projeye/iş kalemine dağıtımı', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
+  { key: 'attendance.leave_type', tableName: 'attendance_entries', fieldName: 'day_type', category: 'employment', purpose: 'İzin ve devamsızlık takibi (yıllık/hastalık/ücretsiz izin, devamsızlık); hastalık izni günü sağlık verisi sayılabilir (doğrulanmadı)', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'payroll.pay_terms', tableName: 'employee_pay_terms', fieldName: 'pay_basis, amount, effective_from, note', category: 'financial', purpose: 'Personel ücret şartı (aylık/günlük/saatlik ücret); bordro hesabının girdisi. Ücret verisi hr.payroll izniyle sınırlıdır ve okunması erişim günlüğüne yazılır', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'payroll.lines', tableName: 'payroll_lines', fieldName: 'gross, deductions, net, employer costs, hours, leave days', category: 'financial', purpose: 'Aylık bordro satırı: brüt/net ücret, kesintiler, işveren yükü ve devam özeti; iç belgedir, resmî bordro değildir', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'employee_ledger.advances', tableName: 'employee_advances', fieldName: 'amount, advance_date, purpose, settled_amount, status', category: 'financial', purpose: 'Personele verilen avanslar, bordrodan kesinti ve geri ödemeler (personel cari); personel bakiyesi ücret verisi gibi hassastır, hr.payroll izniyle sınırlıdır ve okunması erişim günlüğüne yazılır. Yasal dayanak ve avans kesintisi uygulaması doğrulanmadı', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'employee_ledger.salary_payments', tableName: 'employee_salary_payments', fieldName: 'amount, pay_date, payroll_run_id', category: 'financial', purpose: 'Net maaş ödemesi kaydı (kasa/banka hareketine bağlı) ve personel cari bakiyesi; hr.payroll izniyle sınırlıdır, okunması erişim günlüğüne yazılır. Dayanak ve saklama süresi doğrulanmadı', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'social.profile', tableName: 'employee_social_profiles', fieldName: 'ssn_enc, ssn_last4, payroll_type_code, insurance_start, insurance_end', category: 'identity', purpose: 'Sosyal güvenlik numarası (şifreli, maskeli gösterim) ve sigorta dönemi; sosyal güvenlik bildirimi çıktısının girdisi. Açık okuma hr.sensitive izni + gerekçe + erişim günlüğü ister. Yasal dayanak/format doğrulanmadı', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'social.declaration_lines', tableName: 'social_declaration_lines', fieldName: 'premium_base, employee_premium, employer_premium, support amounts, days, ssn_last4', category: 'financial', purpose: 'Aylık sosyal güvenlik bildirimi satırı (genel düzen; resmî biçim değildir, doğrulanmadı): prim matrahı, prim ve destek tutarları, gün sayıları. Yalnızca hr.payroll izniyle okunur, okuma erişim günlüğüne yazılır', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'foreign.docs', tableName: 'foreign_worker_docs', fieldName: 'number_enc, number_last4, issuing_authority, issue_date, expiry_date, reference_note', category: 'identity', purpose: 'Yabancı işçi belgeleri (çalışma/ikamet izni, pasaport, sağlık raporu vb.) ve son kullanma takibi; belge numarası şifreli + maskeli, açık okuma hr.sensitive izni + gerekçe + erişim günlüğü ister. Yasal dayanak ve saklama süresi doğrulanmadı', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'foreign.guarantees', tableName: 'foreign_worker_guarantees', fieldName: 'amount, currency, deposited_date, deposit_reference, status, resolved_date', category: 'financial', purpose: 'Yabancı işçi teminatı takibi (tutar kullanıcı parametresinden, yatırma/iade/irat tarihleri). Yasal dayanak ve tutar doğrulanmadı', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD },
   { key: 'parties.contact', tableName: 'parties', fieldName: 'name, tax_number, phone, email, address', category: 'contact', purpose: 'Müşteri/tedarikçi/taşeron cari kaydı ve fatura', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
+  { key: 'directory.contacts', tableName: 'directory_contacts', fieldName: 'full_name, title, phone, phone2, email, email2, address, tags, note', category: 'contact', purpose: 'Rehber: iş ilişkisi olan üçüncü kişilerin (yetkili, muhatap, usta vb.) iletişim kaydı. Telefon/e-posta/adres şifrelenmez; kimlik no ve doğum tarihi rehberde HİÇ tutulmaz. Toplu dışa aktarma rehber yönetim izni ister, ilgili kişi dışa aktarması gerekçeli ve günlüklüdür, anonimleştirme eylemi vardır. Dayanak ve saklama süresi doğrulanmadı', legalBasis: BASIS_INTEREST, retention: RETENTION_TBD },
+  { key: 'directory.organizations', tableName: 'directory_organizations', fieldName: 'name, address, phone, email, web', category: 'contact', purpose: 'Rehber: kurum/firma iletişim kaydı (bazı kurumlar gerçek kişi ticari unvanı olabilir). Dayanak ve saklama süresi doğrulanmadı', legalBasis: BASIS_INTEREST, retention: RETENTION_TBD },
+  { key: 'directory.notes', tableName: 'directory_notes', fieldName: 'kind, note_date, summary, visibility, author_id', category: 'other', purpose: 'Görüşme notları: kişi/kurumla yapılan arama, toplantı, e-posta özetleri. Serbest metindir (özel nitelikli veri girilmemelidir); özel not yalnızca yazarına görünür, paylaşılan not rehber okuyan herkese. Not silinmez, yazarı düzenler (geçmiş denetim izinde); anonimleştirmede metin temizlenir. Dayanak ve saklama süresi doğrulanmadı', legalBasis: BASIS_INTEREST, retention: RETENTION_TBD, isSensitive: true },
+  { key: 'agenda.items', tableName: 'agenda_items', fieldName: 'title, description, due_date, owner_id, contact_id', category: 'other', purpose: 'Ajanda: görev, hatırlatma ve randevu kaydı (kişi/cari/proje bağlantısı isteğe bağlı); bildirim gönderilmez. Başlık/açıklama serbest metindir. Dayanak ve saklama süresi doğrulanmadı', legalBasis: BASIS_INTEREST, retention: RETENTION_TBD },
   { key: 'users.account', tableName: 'users', fieldName: 'email, full_name', category: 'identity', purpose: 'Uygulama kullanıcı hesabı ve yetkilendirme', legalBasis: BASIS_CONTRACT, retention: RETENTION_TBD },
   { key: 'security_events.ip', tableName: 'security_events', fieldName: 'ip, user_agent', category: 'other', purpose: 'Güvenlik olaylarının izlenmesi (giriş, parola, MFA)', legalBasis: BASIS_INTEREST, retention: RETENTION_TBD },
   { key: 'audit_log.changes', tableName: 'audit_log', fieldName: 'changes', category: 'other', purpose: 'Denetim izi: kim neyi ne zaman değiştirdi', legalBasis: BASIS_LEGAL, retention: RETENTION_TBD },
@@ -77,10 +92,12 @@ export async function verifyInventory(tx: Tx, id: string, userId: string, note: 
 
 // --- İlgili kişi talepleri -----------------------------------------------------------------------------
 
-export async function createRequest(tx: Tx, ctx: { companyId: string; userId: string }, input: { employeeId?: string | null; requesterName: string; kind: string; description?: string | null }) {
+export async function createRequest(tx: Tx, ctx: { companyId: string; userId: string }, input: { employeeId?: string | null; contactId?: string | null; requesterName: string; kind: string; description?: string | null }) {
+  if (input.contactId) await assertRefs(tx, { contactId: input.contactId });
+  if (input.employeeId) await assertRefs(tx, { employeeId: input.employeeId });
   const [row] = await tx
     .insert(dataSubjectRequests)
-    .values({ companyId: ctx.companyId, employeeId: input.employeeId ?? null, requesterName: input.requesterName, kind: input.kind, description: input.description ?? null, createdBy: ctx.userId })
+    .values({ companyId: ctx.companyId, employeeId: input.employeeId ?? null, contactId: input.contactId ?? null, requesterName: input.requesterName, kind: input.kind, description: input.description ?? null, createdBy: ctx.userId })
     .returning();
   return row!;
 }
@@ -88,8 +105,9 @@ export async function createRequest(tx: Tx, ctx: { companyId: string; userId: st
 export async function listRequests(tx: Tx, q: { status?: string }) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select r.id, r.kind, r.status, r.requester_name as "requesterName", r.description, r.resolution_note as "resolutionNote",
-           r.opened_at as "openedAt", r.resolved_at as "resolvedAt", r.employee_id as "employeeId", e.code as "employeeCode", e.full_name as "employeeName"
-      from data_subject_requests r left join employees e on e.id = r.employee_id
+           r.opened_at as "openedAt", r.resolved_at as "resolvedAt", r.employee_id as "employeeId", e.code as "employeeCode", e.full_name as "employeeName",
+           r.contact_id as "contactId", c.full_name as "contactName"
+      from data_subject_requests r left join employees e on e.id = r.employee_id left join directory_contacts c on c.id = r.contact_id
      where (${q.status ?? null}::text is null or r.status = ${q.status ?? null}::text)
      order by r.opened_at desc`);
   return { requests: rows.rows };
@@ -109,13 +127,16 @@ export async function resolveRequest(tx: Tx, ctx: { userId: string }, id: string
 
 // --- Erişim günlüğü ------------------------------------------------------------------------------------
 
-export async function listAccessLog(tx: Tx, q: { employeeId?: string }) {
+export async function listAccessLog(tx: Tx, q: { employeeId?: string; contactId?: string }) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
-    select l.id, l.field, l.reason, l.created_at as "at", l.employee_id as "employeeId", e.code as "employeeCode", e.full_name as "employeeName", u.email as "by"
+    select l.id, l.field, l.reason, l.created_at as "at", l.employee_id as "employeeId", e.code as "employeeCode", e.full_name as "employeeName",
+           l.contact_id as "contactId", c.full_name as "contactName", u.email as "by"
       from personal_data_access_log l
-      join employees e on e.id = l.employee_id
+      left join employees e on e.id = l.employee_id
+      left join directory_contacts c on c.id = l.contact_id
       join users u on u.id = l.user_id
      where (${q.employeeId ?? null}::uuid is null or l.employee_id = ${q.employeeId ?? null}::uuid)
+       and (${q.contactId ?? null}::uuid is null or l.contact_id = ${q.contactId ?? null}::uuid)
      order by l.created_at desc
      limit 500`);
   return { log: rows.rows };

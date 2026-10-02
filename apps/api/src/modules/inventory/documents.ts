@@ -24,6 +24,7 @@ import { requireRate } from '../settings/rates';
 import { loadItemStates, loadWarehouseQty, lockItems, neg, uuidList } from './balances';
 import { journalStockDocument, ledgerCtxOf } from './journal';
 import { StockPlanner, type DraftRow, type PlannerItem } from './planner';
+import { applySerials, type SerialPlan } from './serials';
 import { requireActiveWarehouse } from './warehouses';
 
 export interface StockCtx {
@@ -66,7 +67,7 @@ interface Header {
 }
 
 /** Belge başlığını boşluksuz numarayla ve satırlarıyla yazar. Ürünler önceden kilitlenmiş olmalı. */
-export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, header: Header, rows: DraftRow[]) {
+export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, header: Header, rows: DraftRow[], serials?: SerialPlan) {
   const year = isoYear(header.docDate);
   const seq = await nextNumber(tx, ctx.companyId, STOCK_NUMBER_KEY, year);
   const [doc] = await tx
@@ -87,6 +88,8 @@ export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, he
     })
     .returning();
   if (rows.length > 0) {
+    // Seri hareketleri stok hareketlerinden önce yazılır (miktar = seri sayısı denetimi hareket eklenirken yapılır)
+    await applySerials(tx, ctx, doc!, rows, serials);
     await tx.insert(stockMovements).values(
       rows.map((r) => ({
         companyId: ctx.companyId,
@@ -190,6 +193,7 @@ export async function postStockDocument(tx: Tx, ctx: StockCtx, input: CreateStoc
       description: input.description,
     },
     planner.rows,
+    { intent: { byLine: new Map(input.lines.map((l, i) => [i + 1, l.serials ?? []] as const)) } },
   );
   // Elle girilen belgenin muhasebe kaydı (fatura kaynaklı belgeler kendi yevmiyesini faturadan alır)
   await journalStockDocument(tx, ctx, doc, planner.rows);
@@ -287,6 +291,7 @@ export async function reverseStockDocument(
       sourceId: original.sourceId,
     },
     rows,
+    { reverseOf: original.id },
   );
   await tx.update(stockDocuments).set({ reversedById: reversal.id }).where(eq(stockDocuments.id, id));
 

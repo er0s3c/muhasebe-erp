@@ -92,7 +92,7 @@ test('satın alma zinciri: talep → onay → RFQ + teklif → sipariş → mal 
   await expect(page.getByText(/MK-\d{4}-000001/)).toBeVisible();
 
   // 5) Sipariş listesi ve proje taahhüdü: kalan 60 × 2.900 = 174.000
-  await nav.getByRole('link', { name: 'Siparişler' }).click();
+  await nav.getByRole('link', { name: 'Siparişler', exact: true }).click();
   await expect(page.getByRole('row', { name: /Hazır Beton Ltd\./ })).toContainText('40 / 100');
   await nav.getByRole('link', { name: 'Projeler' }).click();
   await page.getByRole('row', { name: /Güneş Sitesi/ }).click();

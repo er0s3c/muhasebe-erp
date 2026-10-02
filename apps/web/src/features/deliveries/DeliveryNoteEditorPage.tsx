@@ -1,4 +1,4 @@
-import { ArrowLeft, Ban, FileText, Printer } from 'lucide-react';
+import { ArrowLeft, Ban, FileText, Printer, Undo2 } from 'lucide-react';
 import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -19,7 +19,7 @@ import { useCompany } from '../../lib/session';
 import type { DeliveryNoteDetail, DeliveryNoteType } from '../../lib/types';
 import { qtyText, useUnitLabel } from '../inventory/common';
 import { DELIVERY_INVALIDATE, DeliveryInvoicingBadge, DeliveryStatusBadge } from './common';
-import { DeliveryNoteForm } from './DeliveryNoteForm';
+import { DeliveryNoteForm, NOTE_LIST } from './DeliveryNoteForm';
 
 /**
  * /delivery-notes/new ve /delivery-notes/:id: taslaksa düzenlenebilir form,
@@ -66,8 +66,10 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
     DELIVERY_INVALIDATE,
   );
 
-  const listPath = meta.inbound ? '/delivery-notes/purchases' : '/delivery-notes/sales';
-  const side = meta.inbound ? 'purchases' : 'sales';
+  const listPath = NOTE_LIST[note.type].path;
+  const side = NOTE_LIST[note.type].key;
+  const showCost = note.type === 'purchase';
+  const canReturn = !meta.isReturn && note.status === 'posted' && can('deliveries.manage') && lines.some((l) => l.returnableQty && Number(l.returnableQty) > 0);
   const hasRemaining = lines.some((l) => dec(l.remainingQty).gt(0));
   const canInvoice = note.status === 'posted' && hasRemaining && can('invoices.manage');
   const canCancel = note.status === 'posted' && can('deliveries.post');
@@ -100,10 +102,16 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
             <Printer className="size-4" aria-hidden />
             {t('deliveries.view.print')}
           </Button>
+          {canReturn && (
+            <Button onClick={() => navigate(`/delivery-notes/new?type=${meta.returnType}&returnOf=${note.id}`)}>
+              <Undo2 className="size-4" aria-hidden />
+              {t('deliveries.view.createReturn')}
+            </Button>
+          )}
           {canInvoice && (
             <Button variant="primary" onClick={() => navigate(`/invoices/new?type=${meta.invoiceType}&deliveryNote=${note.id}`)}>
               <FileText className="size-4" aria-hidden />
-              {t('deliveries.view.createInvoice')}
+              {meta.isReturn ? t('deliveries.view.createCredit') : t('deliveries.view.createInvoice')}
             </Button>
           )}
           {canCancel && (
@@ -135,6 +143,26 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
           <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <Item label={t('deliveries.form.warehouse')}>{note.warehouseName}</Item>
             {note.externalNo && <Item label={t('deliveries.form.externalNo')}>{note.externalNo}</Item>}
+            {note.returnOfId && (
+              <Item label={t('deliveries.view.returnOf')}>
+                <Link to={`/delivery-notes/${note.returnOfId}`} className="link">
+                  {note.returnOfNo}
+                </Link>
+              </Item>
+            )}
+            {data.returns.length > 0 && (
+              <Item label={t('deliveries.view.returns')}>
+                {data.returns.map((r, i) => (
+                  <span key={r.id}>
+                    {i > 0 && ', '}
+                    <Link to={`/delivery-notes/${r.id}`} className="link">
+                      {r.noteNo}
+                    </Link>
+                    {r.status === 'cancelled' && <span className="text-muted"> ({t('deliveries.status.cancelled')})</span>}
+                  </span>
+                ))}
+              </Item>
+            )}
             {note.vehiclePlate && <Item label={t('deliveries.view.vehicle')}>{note.vehiclePlate}</Item>}
             {note.driverName && <Item label={t('deliveries.view.driver')}>{note.driverName}</Item>}
             {note.stockDocumentId && (
@@ -174,11 +202,12 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
                 <Th num>{t('deliveries.form.quantity')}</Th>
                 {posted && note.status === 'posted' && (
                   <>
-                    <Th num className="print:hidden">{t('deliveries.view.invoiced')}</Th>
+                    <Th num className="print:hidden">{meta.isReturn ? t('deliveries.view.credited') : t('deliveries.view.invoiced')}</Th>
                     <Th num className="print:hidden">{t('deliveries.view.remaining')}</Th>
+                    {!meta.isReturn && <Th num className="print:hidden">{t('deliveries.view.returned')}</Th>}
                   </>
                 )}
-                {meta.inbound && <Th num>{t('deliveries.view.unitCost')}</Th>}
+                {showCost && <Th num>{t('deliveries.view.unitCost')}</Th>}
                 {posted && (
                   <Th num className="print:hidden">
                     {t('deliveries.view.value')} ({currencySymbol(base)})
@@ -192,6 +221,16 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
                   <Td>
                     <span>{l.description}</span>
                     <span className="ml-2 font-mono text-xs text-muted">{l.itemCode}</span>
+                    {l.serials && l.serials.length > 0 && (
+                      <span className="block text-xs text-muted" data-testid="line-serials">
+                        {t('serials.title')}: <span className="font-mono">{l.serials.join(', ')}</span>
+                      </span>
+                    )}
+                    {l.salesOrderNo && (
+                      <Link to={`/sales/docs/${l.salesOrderId}`} className="link ml-2 text-xs print:hidden">
+                        {l.salesOrderNo}
+                      </Link>
+                    )}
                   </Td>
                   <Td num>
                     {qtyText(l.quantity)} {l.unit ? unitLabel(l.unit) : ''}
@@ -200,9 +239,10 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
                     <>
                       <Td num className="text-muted print:hidden">{qtyText(l.invoicedQty) || '0'}</Td>
                       <Td num className="print:hidden">{qtyText(l.remainingQty) || '0'}</Td>
+                      {!meta.isReturn && <Td num className="text-muted print:hidden">{qtyText(l.returnedQty ?? '0') || '0'}</Td>}
                     </>
                   )}
-                  {meta.inbound && (
+                  {showCost && (
                     <Td num className="text-muted">
                       {l.unitCost ? moneyIn(l.unitCost, l.currencyCode ?? base, 4) : <Badge tone="warning">{t('deliveries.view.noPrice')}</Badge>}
                     </Td>
