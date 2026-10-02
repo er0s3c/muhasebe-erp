@@ -13,7 +13,7 @@ Tek artefakt bir **Docker imajıdır** (`Dockerfile`): derlenmiş API ve web ara
 | `deploy/.env.production.example` | Ortam değişkenleri şablonu (`deploy/.env` olarak kopyalanır; depoya girmez) |
 | `infra/postgres/init-prod.sh` | İlk açılışta rolleri ve veritabanını yaratır |
 | `scripts/backup.sh`, `restore.sh`, `restore-drill.sh` | Yedek, geri yükleme, geri yükleme tatbikatı |
-| `install.sh`, `Kur.cmd`, `installer/` | Kurulum sihirbazı (Linux/WSL, Windows; Docker'lı ve Docker'sız), §2 |
+| `install.sh`, `Kur.cmd`, `installer/` | Kurulum sihirbazı (Linux/WSL, Windows; Docker'lı ve Docker'sız; tüm yapılandırmayı sorar), §2. `installer/answers.example`: yanıt dosyası örneği |
 | `npm run release` | Sürüm kitleri (linux-x64, win-x64): Docker'sız kurulum da kitten yapılır |
 
 Uygulama kabı yalnızca **RLS'e tabi çalışma zamanı rolünü** (`erp_app`) bilir; şema sahibi rolün (`erp`) parolası yalnızca tek seferlik `migrate` kabındadır. Uygulama, süper kullanıcı/`BYPASSRLS`/tablo sahibi bir rolle ya da RLS'siz tablolarla açılmayı **reddeder** (üretimde `exit 1`).
@@ -28,26 +28,79 @@ Uygulama kabı yalnızca **RLS'e tabi çalışma zamanı rolünü** (`erp_app`) 
 
 ### Kurulum sihirbazı (önerilen)
 
-Tek giriş noktası: **Linux/WSL** `./install.sh`, **Windows** `Kur.cmd` (çift tıklama; Windows PowerShell 5.1 yeterli, gerekirse UAC ile yönetici izni ister). Sihirbaz dört aşamada çalışır ve güvenle yeniden çalıştırılabilir (mevcut parolalara/ayarlara dokunmaz):
+Tek giriş noktası: **Linux/WSL** `./install.sh`, **Windows** `Kur.cmd` (çift tıklama; Windows PowerShell 5.1 yeterli, gerekirse UAC ile yönetici izni ister). **Tek betik hem kurulumu hem tüm yapılandırmayı yapar**: hiçbir ayar dosyasını elle düzenlemeniz gerekmez. Sihirbaz beş aşamada çalışır ve güvenle yeniden çalıştırılabilir (mevcut parolalara/ayarlara dokunmaz):
 
 1. **Uyumluluk kontrolü** — işletim sistemi ve sürümü (Ubuntu 22.04+, Debian 12+, WSL, Windows 10 1809+/11/Server 2019+), mimari (x64), bellek (en az 2 GB, 4 GB önerilir), boş disk (en az 5 GB), yönetici yetkisi, systemd, Docker + compose v2, sanallaştırma (Windows), mevcut Node.js ve PostgreSQL, portlar, internet, makine kimliği, kit hedefi. Her satır ✓/!/✗; ✗ varsa kurulum başlamaz. Yalnızca rapor: `./install.sh --check` / `installer\install.ps1 -Check`.
-2. **Yol seçimi** — kip: `dev` (depodan test/geliştirme) ya da `prod` (sürüm kitinden müşteri kurulumu; `kit.json` varsa varsayılan). Yol: `docker` (Docker çalışıyorsa önerilir) ya da `native` (Docker'sız; sanallaştırması kapalı PC'ler dahil). Erişim: `local` (yalnız bu bilgisayar), `lan` (yerel ağ, http), `domain` (alan adı + otomatik HTTPS, yalnız Docker yolunda Caddy ile).
-3. **Gerekli paketler** — geliştirmede Node.js 22 (nodejs.org resmî paketi, SHA-256 doğrulamalı); yerel yolda PostgreSQL 16 (Linux: dağıtım deposu ya da resmî PGDG deposu; Windows: winget, yoksa EnterpriseDB sessiz kurulumu, Authenticode imzası doğrulanır). Müşteri kitinde Node.js gömülüdür, ayrıca kurulmaz.
-4. **Sistemin kurulumu** — aşağıdaki tabloya göre.
+2. **Yol seçimi** — kip: `dev` (depodan test/geliştirme) ya da `prod` (sürüm kitinden müşteri kurulumu; `kit.json` varsa varsayılan). Yol: `docker` (Docker çalışıyorsa önerilir) ya da `native` (Docker'sız; sanallaştırması kapalı PC'ler dahil). Erişim: `local` (yalnız bu bilgisayar), `lan` (yerel ağ), `domain` (alan adı üzerinden internet).
+3. **Yapılandırma (sorular)** — aşağıdaki "Kurulum soruları" tablosu: demo/boş, port, alan adı ve HTTPS, e-posta, lisans, yedek, kayıt. Bu aşamada **hiçbir şey yazılmaz**; en sonda özet gösterilir ve onay istenir.
+4. **Gerekli paketler** — geliştirmede Node.js 22 (nodejs.org resmî paketi, SHA-256 doğrulamalı); yerel yolda PostgreSQL 16 (Linux: dağıtım deposu ya da resmî PGDG deposu; Windows: winget, yoksa EnterpriseDB sessiz kurulumu, Authenticode imzası doğrulanır). Müşteri kitinde Node.js gömülüdür, ayrıca kurulmaz.
+5. **Sistemin kurulumu** — aşağıdaki tabloya göre; sonunda **özet ekranı** (adresler, lisans durumu, e-posta, yedek, dosya/günlük/yedek konumları, ilk giriş adımları ve "resmî fatura/bordro değildir" notu) yazılır.
+
+#### Kurulum soruları
+
+Her sorunun varsayılanı vardır (Enter kabul eder), bir satırlık açıklaması gösterilir, geçersiz girişte yeniden sorulur; parolalar ve lisans kodu yazarken görünmez. Aynı anahtarlar `--yes`/yanıt dosyasında kullanılır (sonraki bölüm).
+
+| Soru (ekranda) | Yanıt anahtarı | Varsayılan | Ne işe yarar |
+|---|---|---|---|
+| Demo verisi (örnek şirket/cari/proje) yüklensin mi? `[e/H]` | `DEMO` (`yes`/`no`) | **hayır** (üretim); dev'de evet | Hayır = **tamamen boş uygulama**: örnek şirket, kullanıcı, cari yok; ilk hesabı siz "Kayıt ol" ile açarsınız. Evet = deneme verisi (`demo@ornek.local`; parolası herkesçe bilinir, gerçek veri girmeyin). Demo yalnızca **ilk kurulumda** yüklenir; yeniden çalıştırma/yükseltme asla yüklemez |
+| Uygulamaya nereden erişilecek? | `ACCESS` | `local` | `local` bu bilgisayar, `lan` yerel ağ, `domain` internet |
+| Uygulama portu | `PORT` | `3000` | Başka uygulama kullanıyorsa yeniden sorulur (çakışma denetimi). Veritabanı portu dışarı açılmaz; yerel yolda mevcut PostgreSQL kümesi kullanılır |
+| Güvenli bağlantı (HTTPS) nasıl sağlansın? | `TLS_MODE` | domain: `auto`; diğer: `none` | `auto` Let's Encrypt, `byo` kendi sertifikanız, `selfsigned` kendi imzalı (yerel ağ), `none` düz http. **HTTPS şimdilik Docker yolundadır** (Caddy) |
+| Alan adı ya da adres | `DOMAIN` | LAN'da makinenin IP'si | `auto` için gerçek alan adı (FQDN); diğerlerinde IP/bilgisayar adı da olur |
+| Sertifika bildirimleri için e-posta | `ACME_EMAIL` | boş | Let's Encrypt bitiş uyarıları |
+| Sertifika dosyası / Özel anahtar dosyası | `CERT_FILE`, `KEY_FILE` | — | `byo`: tam zincir `.crt/.pem` + parolasız `.key`. Doğrulanır: anahtar sertifikaya uyuyor mu, süresi, alan adını kapsıyor mu, zincir sırası, ara sertifika eksik mi. Dosyalar yalnızca yöneticinin okuyabildiği `deploy/certs` klasörüne kopyalanır; anahtar içeriği asla yazdırılmaz |
+| HTTP / HTTPS portu | `HTTP_PORT`, `HTTPS_PORT` | `80` / `443` | `auto` için sabittir; diğerlerinde değiştirilebilir (çakışma denetimi) |
+| E-posta gönderimi kurulsun mu? | `MAIL_ENABLED` | hayır | Hayır = parola sıfırlama/e-posta doğrulama kapalı kalır (§9) |
+| SMTP sunucusu, güvenlik türü, port | `SMTP_HOST`, `SMTP_SECURITY`, `SMTP_PORT` | `starttls`; 465/587/25 | `ssl` (465), `starttls` (587), `none` (şifresiz; uyarı verir) |
+| Kullanıcı adı, parola | `SMTP_USER`, `SMTP_PASSWORD` | — | Parola yazarken görünmez; ortam dosyasına yüzde-kodlu `SMTP_URL` olarak yazılır |
+| Gönderen adresi / adı | `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | kullanıcı adı / `Muhasebe ERP` | `MAIL_FROM` olur |
+| Uygulamanın adresi | `APP_BASE_URL` | erişim ayarından türetilir | E-postalardaki bağlantı kökü |
+| Test e-postası adresi | `MAIL_TEST_TO` | boş (test yok) | Doluysa **gerçek bir test e-postası gönderilir**. Başarısızsa nedeni düz Türkçe yazılır ve seçenek sunulur: tekrar dene / ayarları düzenle / e-postasız devam / yine de kaydet. Yanıt dosyası kipinde başarısızlık kurulumu **durdurur** |
+| Lisans sunucusu adresi | `LICENSE_SERVER_URL` | boş (kitteki/imajdaki varsayılan) | Yalnızca https; verilirse `/healthz` ile erişimi sınanır, ulaşılamazsa uyarılır |
+| Lisans etkinleştirme kodu | `LICENSE_CODE` | boş (tarayıcıda girilir) | Girilirse uygulama açıldıktan sonra yerel `POST /api/license/activate` ile etkinleştirilir (belgeli akış; kod yazdırılmaz/saklanmaz). Girilmezse ilk açılışta "Lisans etkinleştirme" ekranından girilir |
+| Yedek klasörü, kaç yedek, saat | `BACKUP_DIR`, `BACKUP_KEEP`, `BACKUP_TIME` | `/var/lib/muhasebe-erp/backups` (Docker: `<kurulum>/backups`), `14`, `02:30` | Günlük yedek (systemd zamanlayıcısı, yoksa cron; Windows'ta zamanlanmış görev). Ofis dışı kopya (rsync/UNC) elle kurulur (§6) |
+| Yeni kullanıcı/şirket kaydı açık olsun mu? | `REGISTRATION` | evet | İlk sahip hesabı için gerekli; sonra `--reconfigure` ile kapatın (`REGISTRATION_ENABLED=false`) |
+
+Saat dilimi/dil ve şirket görünen adı için sihirbaz soru **sormaz**: uygulamada bunlar yapılandırma ayarı değildir (şirket adı ilk kayıtta girilir).
+
+**Lisans zorunludur.** Üretim kurulumunda uygulama lisans etkinleştirilmeden **iş uçlarını açmaz** (`402 LICENSE_REQUIRED`; yalnızca sağlık, genel yapılandırma ve lisans uçları açık; arayüz etkinleştirme ekranını gösterir). Sihirbaz kurulumdan sonra bunu doğrular (`/api/public-config` → denetim açık, iş ucu 402) ve denetim açık görünmüyorsa uyarır. Geliştirme kipinde (`NODE_ENV≠production`) denetim kapalıdır; sihirbaz üretim kipinde `LICENSE_ENFORCEMENT_DEV`/`LICENSE_DEV_KEYRING` anahtarlarını asla yazmaz, bulursa siler.
+
+#### Çalışma biçimleri ve bayraklar
+
+| Biçim | Linux/WSL | Windows | Açıklama |
+|---|---|---|---|
+| Etkileşimli | `./install.sh` | `Kur.cmd` | Terminal varsa sorar |
+| Varsayılanlarla | `--yes` | `-Yes` | Hiçbir şey sormaz (güncelleyici böyle çağırır) |
+| Yanıt dosyası | `--answers=DOSYA` | `-AnswersFile DOSYA` | Sormaz; `KEY=VALUE` dosyasından okur |
+| Yeniden yapılandırma | `--reconfigure` | `-Reconfigure` | Kurulu sistemde yalnızca yapılandırmayı yeniden sorar |
+| Kuru çalıştırma | `--dry-run` | `-DryRun` | Sistemi değiştirmeden ne yazılacağını gösterir (parolalar `********`) |
+
+Diğer bayraklar: `--check`, `--mode=dev|prod`, `--path=docker|native`, `--access=…`, `--domain=…`, `--port=…`, `--tls=auto|byo|selfsigned|none`, `--http-port`, `--https-port`, `--demo`/`--no-demo`, `--start`, `--uninstall [--purge]`, `--restore-db=…` (Windows'ta aynı adlar `-Mode`, `-Path`, `-Access`, `-Domain`, `-Port`, `-Tls`, `-HttpPort`, `-HttpsPort`, `-Demo`/`-NoDemo`, …). Komut satırı bayrakları yanıt dosyasından önceliklidir.
+
+**Yanıt dosyası.** `installer/answers.example` dosyasını kopyalayıp düzenleyin; her satır `ANAHTAR=değer`, `#` yorumdur, boş değer = varsayılan. Anahtarlar yukarıdaki tablodaki sütundur; ayrıca `MODE` (`prod`/`dev`) ve `INSTALL_PATH` (`docker`/`native`). Dosya **çalıştırılmaz**, yalnızca okunur; bilinmeyen anahtar hata verir; sihirbaz dosyayı hiçbir yere **kopyalamaz**. `SMTP_PASSWORD` ve `LICENSE_CODE` gizlidir: dosyada bulunabilir ancak sihirbaz uyarır ve **kurulum bitince dosyayı silmeniz** gerekir (Linux'ta `chmod 600`).
+
+```bash
+./install.sh --answers=musteri.answers --dry-run     # önce ne yazılacağına bakın
+./install.sh --answers=musteri.answers                # sonra uygulayın
+```
+
+**Yeniden yapılandırma** (`--reconfigure`). Kurulumdan sonra e-posta, HTTPS/sertifika, yedek, lisans adresi/kodu ve kayıt kapısını **yeniden sorar** (mevcut değerler varsayılandır; parola için Enter = koru). Sürüm, veritabanı ve veriler değişmez; demo sorulmaz. Uygulama: eski ayar dosyaları zaman damgalı yedeklenir (`erp.env.bak-YYYYMMDD-HHMMSS`, chmod 600), yenisi önce geçici dosyaya yazılıp yerine taşınır (atomik), hizmet yeniden başlatılır ve `/api/health/ready` doğrulanır; **sağlık başarısızsa eski ayarlar otomatik geri yazılır**. Yerel (Linux) kurulumda kurulu kopyadan: `sudo erp-setup --reconfigure`; Docker'da kit klasöründen: `./install.sh --reconfigure`; Windows yerelde `Program Files\MuhasebeERP\current\installer\install.ps1 -Reconfigure`. Sihirbazın durum dosyası (`/etc/muhasebe-erp/wizard.conf`, Docker'da `deploy/wizard.conf`, Windows'ta `ProgramData\MuhasebeERP\wizard.conf`) **gizli bilgi içermez**; yalnızca soruların varsayılanlarını ve demo durumunu tutar.
+
+**HTTPS ayrıntıları (Docker yolu).** `auto`: Let's Encrypt; sihirbaz DNS'in bu makinenin genel IP'sine (`api.ipify.org` ile öğrenilir) işaret edip etmediğini, 80/443'ün boş olduğunu denetler ve uyarır (dışarıdan 80/443'ün açık olması sizin işinizdir). `byo`: kendi sertifikanız (yukarıdaki doğrulamalarla). `selfsigned`: openssl ile 825 günlük kendi imzalı sertifika (openssl yoksa Caddy'nin yerel CA'sı); istemcilerde güvenilir yapma adımları özet ekranında yazılır. Sihirbaz `deploy/Caddyfile.local` ve `deploy/certs/` üretir (`ERP_CADDYFILE`, `ERP_CERT_DIR`, `HTTP_PORT`, `HTTPS_PORT` ortam değişkenleriyle compose'a bağlanır). **Docker'sız (yerel) yolda HTTPS yoktur**: `lan` seçip kendi ters vekilinizi (nginx/Caddy) önüne koyun. Caddy/TLS profili CI'da otomatik sınanmaz; ilk kurulumda elle doğrulayın.
 
 | Kip / yol | Ne yapılır |
 |---|---|
 | dev / docker | `.env` (rastgele JWT), `docker compose up -d db`, geliştirme rolleri, `npm ci`, migration, demo verisi → `npm run dev` |
 | dev / native | Aynısı; veritabanı yerel PostgreSQL'de (`infra/postgres/init.sql`) |
-| prod / docker | İmaj kitteki derlenmiş dosyalardan yerelde oluşturulur (kaynak gerekmez); `deploy/.env` rastgele parolalarla yazılır (chmod 600 / yalnız yöneticiler), `docker compose up -d`, sağlık kontrolü. Windows'ta makine kimliği `ProgramData\MuhasebeERP\host-machine-id` dosyasına yazılıp `ERP_HOST_ID_FILE` ile bağlanır |
-| prod / native (Linux) | `/opt/muhasebe-erp/versions/<sürüm>` + `current` bağı, `/etc/muhasebe-erp/erp.env` (640, uygulama) ve `migrate.env` (600, şema sahibi), `muhasebe-erp` sistem kullanıcısı, systemd hizmeti (yoksa `erpctl start|stop|status|logs`; WSL'de systemd'yi açmayı önerir), günlük yedek zamanlayıcısı (02:30, son 14; `/var/lib/muhasebe-erp/backups`), isteğe bağlı ufw kuralı |
-| prod / native (Windows) | `Program Files\MuhasebeERP\versions\<sürüm>` + `current` bağlantısı (junction), `ProgramData\MuhasebeERP` (yalnız SYSTEM ve Yöneticiler; ayarlar, günlükler, yedekler), **Muhasebe ERP** Windows hizmeti (WinSW; otomatik başlar, çökmede yeniden başlar; LocalService hesabıyla), günlük yedek zamanlanmış görevi (02:30, son 14), isteğe bağlı güvenlik duvarı kuralı, masaüstü kısayolu |
+| prod / docker | İmaj kitteki derlenmiş dosyalardan yerelde oluşturulur (kaynak gerekmez); `deploy/.env` rastgele parolalar ve yanıtlarla yazılır (chmod 600 / yalnız yöneticiler), HTTPS seçildiyse `deploy/Caddyfile.local` + sertifikalar, `docker compose up -d`, sağlık kontrolü, (seçildiyse) demo verisi, lisans kapısı doğrulaması ve kod girildiyse etkinleştirme, Linux'ta günlük yedek zamanlayıcısı (`scripts/backup.sh --compose`). Windows'ta makine kimliği `ProgramData\MuhasebeERP\host-machine-id` dosyasına yazılıp `ERP_HOST_ID_FILE` ile bağlanır |
+| prod / native (Linux) | `/opt/muhasebe-erp/versions/<sürüm>` + `current` bağı, `/etc/muhasebe-erp/erp.env` (640, uygulama) ve `migrate.env` (600, şema sahibi), `muhasebe-erp` sistem kullanıcısı, systemd hizmeti (yoksa `erpctl start|stop|status|logs`; WSL'de systemd'yi açmayı önerir), günlük yedek zamanlayıcısı (varsayılan 02:30, son 14; `/var/lib/muhasebe-erp/backups`; hepsi sorulur), `erp-setup` kısayolu, isteğe bağlı ufw kuralı |
+| prod / native (Windows) | `Program Files\MuhasebeERP\versions\<sürüm>` + `current` bağlantısı (junction), `ProgramData\MuhasebeERP` (yalnız SYSTEM ve Yöneticiler; ayarlar, günlükler, yedekler), **Muhasebe ERP** Windows hizmeti (WinSW; otomatik başlar, çökmede yeniden başlar; LocalService hesabıyla), günlük yedek zamanlanmış görevi (varsayılan 02:30, son 14), isteğe bağlı güvenlik duvarı kuralı, masaüstü kısayolu |
 
 Yeniden çalıştırma = yükseltme: yeni kitin sihirbazı ayarları korur, uygulamayı durdurur, yeni sürümü yan klasöre kopyalar, `current`'ı çevirir, migration'ı uygular, başlatır; migration başarısızsa önceki sürüme döner. **Yükseltmeden önce yedek alın** (`sudo /opt/muhasebe-erp/bin/erp-backup` / `ProgramData\MuhasebeERP` altındaki yedek görevi; Docker: `scripts/backup.sh --compose`). Kaldırma: `./install.sh --uninstall` (veri korunur), `--uninstall --purge` (veritabanı, ayarlar ve yedekler silinir; Windows: `-Uninstall -Purge`).
 
-**Sürüm kiti üretimi (satıcı):** `npm run release -- --version=1.2.0 [--targets=linux-x64,win-x64]` → `release/1.2.0/` altında arşivler ve `SHA256SUMS`. Kitte derlenmiş API + web (kaynak haritası yok), hedef platformun üretim bağımlılıkları (yerel argon2 dahil), resmî Node.js çalışma zamanı, kurulum sihirbazı, Docker yolu dosyaları; Windows kitinde ayrıca WinSW (MIT, sabit SHA-256) ve Docker yolu için Linux bağımlılıkları bulunur. Kit lisanslı derlenir (satıcı açık anahtarı gömülü; [LICENSING.md §5](LICENSING.md)). Kitler şimdilik yalnızca x64'tür.
+**Sürüm kiti üretimi (satıcı):** `npm run release -- --version=1.2.0 [--targets=linux-x64,win-x64]` → `release/1.2.0/` altında arşivler ve `SHA256SUMS`. Kitte derlenmiş API + web (kaynak haritası yok), hedef platformun üretim bağımlılıkları (yerel argon2 dahil), resmî Node.js çalışma zamanı, kurulum sihirbazı, Docker yolu dosyaları; Windows kitinde ayrıca WinSW (MIT, sabit SHA-256) ve Docker yolu için Linux bağımlılıkları bulunur. Kitte `dist/demo.js` de bulunur: yalnızca sihirbazın demo sorusuna "evet" denirse ve `ALLOW_DEMO=true` verilerek çalıştırılır (üretimde aksi halde reddedilir). Kit lisanslı derlenir (satıcı açık anahtarı gömülü; [LICENSING.md §5](LICENSING.md)). Kitler şimdilik yalnızca x64'tür.
 
-**Sınamalar:** Linux yerel ve Docker yolları (dev ve prod) Ubuntu 24.04 üzerinde uçtan uca denenmiştir. Windows sihirbazı Windows PowerShell 5.1 sözdizimi/cmdlet uyumluluğu için statik olarak denetlenmiştir; gerçek bir Windows makinede ilk kurulumu bu bölüme göre doğrulayın (özellikle PostgreSQL sessiz kurulumu ve hizmet hesabı).
+**Sınamalar:** Linux yerel ve Docker yolları (dev ve prod) Ubuntu 24.04 üzerinde uçtan uca denenmiştir; yapılandırma aşaması (boş/demo kurulum, lisans kapısı, e-posta testi, yeniden yapılandırma, kuru çalıştırma) Linux yerel yolunda sahte bir kitle denenmiştir (Docker/Caddy/HTTPS ve gerçek SMTP sağlayıcısı bu ortamda denenmedi). Windows sihirbazı **Windows'ta çalıştırılarak denenmemiştir**: PowerShell ayrıştırıcısıyla sözdizimi, kitaplık işlevleri (doğrulayıcılar, SMTP adresi, yanıt dosyası, ortam düzenleyici, sertifika denetimi, e-posta sorusu) PowerShell 7 ile Linux'ta sınanmış, Windows PowerShell 5.1 uyumluluğu ise okuyarak denetlenmiştir; gerçek bir Windows makinede ilk kurulumu bu bölüme göre doğrulayın (özellikle PostgreSQL sessiz kurulumu, hizmet hesabı, ACL'ler, UAC ile yeniden başlatma ve yeni sorular).
 
 ### Docker Compose ile elle kurulum
 
@@ -119,6 +172,18 @@ Geçersiz/eksik değerde uygulama başlamaz ve nedenini yazar. Boş değer "tan�
 | `ERP_UPDATER_TOKEN` | yok | Uzaktan güncelleme: ana makinedeki güncelleyiciyle paylaşılan belirteç (≥ 32 karakter; sihirbaz üretir). Yoksa güncelleyici uçları kapalıdır |
 | `ERP_KIT_TARGET` | yok | `linux-x64` / `win-x64`: kurulum kitinin hedefi (sihirbaz yazar); kalp atışında satıcıya bildirilir, güncelleme arşivini seçer |
 | `ALLOW_DEMO` | yok | Yalnızca demo örneğinde `true` (bkz. §8); müşteri kurulumunda **asla** |
+
+**Compose düzeyi değişkenler** (`deploy/.env`; kurulum sihirbazı yazar, uygulama kabına geçmez):
+
+| Değişken | Varsayılan | Açıklama |
+|---|---|---|
+| `APP_BIND` / `APP_PORT` | `127.0.0.1` / `3000` | Uygulamanın ana makinedeki dinleme adresi/portu (`0.0.0.0` = yerel ağ, yalnız TLS'siz LAN) |
+| `ERP_DOMAIN` | yok | Doluysa `tls` profili (Caddy) çalışır; HTTPS'in alan adı/adresi |
+| `ERP_CADDYFILE` | `./Caddyfile` | Caddy yapılandırması; sihirbaz `./Caddyfile.local` üretir ve buraya yazar |
+| `ERP_CERT_DIR` | `./certs` | Kendi sertifikanız/kendi imzalı için `fullchain.pem` + `privkey.pem` klasörü (Caddy'ye salt-okunur bağlanır) |
+| `HTTP_PORT` / `HTTPS_PORT` | `80` / `443` | Caddy'nin ana makinedeki portları |
+
+Bu dosyaları elle yazmak zorunda değilsiniz: `./install.sh --reconfigure` hepsini sorar ve atomik yazar (§2). `SMTP_URL` ve `MAIL_FROM` için sihirbaz yüzde-kodlama yapar (`@ $ / ! ' ( ) * % #` içeren parolalar güvenle yazılır).
 
 Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceliklidir**; kabukta eski bir `JWT_SECRET` tanımlıysa dosyadaki değer yok sayılır.
 
@@ -288,6 +353,7 @@ $D stop app && $D run --rm demo-reset && $D up -d app
 
 - Gönderim işlem tamamlandıktan **sonra** ve arka planda yapılır: posta hatası isteği bozmaz; kullanıcı var/yok bilgisi yanıt süresinden sızmaz.
 - Bağlantı jetonları yalnızca `sha256` özetiyle saklanır, tek kullanımlıktır, sıfırlama 60 dakika geçerlidir.
+- **Kurulum sihirbazı SMTP'yi sorar** (sunucu, güvenlik türü, port, kullanıcı, parola, gönderen, adres) ve istenirse **gerçek bir test e-postası** gönderir (`installer/tools/erp-tool.mjs smtp-test`; kitteki gömülü Node ile). Sonradan değiştirmek için `--reconfigure`; e-postasız devam etmek için "hayır" deyin (akışlar kapalı kalır).
 - **SPF, DKIM ve DMARC kayıtları alan adınızda sizin işinizdir**; olmazsa mesajlar spam'e düşer. SMTP sağlayıcınızın belgelerine bakın.
 - TLS sertifikası doğrulaması **kapatılamaz**; kendi imzalı sertifikalı bir SMTP için CA'yı `NODE_EXTRA_CA_CERTS` ile verin.
 
@@ -307,12 +373,13 @@ $D stop app && $D run --rm demo-reset && $D up -d app
 - [ ] Sunucu giden HTTPS ile lisans sunucusuna ulaşabiliyor (güvenlik duvarı/vekil); `/etc/machine-id` mevcut ve kalıcı
 
 **Kurulum**
-- [ ] `deploy/.env` dolduruldu, `chmod 600`, ayrı bir yerde yedeklendi; parolalar rastgele ve benzersiz
+- [ ] Kurulum sihirbazı çalıştırıldı (sorular yanıtlandı; `--answers` dosyası kullanıldıysa **silindi**); `deploy/.env`/`erp.env` (`chmod 600/640`) ayrı bir yerde yedeklendi; parolalar rastgele ve benzersiz
 - [ ] `up -d` başarılı; `/api/health/ready` 200; sürüm `/api/public-config` ile doğrulandı
 - [ ] Lisans etkinleştirildi (Ayarlar > Lisans: durum **Etkin**, sektör/cihaz/şirket sınırı sözleşmeyle uyumlu)
 - [ ] İlk sahip kaydı yapıldı; `REGISTRATION_ENABLED=false` (özel kurulum) ve uygulama yeniden oluşturuldu
 - [ ] TLS/`TRUST_PROXY`/`COOKIE_SECURE` ortamla uyumlu; oturum açıp yenileme (15 dk sonra) sınandı
-- [ ] SMTP (isteğe bağlı) ve SPF/DKIM; parola sıfırlama uçtan uca denendi
+- [ ] SMTP (isteğe bağlı; sihirbazın test e-postası ulaştı) ve SPF/DKIM; parola sıfırlama uçtan uca denendi
+- [ ] Sihirbazın özetindeki lisans durumu doğru (lisanssızken iş uçları 402); "boş uygulama" seçildiyse demo hesabı yok; HTTPS seçildiyse sertifika tarayıcıda geçerli (kendi imzalıda istemcilere kök eklendi)
 
 **Devreye almadan önce**
 - [ ] Şirket kuruldu; mali dönemler, kurlar, KDV oranları (doğrulanmış işaretli), hesap eşlemesi gözden geçirildi; kullanılmayan modüller Ayarlar > Modüller'den kapatıldı

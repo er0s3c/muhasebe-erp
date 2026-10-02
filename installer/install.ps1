@@ -3,7 +3,10 @@
   Muhasebe ERP kurulum sihirbazı — Windows 10/11, Windows Server 2019+
 
 .DESCRIPTION
-  1) Uyumluluk kontrolü  2) Yol seçimi  3) Gerekli paketler  4) Sistemin kurulumu
+  1) Uyumluluk kontrolü  2) Yol seçimi  3) Yapılandırma (sorular)  4) Gerekli paketler  5) Sistemin kurulumu
+
+  Tek betikle kurulum VE tüm yapılandırma: demo/boş veri, lisans, e-posta (SMTP), alan adı/sertifika (HTTPS), yedekleme, portlar.
+  Etkileşimli sorar; her sorunun varsayılanı vardır (Enter kabul eder).
 
   Kip   dev  : depodan test/geliştirme kurulumu (Node 22 + PostgreSQL 16 ya da Docker'da veritabanı, demo verisi)
         prod : müşteri kurulumu (kaynaksız sürüm kiti; kit.json varsa varsayılan)
@@ -12,8 +15,13 @@
 
   Çift tıkla: Kur.cmd. Elle:
     powershell -ExecutionPolicy Bypass -File installer\install.ps1 [-Check] [-Mode dev|prod] [-Path docker|native]
-      [-Access local|lan|domain] [-Domain erp.ornek.com] [-Port 3000] [-Yes] [-NoDemo] [-Start] [-Uninstall [-Purge]]
+      [-Access local|lan|domain] [-Domain erp.ornek.com] [-Port 3000] [-Tls auto|byo|selfsigned|none] [-Demo|-NoDemo]
+      [-Yes] [-AnswersFile DOSYA] [-Reconfigure] [-DryRun] [-Start] [-Uninstall [-Purge]]
       [-PgSuperPassword ...] [-RestoreDb yedek.dump]   (güncelleyicinin geri dönüşü: önce veritabanını yedekten yükler)
+    -Yes             tüm sorulara varsayılanı verir (sormaz)
+    -AnswersFile     sormaz; KEY=VALUE yanıt dosyasından okur (örnek: installer\answers.example)
+    -Reconfigure     kurulu sistemde yalnızca yapılandırmayı (SMTP, HTTPS, yedek, lisans adresi) yeniden sorar ve uygular
+    -DryRun          sistemi değiştirmeden ne yazılacağını gösterir (parolalar maskeli)
 
   Windows PowerShell 5.1 ile uyumludur (PowerShell 7 gerekmez). Ayrıntı: docs/OPERATIONS.md §2.
 #>
@@ -24,9 +32,16 @@ param(
   [ValidateSet('', 'docker', 'native')][string]$Path = '',
   [ValidateSet('', 'local', 'lan', 'domain')][string]$Access = '',
   [string]$Domain = '',
-  [int]$Port = 3000,
+  [int]$Port = 0,
+  [ValidateSet('', 'auto', 'byo', 'selfsigned', 'none')][string]$Tls = '',
+  [string]$HttpPort = '',
+  [string]$HttpsPort = '',
   [switch]$Yes,
+  [switch]$Demo,
   [switch]$NoDemo,
+  [string]$AnswersFile = '',
+  [switch]$Reconfigure,
+  [switch]$DryRun,
   [switch]$Start,
   [switch]$Uninstall,
   [switch]$Purge,
@@ -78,15 +93,15 @@ function Die([string]$m) {
 }
 
 function Ask([string]$q, [string]$def, [string[]]$opts) {
-  if ($Yes -or -not [Environment]::UserInteractive) { return $def }
-  $a = Read-Host "$q [$def] ($($opts -join '/'))"
+  if (-not (Test-Interactive)) { return $def }
+  $a = Read-Answer "$q [$def] ($($opts -join '/')): " $false
   if ([string]::IsNullOrWhiteSpace($a)) { return $def }
   if ($opts -contains $a.Trim()) { return $a.Trim() }
   return $def
 }
 function Confirm-Step([string]$q) {
-  if ($Yes -or -not [Environment]::UserInteractive) { return $true }
-  $a = Read-Host "$q [E/h]"
+  if (-not (Test-Interactive)) { return $true }
+  $a = Read-Answer "$q [E/h]: " $false
   return ([string]::IsNullOrWhiteSpace($a) -or $a -match '^[EeYy]')
 }
 
@@ -153,6 +168,40 @@ function Download([string]$url, [string]$file) {
   Invoke-WebRequest -Uri $url -OutFile $file -UseBasicParsing
 }
 
+# Yapılandırma kitaplıkları (installer\lib): yanıt dosyası, doğrulayıcılar, sorular, ayar yazımı, yeniden yapılandırma
+. (Join-Path $PSScriptRoot 'lib\config.ps1')
+. (Join-Path $PSScriptRoot 'lib\wizard.ps1')
+
+# ---- Bayraklar ve yanıt dosyası ----------------------------------------------------------------------------------------------
+# Komut satırı bayrakları yanıt dosyasından önceliklidir. Yanıt anahtarları install.sh ile aynıdır (docs/OPERATIONS.md §2).
+if ($AnswersFile) {
+  if (-not (Test-Path -LiteralPath $AnswersFile)) { Die "Yanıt dosyası bulunamadı: $AnswersFile" }
+  $AnswersFile = (Resolve-Path -LiteralPath $AnswersFile).Path   # UAC ile yeniden başlatmada çalışma klasörü değişir: mutlak yol
+}
+if ($Mode) { $script:A['MODE'] = $Mode }
+if ($Path) { $script:A['INSTALL_PATH'] = $Path }
+if ($Access) { $script:A['ACCESS'] = $Access }
+if ($Domain) { $script:A['DOMAIN'] = $Domain }
+if ($Port) { $script:A['PORT'] = "$Port" }
+if ($Tls) { $script:A['TLS_MODE'] = $Tls }
+if ($HttpPort) { $script:A['HTTP_PORT'] = $HttpPort }
+if ($HttpsPort) { $script:A['HTTPS_PORT'] = $HttpsPort }
+if ($Demo) { $script:A['DEMO'] = 'yes' }
+if ($NoDemo) { $script:A['DEMO'] = 'no' }
+if ($AnswersFile) { Import-Answers $AnswersFile }
+if (-not $Mode -and $script:A['MODE']) { $Mode = $script:A['MODE'] }
+if (-not $Path -and $script:A['INSTALL_PATH']) { $Path = $script:A['INSTALL_PATH'] }
+if (-not $Access -and $script:A['ACCESS']) { $Access = $script:A['ACCESS'] }
+if (-not $Domain -and $script:A['DOMAIN']) { $Domain = $script:A['DOMAIN'] }
+if (-not $Port -and $script:A['PORT']) { $m = V-Port $script:A['PORT']; if ($m) { Die "PORT: $m" }; $Port = [int]$script:A['PORT'] }
+if ($Mode -and @('dev', 'prod') -notcontains $Mode) { Die 'MODE dev ya da prod olmalı' }
+if ($Path -and @('docker', 'native') -notcontains $Path) { Die 'INSTALL_PATH docker ya da native olmalı' }
+if ($Access -and @('local', 'lan', 'domain') -notcontains $Access) { Die 'ACCESS local, lan ya da domain olmalı' }
+if ($Domain) { $m = V-Host $Domain; if ($m) { Die "DOMAIN: $m" } }
+if ($script:A['TLS_MODE'] -and @('auto', 'byo', 'selfsigned', 'none') -notcontains $script:A['TLS_MODE']) { Die 'TLS_MODE auto, byo, selfsigned ya da none olmalı' }
+foreach ($k in @('HTTP_PORT', 'HTTPS_PORT')) { if ($script:A[$k]) { $m = V-Port $script:A[$k]; if ($m) { Die "${k}: $m" } } }
+if ($script:A['DEMO']) { $d = ConvertTo-YesNo $script:A['DEMO']; if (-not $d) { Die "DEMO: 'evet' ya da 'hayır' yazın" }; $script:A['DEMO'] = $d }
+
 # ---- Ortam algılama ------------------------------------------------------------------------------------------------------
 
 $Kit = $null
@@ -162,11 +211,12 @@ if (-not $Mode) { if ($Kit) { $Mode = 'prod' } else { $Mode = 'dev' } }
 if ($Mode -eq 'dev' -and -not $IsRepo) { Die 'Geliştirme kurulumu depo klasöründen çalıştırılır (package.json bulunamadı).' }
 
 # Yönetici yetkisi: paket/hizmet kurulumu için gerekir; yoksa UAC ile kendini yeniden başlatır
-if (-not $Check -and -not (Test-Admin)) {
+if (-not $Check -and -not $DryRun -and -not (Test-Admin)) {
   Say 'Yönetici yetkisi gerekiyor; Windows izin isteyecek…'
   $argv = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Elevated')
   foreach ($k in $PSBoundParameters.Keys) {
     $v = $PSBoundParameters[$k]
+    if ($k -eq 'AnswersFile') { $v = $AnswersFile }
     if ($v -is [switch]) { if ($v.IsPresent) { $argv += "-$k" } } else { $argv += "-$k"; $argv += "`"$v`"" }
   }
   Start-Process -FilePath 'powershell.exe' -ArgumentList $argv -Verb RunAs
@@ -214,7 +264,7 @@ function Add-Check([string]$name, [string]$state, [string]$msg) {
 $DockerState = 'missing'; $PgInfo = $null
 
 function Invoke-CompatCheck {
-  Stage '1/4 Sistem uyumluluk kontrolü'
+  Stage '1/5 Sistem uyumluluk kontrolü'
   $os = Get-CimInstance Win32_OperatingSystem
   $build = [int]$os.BuildNumber
   if ($build -ge 17763) { Add-Check 'İşletim sistemi' 'ok' "$($os.Caption) (derleme $build)" }
@@ -267,7 +317,7 @@ function Invoke-CompatCheck {
   elseif ($script:PgInfo) { Add-Check 'PostgreSQL' 'info' "$($script:PgInfo.Version) kurulu; yerel yolda PostgreSQL $PgMajor ayrıca kurulur" }
   else { Add-Check 'PostgreSQL' 'info' "yok — yerel yolda PostgreSQL $PgMajor kurulur" }
 
-  $ports = @(); if ($Mode -eq 'dev') { $ports = @(3000, 5173) } else { $ports = @($Port) }
+  $ports = @(); $pEff = $Port; if (-not $pEff) { $pEff = 3000 }; if ($Mode -eq 'dev') { $ports = @(3000, 5173) } else { $ports = @($pEff) }
   $busy = @($ports | Where-Object { Test-PortBusy $_ })
   if ($busy.Count -gt 0) {
     if ($Mode -eq 'prod' -and (Get-Service $SvcId -ErrorAction SilentlyContinue)) { Add-Check 'Portlar' 'info' "$($busy -join ', ') kullanımda (mevcut Muhasebe ERP — yükseltilecek)" }
@@ -294,10 +344,10 @@ function Invoke-CompatCheck {
 
 # ---- 2) Yol seçimi ---------------------------------------------------------------------------------------------------------
 function Select-InstallPath {
-  Stage '2/4 Kurulum yolu'
+  Stage '2/5 Kurulum yolu'
   $dockerOk = ($script:DockerState -eq 'ok')
   $pgOk = ($script:PgInfo -and $script:PgInfo.Version.Major -ge $PgMajor)
-  if ($Mode -eq 'prod') { $rec = 'native'; if ($dockerOk) { $rec = 'docker' }; if (-not $Kit) { $rec = 'docker' } }
+  if ($Mode -eq 'prod') { $rec = 'native'; if ($dockerOk) { $rec = 'docker' }; if (-not $Kit) { $rec = 'docker' }; if ($script:Existing -and $script:ExistingPath) { $rec = $script:ExistingPath } }
   else { $rec = 'native'; if (-not $pgOk -and $dockerOk) { $rec = 'docker' } }
   if (-not $script:Path) {
     Info "Kip: $Mode   Önerilen yol: $rec"
@@ -313,16 +363,8 @@ function Select-InstallPath {
   if ($script:Path -eq 'docker' -and -not $dockerOk) { Die "Docker yolu seçildi ama Docker Desktop çalışmıyor. Docker Desktop'ı başlatın ya da -Path native kullanın." }
   if ($Mode -eq 'prod' -and $script:Path -eq 'native' -and -not $Kit) { Die "Yerel müşteri kurulumu sürüm kitinden yapılır: 'npm run release -- --version=X --targets=win-x64' ile üretip kitteki Kur.cmd'yi çalıştırın." }
   if ($script:Fails -gt 0) { Die 'Uyumluluk kontrolünde engelleyici sorun var. Giderip sihirbazı yeniden çalıştırın.' }
-  if ($Mode -eq 'dev') { $script:Access = 'local' }
-  elseif (-not $script:Access) {
-    Info 'Erişim: local = yalnızca bu bilgisayar, lan = yerel ağdaki bilgisayarlar (http), domain = alan adı + otomatik HTTPS (yalnız Docker)'
-    $script:Access = Ask 'Uygulamaya nereden erişilecek?' 'local' @('local', 'lan', 'domain')
-  }
-  if ($script:Access -eq 'domain') {
-    if ($script:Path -ne 'docker') { Die 'Alan adı + HTTPS şimdilik Docker yolunda desteklenir; yerel yolda lan seçin.' }
-    if (-not $script:Domain) { if ($Yes) { Die '-Access domain için -Domain verin' }; $script:Domain = Read-Host 'Alan adı (ör. erp.firmaniz.com)' }
-    if ($script:Domain -notmatch '^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') { Die "Geçersiz alan adı: $($script:Domain)" }
-  }
+  Ask-Access
+  if ($script:Access -eq 'domain' -and $script:Path -ne 'docker') { Die 'Alan adı + HTTPS şimdilik Docker yolunda desteklenir; yerel yolda lan seçin.' }
   Ok "Yol: $Mode / $($script:Path) / erişim: $($script:Access)"
 }
 
@@ -397,7 +439,7 @@ function Install-Postgres {
 }
 
 function Invoke-Prerequisites {
-  Stage '3/4 Gerekli paketler'
+  Stage '4/5 Gerekli paketler'
   if ($Mode -eq 'dev') { Install-Node }
   if ($script:Path -eq 'native') { Install-Postgres } else { Ok "Docker hazır ($(& docker version --format '{{.Server.Version}}'))" }
 }
@@ -412,7 +454,7 @@ function Invoke-Psql([string[]]$argv) {
 
 # ---- 4a) Geliştirme kurulumu -------------------------------------------------------------------------------------------
 function Install-Dev {
-  Stage '4/4 Geliştirme ortamı kurulumu'
+  Stage '5/5 Geliştirme ortamı kurulumu'
   Set-Location $Root
   $envFile = Join-Path $Root '.env'
   if (-not (Test-Path $envFile)) {
@@ -443,7 +485,8 @@ function Install-Dev {
   Ok 'npm bağımlılıkları hazır'
   Invoke-Native 'npm' @('run', '--silent', 'db:migrate') 'Migration'
   Ok 'Veritabanı şeması güncel'
-  if (-not $NoDemo) { Invoke-Native 'npm' @('run', '--silent', 'db:seed') 'Demo verisi'; Ok 'Demo verisi yüklendi (giriş: demo@ornek.local / Demo-Sifre-123)' }
+  if ($script:A['DEMO'] -eq 'yes') { Invoke-Native 'npm' @('run', '--silent', 'db:seed') 'Demo verisi'; Ok 'Demo verisi yüklendi (giriş: demo@ornek.local / Demo-Sifre-123)' }
+  else { Ok "Demo verisi yüklenmedi: boş uygulama (ilk hesap tarayıcıda 'Kayıt ol' ile açılır)" }
 
   Stage 'Hazır'
   Say '  Başlatmak için:   npm run dev'
@@ -462,7 +505,7 @@ function Write-HostIdFile {
 }
 
 function Install-ProdDocker {
-  Stage '4/4 Sistem kurulumu (Docker)'
+  Stage '5/5 Sistem kurulumu (Docker)'
   Set-Location $Root
   $envFile = Join-Path $Root 'deploy\.env'
   $buildFlag = @()
@@ -480,7 +523,9 @@ function Install-ProdDocker {
     Info 'Depodan kurulum: imaj kaynak koddan derlenecek'
   }
   $hostId = (Write-HostIdFile).Replace('\', '/')
+  $fresh = $false
   if (-not (Test-Path $envFile)) {
+    $fresh = $true
     $lines = @(
       "# Kurulum sihirbazının ürettiği ayarlar ($(Get-Date -Format s)). Parolalar yalnızca burada durur: dosyayı YEDEKLEYİN.",
       "POSTGRES_PASSWORD=$(New-RandomHex 24)",
@@ -489,22 +534,20 @@ function Install-ProdDocker {
       "JWT_SECRET=$(New-RandomB64 48)",
       "ERP_IMAGE=$image",
       "APP_VERSION=$(if ($Kit) { $Kit.version } else { 'dev' })",
-      "APP_PORT=$Port",
       "ERP_HOST_ID_FILE=$hostId"
     )
-    switch ($script:Access) {
-      'local' { $lines += @('APP_BIND=127.0.0.1', 'COOKIE_SECURE=false', 'TRUST_PROXY=false') }
-      'lan' { $lines += @('APP_BIND=0.0.0.0', 'COOKIE_SECURE=false', 'TRUST_PROXY=false') }
-      'domain' { $lines += @('APP_BIND=127.0.0.1', "ERP_DOMAIN=$($script:Domain)", "APP_BASE_URL=https://$($script:Domain)") }
-    }
-    Write-TextFile $envFile (($lines -join "`n") + "`n")
-    & icacls $envFile /inheritance:r /grant:r "${SidSystem}:F" "${SidAdmins}:F" | Out-Null
+    Build-EnvChanges 'docker'
+    Write-SecureFile $envFile (Invoke-EnvApply $lines $script:Chg) $false
     Ok 'deploy\.env oluşturuldu (rastgele parolalar; yalnızca yöneticiler okur)'
+    Write-TlsFiles
+    $script:DemoPending = $script:A['DEMO']; $script:DemoSeeded = 'no'
+    Write-WizardConf
   } else {
     Set-EnvLine $envFile 'ERP_IMAGE' $image
     Set-EnvLine $envFile 'ERP_HOST_ID_FILE' $hostId
     if ($Kit) { Set-EnvLine $envFile 'APP_VERSION' $Kit.version }
-    Ok 'deploy\.env mevcut: parolalar korundu, imaj güncellendi'
+    Ok 'deploy\.env mevcut: parolalar ve ayarlar korundu, imaj güncellendi'
+    $script:DemoPending = Get-Cur 'DEMO_PENDING' 'no'; $script:DemoSeeded = Get-Cur 'DEMO_SEEDED' 'no'; $script:A['DEMO'] = Get-Cur 'DEMO' 'no'
   }
   if ($Kit) { Install-Updater 'docker' $envFile }
   if ($RestoreDb) { Restore-DbDocker $RestoreDb }
@@ -516,7 +559,14 @@ function Install-ProdDocker {
   $p = Get-EnvValue $envFile 'APP_PORT'; if (-not $p) { $p = '3000' }
   if (-not (Wait-Ready "http://127.0.0.1:$p/api/health/ready" 180)) { Die 'Uygulama hazır olmadı: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs app' }
   Ok 'Uygulama çalışıyor'
-  if ($script:Access -eq 'lan') { Add-FirewallRule ([int]$p) }
+  if ($script:DemoPending -eq 'yes') {
+    Info 'Demo verisi yükleniyor…'
+    if (Invoke-DemoSeedDocker) { $script:SeededDemo = $true; $script:DemoPending = 'no'; $script:DemoSeeded = 'yes'; Ok 'Demo verisi yüklendi'; Write-WizardConf }
+    else { Warn 'Demo verisi yüklenemedi (docker compose ... exec app node dist/demo.js seed; ALLOW_DEMO=true gerekir)' }
+  } elseif ($fresh) { Ok 'Boş uygulama: demo/örnek veri yüklenmedi' }
+  if ($script:Access -eq 'lan' -and $script:A['TLS_MODE'] -eq 'none') { Add-FirewallRule ([int]$p) }
+  elseif ($script:A['TLS_MODE'] -ne 'none') { Add-FirewallRule ([int]$script:A['HTTPS_PORT']) }
+  Invoke-PostInstallChecks "http://127.0.0.1:$p"
   Complete-Prod ([int]$p)
 }
 
@@ -565,27 +615,27 @@ function Write-BackupTask {
   $bin = Join-Path $ProgDir 'bin'
   if (-not (Test-Path $bin)) { New-Item -ItemType Directory -Path $bin | Out-Null }
   $script = @"
-# Muhasebe ERP yedeği (pg_dump, özel biçim). Son 14 yedek tutulur. Geri yükleme: docs/OPERATIONS.md §6
+# Muhasebe ERP yedeği (pg_dump, özel biçim). Son $($script:A['BACKUP_KEEP']) yedek tutulur. Ayar: install.ps1 -Reconfigure. Geri yükleme: docs/OPERATIONS.md §6
 `$ErrorActionPreference = 'Stop'
 `$url = ((Get-Content '$DataDir\migrate.env' | Where-Object { `$_ -like 'MIGRATION_DATABASE_URL=*' }) -replace '^MIGRATION_DATABASE_URL=', '')
-`$dir = '$DataDir\backups'
+`$dir = '$($script:A['BACKUP_DIR'])'
 if (-not (Test-Path `$dir)) { New-Item -ItemType Directory -Path `$dir | Out-Null }
 `$out = Join-Path `$dir ('erp-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.dump')
 & '$($script:PgInfo.Bin)\pg_dump.exe' -Fc -d `$url -f `$out
 if (`$LASTEXITCODE -ne 0) { throw 'pg_dump başarısız' }
-Get-ChildItem `$dir -Filter 'erp-*.dump' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 14 | Remove-Item -Force
+Get-ChildItem `$dir -Filter 'erp-*.dump' | Sort-Object LastWriteTime -Descending | Select-Object -Skip $($script:A['BACKUP_KEEP']) | Remove-Item -Force
 Write-Host "Yedek: `$out"
 "@
   [IO.File]::WriteAllText((Join-Path $bin 'erp-backup.ps1'), $script, (New-Object System.Text.UTF8Encoding $true))
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$bin\erp-backup.ps1`""
-  $trigger = New-ScheduledTaskTrigger -Daily -At '02:30'
+  $trigger = New-ScheduledTaskTrigger -Daily -At $($script:A['BACKUP_TIME'])
   $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
   $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries
   Register-ScheduledTask -TaskName 'Muhasebe ERP Yedek' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
 }
 
 function Install-ProdNative {
-  Stage '4/4 Sistem kurulumu (yerel Windows hizmeti)'
+  Stage '5/5 Sistem kurulumu (yerel Windows hizmeti)'
   $ver = $Kit.version
   if (-not (Test-Path (Join-Path $Root 'app\runtime\node.exe'))) { Die 'Kitte çalışma zamanı yok (app\runtime\node.exe); kit bozuk olabilir' }
   if (-not (Test-Path (Join-Path $Root 'winsw\MuhasebeERP.exe'))) { Die 'Kitte hizmet sarmalayıcısı yok (winsw\MuhasebeERP.exe)' }
@@ -616,33 +666,34 @@ function Install-ProdNative {
   $erpEnv = Join-Path $DataDir 'erp.env'
   $migEnv = Join-Path $DataDir 'migrate.env'
   $fresh = $false
-  if ((Test-Path $erpEnv) -and (Test-Path $migEnv)) { Ok "Mevcut ayarlar korunuyor ($DataDir)" }
+  if ((Test-Path $erpEnv) -and (Test-Path $migEnv)) {
+    Ok "Mevcut ayarlar korunuyor ($DataDir)"
+    $script:DemoPending = Get-Cur 'DEMO_PENDING' 'no'; $script:DemoSeeded = Get-Cur 'DEMO_SEEDED' 'no'; $script:A['DEMO'] = Get-Cur 'DEMO' 'no'
+  }
   else {
     $fresh = $true
     $ownerPw = New-RandomHex 24; $appPw = New-RandomHex 24
     Invoke-Psql @('-v', "owner_pw=$ownerPw", '-v', "app_pw=$appPw", '-v', "dbname=$DbName", '-f', (Join-Path $Installer 'sql\bootstrap-prod.sql')) | Out-Null
     Ok "Veritabanı '$DbName' ve roller hazır"
-    $hostName = '127.0.0.1'; if ($script:Access -eq 'lan') { $hostName = '0.0.0.0' }
     $pgPort = $script:PgInfo.Port
     $hostId = Write-HostIdFile
-    Write-TextFile $erpEnv (@(
-        "# Muhasebe ERP çalışma zamanı ayarları (kurulum: $(Get-Date -Format s)). Gizli: yalnızca SYSTEM, Yöneticiler ve hizmet okur. YEDEKLEYİN.",
-        'NODE_ENV=production',
-        "HOST=$hostName",
-        "PORT=$Port",
-        "DATABASE_URL=postgres://erp_app:$appPw@127.0.0.1:$pgPort/$DbName",
-        "JWT_SECRET=$(New-RandomB64 48)",
-        "WEB_DIST_DIR=$ProgDir\current\app\web",
-        "LICENSE_HOST_ID_FILE=$hostId",
-        'TRUST_PROXY=false',
-        'COOKIE_SECURE=false',
-        'REGISTRATION_ENABLED=true',
-        "APP_VERSION=$ver"
-      ) -join "`n")
+    $baseLines = @(
+      "# Muhasebe ERP çalışma zamanı ayarları (kurulum: $(Get-Date -Format s)). Gizli: yalnızca SYSTEM, Yöneticiler ve hizmet okur. YEDEKLEYİN.",
+      'NODE_ENV=production',
+      "DATABASE_URL=postgres://erp_app:$appPw@127.0.0.1:$pgPort/$DbName",
+      "JWT_SECRET=$(New-RandomB64 48)",
+      "WEB_DIST_DIR=$ProgDir\current\app\web",
+      "LICENSE_HOST_ID_FILE=$hostId",
+      "APP_VERSION=$ver"
+    )
+    Build-EnvChanges 'native'
+    Write-TextFile $erpEnv ((Invoke-EnvApply $baseLines $script:Chg) -join "`n")
     Write-TextFile $migEnv "# Şema sahibi bağlantısı: yalnızca migration ve yedek kullanır (uygulama hizmeti okumaz).`nMIGRATION_DATABASE_URL=postgres://erp:$ownerPw@127.0.0.1:$pgPort/$DbName`n"
     & icacls $erpEnv /grant "${SidLocalService}:R" | Out-Null
     & icacls (Join-Path $DataDir 'host-machine-id') /grant "${SidLocalService}:R" | Out-Null
     Ok "Ayarlar yazıldı ($erpEnv, $migEnv)"
+    $script:DemoPending = $script:A['DEMO']; $script:DemoSeeded = 'no'
+    Write-WizardConf
   }
   Set-EnvLine $erpEnv 'APP_VERSION' $ver
   if ($RestoreDb) { Restore-DbNative $RestoreDb }
@@ -670,14 +721,19 @@ function Install-ProdNative {
   Ok 'Windows hizmeti: Muhasebe ERP (otomatik başlar; services.msc)'
   Write-BackupTask
   Install-Updater 'native' $erpEnv
-  Ok "Günlük yedek: 02:30 ($DataDir\backups, son 14). Elle: powershell -File `"$ProgDir\bin\erp-backup.ps1`""
+  Ok "Günlük yedek: $($script:A['BACKUP_TIME']) ($($script:A['BACKUP_DIR']), son $($script:A['BACKUP_KEEP'])). Elle: powershell -File `"$ProgDir\bin\erp-backup.ps1`""
   if (-not (Wait-Ready "http://127.0.0.1:$Port/api/health/ready" 90)) { Die "Uygulama hazır olmadı: günlük $DataDir\logs" }
   Ok 'Uygulama çalışıyor'
+  if ($script:DemoPending -eq 'yes') {
+    Info 'Demo verisi yükleniyor…'
+    if (Invoke-DemoSeedNative) { $script:SeededDemo = $true; $script:DemoPending = 'no'; $script:DemoSeeded = 'yes'; Ok 'Demo verisi yüklendi'; Write-WizardConf }
+    else { Warn 'Demo verisi yüklenemedi (node.exe dist\demo.js seed; ALLOW_DEMO=true gerekir)' }
+  } elseif ($fresh) { Ok 'Boş uygulama: demo/örnek veri yüklenmedi' }
   if ($script:Access -eq 'lan') { Add-FirewallRule $Port }
   # Masaüstü kısayolu (tüm kullanıcılar)
   $url = "http://localhost:$Port"
   [IO.File]::WriteAllText((Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Muhasebe ERP.url'), "[InternetShortcut]`r`nURL=$url`r`n", $Utf8NoBom)
-  [void]$fresh
+  Invoke-PostInstallChecks "http://127.0.0.1:$Port"
   Complete-Prod $Port
 }
 
@@ -755,20 +811,11 @@ function Restore-DbDocker([string]$file) {
 }
 
 function Complete-Prod([int]$p) {
-  switch ($script:Access) {
-    'domain' { $url = "https://$($script:Domain)" }
-    'lan' {
-      $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(127|169\.254)\.' } | Select-Object -First 1).IPAddress
-      $url = "http://${ip}:$p"
-    }
-    default { $url = "http://localhost:$p" }
-  }
-  Stage 'Hazır'
-  Say "  Adres:  $url   (masaüstünde 'Muhasebe ERP' kısayolu)"
-  Say "  1) Tarayıcıda açın → 'Lisans etkinleştirme' ekranına satıcıdan aldığınız kodu girin."
-  Say '  2) Sonra ilk sahip hesabını oluşturun; ardından kaydı kapatın (REGISTRATION_ENABLED=false).'
-  Say "  Ayar dosyalarını (parolalar, $DataDir) güvenli bir yere yedekleyin. Ayrıntı: docs\OPERATIONS.md"
-  if (-not $Yes) { Start-Process $url }
+  if ($script:A['TLS_MODE'] -ne 'none' -and $script:Domain) { $url = $script:BaseUrl; if (-not $url) { $url = New-BaseUrl } }
+  elseif ($script:Access -eq 'lan') { $url = "http://$(Get-LanIp):$p" }
+  else { $url = "http://localhost:$p" }
+  Show-Summary $url
+  if (-not $Yes -and -not $AnswersFile) { Start-Process $url }
 }
 
 # ---- Kaldırma ----------------------------------------------------------------------------------------------------------
@@ -798,12 +845,17 @@ function Uninstall-Native {
 # ---- Akış ---------------------------------------------------------------------------------------------------------------
 Say 'Muhasebe ERP kurulum sihirbazı (Windows)'
 if ($Uninstall) { Uninstall-Native; if ($Elevated) { Read-Host 'Kapatmak için Enter' | Out-Null }; exit 0 }
+if ($Reconfigure) { Invoke-Reconfigure; if ($Elevated) { Read-Host 'Kapatmak için Enter' | Out-Null }; exit 0 }
+if ($DryRun) { Warn 'KURU ÇALIŞTIRMA: sistemde hiçbir şey değiştirilmeyecek.' }
+Find-Existing
 Invoke-CompatCheck
 if ($Check) {
   if ($script:Fails -gt 0) { Die 'Engelleyici sorun var.' }
   Say ''; Ok 'Kurulum yapılabilir.'; exit 0
 }
 Select-InstallPath
+Invoke-Configure
+if ($DryRun) { Show-DryRun; exit 0 }
 Invoke-Prerequisites
 if ($Mode -eq 'dev') { Install-Dev }
 elseif ($script:Path -eq 'docker') { Install-ProdDocker }

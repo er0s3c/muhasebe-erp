@@ -15,6 +15,7 @@ trap 'echo "$(basename "$0"): $LINENO. satırda beklenmedik hata" >&2' ERR
 MODE=direct
 DIR="${BACKUP_DIR:-./backups}"
 KEEP="${BACKUP_KEEP_DAYS:-30}"
+KEEP_COUNT="${BACKUP_KEEP_COUNT:-}"
 COMPOSE_FILE="${COMPOSE_FILE:-deploy/docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-deploy/.env}"
 
@@ -23,12 +24,14 @@ while [ $# -gt 0 ]; do
     --compose) MODE=compose ;;
     --dir) DIR="${2:?--dir bir değer ister}"; shift ;;
     --keep-days) KEEP="${2:?--keep-days bir değer ister}"; shift ;;
+    --keep-count) KEEP_COUNT="${2:?--keep-count bir değer ister}"; shift ;;
     -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "Bilinmeyen seçenek: $1" >&2; exit 2 ;;
   esac
   shift
 done
 case "$KEEP" in ''|*[!0-9]*) echo "--keep-days sayı olmalı" >&2; exit 2 ;; esac
+case "$KEEP_COUNT" in *[!0-9]*) echo "--keep-count sayı olmalı" >&2; exit 2 ;; esac
 
 # Anahtar dosyada yoksa boş değer döner (hata değil): `set -e` + `pipefail` altında eşleşmeyen grep betiği sessizce sonlandırırdı.
 envval() { { grep -E "^$1=" "$ENV_FILE" || true; } | tail -n1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
@@ -64,7 +67,12 @@ mv "$PARTIAL" "$FINAL"
 ( cd "$DIR" && sha256sum "$(basename "$FINAL")" > "$(basename "$FINAL").sha256" )
 
 # Eski yedekleri temizle (yalnızca bu betiğin adlandırdığı dosyalar)
-find "$DIR" -maxdepth 1 -type f \( -name 'erp-*.dump' -o -name 'erp-*.dump.sha256' \) -mtime +"$KEEP" -delete
+if [ -n "$KEEP_COUNT" ]; then
+  # Sayıya göre: en yeni N döküm kalır (özet dosyalarıyla birlikte)
+  ls -1t "$DIR"/erp-*.dump 2>/dev/null | tail -n +$((KEEP_COUNT + 1)) | while read -r old; do rm -f "$old" "$old.sha256"; done
+else
+  find "$DIR" -maxdepth 1 -type f \( -name 'erp-*.dump' -o -name 'erp-*.dump.sha256' \) -mtime +"$KEEP" -delete
+fi
 
 SIZE="$(du -h "$FINAL" | cut -f1)"
-echo "Yedek alındı: $FINAL ($SIZE); ${KEEP} günden eski yedekler silindi."
+if [ -n "$KEEP_COUNT" ]; then echo "Yedek alındı: $FINAL ($SIZE); en yeni ${KEEP_COUNT} yedek tutuldu."; else echo "Yedek alındı: $FINAL ($SIZE); ${KEEP} günden eski yedekler silindi."; fi

@@ -18,3 +18,9 @@ backups/
 
 # Sürüm kitleri (npm run release)
 release/
+
+# Kurulum sihirbazının ürettiği yerel dosyalar
+deploy/Caddyfile.local
+deploy/certs/
+deploy/wizard.conf
+deploy/.env.bak-*

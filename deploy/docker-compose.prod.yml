@@ -100,10 +100,12 @@ services:
       # Yalnızca 'tls' profilinde kullanılır; profil kapalıyken boş olması sorun değildir (compose tüm servisleri yorumlar)
       ERP_DOMAIN: ${ERP_DOMAIN:-}
     ports:
-      - '80:80'
-      - '443:443'
+      - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Kurulum sihirbazı HTTPS ayarına göre deploy/Caddyfile.local üretir ve ERP_CADDYFILE ile gösterir
+      - ${ERP_CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
+      - ${ERP_CERT_DIR:-./certs}:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

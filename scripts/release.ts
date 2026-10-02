@@ -202,7 +202,7 @@ async function stage(target: Target): Promise<string> {
   rmSync(dir, { recursive: true, force: true });
   log(`kit hazırlanıyor: ${name}`);
   const app = join(dir, 'app');
-  copyFiltered(apiDist, join(app, 'dist'), (n) => n === 'demo.js' || n.endsWith('.map'));
+  copyFiltered(apiDist, join(app, 'dist'), (n) => n.endsWith('.map'));
   copyFiltered(webDist, join(app, 'web'), (n) => n.endsWith('.map'));
   cpSync(notices, join(app, 'THIRD-PARTY-NOTICES.md'));
   cpSync(notices, join(app, 'web', 'THIRD-PARTY-NOTICES.md'));

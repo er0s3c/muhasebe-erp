@@ -2,7 +2,10 @@
 # =====================================================================================================================
 # Muhasebe ERP kurulum sihirbazı — Linux ve WSL (Ubuntu/Debian)
 #
-#   1) Uyumluluk kontrolü   2) Yol seçimi   3) Gerekli paketler   4) Sistemin kurulumu
+#   1) Uyumluluk kontrolü   2) Yol seçimi   3) Yapılandırma (sorular)   4) Gerekli paketler   5) Sistemin kurulumu
+#
+# Tek betikle kurulum VE tüm yapılandırma: demo/boş veri, lisans, e-posta (SMTP), alan adı/sertifika (HTTPS), yedekleme, portlar.
+# Etkileşimli (terminalde) sorar; her sorunun varsayılanı vardır (Enter kabul eder).
 #
 # Kip:
 #   dev   Depodan test/geliştirme kurulumu (Node 22 + PostgreSQL 16 ya da Docker'da veritabanı, demo verisi)
@@ -12,10 +15,16 @@
 #   native  PostgreSQL 16 yerel kurulur; uygulama systemd hizmeti (systemd yoksa erpctl) olarak çalışır
 #
 # Kullanım:  ./install.sh [--check] [--mode=dev|prod] [--path=docker|native] [--access=local|lan|domain]
-#                         [--domain=erp.ornek.com] [--port=3000] [--yes] [--no-demo] [--start] [--uninstall [--purge]]
+#                         [--domain=erp.ornek.com] [--port=3000] [--tls=auto|byo|selfsigned|none] [--demo|--no-demo]
+#                         [--yes] [--answers=DOSYA] [--reconfigure] [--dry-run] [--start] [--uninstall [--purge]]
 #                         [--restore-db=yedek.dump]   (güncelleyicinin geri dönüşü: kurmadan önce veritabanını yedekten yükler)
+#   --yes            tüm sorulara varsayılanı verir (sormaz)
+#   --answers=DOSYA  sormaz; KEY=VALUE yanıt dosyasından okur (örnek: installer/answers.example)
+#   --reconfigure    kurulu sistemde yalnızca yapılandırmayı (SMTP, HTTPS, yedek, lisans adresi) yeniden sorar ve uygular
+#   --dry-run        sistemi değiştirmeden ne yazılacağını gösterir (parolalar maskeli)
 # Ayrıntı:   docs/OPERATIONS.md §2 (Kurulum sihirbazı)
 # =====================================================================================================================
+# shellcheck disable=SC2034  # değişkenler yapılandırma kitaplıklarında (source) ve dolaylı atamalarla kullanılır
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,25 +46,38 @@ SVC_NAME=muhasebe-erp
 DB_NAME=erp
 
 # ---- Seçenekler -----------------------------------------------------------------------------------------------------
-OPT_CHECK=0 OPT_YES=0 OPT_DEMO=1 OPT_START=0 OPT_UNINSTALL=0 OPT_PURGE=0
-MODE="" PATH_CHOICE="" ACCESS="" DOMAIN="" PORT=3000 RESTORE_DB=""
+OPT_CHECK=0 OPT_YES=0 OPT_START=0 OPT_UNINSTALL=0 OPT_PURGE=0 OPT_DRYRUN=0 OPT_RECONFIGURE=0 ANSWERS_FILE=""
+MODE="" PATH_CHOICE="" ACCESS="" DOMAIN="" PORT="" RESTORE_DB=""
+# Yanıt anahtarları (installer/lib/config.sh ANSWER_KEYS); komut satırı bayrakları yanıt dosyasından önceliklidir
+DEMO="" REGISTRATION="" LICENSE_SERVER_URL="" LICENSE_CODE="" MAIL_ENABLED="" SMTP_HOST="" SMTP_PORT="" SMTP_SECURITY="" SMTP_USER=""
+SMTP_PASSWORD="" MAIL_FROM_ADDRESS="" MAIL_FROM_NAME="" MAIL_TEST_TO="" APP_BASE_URL="" TLS_MODE="" ACME_EMAIL="" CERT_FILE="" KEY_FILE=""
+HTTP_PORT="" HTTPS_PORT="" BACKUP_DIR="" BACKUP_KEEP="" BACKUP_TIME="" DEMO_PENDING="" DEMO_SEEDED="" WIZARD_TMP=""
 UPD_DIR=$PREFIX/updater
 
-usage() { sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,/^set -E/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
-for arg in "$@"; do
+while (( $# )); do
+  arg="$1"; shift
   case "$arg" in
     --check) OPT_CHECK=1 ;;
     --yes|-y) OPT_YES=1 ;;
-    --no-demo) OPT_DEMO=0 ;;
+    --demo) DEMO=yes ;;
+    --no-demo) DEMO=no ;;
     --start) OPT_START=1 ;;
     --uninstall) OPT_UNINSTALL=1 ;;
     --purge) OPT_PURGE=1 ;;
+    --dry-run) OPT_DRYRUN=1 ;;
+    --reconfigure) OPT_RECONFIGURE=1 ;;
+    --answers) (( $# )) || { echo "--answers bir dosya yolu ister" >&2; exit 2; }; ANSWERS_FILE="$1"; shift ;;
+    --answers=*) ANSWERS_FILE="${arg#*=}" ;;
     --mode=*) MODE="${arg#*=}" ;;
     --path=*) PATH_CHOICE="${arg#*=}" ;;
     --access=*) ACCESS="${arg#*=}" ;;
     --domain=*) DOMAIN="${arg#*=}" ;;
     --port=*) PORT="${arg#*=}" ;;
+    --tls=*) TLS_MODE="${arg#*=}" ;;
+    --http-port=*) HTTP_PORT="${arg#*=}" ;;
+    --https-port=*) HTTPS_PORT="${arg#*=}" ;;
     --restore-db=*) RESTORE_DB="${arg#*=}" ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Bilinmeyen seçenek: $arg (yardım: --help)" >&2; exit 2 ;;
@@ -76,21 +98,26 @@ die()  { printf '\n%s✗ %s%s\n' "$C_FAIL" "$*" "$C_0" >&2; exit 1; }
 stage() { printf '\n%s== %s ==%s\n' "$C_B" "$*" "$C_0"; }
 trap 'die "Beklenmeyen hata (satır $LINENO). Yukarıdaki çıktıyı kontrol edin; sihirbaz güvenle yeniden çalıştırılabilir."' ERR
 
+# Etkileşimli girdi, yardımcılar ve yapılandırma kitaplığı (installer/lib/config.sh): ask/confirm da burada tanımlanır
+# shellcheck source=lib/config.sh
+. "$INSTALLER/lib/config.sh"
+# shellcheck source=lib/wizard.sh
+. "$INSTALLER/lib/wizard.sh"
+
 ask() { # ask "Soru" varsayılan seçenek1 seçenek2 ... → seçilen değer (stdout)
-  local q="$1" def="$2"; shift 2
-  if (( OPT_YES )) || [[ ! -r /dev/tty ]]; then printf '%s' "$def"; return; fi
-  local ans
-  printf '%s [%s] (%s): ' "$q" "$def" "$(IFS=/; echo "$*")" > /dev/tty
-  read -r ans < /dev/tty || true
-  ans="${ans:-$def}"
+  local q="$1" def="$2" o; shift 2
+  if ! interactive; then printf '%s' "$def"; return; fi
+  prompt_line "$q [$def] ($(IFS=/; echo "$*")): "
+  local ans="${REPLY_VAL:-$def}"
   for o in "$@"; do [[ "$o" == "$ans" ]] && { printf '%s' "$ans"; return; }; done
   printf '%s' "$def"
 }
-confirm() { # confirm "Soru" → 0 evet
-  if (( OPT_YES )) || [[ ! -r /dev/tty ]]; then return 0; fi
-  local ans; printf '%s [E/h]: ' "$1" > /dev/tty; read -r ans < /dev/tty || true
-  [[ -z "$ans" || "$ans" =~ ^[EeYy] ]]
+confirm() { # confirm "Soru" → 0 evet (etkileşimsiz kipte her zaman evet)
+  if ! interactive; then return 0; fi
+  prompt_line "$1 [E/h]: "
+  [[ -z "$REPLY_VAL" || "$REPLY_VAL" =~ ^[EeYy] ]]
 }
+section() { printf '\n%s-- %s --%s\n' "$C_B" "$1" "$C_0" >&2; }
 
 rand_hex() { if command -v openssl >/dev/null; then openssl rand -hex "$1"; else head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; fi; }
 rand_b64() { head -c "$1" /dev/urandom | base64 | tr -d '\n=' | tr '+/' '-_'; }
@@ -160,7 +187,7 @@ FAILS=0 DOCKER_READY=0 NODE_READY=0 PG_READY=0
 ck() { CK_NAME+=("$1"); CK_STATE+=("$2"); CK_MSG+=("$3"); [[ "$2" == fail ]] && FAILS=$((FAILS+1)); return 0; }
 
 compat_check() {
-  stage "1/4 Sistem uyumluluk kontrolü"
+  stage "1/5 Sistem uyumluluk kontrolü"
   local supported=0
   case "$OS_ID" in
     ubuntu) ver_ge "$OS_VER" 22.04 && supported=1 ;;
@@ -216,7 +243,7 @@ compat_check() {
 
   local busy=()
   if [[ "$MODE" == dev ]]; then for p in 3000 5173; do port_busy "$p" && busy+=("$p"); done
-  else port_busy "$PORT" && busy+=("$PORT"); fi
+  else port_busy "${PORT:-3000}" && busy+=("${PORT:-3000}"); fi
   if (( ${#busy[@]} )); then
     if [[ "$MODE" == prod ]] && { [[ -L "$PREFIX/current" ]] || docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^muhasebe-erp-app'; }; then
       ck "Portlar" info "${busy[*]} kullanımda (mevcut Muhasebe ERP kurulumu — yükseltilecek)"
@@ -243,11 +270,12 @@ compat_check() {
 
 # ---- 2) Yol seçimi ----------------------------------------------------------------------------------------------------------
 choose_path() {
-  stage "2/4 Kurulum yolu"
+  stage "2/5 Kurulum yolu"
   local rec
   if [[ "$MODE" == prod ]]; then
     if (( DOCKER_READY )); then rec=docker; else rec=native; fi
     (( KIT == 0 )) && rec=docker
+    (( EXISTING )) && [[ -n "$EXISTING_PATH" ]] && rec="$EXISTING_PATH"
   else
     if (( PG_READY )); then rec=native; elif (( DOCKER_READY )); then rec=docker; else rec=native; fi
   fi
@@ -273,19 +301,10 @@ choose_path() {
     die "Uyumluluk kontrolünde engelleyici sorun var (✗). Giderip sihirbazı yeniden çalıştırın."
   fi
 
-  if [[ "$MODE" == prod && -z "$ACCESS" ]]; then
-    info "Erişim: local = yalnızca bu bilgisayar, lan = yerel ağdaki bilgisayarlar (http), domain = alan adı + otomatik HTTPS (yalnız Docker)"
-    ACCESS="$(ask "Uygulamaya nereden erişilecek?" local local lan domain)"
-  fi
-  [[ "$MODE" == dev ]] && ACCESS=local
+  if [[ "$MODE" == prod ]]; then ask_access; else ACCESS=local; fi
   [[ "$ACCESS" == local || "$ACCESS" == lan || "$ACCESS" == domain ]] || die "--access local, lan ya da domain olmalı"
-  if [[ "$ACCESS" == domain ]]; then
-    [[ "$PATH_CHOICE" == docker ]] || die "Alan adı + HTTPS şimdilik Docker yolunda (Caddy) desteklenir; yerel yolda lan seçip önüne bir ters vekil koyun."
-    if [[ -z "$DOMAIN" ]]; then
-      (( OPT_YES )) && die "--access=domain için --domain=alan.adi verin"
-      printf 'Alan adı (ör. erp.firmaniz.com): ' > /dev/tty; read -r DOMAIN < /dev/tty
-    fi
-    [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || die "Geçersiz alan adı: $DOMAIN"
+  if [[ "$ACCESS" == domain && "$PATH_CHOICE" != docker ]]; then
+    die "Alan adı + HTTPS şimdilik Docker yolunda (Caddy) desteklenir; yerel yolda lan seçip önüne bir ters vekil koyun."
   fi
   okm "Yol: $MODE / $PATH_CHOICE / erişim: $ACCESS"
 }
@@ -351,7 +370,7 @@ install_postgres() {
 }
 
 prerequisites() {
-  stage "3/4 Gerekli paketler"
+  stage "4/5 Gerekli paketler"
   command -v curl >/dev/null || apt_install curl ca-certificates
   if [[ "$MODE" == dev ]]; then install_node; fi
   if [[ "$PATH_CHOICE" == native ]]; then install_postgres; else okm "Docker hazır ($(docker version --format '{{.Server.Version}}'))"; fi
@@ -373,7 +392,7 @@ set_env_line() { # set_env_line dosya ANAHTAR değer (varsa değiştirir, yoksa 
 }
 
 install_dev() {
-  stage "4/4 Geliştirme ortamı kurulumu"
+  stage "5/5 Geliştirme ortamı kurulumu"
   cd "$ROOT"
   if [[ ! -f .env ]]; then
     as_user cp .env.example .env
@@ -403,7 +422,8 @@ install_dev() {
   okm "npm bağımlılıkları hazır"
   as_user npm run --silent db:migrate
   okm "Veritabanı şeması güncel"
-  if (( OPT_DEMO )); then as_user npm run --silent db:seed && okm "Demo verisi yüklendi (giriş: demo@ornek.local / Demo-Sifre-123)"; fi
+  if [[ "$DEMO" == yes ]]; then as_user npm run --silent db:seed && okm "Demo verisi yüklendi (giriş: demo@ornek.local / Demo-Sifre-123)"
+  else okm "Demo verisi yüklenmedi: boş uygulama (ilk hesap tarayıcıda 'Kayıt ol' ile açılır)"; fi
 
   stage "Hazır"
   say "  Başlatmak için:   npm run dev"
@@ -420,9 +440,10 @@ wait_ready() { # wait_ready url saniye
 }
 
 install_prod_docker() {
-  stage "4/4 Sistem kurulumu (Docker)"
+  stage "5/5 Sistem kurulumu (Docker)"
   cd "$ROOT"
   local envf=deploy/.env image build_flag=()
+  WIZARD_TMP="$(mktemp)"
   if (( KIT )); then
     image="muhasebe-erp:$KIT_VERSION"
     if docker image inspect "$image" >/dev/null 2>&1; then okm "İmaj mevcut: $image"
@@ -438,8 +459,9 @@ install_prod_docker() {
     info "Depodan kurulum: imaj kaynak koddan derlenecek (lisans anahtarı derlemeye gömülür; docs/LICENSING.md)"
   fi
 
+  local fresh=0
   if [[ ! -f "$envf" ]]; then
-    umask 077
+    fresh=1
     {
       echo "# Kurulum sihirbazının ürettiği ayarlar ($(date -Iseconds)). Parolalar yalnızca burada durur: dosyayı YEDEKLEYİN."
       echo "POSTGRES_PASSWORD=$(rand_hex 24)"
@@ -448,19 +470,19 @@ install_prod_docker() {
       echo "JWT_SECRET=$(rand_b64 48)"
       echo "ERP_IMAGE=$image"
       echo "APP_VERSION=${KIT_VERSION:-dev}"
-      echo "APP_PORT=$PORT"
-      case "$ACCESS" in
-        local) echo "APP_BIND=127.0.0.1"; echo "COOKIE_SECURE=false"; echo "TRUST_PROXY=false" ;;
-        lan) echo "APP_BIND=0.0.0.0"; echo "COOKIE_SECURE=false"; echo "TRUST_PROXY=false" ;;
-        domain) echo "APP_BIND=127.0.0.1"; echo "ERP_DOMAIN=$DOMAIN"; echo "APP_BASE_URL=https://$DOMAIN" ;;
-      esac
-    } > "$envf"
-    chmod 600 "$envf"
+    } > "$WIZARD_TMP"
+    build_env_changes docker
+    env_apply "${CHG[@]}" < "$WIZARD_TMP" | install_file "$ROOT/$envf" 600
+    rm -f "$WIZARD_TMP"
     okm "deploy/.env oluşturuldu (rastgele parolalar; chmod 600)"
+    apply_tls_files
+    DEMO_PENDING="$DEMO"; DEMO_SEEDED=no
+    write_wizard_conf
   else
     set_env_line "$envf" ERP_IMAGE "$image"
     [[ -n "$KIT_VERSION" ]] && set_env_line "$envf" APP_VERSION "$KIT_VERSION"
-    okm "deploy/.env mevcut: parolalar korundu, imaj $image olarak güncellendi"
+    okm "deploy/.env mevcut: parolalar ve ayarlar korundu, imaj $image olarak güncellendi"
+    DEMO_PENDING="${CUR[DEMO_PENDING]:-no}"; DEMO_SEEDED="${CUR[DEMO_SEEDED]:-no}"; DEMO="${CUR[DEMO]:-no}"
   fi
 
   (( KIT )) && install_updater docker "$ROOT/$envf"
@@ -472,6 +494,12 @@ install_prod_docker() {
   local port; port="$(sed -n 's/^APP_PORT=//p' "$envf")"; port="${port:-3000}"
   wait_ready "http://127.0.0.1:$port/api/health/ready" 180 || die "Uygulama hazır olmadı: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs app"
   okm "Uygulama çalışıyor"
+  if [[ "$DEMO_PENDING" == yes ]]; then
+    info "Demo verisi yükleniyor…"
+    seed_demo_docker >/dev/null && { SEEDED_DEMO=1; DEMO_PENDING=no; DEMO_SEEDED=yes; okm "Demo verisi yüklendi"; write_wizard_conf; } || warn "Demo verisi yüklenemedi (docker compose … exec app node dist/demo.js seed; ALLOW_DEMO=true gerekir)"
+  elif (( fresh )); then okm "Boş uygulama: demo/örnek veri yüklenmedi"; fi
+  (( fresh )) && install_backup_docker
+  post_install_checks "http://127.0.0.1:$port"
   finish_prod "$port"
 }
 
@@ -543,17 +571,19 @@ CTL
 }
 
 write_backup_tool() {
-  as_root mkdir -p "$VARDIR/backups"
-  as_root chmod 700 "$VARDIR/backups"
+  local dir="${BACKUP_DIR:-$VARDIR/backups}" keep="${BACKUP_KEEP:-14}" at="${BACKUP_TIME:-02:30}"
+  as_root mkdir -p "$dir"
+  as_root chmod 700 "$dir"
   as_root tee "$PREFIX/bin/erp-backup" >/dev/null <<BK
 #!/usr/bin/env bash
-# Muhasebe ERP yedeği (pg_dump, sıkıştırılmış özel biçim). Son 14 yedek tutulur. Geri yükleme: docs/OPERATIONS.md §6
+# Muhasebe ERP yedeği (pg_dump, sıkıştırılmış özel biçim). Son $keep yedek tutulur. Ayar: sudo erp-setup --reconfigure. Geri yükleme: docs/OPERATIONS.md §6
 set -euo pipefail
 set -a; . $ETC/migrate.env; set +a
-out=$VARDIR/backups/erp-\$(date +%Y%m%d-%H%M%S).dump
+umask 077
+out=$dir/erp-\$(date +%Y%m%d-%H%M%S).dump
 /usr/lib/postgresql/$PG_MAJOR/bin/pg_dump -Fc -d "\$MIGRATION_DATABASE_URL" -f "\$out"
 chmod 600 "\$out"
-ls -1t $VARDIR/backups/erp-*.dump 2>/dev/null | tail -n +15 | xargs -r rm -f
+ls -1t $dir/erp-*.dump 2>/dev/null | tail -n +$((keep + 1)) | xargs -r rm -f
 echo "Yedek: \$out"
 BK
   as_root chmod 700 "$PREFIX/bin/erp-backup"
@@ -567,15 +597,22 @@ ExecStart=$PREFIX/bin/erp-backup
 EOF
     as_root tee "/etc/systemd/system/$SVC_NAME-backup.timer" >/dev/null <<EOF
 [Unit]
-Description=Muhasebe ERP günlük yedek (02:30)
+Description=Muhasebe ERP günlük yedek ($at)
 [Timer]
-OnCalendar=*-*-* 02:30:00
+OnCalendar=$(time_to_oncalendar "$at")
 Persistent=true
 [Install]
 WantedBy=timers.target
 EOF
     as_root systemctl daemon-reload
     as_root systemctl enable --now "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true
+    as_root systemctl restart "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true
+    okm "Günlük yedek: systemd zamanlayıcısı $at → $dir (son $keep). Elle: sudo $PREFIX/bin/erp-backup"
+  elif can_root && [[ -d /etc/cron.d ]]; then
+    printf '# Muhasebe ERP günlük yedek (kurulum sihirbazı)\n%s * * * root %s/bin/erp-backup >> /var/log/muhasebe-erp-backup.log 2>&1\n' "$(time_to_cron "$at")" "$PREFIX" | as_root tee "/etc/cron.d/$SVC_NAME-backup" >/dev/null
+    okm "Günlük yedek: cron $at → $dir (son $keep). Elle: sudo $PREFIX/bin/erp-backup"
+  else
+    warn "Otomatik yedek yok (systemd/cron yok): sudo $PREFIX/bin/erp-backup komutunu düzenli çalıştırın"
   fi
 }
 
@@ -591,7 +628,7 @@ offer_wsl_systemd() {
 }
 
 install_prod_native() {
-  stage "4/4 Sistem kurulumu (yerel)"
+  stage "5/5 Sistem kurulumu (yerel)"
   [[ -x "$ROOT/app/runtime/node" ]] || die "Kitte çalışma zamanı yok (app/runtime/node); kit bozuk olabilir"
   local ver="$KIT_VERSION" pgp; pgp="$(pg_port)"
 
@@ -619,8 +656,10 @@ install_prod_native() {
   fi
 
   local owner_pw app_pw jwt fresh=0
+  WIZARD_TMP="$(mktemp)"
   if as_root test -f "$ETC/erp.env" && as_root test -f "$ETC/migrate.env"; then
     okm "Mevcut ayarlar korunuyor ($ETC)"
+    DEMO_PENDING="${CUR[DEMO_PENDING]:-no}"; DEMO_SEEDED="${CUR[DEMO_SEEDED]:-no}"; DEMO="${CUR[DEMO]:-no}"
   else
     fresh=1
     owner_pw="$(rand_hex 24)"; app_pw="$(rand_hex 24)"; jwt="$(rand_b64 48)"
@@ -631,31 +670,29 @@ install_prod_native() {
     as_postgres psql -p "$pgp" -v ON_ERROR_STOP=1 -q -v owner_pw="$owner_pw" -v app_pw="$app_pw" -v dbname="$DB_NAME" \
       -f - < "$INSTALLER/sql/bootstrap-prod.sql" >/dev/null
     okm "Veritabanı '$DB_NAME' ve roller hazır"
-    local host=127.0.0.1 secure=false
-    [[ "$ACCESS" == lan ]] && host=0.0.0.0
     umask 077
-    as_root tee "$ETC/erp.env" >/dev/null <<EOF
-# Muhasebe ERP çalışma zamanı ayarları (kurulum: $(date -Iseconds)). Gizli: yalnızca root ve $SVC_USER okur. YEDEKLEYİN.
-NODE_ENV=production
-HOST=$host
-PORT=$PORT
-DATABASE_URL=postgres://erp_app:$app_pw@127.0.0.1:$pgp/$DB_NAME
-JWT_SECRET=$jwt
-WEB_DIST_DIR=$PREFIX/current/app/web
-LICENSE_HOST_ID_FILE=/etc/machine-id
-TRUST_PROXY=false
-COOKIE_SECURE=$secure
-REGISTRATION_ENABLED=true
-APP_VERSION=$ver
-EOF
+    {
+      echo "# Muhasebe ERP çalışma zamanı ayarları (kurulum: $(date -Iseconds)). Gizli: yalnızca root ve $SVC_USER okur. YEDEKLEYİN."
+      echo "NODE_ENV=production"
+      echo "DATABASE_URL=postgres://erp_app:$app_pw@127.0.0.1:$pgp/$DB_NAME"
+      echo "JWT_SECRET=$jwt"
+      echo "WEB_DIST_DIR=$PREFIX/current/app/web"
+      echo "LICENSE_HOST_ID_FILE=/etc/machine-id"
+      echo "APP_VERSION=$ver"
+    } > "$WIZARD_TMP"
+    build_env_changes native
+    env_apply "${CHG[@]}" < "$WIZARD_TMP" | install_file "$ETC/erp.env" 640 "root:$SVC_USER"
+    rm -f "$WIZARD_TMP"
     as_root tee "$ETC/migrate.env" >/dev/null <<EOF
 # Şema sahibi bağlantısı: yalnızca migration ve yedek kullanır (uygulama hizmeti okumaz).
 MIGRATION_DATABASE_URL=postgres://erp:$owner_pw@127.0.0.1:$pgp/$DB_NAME
 EOF
-    as_root chown "root:$SVC_USER" "$ETC/erp.env"; as_root chmod 640 "$ETC/erp.env"
     as_root chown root:root "$ETC/migrate.env"; as_root chmod 600 "$ETC/migrate.env"
     okm "Ayarlar yazıldı ($ETC/erp.env, $ETC/migrate.env)"
+    DEMO_PENDING="$DEMO"; DEMO_SEEDED=no
+    write_wizard_conf
   fi
+  rm -f "$WIZARD_TMP"
   as_root sed -i "s/^APP_VERSION=.*/APP_VERSION=$ver/" "$ETC/erp.env"
   [[ -n "$RESTORE_DB" ]] && restore_db_native "$RESTORE_DB"
 
@@ -684,11 +721,43 @@ EOF
   if [[ "$ACCESS" == lan ]] && command -v ufw >/dev/null && as_root ufw status 2>/dev/null | grep -q 'Status: active'; then
     confirm "Güvenlik duvarında $PORT/tcp açılsın mı (ufw)?" && as_root ufw allow "$PORT/tcp" >/dev/null && okm "ufw: $PORT/tcp açıldı"
   fi
-  if (( fresh )); then
-    if (( HAS_SYSTEMD )); then info "Günlük yedek: systemd zamanlayıcısı 02:30 ($VARDIR/backups, son 14). Elle: sudo $PREFIX/bin/erp-backup"
-    else warn "Otomatik yedek yok (systemd kapalı): sudo $PREFIX/bin/erp-backup komutunu düzenli çalıştırın (cron)"; fi
-  fi
+  if [[ "$DEMO_PENDING" == yes ]]; then
+    info "Demo verisi yükleniyor…"
+    if seed_demo_native >/dev/null; then SEEDED_DEMO=1; DEMO_PENDING=no; DEMO_SEEDED=yes; okm "Demo verisi yüklendi"; write_wizard_conf
+    else warn "Demo verisi yüklenemedi ($PREFIX/current/app/runtime/node dist/demo.js seed; ALLOW_DEMO=true gerekir)"; fi
+  elif (( fresh )); then okm "Boş uygulama: demo/örnek veri yüklenmedi"; fi
+  write_setup_wrapper
+  post_install_checks "http://127.0.0.1:$PORT"
   finish_prod "$PORT"
+}
+
+write_setup_wrapper() { # kurulu kopyadan yeniden yapılandırma: sudo erp-setup --reconfigure
+  printf '#!/usr/bin/env bash\n# Muhasebe ERP kurulum sihirbazı (kurulu sürüm): sudo erp-setup --reconfigure | --help\nexec bash "%s/current/installer/install.sh" "$@"\n' "$PREFIX" | as_root tee /usr/local/bin/erp-setup >/dev/null
+  as_root chmod 755 /usr/local/bin/erp-setup
+}
+
+post_install_checks() { # post_install_checks ADRES — lisans kapısı, (varsa) etkinleştirme, ertelenmiş e-posta denemesi
+  verify_license_gate "$1"
+  [[ -n "$LICENSE_CODE" ]] && activate_license "$1"
+  if (( MAIL_TEST_DEFERRED )) && [[ -n "$MAIL_TEST_TO" ]]; then mail_test_container "$MAIL_TEST_TO" || warn "Test e-postası gönderilemedi (yukarıya bakın)"; fi
+  return 0
+}
+
+install_backup_docker() { # Docker yolunda günlük yedek: scripts/backup.sh --compose (systemd zamanlayıcısı ya da cron)
+  [[ "$PATH_CHOICE" == docker && -n "$BACKUP_DIR" ]] || return 0
+  local cmd="/usr/bin/env bash $ROOT/scripts/backup.sh --compose --dir $BACKUP_DIR --keep-count $BACKUP_KEEP"
+  if (( HAS_SYSTEMD )) && can_root; then
+    printf '[Unit]\nDescription=Muhasebe ERP günlük yedek\n[Service]\nType=oneshot\nWorkingDirectory=%s\nExecStart=%s\n' "$ROOT" "$cmd" | as_root tee "/etc/systemd/system/$SVC_NAME-backup.service" >/dev/null
+    printf '[Unit]\nDescription=Muhasebe ERP günlük yedek (%s)\n[Timer]\nOnCalendar=%s\nPersistent=true\n[Install]\nWantedBy=timers.target\n' "$BACKUP_TIME" "$(time_to_oncalendar "$BACKUP_TIME")" | as_root tee "/etc/systemd/system/$SVC_NAME-backup.timer" >/dev/null
+    as_root systemctl daemon-reload
+    as_root systemctl enable --now "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true
+    okm "Günlük yedek: systemd zamanlayıcısı $BACKUP_TIME → $BACKUP_DIR (son $BACKUP_KEEP)"
+  elif can_root && [[ -d /etc/cron.d ]]; then
+    printf '# Muhasebe ERP günlük yedek (kurulum sihirbazı)\n%s * * * root %s >> /var/log/muhasebe-erp-backup.log 2>&1\n' "$(time_to_cron "$BACKUP_TIME")" "$cmd" | as_root tee "/etc/cron.d/$SVC_NAME-backup" >/dev/null
+    okm "Günlük yedek: cron $BACKUP_TIME → $BACKUP_DIR (son $BACKUP_KEEP)"
+  else
+    warn "Otomatik yedek kurulamadı. Elle: $cmd  (cron ile her gün $BACKUP_TIME)"
+  fi
 }
 
 # ---- Uzaktan güncelleme: güncelleyici (her dakika; yönetici yetkisiyle) -------------------------------------------------
@@ -759,16 +828,10 @@ restore_db_docker() {
 
 finish_prod() {
   local port="$1" url
-  case "$ACCESS" in
-    domain) url="https://$DOMAIN" ;;
-    lan) url="http://$(hostname -I 2>/dev/null | awk '{print $1}'):$port" ;;
-    *) url="http://localhost:$port" ;;
-  esac
-  stage "Hazır"
-  say "  Adres:  $url"
-  say "  1) Tarayıcıda açın → 'Lisans etkinleştirme' ekranına satıcıdan aldığınız kodu girin."
-  say "  2) Sonra ilk sahip hesabını oluşturun; ardından kaydı kapatın (REGISTRATION_ENABLED=false)."
-  say "  Ayar dosyalarını (parolalar) güvenli bir yere yedekleyin. Ayrıntı: docs/OPERATIONS.md"
+  if [[ "$TLS_MODE" != none && -n "${DOMAIN:-}" ]]; then url="${BASE_URL_VALUE:-$(derive_base_url)}"
+  elif [[ "$ACCESS" == lan ]]; then url="http://$(lan_ip):$port"
+  else url="http://localhost:$port"; fi
+  print_summary "$url"
 }
 
 # ---- Kaldırma (yerel kurulum) -----------------------------------------------------------------------------------------
@@ -780,7 +843,7 @@ uninstall_native() {
       "/etc/systemd/system/$SVC_NAME-updater.service" "/etc/systemd/system/$SVC_NAME-updater.timer"
     as_root systemctl daemon-reload
   elif [[ -x "$PREFIX/bin/erpctl" ]]; then as_root "$PREFIX/bin/erpctl" stop >/dev/null 2>&1 || true; fi
-  as_root rm -rf "$PREFIX" /usr/local/bin/erpctl /usr/local/bin/erp-update
+  as_root rm -rf "$PREFIX" /usr/local/bin/erpctl /usr/local/bin/erp-update /usr/local/bin/erp-setup "/etc/cron.d/$SVC_NAME-backup"
   okm "Program dosyaları ve hizmet kaldırıldı"
   if (( OPT_PURGE )); then
     confirm "VERİTABANI '$DB_NAME', ayarlar ve yedekler KALICI olarak silinsin mi?" || die "Vazgeçildi"
@@ -792,20 +855,41 @@ uninstall_native() {
     id -u "$SVC_USER" >/dev/null 2>&1 && as_root userdel "$SVC_USER" || true
     okm "Veritabanı, ayarlar ve yedekler silindi"
   else
-    info "Veritabanı ($DB_NAME), ayarlar ($ETC) ve yedekler ($VARDIR/backups) korundu; tamamen silmek için --uninstall --purge"
+    info "Veritabanı ($DB_NAME), ayarlar ($ETC) ve yedekler ($VARDIR/backups) korundu (özel yedek klasörü her zaman korunur); tamamen silmek için --uninstall --purge"
   fi
 }
 
 # ---- Akış ---------------------------------------------------------------------------------------------------------------
+validate_flags() {
+  local m
+  [[ -z "$PORT" ]] || { m="$(v_port "$PORT")" || die "--port: $m"; }
+  [[ -z "$HTTP_PORT" ]] || { m="$(v_port "$HTTP_PORT")" || die "--http-port: $m"; }
+  [[ -z "$HTTPS_PORT" ]] || { m="$(v_port "$HTTPS_PORT")" || die "--https-port: $m"; }
+  case "$TLS_MODE" in ''|auto|byo|selfsigned|none) ;; *) die "--tls auto, byo, selfsigned ya da none olmalı" ;; esac
+  case "$ACCESS" in ''|local|lan|domain) ;; *) die "--access local, lan ya da domain olmalı" ;; esac
+  case "$PATH_CHOICE" in ''|docker|native) ;; *) die "--path docker ya da native olmalı" ;; esac
+  if [[ -n "$DOMAIN" ]]; then m="$(v_host "$DOMAIN")" || die "--domain: $m"; fi
+  return 0
+}
+
 say "${C_B}Muhasebe ERP kurulum sihirbazı${C_0} ${C_DIM}(Linux/WSL)${C_0}"
+[[ -n "$ANSWERS_FILE" ]] && load_answers "$ANSWERS_FILE"
+[[ -z "$DEMO" ]] || DEMO="$(norm_yn "$DEMO")" || die "DEMO: 'evet' ya da 'hayır' yazın"
+validate_flags
+init_input
 detect
 if (( OPT_UNINSTALL )); then uninstall_native; exit 0; fi
+if (( OPT_RECONFIGURE )); then reconfigure_main; exit 0; fi
+(( OPT_DRYRUN )) && warn "KURU ÇALIŞTIRMA: sistemde hiçbir şey değiştirilmeyecek."
+detect_existing
 compat_check
 if (( OPT_CHECK )); then
   if (( FAILS )); then say ""; die "Engelleyici sorun var (✗)."; fi
   say ""; okm "Kurulum yapılabilir."; exit 0
 fi
 choose_path
+configure
+if (( OPT_DRYRUN )); then dry_run_report; exit 0; fi
 prerequisites
 if [[ "$MODE" == dev ]]; then install_dev
 elif [[ "$PATH_CHOICE" == docker ]]; then install_prod_docker

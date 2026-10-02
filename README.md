@@ -35,12 +35,17 @@ KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef 
 
 ## Hızlı başlangıç
 
-**Tek komutla (önerilen):** kurulum sihirbazı önce sistemi denetler (işletim sistemi, bellek, disk, portlar, Docker, Node, PostgreSQL), sonra uygun yolu önerir, eksik paketleri kurar ve sistemi ayağa kaldırır.
+**Tek komutla (önerilen):** kurulum sihirbazı önce sistemi denetler (işletim sistemi, bellek, disk, portlar, Docker, Node, PostgreSQL), uygun yolu önerir, **düz Türkçe sorularla tüm yapılandırmayı alır** (demo mu boş mu, lisans, e-posta/SMTP + test e-postası, alan adı ve HTTPS sertifikası, yedekleme, portlar), eksik paketleri kurar ve sistemi ayağa kaldırır. Hiçbir ayar dosyasını elle düzenlemeniz gerekmez.
 
 ```bash
 ./install.sh                 # Linux / WSL (Ubuntu 22.04+, Debian 12+)
 ./install.sh --check         # yalnızca uyumluluk raporu
+./install.sh --dry-run       # sistemi değiştirmeden ne yazılacağını gösterir
+./install.sh --answers=installer/answers.example   # sormadan, yanıt dosyasından (parola/kod varsa sonra silin)
+./install.sh --reconfigure   # kurulu sistemde yalnızca ayarları (e-posta, HTTPS, yedek, lisans adresi) yeniden sorar
 ```
+
+Müşteri (kit) kurulumunda varsayılan **boş uygulamadır** (demo verisi yok) ve uygulama **lisans etkinleştirilmeden çalışmaz**; demo yalnızca sorulduğunda ve ilk kurulumda yüklenir. Windows'ta aynı bayraklar `-DryRun`, `-AnswersFile`, `-Reconfigure` adlarıyladır.
 
 Windows'ta depo klasöründeki **`Kur.cmd`** dosyasına çift tıklayın (Windows PowerShell 5.1 yeterlidir; Docker gerekmez). Depodan çalıştırınca geliştirme/test kurulumu yapılır: Node 22 ve PostgreSQL 16 yoksa kurulur (ya da veritabanı Docker'da çalışır), `.env`, şema ve demo verisi hazırlanır; sonra `npm run dev`. Seçenekler: `./install.sh --help`, ayrıntı [docs/OPERATIONS.md §2](docs/OPERATIONS.md).
 
