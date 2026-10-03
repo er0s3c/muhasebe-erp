@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import {
   hasPermission,
@@ -33,6 +33,8 @@ export interface AccessTokenPayload {
   org: string;
   /** Oturumun açıldığı kayıtlı cihaz (lisans denetimi açıkken her erişim belirtecinde bulunur). */
   did?: string;
+  /** Oturum ailesi (refresh_tokens.family_id): ailede geçerli yenileme belirteci kalmadıysa (çıkış, parola değişimi) erişim de biter. */
+  sid?: string;
   /** 'mfa': yalnızca ikinci adım için verilen kısa ömürlü belirteç; hiçbir korumalı uçta geçmez. */
   purpose?: 'mfa';
 }
@@ -66,6 +68,7 @@ export interface AuthUser {
   id: string;
   orgId: string;
   deviceId?: string;
+  sessionId?: string;
 }
 
 export interface AuthCtx {
@@ -107,8 +110,18 @@ async function authenticate(app: FastifyInstance, req: FastifyRequest): Promise<
     if (!did) throw unauthorized();
     if (!(await app.devices.isActive(did))) throw new AppError(401, 'DEVICE_REVOKED', 'Bu cihazın erişimi kaldırıldı; yeniden giriş yapın');
   }
-  return { id: req.user.sub, orgId: req.user.org, deviceId: req.user.did };
+  return { id: req.user.sub, orgId: req.user.org, deviceId: req.user.did, sessionId: req.user.sid };
 }
+
+/**
+ * Erişim belirtecinin oturum ailesi hâlâ açık mı (iptal edilmemiş, süresi dolmamış bir yenileme belirteci var mı)?
+ * Çıkış ve parola değişimi aileyi kapatır; böylece erişim belirteci 15 dakikalık ömrünü beklemeden geçersiz olur.
+ * Oturum bilgisi olmayan (bu sürümden önce verilmiş) belirteçler kısa ömürleri boyunca geçerli kalır.
+ */
+const sessionOpen = (user: AuthUser) =>
+  user.sessionId
+    ? sql<boolean>`exists (select 1 from refresh_tokens r where r.family_id = ${user.sessionId}::uuid and r.revoked_at is null and r.expires_at > now())`
+    : sql<boolean>`true`;
 
 /** Yalnızca giriş yapmış kullanıcı gerektiren rota (şirket seçimi gerekmez). */
 export function authedRoute<T>(
@@ -123,10 +136,10 @@ export function authedRoute<T>(
     return withContext(app.db, { userId: user.id, orgId: user.orgId, ip: req.ip }, async (tx) => {
       // Token geçerli olsa da kullanıcı pasifleştirilmiş olabilir.
       const [row] = await tx
-        .select({ isActive: users.isActive, mustChangePassword: users.mustChangePassword })
+        .select({ isActive: users.isActive, mustChangePassword: users.mustChangePassword, sessionOpen: sessionOpen(user) })
         .from(users)
         .where(eq(users.id, user.id));
-      if (!row?.isActive) throw unauthorized();
+      if (!row?.isActive || !row.sessionOpen) throw unauthorized();
       if (row.mustChangePassword && !opts.allowMustChange) throw passwordChangeRequired();
       return handler({ tx, user, req, reply });
     });
@@ -173,10 +186,12 @@ export function tenantRoute<T>(
           role: memberships.role,
           isActive: users.isActive,
           mustChangePassword: users.mustChangePassword,
+          sessionOpen: sessionOpen(user),
         })
         .from(memberships)
         .innerJoin(users, eq(users.id, memberships.userId))
         .where(and(eq(memberships.companyId, companyId), eq(memberships.userId, user.id)));
+      if (member && !member.sessionOpen) throw unauthorized();
       if (!member || !member.isActive) throw forbidden('Bu şirkete erişiminiz yok', 'NOT_A_MEMBER');
       if (member.mustChangePassword) throw passwordChangeRequired();
 

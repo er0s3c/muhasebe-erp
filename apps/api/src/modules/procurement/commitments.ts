@@ -11,7 +11,7 @@ import { findRate } from '../settings/rates';
  * Not: stoklu malzemede taahhüt kabulle biter; maliyet projeye sarf anında yazılır (aradaki stok depodadır).
  */
 export async function loadOrderCommitted(tx: Tx, projectId: string, asOf: string) {
-  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies);
+  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies).where(sql`${companies.id} = app_company_id()`);
   const base = company!.base;
   const rows = await tx.execute<{ wbsId: string; currency: string; remaining: string; orderId: string }>(sql`
     select l.wbs_id as "wbsId", o.currency_code as currency, o.id as "orderId",

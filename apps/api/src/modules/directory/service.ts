@@ -245,12 +245,8 @@ export async function mergeContacts(tx: Tx, keepId: string, dropId: string) {
   const moved = await tx.execute<{ n: number }>(sql`select directory_repoint_notes(${dropId}::uuid, ${keepId}::uuid) as n`);
   await tx.execute(sql`update agenda_items set contact_id = ${keepId}, updated_at = now() where contact_id = ${dropId}`);
   // Kaynak kişi: arşiv + iz; kişisel alanlar temizlenir (artık hedef kişide)
-  await tx.execute(sql`select set_config('app.directory_op', 'merge', true)`);
-  await tx
-    .update(directoryContacts)
-    .set({ isArchived: true, archivedAt: new Date(), mergedIntoId: keepId, phone: null, phone2: null, email: null, email2: null, address: null, title: null, tags: [], note: null, updatedAt: new Date() })
-    .where(eq(directoryContacts.id, dropId));
-  await tx.execute(sql`select set_config('app.directory_op', '', true)`);
+  // (veritabanı işlevi: "birleştirme" bayrağı yalnızca SECURITY DEFINER işlev içinden geçerlidir)
+  await tx.execute(sql`select directory_mark_merged(${dropId}::uuid, ${keepId}::uuid)`);
   return { ...(await getContact(tx, keepId)), movedNotes: Number(moved.rows[0]?.n ?? 0), conflicts };
 }
 

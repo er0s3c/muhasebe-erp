@@ -258,11 +258,13 @@ uygulama sunucusundan **lisans sunucusuna HTTPS (443) çıkışı** açık olmal
 
 **Etkinleştirme.** Uygulamayı ilk açtığınızda *Lisansınızı etkinleştirin* sayfası çıkar; satıcınızdan aldığınız kodu girin. İnternet yoksa aynı sayfada *Çevrimdışı etkinleştirme*.
 Lisans etkinleşince kayıt/giriş açılır. Lisans durumu, kapsamı ve kullanımı **Ayarlar › Lisans**'ta görünür.
+Lisansı yenileme/devre dışı bırakma, güncellemeler ve cihazlar **kurulumun sahibi kuruluşa** aittir: ilk şirketi açan kuruluşun şirket sahipleri
+(cihazlarda yöneticileri de) yönetir; açık kayıtla gelen başka bir kuruluş yönetemez (`docs/OPERATIONS.md` §4).
 
 **Günlük kullanım.** Kira kendiliğinden yenilenir. Sarı bant "Lisans doğrulanamıyor" derse sunucunun internet erişimini kontrol edin; tolerans süresi içinde işiniz aksamaz.
 Kırmızı bant "Salt-okunur mod" ise verilerinizi görüntüleyip dışa aktarabilirsiniz; yazma için satıcınızla iletişime geçin (süre yenileme ya da askının kaldırılması).
 
-**Yeni şirket.** Şirket açarken sektör, lisansınızdaki sektörlerle sınırlıdır; şirket sınırına ulaşınca oluşturma kapanır.
+**Yeni şirket.** Yeni şirketi mevcut bir şirketin sahibi ya da yöneticisi açar; sektör, lisansınızdaki sektörlerle sınırlıdır; şirket sınırına ulaşınca oluşturma kapanır.
 
 **Sunucu taşıma.** §6'daki adımlar. **Yedek:** lisans durumu veritabanı yedeğine dahildir; yeni sunucuya geri yüklemek parmak izi nedeniyle salt-okunura düşürür, yeniden etkinleştirme açar.
 

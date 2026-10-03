@@ -1,10 +1,11 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { WEAK_PASSWORD_MESSAGE, changePasswordSchema, isWeakPassword, loginSchema, mfaVerifySchema, registerSchema } from '@erp/shared';
 import type { Queryable } from '../../db/client';
-import { organizations, refreshTokens, users } from '../../db/schema';
+import { refreshTokens, users } from '../../db/schema';
+import { insertOrganization } from '../tenancy/service';
 import { authedRoute } from '../../http/context';
 import { AppError, unauthorized, unprocessable } from '../../http/errors';
 import { assertSameOrigin } from '../../http/origin';
@@ -64,8 +65,10 @@ async function issueSession(
   opts: { db?: Queryable; family?: SessionFamily; deviceId?: string } = {},
 ) {
   const db = opts.db ?? app.db;
+  // Erişim belirteci oturum ailesine (sid) bağlanır: aile çıkışla/parola değişimiyle iptal edilince belirteç de geçersizdir.
+  const familyId = opts.family?.id ?? randomUUID();
   const accessToken = app.jwt.sign(
-    { sub: user.id, org: user.organizationId, ...(opts.deviceId ? { did: opts.deviceId } : {}) },
+    { sub: user.id, org: user.organizationId, sid: familyId, ...(opts.deviceId ? { did: opts.deviceId } : {}) },
     { expiresIn: app.config.ACCESS_TOKEN_TTL_SECONDS },
   );
   const refreshToken = randomBytes(32).toString('base64url');
@@ -83,7 +86,8 @@ async function issueSession(
     userAgent: req.headers['user-agent']?.slice(0, 300) ?? null,
     ip: req.ip,
     deviceId: opts.deviceId ?? null,
-    ...(opts.family ? { familyId: opts.family.id, familyStartedAt: opts.family.startedAt } : {}),
+    familyId,
+    ...(opts.family ? { familyStartedAt: opts.family.startedAt } : {}),
   });
   void reply.setCookie(REFRESH_COOKIE, refreshToken, {
     httpOnly: true,
@@ -131,14 +135,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const device = await app.devices.ensureForRequest(req, reply);
 
     const user = await app.db.transaction(async (tx) => {
-      const [org] = await tx
-        .insert(organizations)
-        .values({ name: input.organizationName })
-        .returning({ id: organizations.id });
+      const orgId = await insertOrganization(tx, input.organizationName);
       const [u] = await tx
         .insert(users)
         .values({
-          organizationId: org!.id,
+          organizationId: orgId,
           email: input.email,
           passwordHash,
           fullName: input.fullName,
@@ -323,7 +324,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         .update(users)
         .set({ passwordHash: await hash(input.newPassword), mustChangePassword: false })
         .where(eq(users.id, user.id));
-      // Diğer oturumları kapat; bu isteği gönderen oturum (çerez varsa) açık kalır.
+      // Diğer oturumları kapat (erişim belirteçleri de oturum ailesine bağlı olduğundan hemen geçersizleşir); bu isteği gönderen
+      // oturum (çerez varsa) açık kalır.
       const current = req.cookies[REFRESH_COOKIE];
       await tx
         .update(refreshTokens)

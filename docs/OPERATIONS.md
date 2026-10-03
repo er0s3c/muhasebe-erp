@@ -208,6 +208,14 @@ Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceli
   docker compose … exec app node dist/admin.js devices:revoke-all --yes      # herkes yeniden giriş yapar
   ```
 - Rol değişiklikleri: `owner` rolünü yalnızca sahip verir/alır; son sahip düşürülemez.
+- **Yeni şirket ve kurulum yönetimi:** yeni şirketi yalnızca mevcut bir şirketin sahibi/yöneticisi açar. Lisans, uzaktan güncelleme ve cihaz yönetimi **kurulumun sahibi kuruluşa** aittir (ilk şirketi açan kuruluş; yükseltilen kurulumlarda en eski şirketin kuruluşu). Açık kayıtla (`REGISTRATION_ENABLED=true`) gelen başka bir kuruluş bunları yönetemez ama kendi ilk şirketini açabilir (lisans şirket sınırından düşer) — özel kurulumda kaydı kapatın. Sahip kuruluşu değiştirmek gerekirse (ör. yanlış kuruluş sabitlendi) şema sahibi rolle:
+
+  ```sql
+  -- psql "$MIGRATION_DATABASE_URL"
+  UPDATE license_state SET owner_org_id = (SELECT organization_id FROM users WHERE email = 'sahip@ornek.com') WHERE id = 1;
+  ```
+- **Üye işlemleri:** başka şirketlerde de üyeliği olan kullanıcının iki adımlı doğrulamasını sıfırlamak ya da mevcut bir kullanıcıyı şirkete eklemek, işlemi yapanın o kullanıcının üye olduğu her şirkette en az onun rütbesinde sahip/yönetici olmasını ister (`MEMBER_OUTRANKS_YOU`); gerekirse ilgili şirketin sahibi yapar.
+- **Çıkış ve parola değişikliği** açık oturumların erişim belirteçlerini de hemen geçersiz kılar (diğer sekmeler/cihazlar yeniden giriş ister).
 
 ## 5. Yükseltme
 
@@ -219,6 +227,7 @@ Satıcı yeni sürümü lisans panelinden **gönderir**; müşteride **kurulum s
 2. Sahip aynı kartta sürüm notunu görür: **Şimdi güncelle** ya da **Bu gece güncelle (02:00, sunucu saati)**. Onay `security_events`'e yazılır (`update_requested`).
 3. Güncelleyici (Linux: `muhasebe-erp-updater.timer`, dakikada bir; Windows: **Muhasebe ERP Güncelleyici** zamanlanmış görevi, SYSTEM) onaylı işi alır: kiti lisans sunucusundan kısa ömürlü, kuruluma özel bir belirteçle indirir, **SHA-256 ve boyutu** manifestoyla karşılaştırır, **yedek alır** (yedek alınamazsa güncelleme yapılmaz), kiti açar ve **yeni kitin kurulum sihirbazını** etkileşimsiz çalıştırır (durdurma, yan klasöre kopyalama, migration, başlatma, sağlık). Uygulama yeni sürümle yanıt verince durum **Tamamlandı** olur.
 4. **Başarısızlıkta:** migration tek işlemde çalıştığından migration hatası veritabanını değiştirmez; eski sürüm çalışmaya devam eder → **Başarısız**. Yeni sürüm migration sonrası ayağa kalkmazsa güncelleyici **önceki sürümün sihirbazını yedekten veritabanı geri yüklemesiyle** çalıştırır → **Geri alındı** (güncelleme sonrası girilen veri yoktur, çünkü uygulama kapalıydı). İkisi de olmazsa durum ve yedeğin yolu günlükte kalır; §6'ya göre elle geri yükleyin.
+   Güncelleyicinin durum bildirimi (`POST /api/system/updater/report`) lisans salt-okunur moddayken de kabul edilir; sonuç (başarısız/geri alındı) böylece kaydedilir.
 
 Gereksinimler ve notlar:
 

@@ -1,28 +1,16 @@
-import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import { z } from 'zod';
-import { memberships } from '../db/schema';
-import type { Tx } from '../db/client';
 import { GUARD, authedRoute, type AuthUser, type GuardMeta } from '../http/context';
 import { AppError, forbidden } from '../http/errors';
 import { recordSecurityEvent, type SecurityEventName } from '../modules/auth/events';
 import { assertLicensed, restrictionMessage } from './gate';
+import { isInstallationAdmin, pinInstallationOwner } from './installation';
 import type { LicenseSnapshot } from './service';
 
 const codeSchema = z.object({ code: z.string().trim().min(10).max(64) });
 const offlineLeaseSchema = z.object({ lease: z.string().trim().min(50).max(16_384) });
 
 const iso = (ms: number | null | undefined) => (ms == null ? null : new Date(ms).toISOString());
-
-/** Kurulum yöneticisi: herhangi bir şirkette `owner` rolü olan kullanıcı (kurulum tek müşteriye aittir; docs/LICENSING.md). */
-export async function isOwner(tx: Tx, userId: string): Promise<boolean> {
-  const [row] = await tx
-    .select({ userId: memberships.userId })
-    .from(memberships)
-    .where(and(eq(memberships.userId, userId), eq(memberships.role, 'owner')))
-    .limit(1);
-  return Boolean(row);
-}
 
 /** Yanıt gövdesi. Kurulum kimliği, son hata gibi ayrıntılar yalnızca sahibe gösterilir. */
 function view(snap: LicenseSnapshot, usage: { companies: number; devices: number }, owner: boolean) {
@@ -75,7 +63,7 @@ interface AdminCtx {
 
 /**
  * Lisans yönetim uçları. `anonymousWhenUnlicensed`: kurulum henüz lisanssızken (kullanıcı da yok) kimliksiz çağrılabilir;
- * bir kira varsa (kısıtlı durum dahil) giriş yapmış bir şirket sahibi gerekir. Kaba kuvvete karşı IP başına oran sınırı vardır.
+ * bir kira varsa (kısıtlı durum dahil) giriş yapmış kurulum sahibi (kurulumun sahibi kuruluşta şirket sahibi) gerekir. Kaba kuvvete karşı IP başına oran sınırı vardır.
  */
 function licenseAdminRoute<T>(
   app: FastifyInstance,
@@ -83,7 +71,7 @@ function licenseAdminRoute<T>(
   handler: (ctx: AdminCtx) => Promise<T>,
 ): RouteHandlerMethod {
   const authed = authedRoute(app, async ({ tx, user, req, reply }) => {
-    if (!(await isOwner(tx, user.id))) throw forbidden('Bu işlem yalnızca şirket sahibine açıktır', 'OWNER_ONLY');
+    if (!(await isInstallationAdmin(tx, user))) throw forbidden('Bu işlem yalnızca kurulum sahibine açıktır', 'OWNER_ONLY');
     return handler({ req, reply, actor: user });
   });
   const route: RouteHandlerMethod = async function (req, reply) {
@@ -112,7 +100,7 @@ export const licenseRoutes: FastifyPluginAsync = async (app) => {
     authedRoute(
       app,
       async ({ tx, user }) => {
-        const [snap, usage, owner] = await Promise.all([app.license.current(), app.license.usage(), isOwner(tx, user.id)]);
+        const [snap, usage, owner] = await Promise.all([app.license.current(), app.license.usage(), isInstallationAdmin(tx, user)]);
         return view(snap, usage, owner);
       },
       { allowMustChange: true },
@@ -126,6 +114,7 @@ export const licenseRoutes: FastifyPluginAsync = async (app) => {
     licenseAdminRoute(app, { anonymousWhenUnlicensed: true, limit: { name: 'license-activate', max: 10, windowMs: 10 * 60_000 } }, async (ctx) => {
       const { code } = codeSchema.parse(ctx.req.body);
       const snap = await app.license.activate(code);
+      await pinInstallationOwner(app.db);
       await audit(ctx, 'license_activated', { state: snap.state });
       return respond(snap, true);
     }),
@@ -152,6 +141,7 @@ export const licenseRoutes: FastifyPluginAsync = async (app) => {
     licenseAdminRoute(app, { anonymousWhenUnlicensed: true, limit: { name: 'license-offline', max: 20, windowMs: 10 * 60_000 } }, async (ctx) => {
       const { lease } = offlineLeaseSchema.parse(ctx.req.body);
       const snap = await app.license.offlineActivate(lease);
+      await pinInstallationOwner(app.db);
       await audit(ctx, 'license_offline_activated', { state: snap.state });
       return respond(snap, true);
     }),

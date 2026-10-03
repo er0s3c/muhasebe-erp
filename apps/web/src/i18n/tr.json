@@ -304,6 +304,7 @@
   "onboarding": {
     "title": "İlk şirketinizi kuralım",
     "subtitle": "Hesap planı, mali dönemler ve KDV oranları sizin için hazırlanır.",
+    "notAllowed": "Yeni şirketi yalnızca mevcut bir şirketin sahibi ya da yöneticisi açabilir.",
     "companyName": "Şirket unvanı",
     "sector": "Faaliyet alanı",
     "sectorHint": "Menüde hangi modüllerin görüneceğini belirler.",

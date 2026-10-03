@@ -60,7 +60,9 @@ export async function listPeriods(tx: Tx, year: number) {
 }
 
 export async function closePeriod(tx: Tx, periodId: string, userId: string) {
-  const [period] = await tx.select().from(fiscalPeriods).where(eq(fiscalPeriods.id, periodId));
+  // Dönem satırı kilitlenir: bu döneme kayıt atan (koruyucuda FOR SHARE alan) işlemler bitene dek beklenir, sonra
+  // taslak sayımı ve kapanış onların sonucunu görür; kapanıştan sonra gelen kayıt kapalı dönemi görüp reddedilir.
+  const [period] = await tx.select().from(fiscalPeriods).where(eq(fiscalPeriods.id, periodId)).for('update');
   if (!period) throw notFound('Dönem');
   const [drafts] = await tx
     .select({ n: sql<number>`count(*)::int` })

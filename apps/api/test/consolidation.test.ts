@@ -105,8 +105,10 @@ describe('çoklu şirket konsolidasyonu', async () => {
 
     it('rol yetersizse gruba eklenemez; sonradan düşürülen rol raporda şirketi düşürür (ROLE_INSUFFICIENT)', async () => {
       const s = await seed('Guv3');
-      const m = await client(app, s.u.token, s.A.id).post('/api/company/members', { email: `m3-${Date.now()}@example.com`, fullName: 'Mehmet Kişi', role: 'admin', password: PASSWORD, mustChangePassword: false });
+      // M, U'yu kendi şirketine bağlayabilsin diye U'nun tüm şirketlerinde sahip olmalı (mevcut kullanıcıyı bağlama kuralı)
+      const m = await client(app, s.u.token, s.A.id).post('/api/company/members', { email: `m3-${Date.now()}@example.com`, fullName: 'Mehmet Kişi', role: 'owner', password: PASSWORD, mustChangePassword: false });
       const email = m.json().member.email as string;
+      expect((await client(app, s.u.token, s.B.id).post('/api/company/members', { email, fullName: 'Mehmet Kişi', role: 'owner' })).statusCode).toBe(201);
       const mTok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password: PASSWORD } })).json().accessToken as string;
       const C = await createCompany(app, mTok, { name: 'M şirketi 3' });
       const mc = client(app, mTok, C.id);
@@ -135,7 +137,8 @@ describe('çoklu şirket konsolidasyonu', async () => {
 
     it('üyelik kaldırılınca şirket raporlardan (mizan, döviz pozisyonu, özet, ipucu, dışa aktarma) düşer', async () => {
       const s = await seed('Guv4');
-      const m = await client(app, s.u.token, s.A.id).post('/api/company/members', { email: `m4-${Date.now()}@example.com`, fullName: 'Mehmet Kişi', role: 'admin', password: PASSWORD, mustChangePassword: false });
+      const m = await client(app, s.u.token, s.A.id).post('/api/company/members', { email: `m4-${Date.now()}@example.com`, fullName: 'Mehmet Kişi', role: 'owner', password: PASSWORD, mustChangePassword: false });
+      expect((await client(app, s.u.token, s.B.id).post('/api/company/members', { email: m.json().member.email, fullName: 'Mehmet Kişi', role: 'owner' })).statusCode).toBe(201);
       const mTok = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: m.json().member.email, password: PASSWORD } })).json().accessToken as string;
       const C = await createCompany(app, mTok, { name: 'M şirketi 4', baseCurrency: 'TRY' });
       const mc = client(app, mTok, C.id);

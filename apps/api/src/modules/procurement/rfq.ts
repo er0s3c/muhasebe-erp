@@ -112,7 +112,7 @@ export async function getRfq(tx: Tx, id: string) {
   const offerLines = offers.length ? await tx.select().from(rfqOfferLines).where(inArray(rfqOfferLines.offerId, offers.map((o) => o.id))) : [];
   const partyRows = offers.length ? await tx.select({ id: parties.id, name: parties.name }).from(parties).where(inArray(parties.id, offers.map((o) => o.partyId))) : [];
   const partyName = new Map(partyRows.map((p) => [p.id, p.name]));
-  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies);
+  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies).where(sql`${companies.id} = app_company_id()`);
   const base = company!.base;
   const today = todayIso();
 

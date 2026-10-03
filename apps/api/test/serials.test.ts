@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { asOwner, day, expectDbError, makeApp } from './helpers';
+import { asDb, asOwner, day, expectDbError, makeApp } from './helpers';
 import { x2Kit } from './x2-helpers';
 
 describe('seri no takibi (X3)', async () => {
-  const { app } = await makeApp();
+  const { app, handle } = await makeApp();
   const k = x2Kit(app);
 
   async function base(name: string) {
@@ -210,5 +210,18 @@ describe('seri no takibi (X3)', async () => {
     const other = await k.setup('Baska');
     expect((await other.c.get('/api/serials')).json().total).toBe(0);
     expect((await other.c.get('/api/serials/lookup?serialNo=Y1')).statusCode).toBe(404);
+  });
+
+  it('DB-5: kayıtlı belgenin satır seri no kaydı uygulama rolüyle silinemez; taslak belgeninki silinir', async () => {
+    const { s, company, orgId, c, main, item, cust } = await base('SeriSil');
+    expect((await receive(c, main.id, item.id, ['D5-1', 'D5-2'])).statusCode).toBe(201);
+    const sale = await k.posted(c, { type: 'sales', partyId: cust.id, noteDate: day(3, 5), warehouseId: main.id, lines: [k.dline(item.id, '1', { serials: ['D5-1'] })] });
+    const draft = await k.note(c, { type: 'sales', partyId: cust.id, noteDate: day(3, 6), warehouseId: main.id, lines: [k.dline(item.id, '1', { serials: ['D5-2'] })] });
+    const draftLine = draft.json().lines[0].id as string;
+    await asDb(handle, { userId: s.userId, orgId, companyId: company.id }, async (q) => {
+      const err = await expectDbError(q, 'delete from document_line_serials where delivery_line_id = $1', [sale.lines[0].id]);
+      expect(err.code).toBe('ERP17');
+      expect((await q('delete from document_line_serials where delivery_line_id = $1 returning id', [draftLine])).rows).toHaveLength(1);
+    });
   });
 });

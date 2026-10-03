@@ -51,6 +51,7 @@ const PG_RULE_CODES: Record<string, string> = {
   ERP21: 'DIRECTORY_RULE_VIOLATION',
   ERP22: 'CONSOLIDATION_RULE_VIOLATION',
   ERP23: 'FISCAL_YEAR_RULE_VIOLATION',
+  ERP24: 'SETTINGS_RULE_VIOLATION',
 };
 
 /** Toplu işlemlerde tek kalemin hatasını raporlamak için: uygulama hatası, veritabanı kuralı ya da beklenmeyen hata. */
@@ -229,6 +230,11 @@ export function errorHandler(
   if (pg?.code === 'ERP23') {
     // Mali yıl kuralları (kapalı yıla kayıt, dönem açma, kapanış/yeniden açma sırası ve gerekçe)
     void reply.status(422).send({ error: { code: 'FISCAL_YEAR_RULE_VIOLATION', message: pg.message } });
+    return;
+  }
+  if (pg?.code === 'ERP24') {
+    // Ayar/başvuru verisi kuralları (kayıtlı faturada kullanılmış KDV oranı, kapalı döneme ya da kayıtlı yevmiyeye ait kur)
+    void reply.status(422).send({ error: { code: 'SETTINGS_RULE_VIOLATION', message: pg.message } });
     return;
   }
   if (pg?.code === '23505') {

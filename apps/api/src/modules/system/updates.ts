@@ -5,10 +5,10 @@ import { z } from 'zod';
 import { compareVersions } from '@erp/license-core';
 import type { Tx } from '../../db/client';
 import { appUpdates } from '../../db/schema';
-import { authedRoute } from '../../http/context';
+import { authedRoute, type AuthUser } from '../../http/context';
 import { AppError, conflict, forbidden, notFound, unprocessable } from '../../http/errors';
 import { licenseServerUrl } from '../../licensing';
-import { isOwner } from '../../licensing/routes';
+import { isInstallationAdmin } from '../../licensing/installation';
 import { recordSecurityEvent } from '../auth/events';
 
 type UpdateRow = typeof appUpdates.$inferSelect;
@@ -44,8 +44,8 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
   const updaterToken = app.config.ERP_UPDATER_TOKEN;
   const serverUrl = licenseServerUrl(app.config);
 
-  const requireOwner = async (tx: Tx, userId: string) => {
-    if (!(await isOwner(tx, userId))) throw forbidden('Güncellemeleri yalnızca kurulum sahibi yönetir', 'OWNER_ONLY');
+  const requireOwner = async (tx: Tx, user: AuthUser) => {
+    if (!(await isInstallationAdmin(tx, user))) throw forbidden('Güncellemeleri yalnızca kurulum sahibi yönetir', 'OWNER_ONLY');
   };
 
   async function overview(tx: Tx) {
@@ -66,7 +66,7 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     '/api/system/update',
     authedRoute(app, async ({ tx, user }) => {
-      await requireOwner(tx, user.id);
+      await requireOwner(tx, user);
       return overview(tx);
     }),
   );
@@ -76,7 +76,7 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
     '/api/system/update/check',
     { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } },
     authedRoute(app, async ({ tx, user }) => {
-      await requireOwner(tx, user.id);
+      await requireOwner(tx, user);
       await app.license.heartbeat();
       return overview(tx);
     }),
@@ -85,7 +85,7 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     '/api/system/update/:id/request',
     authedRoute(app, async ({ tx, user, req }) => {
-      await requireOwner(tx, user.id);
+      await requireOwner(tx, user);
       const { id } = z.object({ id: z.uuid() }).parse(req.params);
       const { when } = z.object({ when: z.enum(['now', 'tonight']) }).parse(req.body);
       if (!updaterToken || !platform) {
@@ -112,7 +112,7 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     '/api/system/update/:id/cancel',
     authedRoute(app, async ({ tx, user, req }) => {
-      await requireOwner(tx, user.id);
+      await requireOwner(tx, user);
       const { id } = z.object({ id: z.uuid() }).parse(req.params);
       const [upd] = await tx
         .update(appUpdates)

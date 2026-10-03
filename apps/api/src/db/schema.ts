@@ -192,6 +192,11 @@ export const licenseState = pgTable(
     lastError: text(),
     /** Çevrimdışı etkinleştirme isteğinin kimliği; dönen kira bu kimlikle eşleşmelidir. */
     pendingRequestId: text(),
+    /**
+     * Kurulumun sahibi kuruluş: lisans/güncelleme/cihaz yönetimi yalnızca bu kuruluşun şirket sahiplerine (cihazlarda yöneticilerine)
+     * açıktır. İlk şirket kurulurken ya da lisans etkinleştirilirken sabitlenir; boşsa en eski şirketin kuruluşu geçerlidir.
+     */
+    ownerOrgId: uuid().references(() => organizations.id),
     createdAt: createdAt(),
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
@@ -224,6 +229,7 @@ export const refreshTokens = pgTable(
     index('refresh_tokens_user_idx').on(t.userId),
     index('refresh_tokens_expires_idx').on(t.expiresAt),
     index('refresh_tokens_device_idx').on(t.deviceId),
+    index('refresh_tokens_family_idx').on(t.familyId),
   ],
 );
 
@@ -1086,6 +1092,8 @@ export const attendanceEntries = pgTable(
     foreignKey({ name: 'attendance_entries_wbs_fk', columns: [t.wbsId, t.projectId], foreignColumns: [projectWbs.id, projectWbs.projectId] }),
     foreignKey({ name: 'attendance_entries_cost_code_fk', columns: [t.costCodeId, t.companyId], foreignColumns: [costCodes.id, costCodes.companyId] }),
     index('attendance_entries_date_idx').on(t.companyId, t.workDate),
+    index('attendance_entries_wbs_idx').on(t.wbsId).where(sql`${t.wbsId} is not null`),
+    index('attendance_entries_cost_code_idx').on(t.costCodeId).where(sql`${t.costCodeId} is not null`),
     index('attendance_entries_project_idx')
       .on(t.companyId, t.projectId, t.workDate)
       .where(sql`${t.projectId} is not null`),
@@ -1594,7 +1602,6 @@ export const socialDeclarationLines = pgTable(
     foreignKey({ name: 'social_declaration_lines_declaration_fk', columns: [t.declarationId, t.companyId], foreignColumns: [socialDeclarations.id, socialDeclarations.companyId] }),
     foreignKey({ name: 'social_declaration_lines_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
     foreignKey({ name: 'social_declaration_lines_payroll_line_fk', columns: [t.payrollLineId, t.companyId], foreignColumns: [payrollLines.id, payrollLines.companyId] }),
-    index('social_declaration_lines_decl_idx').on(t.declarationId),
     check('social_declaration_lines_amounts_ck', sql`${t.premiumBase} >= 0 and ${t.employeePremium} >= 0 and ${t.employerPremium} >= 0 and ${t.supportEmployee} >= 0 and ${t.supportEmployer} >= 0 and ${t.supportEmployee} <= ${t.employeePremium} and ${t.supportEmployer} <= ${t.employerPremium}`),
   ],
 );
@@ -1915,6 +1922,9 @@ export const journalLines = pgTable(
     index('journal_lines_wbs_idx')
       .on(t.wbsId)
       .where(sql`${t.wbsId} is not null`),
+    index('journal_lines_cost_code_idx')
+      .on(t.costCodeId)
+      .where(sql`${t.costCodeId} is not null`),
     check('journal_lines_wbs_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
     foreignKey({
       name: 'journal_lines_cost_code_fk',
@@ -2027,6 +2037,7 @@ export const items = pgTable(
       foreignColumns: [itemCategories.id, itemCategories.companyId],
     }),
     check('items_kind_ck', sql`${t.kind} in ('goods','service')`),
+    check('items_serial_goods_ck', sql`not ${t.tracksSerial} or ${t.kind} = 'goods'`),
     check(
       'items_amounts_ck',
       sql`(${t.purchasePrice} is null or ${t.purchasePrice} >= 0) and (${t.salePrice} is null or ${t.salePrice} >= 0) and (${t.minLevel} is null or ${t.minLevel} >= 0)`,
@@ -2337,6 +2348,7 @@ export const invoices = pgTable(
       .where(sql`${t.externalNo} is not null and ${t.status} = 'posted'`),
     index('invoices_date_idx').on(t.companyId, t.type, t.invoiceDate),
     index('invoices_party_idx').on(t.companyId, t.partyId),
+    index('invoices_journal_idx').on(t.journalEntryId).where(sql`${t.journalEntryId} is not null`),
     foreignKey({
       name: 'invoices_party_fk',
       columns: [t.partyId, t.companyId],
@@ -4598,6 +4610,7 @@ export const priceListItems = pgTable(
     foreignKey({ name: 'price_list_items_list_fk', columns: [t.priceListId, t.companyId], foreignColumns: [priceLists.id, priceLists.companyId] }),
     foreignKey({ name: 'price_list_items_item_fk', columns: [t.itemId, t.companyId], foreignColumns: [items.id, items.companyId] }),
     index('price_list_items_lookup_idx').on(t.priceListId, t.itemId),
+    uniqueIndex('price_list_items_uq').on(t.priceListId, t.itemId, t.minQty, sql`(coalesce(${t.validFrom}, '0001-01-01'::date))`),
     check('price_list_items_ck', sql`${t.price} >= 0 and ${t.minQty} >= 0 and (${t.validTo} is null or ${t.validFrom} is null or ${t.validTo} >= ${t.validFrom})`),
   ],
 );
@@ -4629,6 +4642,7 @@ export const partyPrices = pgTable(
     foreignKey({ name: 'party_prices_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
     foreignKey({ name: 'party_prices_item_fk', columns: [t.itemId, t.companyId], foreignColumns: [items.id, items.companyId] }),
     index('party_prices_lookup_idx').on(t.partyId, t.itemId, t.kind),
+    uniqueIndex('party_prices_uq').on(t.partyId, t.itemId, t.kind, t.minQty, sql`(coalesce(${t.validFrom}, '0001-01-01'::date))`),
     check('party_prices_kind_ck', sql`${t.kind} in ('sales','purchase')`),
     check(
       'party_prices_ck',
@@ -4669,6 +4683,7 @@ export const itemSerials = pgTable(
       .on(t.companyId, t.itemId, t.serialNo)
       .where(sql`${t.status} <> 'void'`),
     index('item_serials_status_idx').on(t.companyId, t.itemId, t.status),
+    check('item_serials_format_ck', sql`${t.serialNo} <> '' and ${t.serialNo} = upper(btrim(${t.serialNo}))`),
     check('item_serials_status_ck', sql`${t.status} in ('pending','in_stock','issued','returned','scrapped','void')`),
     check('item_serials_warehouse_ck', sql`(${t.status} = 'in_stock') = (${t.warehouseId} is not null)`),
   ],
@@ -4731,6 +4746,7 @@ export const documentLineSerials = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    check('document_line_serials_format_ck', sql`${t.serialNo} <> '' and ${t.serialNo} = upper(btrim(${t.serialNo}))`),
     foreignKey({ name: 'document_line_serials_delivery_fk', columns: [t.deliveryLineId, t.companyId], foreignColumns: [deliveryNoteLines.id, deliveryNoteLines.companyId] }).onDelete('cascade'),
     foreignKey({ name: 'document_line_serials_invoice_fk', columns: [t.invoiceLineId, t.companyId], foreignColumns: [invoiceLines.id, invoiceLines.companyId] }).onDelete('cascade'),
     uniqueIndex('document_line_serials_delivery_uq')
@@ -5479,12 +5495,8 @@ export const consolidationEliminationLines = pgTable(
   'consolidation_elimination_lines',
   {
     id: id(),
-    eliminationId: uuid()
-      .notNull()
-      .references(() => consolidationEliminations.id),
-    groupId: uuid()
-      .notNull()
-      .references(() => consolidationGroups.id),
+    eliminationId: uuid().notNull(),
+    groupId: uuid().notNull(),
     lineNo: integer().notNull(),
     /** Hesap kodu (şirket hesap planı kodu; şirketler arası kodla eşlenir). Grup para biriminde tutar. */
     accountCode: text().notNull(),
@@ -5493,6 +5505,9 @@ export const consolidationEliminationLines = pgTable(
     memo: text(),
   },
   (t) => [
+    // Kısa adlar: varsayılan ad 63 karakteri aşıp PostgreSQL'de kesiliyordu (0079'da yeniden adlandırıldı).
+    foreignKey({ name: 'consolidation_elim_lines_elimination_fk', columns: [t.eliminationId], foreignColumns: [consolidationEliminations.id] }),
+    foreignKey({ name: 'consolidation_elim_lines_group_fk', columns: [t.groupId], foreignColumns: [consolidationGroups.id] }),
     unique('consolidation_elimination_lines_uq').on(t.eliminationId, t.lineNo),
     check('consolidation_elimination_lines_amount_ck', sql`${t.debit} >= 0 and ${t.credit} >= 0 and (${t.debit} > 0) <> (${t.credit} > 0)`),
     check('consolidation_elimination_lines_code_ck', sql`${t.accountCode} ~ '^[0-9][0-9A-Za-z.]{0,19}$'`),

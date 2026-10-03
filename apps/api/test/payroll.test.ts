@@ -608,4 +608,19 @@ describe('bordro motoru (Faz D3)', async () => {
     });
     expect(done.lines[0]).toMatchObject({ gross: '3000.0000' });
   });
+
+  it('DB-7: onaylanmış bordroda ay sonunda yürürlükte olan ücret şartı silinemez; kullanılmamış (sonraki) şart silinir', async () => {
+    const w = await world('PrbSartSil');
+    const e = await w.mkEmp();
+    const used = (await w.term(e.id, '3000')).term as { id: string };
+    const later = (await w.term(e.id, '3500', 'monthly', `${thisYear + 1}-01-01`)).term as { id: string };
+    await w.att([w.worked(e.id, 2)]);
+    await w.closeAtt();
+    const r = await w.mkRun();
+    await ok(w.c.post(`/api/payroll/runs/${r.run.id}/approve`));
+    const del = await w.c.delete(`/api/payroll/pay-terms/${used.id}`);
+    expect(del.statusCode).toBe(422);
+    expect(del.json().error.code).toBe('HR_RULE_VIOLATION');
+    expect([200, 204]).toContain((await w.c.delete(`/api/payroll/pay-terms/${later.id}`)).statusCode);
+  });
 });

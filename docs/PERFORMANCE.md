@@ -55,6 +55,7 @@ Yorum: günlük kullanım uçları (menü, liste, arama, ekstre, fatura, KDV) 10
 
 - **Cari yaşlandırma** şirketin tüm cari satırlarını belleğe alıp FIFO'yu uygulamada hesaplar: maliyet **toplam satır sayısıyla doğrusal** (20 bin satırda ~0,2 sn; 200 bin satırda ~2 sn beklenir). Çözüm yönü: dönem kapanış özet tablosu ya da SQL pencere fonksiyonlarıyla FIFO.
 - **Hesap ekstresi / mizan** her çağrıda defteri tarar (mizan 7 bin fişte 56 ms). Çok büyük defterlerde dönem bakiye özeti tablosu gerekir.
+- Ekim 2026 veritabanı denetimi ölçümü: 150 bin yevmiye satırında genel defter ~1,46 sn, cari yaşlandırma ~1,39 sn (geçmişle doğrusal); bilinçli olarak değiştirilmedi.
 - **Stok bakiyesi** her belge işlenirken kartın hareket geçmişinden hesaplanır (çalışan bakiye tablosu yok); tek bir kartta yüz binlerce hareket olduğunda kayıt süresi uzar.
 - **Tam veri dışa aktarma** ve defter dışa aktarmaları bellek içi üretilir (kapı ve tavanlarla sınırlı); akışlı xlsx yazımı yapılmadı.
 - **Oran sınırı deposu bellektedir:** tek uygulama örneği varsayılır (docs/OPERATIONS.md).

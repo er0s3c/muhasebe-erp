@@ -165,7 +165,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
       return out;
     }),
   );
-  app.get('/api/agenda/:id', tenantRoute(app, read, async (c) => getAgendaItem(c.tx, idParam.parse(c.req.params).id)));
+  app.get('/api/agenda/:id', tenantRoute(app, read, async (c) => getAgendaItem(c.tx, idParam.parse(c.req.params).id, actx(c))));
   app.patch('/api/agenda/:id', tenantRoute(app, read, async (c) => updateAgendaItem(c.tx, actx(c), idParam.parse(c.req.params).id, updateAgendaSchema.parse(c.req.body))));
   for (const [path, status] of [['complete', 'done'], ['cancel', 'cancelled'], ['reopen', 'open']] as const) {
     app.post(`/api/agenda/:id/${path}`, tenantRoute(app, read, async (c) => setAgendaStatus(c.tx, actx(c), idParam.parse(c.req.params).id, status)));

@@ -6,11 +6,12 @@ import type { LicenseReason, LicenseService, LicenseSnapshot } from './service';
 const OPEN_WHEN_UNLICENSED = new Set(['GET /api/health', 'GET /api/health/ready', 'GET /api/public-config']);
 
 /**
- * Salt-okunur modda yine de yapılabilen yazma istekleri: kimlik doğrulama (kullanıcılar girip verilerini görebilsin,
- * parolasını sıfırlayabilsin) ve lisans uçları (yenileme/yeniden etkinleştirme).
+ * Salt-okunur modda yine de yapılabilen yazma istekleri: kimlik doğrulama (kullanıcılar girip — iki adımlı doğrulama dahil —
+ * verilerini görebilsin, parolasını sıfırlayabilsin), güncelleyici bildirimi ve lisans uçları (yenileme/yeniden etkinleştirme).
  */
 const WRITES_WHEN_RESTRICTED = new Set([
   'POST /api/auth/login',
+  'POST /api/auth/mfa/verify',
   'POST /api/auth/refresh',
   'POST /api/auth/logout',
   'POST /api/auth/change-password',
@@ -18,6 +19,9 @@ const WRITES_WHEN_RESTRICTED = new Set([
   'POST /api/auth/reset-password',
   'POST /api/auth/verify-email',
   'POST /api/auth/resend-verification',
+  // Yerel güncelleyicinin durum bildirimi (paylaşılan belirteçle): salt-okunurken de güncelleme sonucu yazılabilmeli,
+  // yoksa başarısız güncelleme "istendi" durumunda kalır ve her dakika yeniden denenir.
+  'POST /api/system/updater/report',
 ]);
 
 const isLicenseRoute = (route: string) => route === '/api/license' || route.startsWith('/api/license/');

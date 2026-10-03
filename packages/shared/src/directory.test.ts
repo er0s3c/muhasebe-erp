@@ -65,6 +65,13 @@ describe('vCard 3.0', () => {
       ['BEGIN:VCARD', 'VERSION:3.0', 'N:Kaya;Ayşe Nur;;;', 'FN:Ayşe Nur Kaya', 'ORG:A\\; B\\, C', 'TITLE:Müdür', 'TEL;TYPE=WORK,VOICE:0392 1', 'TEL;TYPE=CELL,VOICE:0533 2', 'EMAIL;TYPE=INTERNET:a@b.com', 'ADR;TYPE=WORK:;;Girne\\,\\nKKTC;;;;', 'CATEGORIES:x,y\\,z', 'END:VCARD', ''].join('\r\n'),
     );
   });
+  it('tek başına CR de kaçışlanır (satır enjeksiyonu yok)', () => {
+    const v = buildVCard({ fullName: 'X', title: 'A\rEMAIL:x@evil.test', address: 'B\r\nC' });
+    expect(v).not.toMatch(/\r(?!\n)/);
+    expect(v).toContain('TITLE:A\\nEMAIL:x@evil.test');
+    expect(v).toContain('B\\nC');
+    expect(v.split('\r\n').filter((l) => l.startsWith('EMAIL'))).toHaveLength(0);
+  });
   it('tek isim, boş alanlar atlanır; uzun satır katlanır; çoklu', () => {
     const one = buildVCard({ fullName: 'Madonna' });
     expect(one).toContain('N:;Madonna;;;');

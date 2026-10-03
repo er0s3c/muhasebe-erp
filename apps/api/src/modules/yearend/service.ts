@@ -364,6 +364,13 @@ async function postClosingEntry(
 }
 
 export async function closeFiscalYear(tx: Tx, ctx: LedgerCtx, id: string, input: CloseFiscalYearInput) {
+  // Kilit sırası kayıt koruyucularıyla aynıdır (önce dönemler, sonra mali yıl): yıl içindeki dönemler FOR UPDATE kilitlenir,
+  // böylece süren kayıtlar biter ve ön kontrol/bakiye hesabı onları görür; sonra gelen kayıtlar kapalı yılı görüp reddedilir.
+  const span = await getFiscalYear(tx, id);
+  await tx.execute(sql`
+    select id from fiscal_periods
+     where company_id = ${ctx.companyId}::uuid and start_date >= ${span.startDate}::date and end_date <= ${span.endDate}::date
+     order by start_date for update`);
   const year = await getFiscalYear(tx, id, true);
   if (year.status !== 'open') throw conflict(`${year.name} mali yılı zaten kapalı`, 'FISCAL_YEAR_CLOSED');
   if (input.confirm !== year.name) {

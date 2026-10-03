@@ -17,7 +17,7 @@ import { companies, companyModules, memberships, users } from '../../db/schema';
 import { authedRoute, tenantRoute } from '../../http/context';
 import { notFound, unauthorized, unprocessable } from '../../http/errors';
 import { publicUser } from '../auth/routes';
-import { createCompany } from './service';
+import { assertCanCreateCompany, createCompany } from './service';
 
 export const tenancyRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -58,6 +58,7 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     authedRoute(app, async ({ tx, user, req, reply }) => {
       const input = createCompanySchema.parse(req.body);
+      await assertCanCreateCompany(tx, user.id);
       const company = await createCompany(tx, user, input, req.ip, await app.license.companyRules());
       void reply.code(201);
       return { company };

@@ -204,7 +204,7 @@ export async function submitVariation(tx: Tx, approvalCtx: ApprovalCtx, id: stri
         'VARIATION_EMPTY',
       );
   }
-  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies);
+  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies).where(sql`${companies.id} = app_company_id()`);
   const fx =
     sc.currencyCode === company!.base
       ? dec(1)

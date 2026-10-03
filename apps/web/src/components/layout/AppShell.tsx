@@ -237,11 +237,15 @@ function CompanySwitcher({ collapsed }: { collapsed: boolean }) {
               {c.id === activeCompany.id && <Check className="size-4" aria-hidden />}
             </Dropdown.Item>
           ))}
-          <Dropdown.Separator className="my-1 h-px bg-border" />
-          <Dropdown.Item className={menuItem} onSelect={() => navigate('/company/new')}>
-            <Plus className="size-4 text-muted" aria-hidden />
-            {t('shell.newCompany')}
-          </Dropdown.Item>
+          {companies.some((c) => c.role === 'owner' || c.role === 'admin') && (
+            <>
+              <Dropdown.Separator className="my-1 h-px bg-border" />
+              <Dropdown.Item className={menuItem} onSelect={() => navigate('/company/new')}>
+                <Plus className="size-4 text-muted" aria-hidden />
+                {t('shell.newCompany')}
+              </Dropdown.Item>
+            </>
+          )}
         </Dropdown.Content>
       </Dropdown.Portal>
     </Dropdown.Root>

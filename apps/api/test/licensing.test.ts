@@ -30,6 +30,8 @@ async function licensedOwner(c: LicensedApp, license = c.vendor.issue(), sector 
   }
   const owner = await registerUser(c.app, 'Sahip');
   const company = await createCompany(c.app, owner.token, { sector });
+  // Her senaryonun sahibi kurulumun sahibidir: aynı kurulumda önceki senaryonun kuruluşu sabitlenmiş olabilir (şema sahibi rolle değiştirilir).
+  await licenseOwnerSql(`update license_state set owner_org_id = (select organization_id from users where id = $1) where id = 1`, [owner.userId]);
   return { license, owner, company, api: client(c.app, owner.token, company.id) };
 }
 
@@ -340,6 +342,7 @@ describe('kalp atışı', () => {
     const { owner } = await (async () => {
       const o = await registerUser(c.app, 'Iptal');
       await createCompany(c.app, o.token, { sector: 'COMMERCE', name: 'Iptal Ltd.' });
+      await licenseOwnerSql(`update license_state set owner_org_id = (select organization_id from users where id = $1) where id = 1`, [o.userId]);
       return { owner: o };
     })();
     license.status = 'suspended';

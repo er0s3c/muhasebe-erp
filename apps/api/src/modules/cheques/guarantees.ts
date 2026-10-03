@@ -13,6 +13,7 @@ import {
 import type { Tx } from '../../db/client';
 import { bankGuarantees, currencies, parties, portfolioSettings, projects, subcontracts } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
+import { trContains } from '../../db/search';
 
 /**
  * Banka teminat mektubu portföyü (Faz X1): NAZIM takip. Yevmiye yazmaz (nazım hesap/komisyon gideri kaydı yok: belgelenmiş sınır);
@@ -98,7 +99,7 @@ export async function listGuarantees(tx: Tx, q: BankGuaranteeListQuery) {
        ${q.projectId ? sql`and g.project_id = ${q.projectId}` : sql``}
        ${q.partyId ? sql`and g.party_id = ${q.partyId}` : sql``}
        ${q.withinDays !== undefined ? sql`and g.status = 'active' and g.expiry_date is not null and g.expiry_date <= ${addDays(today, q.withinDays)}::date` : sql``}
-       ${q.q ? sql`and (g.letter_no ilike ${`%${q.q}%`} or g.bank_name ilike ${`%${q.q}%`} or g.counterparty_name ilike ${`%${q.q}%`})` : sql``}
+       ${q.q ? sql`and ${trContains(['g.letter_no', 'g.bank_name', 'g.counterparty_name'], q.q)}` : sql``}
      order by g.expiry_date nulls last, g.letter_no`);
   const rows = withState(res.rows, today, settings.guaranteeWarningDays);
   const totals = await tx.execute<{ direction: string; currency: string; count: number; amount: string }>(sql`

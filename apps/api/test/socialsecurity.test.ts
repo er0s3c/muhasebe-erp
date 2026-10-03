@@ -475,4 +475,17 @@ describe('sosyal güvenlik çıktıları (Faz D4)', async () => {
       expect((await expectDbError(q, `insert into employee_social_profiles (id, company_id, employee_id, effective_from, insurance_start, insurance_end) values (gen_random_uuid(), '${w.company.id}', '${e.id}', '${d(9)}', '${d(9)}', '${d(3)}')`)).code).toBe('23514');
     });
   });
+
+  it('DB-7: kesinleşmiş bildirimde kullanılan sosyal güvenlik profili silinemez; kullanılmamış profil silinir', async () => {
+    const w = await world('SgProfilSil');
+    const { emps } = await w.approvedPayroll();
+    const used = (await w.profile(emps[0]!.id)).profile as { id: string };
+    const later = (await w.profile(emps[0]!.id, { effectiveFrom: `${thisYear + 1}-01-01`, insuranceStart: `${thisYear + 1}-01-01` })).profile as { id: string };
+    const decl = await w.build();
+    await ok(w.c.post(`/api/social-security/declarations/${decl.declaration.id}/finalize`, {}));
+    const del = await w.c.delete(`/api/social-security/profiles/${used.id}`);
+    expect(del.statusCode).toBe(422);
+    expect(del.json().error.code).toBe('HR_RULE_VIOLATION');
+    expect([200, 204]).toContain((await w.c.delete(`/api/social-security/profiles/${later.id}`)).statusCode);
+  });
 });

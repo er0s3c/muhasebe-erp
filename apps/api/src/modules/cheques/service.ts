@@ -28,6 +28,7 @@ import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { lockTreasuryAccounts, type TreasuryAccountRow } from '../treasury/accounts';
 import { buildSettlementJournal, planSettlement, type SettleItemInput } from '../treasury/journal';
+import { trContains } from '../../db/search';
 
 /**
  * Çek/senet yaşam döngüsü ve yevmiyeleri (Faz X1). Tek para birimi: defter para birimi (döviz çek/senet yoktur: belgelenmiş sınır).
@@ -129,7 +130,7 @@ export async function listCheques(tx: Tx, q: ChequeListQuery) {
        ${q.bankAccountId ? sql`and c.bank_account_id = ${q.bankAccountId}` : sql``}
        ${q.dueFrom ? sql`and c.due_date >= ${q.dueFrom}::date` : sql``}
        ${q.dueTo ? sql`and c.due_date <= ${q.dueTo}::date` : sql``}
-       ${q.q ? sql`and (c.doc_no ilike ${`%${q.q}%`} or c.bank_name ilike ${`%${q.q}%`} or p.name ilike ${`%${q.q}%`})` : sql``}
+       ${q.q ? sql`and ${trContains(['c.doc_no', 'c.bank_name', 'p.name'], q.q)}` : sql``}
      order by c.due_date, c.doc_no`);
   const summary = await tx.execute<{ direction: string; status: string; count: number; amount: string }>(sql`
     select c.direction, c.status, count(*)::int as count, sum(c.amount)::numeric(19,2)::text as amount

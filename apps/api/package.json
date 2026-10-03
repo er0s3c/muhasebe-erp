@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
+    "db:lock": "tsx scripts/migration-lock.ts",
     "db:migrate": "tsx --env-file-if-exists=../../.env src/db/migrate-cli.ts",
     "db:seed": "tsx --env-file-if-exists=../../.env src/db/demo-cli.ts seed",
     "admin": "tsx --env-file-if-exists=../../.env src/db/admin-cli.ts",

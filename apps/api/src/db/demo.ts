@@ -30,7 +30,7 @@ import {
 } from '@erp/shared';
 import type { CompanyInfo } from '../http/context';
 import { withContext, type Db, type Tx } from './client';
-import { customCodes, exchangeRates, items as itemsTable, memberships, organizations, subcontractRevisions, users, warehouses } from './schema';
+import { customCodes, exchangeRates, items as itemsTable, memberships, subcontractRevisions, users, warehouses } from './schema';
 import { createParty } from '../modules/parties/service';
 import { createAccount, listAccounts } from '../modules/ledger/accounts';
 import {
@@ -53,7 +53,7 @@ import { cancelInvoice, postInvoice } from '../modules/invoices/posting';
 import { createInvoiceDraft, getInvoice, type InvoiceCtx } from '../modules/invoices/service';
 import { createWarehouse } from '../modules/inventory/warehouses';
 import { closePeriod, findPeriodForDate } from '../modules/settings/periods';
-import { createCompany } from '../modules/tenancy/service';
+import { createCompany, insertOrganization } from '../modules/tenancy/service';
 import { approveBudget, createBudget, putBudgetLines } from '../modules/projects/budgets';
 import { recordProgress } from '../modules/projects/progress';
 import { createProject, setProjectStatus } from '../modules/projects/service';
@@ -762,12 +762,12 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
 
   const passwordHash = await hash(DEMO_PASSWORD);
   const { orgId, userId } = await db.transaction(async (tx) => {
-    const [org] = await tx.insert(organizations).values({ name: 'Örnek Holding' }).returning({ id: organizations.id });
+    const orgId = await insertOrganization(tx, 'Örnek Holding');
     const [u] = await tx
       .insert(users)
-      .values({ organizationId: org!.id, email: DEMO_EMAIL, passwordHash, fullName: 'Ayşe Demir', emailVerifiedAt: new Date() })
+      .values({ organizationId: orgId, email: DEMO_EMAIL, passwordHash, fullName: 'Ayşe Demir', emailVerifiedAt: new Date() })
       .returning({ id: users.id });
-    return { orgId: org!.id, userId: u!.id };
+    return { orgId, userId: u!.id };
   });
 
   await withContext(db, { userId, orgId }, async (tx) => {

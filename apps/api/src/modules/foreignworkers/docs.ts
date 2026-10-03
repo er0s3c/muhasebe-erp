@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, ilike, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { foreignDocStatus, todayIso, type CreateForeignDocInput, type ForeignDocListQuery, type ForeignDocStatus } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { employees, foreignDocRenewals, foreignDocTypes, foreignWorkerDocs, personalDataAccessLog } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { decryptField, encryptField, lastFour, maskTail } from '../hr/crypto';
 import { warningAt, type ForeignCtx } from './params';
+import { trContains } from '../../db/search';
 
 const GENERIC_TYPES = [
   { code: 'WORK_PERMIT', name: 'Çalışma izni' },
@@ -84,8 +85,6 @@ function view(r: DocRow, extra: { employeeCode: string; employeeName: string; na
 export async function listDocs(tx: Tx, q: ForeignDocListQuery) {
   const today = q.asOf ?? todayIso();
   const warn = await warningAt(tx, today);
-  const term = q.q ? `%${q.q.replace(/[%_]/g, (m) => `\\${m}`)}%` : null;
-  const nat = q.nationality ? `%${q.nationality.replace(/[%_]/g, (m) => `\\${m}`)}%` : null;
   const rows = await tx
     .select({ d: foreignWorkerDocs, code: employees.code, name: employees.fullName, nationality: employees.nationality, typeName: foreignDocTypes.name, typeCode: foreignDocTypes.code })
     .from(foreignWorkerDocs)
@@ -95,8 +94,8 @@ export async function listDocs(tx: Tx, q: ForeignDocListQuery) {
       and(
         q.employeeId ? eq(foreignWorkerDocs.employeeId, q.employeeId) : undefined,
         q.typeId ? eq(foreignWorkerDocs.typeId, q.typeId) : undefined,
-        nat ? ilike(employees.nationality, nat) : undefined,
-        term ? sql`(${employees.fullName} ilike ${term} or ${employees.code} ilike ${term})` : undefined,
+        q.nationality ? trContains(['employees.nationality'], q.nationality) : undefined,
+        q.q ? trContains(['employees.full_name', 'employees.code'], q.q) : undefined,
       ),
     )
     .orderBy(sql`${foreignWorkerDocs.expiryDate} asc nulls last`, asc(employees.code));

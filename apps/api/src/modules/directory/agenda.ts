@@ -77,8 +77,13 @@ async function assertContactOpen(tx: Tx, contactId: string | null | undefined) {
   if (c?.a || c?.m) throw unprocessable('Anonimleştirilmiş ya da birleştirilmiş kişiye ajanda kalemi bağlanamaz', 'DIRECTORY_CONTACT_FROZEN');
 }
 
-export async function getAgendaItem(tx: Tx, id: string) {
-  const rows = await tx.execute<Record<string, unknown>>(sql`select ${AGENDA_SELECT} ${AGENDA_FROM} where a.id = ${id}`);
+/**
+ * Tek kalem. `ctx` verilirse listeyle aynı görünürlük uygulanır: yönetici olmayan başkasının özel kalemini kimliğiyle de okuyamaz
+ * (bulunamadı döner; varlığı da sızdırılmaz).
+ */
+export async function getAgendaItem(tx: Tx, id: string, ctx?: AgendaCtx) {
+  const vis = ctx ? scopeWhere('all', ctx) : null;
+  const rows = await tx.execute<Record<string, unknown>>(sql`select ${AGENDA_SELECT} ${AGENDA_FROM} where a.id = ${id}${vis ? sql` and ${vis}` : sql``}`);
   if (!rows.rows[0]) throw notFound('Ajanda kalemi');
   return { item: rows.rows[0] };
 }
