@@ -1,6 +1,6 @@
 import React from 'react';
 import { AbsoluteFill, Html5Audio, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
-import { C, FONT } from '../theme';
+import { C, FONT, NARRATION } from '../theme';
 import { Chip, DarkBackground, Logo, Micro, RevealLine, prog } from '../components/ui';
 import { Subtitles } from '../components/Subtitles';
 import type { SceneTiming } from '../timing';
@@ -100,7 +100,7 @@ export const Intro: React.FC<{ timing: SceneTiming }> = ({ timing }) => {
         </div>
       </AbsoluteFill>
       <Subtitles cues={timing.cues} />
-      <Html5Audio src={staticFile(timing.audio)} />
+      {NARRATION && <Html5Audio src={staticFile(timing.audio)} />}
     </AbsoluteFill>
   );
 };

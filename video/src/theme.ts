@@ -16,3 +16,6 @@ export const FONT = "'Inter', 'Helvetica Neue', Arial, sans-serif";
 export const FPS = 30;
 export const WIDTH = 1920;
 export const HEIGHT = 1080;
+
+/** Seslendirmeyi videoya ekler. Kapalıyken yalnızca müzik çalar; alt yazılar ve süreler aynı kalır (`npm run voice` ile üretilen zaman çizelgesi kullanılır). */
+export const NARRATION = false;

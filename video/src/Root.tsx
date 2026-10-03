@@ -5,7 +5,10 @@ import { fade } from '@remotion/transitions/fade';
 import { slide } from '@remotion/transitions/slide';
 import { wipe } from '@remotion/transitions/wipe';
 import { fontsReady } from './fonts';
-import { FPS, HEIGHT, WIDTH } from './theme';
+import { FPS, HEIGHT, NARRATION, WIDTH } from './theme';
+
+/** Seslendirme varken müzik konuşmanın altında kısık, yokken ön planda çalar. */
+const MUSIC_VOLUME = NARRATION ? 0.42 : 0.9;
 import { TOTAL_FRAMES, TRANSITION, scenes, sceneById } from './timing';
 import { buildSpecs } from './specs';
 import { Intro } from './scenes/Intro';
@@ -20,7 +23,7 @@ const Music: React.FC = () => {
   return (
     <Html5Audio
       src={staticFile('audio/music.mp3')}
-      volume={(f) => interpolate(f, [0, 45, durationInFrames - 75, durationInFrames - 1], [0, 0.42, 0.42, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })}
+      volume={(f) => interpolate(f, [0, 45, durationInFrames - 75, durationInFrames - 1], [0, MUSIC_VOLUME, MUSIC_VOLUME, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })}
     />
   );
 };

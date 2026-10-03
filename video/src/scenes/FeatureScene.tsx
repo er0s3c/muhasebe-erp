@@ -1,5 +1,6 @@
 import React from 'react';
 import { AbsoluteFill, Html5Audio, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
+import { NARRATION } from '../theme';
 import { PaperBackground } from '../components/ui';
 import { ShotWindow, BAR_H, IMG_H, IMG_W, type Shot } from '../components/ShotWindow';
 import { TitleCard } from '../components/TitleCard';
@@ -41,7 +42,7 @@ export const FeatureScene: React.FC<{ timing: SceneTiming; spec: FeatureSpec }> 
       </AbsoluteFill>
       <TitleCard index={spec.number} count={spec.count} title={spec.title} subtitle={spec.subtitle} exitAt={exitAt} />
       <Subtitles cues={timing.cues} />
-      <Html5Audio src={staticFile(timing.audio)} />
+      {NARRATION && <Html5Audio src={staticFile(timing.audio)} />}
     </AbsoluteFill>
   );
 };

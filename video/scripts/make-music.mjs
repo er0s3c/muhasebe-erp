@@ -1,6 +1,6 @@
 /**
  * Arka plan müziği: ffmpeg ile üretilen, telifsiz, sakin bir pad (Am – F – C – G). Harici dosya/indirme gerekmez.
- * Konuşmanın altında Remotion tarafında kısık çalınır. Süre: DURATION (sn, varsayılan 75).
+ * Seslendirme kapalıyken (src/theme.ts NARRATION=false) videonun tek sesidir. Süre: DURATION (sn, varsayılan 75).
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'public/audio/music.mp3');
 mkdirSync(dirname(out), { recursive: true });
-const DURATION = Number(process.env.DURATION ?? 75);
+const DURATION = Number(process.env.DURATION ?? 64);
 const BAR = 4; // sn, bir akor
 const chords = [
   [220.0, 261.63, 329.63, 440.0], // Am
@@ -36,12 +36,20 @@ for (let b = 0; b < bars; b++) {
     );
     n++;
   }
+  // Hafif arpej: her saniyede bir akor sesi, hızlı sönen "pluck" (müzik tek başına çaldığında hareket katar)
+  const notes = [chords[ch][0] * 2, chords[ch][1] * 2, chords[ch][2] * 2, chords[ch][3] * 2];
+  for (let k = 0; k < 4; k++) {
+    const at = Math.round((start + k) * 1000);
+    inputs.push('-f', 'lavfi', '-t', '1.4', '-i', `sine=frequency=${notes[(k * 3) % 4]}:sample_rate=44100`);
+    labels.push(`[${n}:a]afade=t=in:st=0:d=0.01,afade=t=out:st=0.02:d=1.2,volume=0.13,adelay=${at}|${at}[a${n}]`);
+    n++;
+  }
 }
 const mix = labels.map((_, i) => `[a${i}]`).join('');
 const filter =
   labels.join(';') +
   `;${mix}amix=inputs=${n}:normalize=0,aecho=0.8:0.55:420|760:0.35|0.22,lowpass=f=1800,tremolo=f=0.18:d=0.25,` +
-  `atrim=0:${DURATION},afade=t=out:st=${DURATION - 4}:d=4,loudnorm=I=-26:TP=-3[m]`;
+  `atrim=0:${DURATION},afade=t=out:st=${DURATION - 4}:d=4,loudnorm=I=-18:TP=-2[m]`;
 const script = join(root, '.music-filter.txt');
 writeFileSync(script, filter);
 execFileSync('ffmpeg', ['-loglevel', 'error', '-y', ...inputs, '-filter_complex_script', script, '-map', '[m]', '-ac', '2', '-ar', '44100', '-b:a', '128k', out]);

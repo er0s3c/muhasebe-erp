@@ -1,6 +1,6 @@
 # Muhasebe ERP tanıtım videosu (Remotion)
 
-Yaklaşık 1 dakikalık, 1080p, Türkçe seslendirmeli ve alt yazılı tanıtım videosu. Ana uygulamadan bağımsızdır (kök npm çalışma alanlarına dahil değildir); video kodu, seslendirme metni ve ekran görüntüleri bu klasördedir. Tamamen ücretsiz araçlarla üretilir.
+Yaklaşık 1 dakikalık, 1080p, Türkçe alt yazılı tanıtım videosu. Varsayılan olarak yalnızca arka plan müziği çalar; seslendirme isteğe bağlıdır (`src/theme.ts` içinde `NARRATION = true`). Ana uygulamadan bağımsızdır (kök npm çalışma alanlarına dahil değildir); video kodu, seslendirme metni ve ekran görüntüleri bu klasördedir. Tamamen ücretsiz araçlarla üretilir.
 
 **Yapı (toplam ≈ 61 sn, 7 sahne, her bölümün başlık kartı var):**
 
@@ -47,7 +47,9 @@ Remotion ilk çalıştırmada Chrome Headless Shell indirir. İndirme engelliyse
 - **Ekran görüntüleri:** `public/shots/`. Uygulama demo verisiyle çalışırken `npm run shots` ile yeniden alınır (kök dizinde `npm run db:seed` ve `npm run dev` gerekir).
 - **Renkler, yazı tipi:** `src/theme.ts` (uygulamanın tasarım belirteçleriyle aynı; bkz. `docs/DESIGN.md`). Yazı tipi Inter (OFL), `public/fonts/`.
 
-## Ses motorları
+## Ses motorları (seslendirme isteğe bağlı)
+
+Seslendirme varsayılan olarak **kapalıdır**: video yalnızca müzik ve alt yazıyla çalışır. Açmak için `src/theme.ts` içinde `NARRATION = true` yapıp yeniden render edin (müzik düzeyi otomatik kısılır). `npm run voice` kapalıyken de gereklidir: sahne süreleri ve alt yazı zamanlaması bu adımın ürettiği `src/timeline.json`'dan gelir.
 
 `VOICE_ENGINE` ile seçilir:
 
@@ -66,4 +68,4 @@ MBROLA'nın Türkçe sesinde `&` (ünsüz arası kısa ünlü) ve `l/` (koyu l) 
 - Videodaki tüm ekranlar **örnek (demo) veridir**; videoda da bu belirtilir. Gerçek müşteri verisi kullanılmaz.
 - Anlatılan her özellik `README.md`'deki özellik listesine dayanır; hukuki/mali doğrulama gerektiren konulara (KDV oranları, bordro, sosyal güvenlik vb.) video girmez.
 - Remotion, bireyler ve 3 kişiden küçük şirketler için ücretsizdir; daha büyük şirketler için lisans gerekir (<https://www.remotion.dev/license>). Müzik ffmpeg ile üretildiğinden telif sorunu yoktur.
-- Arka plan müziği ve ses ffmpeg ile üretilen basit sentezdir; profesyonel yayın için gerçek bir spiker kaydı ve telifsiz müzik parçası kolayca değiştirilebilir (`public/audio/`, `src/Root.tsx`).
+- Arka plan müziği ffmpeg ile üretilen basit bir sentezdir (Am–F–C–G pad + hafif arpej); isterseniz telifsiz bir müzik parçasıyla `public/audio/music.mp3` dosyasını değiştirebilirsiniz.
