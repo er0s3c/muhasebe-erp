@@ -23,6 +23,7 @@ import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { logPayrollAccess, resolveParams, termsAtMonthEnd, type PayrollCtx } from './config';
 import { buildPayrollJournal } from './journal';
 import { advanceItemTotal, deleteRunAdvanceDeductions, recordRunAdvanceSettlements, validateRunAdvanceDeductions } from '../employee-ledger/hooks';
+import { paged, type PageQuery } from '../../http/paging';
 
 const ledgerCtx = (c: PayrollCtx): LedgerCtx => ({ companyId: c.companyId, userId: c.userId, baseCurrency: c.baseCurrency, reportingCurrency: c.reportingCurrency });
 const chunks = <T>(xs: readonly T[], n = 500): T[][] => {
@@ -341,18 +342,22 @@ export async function deleteRun(tx: Tx, id: string) {
   await clearLines(tx, id);
   await deleteRunAdvanceDeductions(tx, id);
   await tx.delete(payrollAdjustments).where(eq(payrollAdjustments.runId, id));
-  await tx.delete(payrollRuns).where(eq(payrollRuns.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(payrollRuns).where(eq(payrollRuns.id, id)).returning({ id: payrollRuns.id });
+  if (deleted.length === 0) throw notFound('Bordro');
 }
 
 // --- Okuma -----------------------------------------------------------------------------------------------
 
-export async function listRuns(tx: Tx, q: { status?: string; year?: number }) {
-  const rows = await tx
+export async function listRuns(tx: Tx, q: { status?: string; year?: number }, page?: PageQuery) {
+  const query = tx
     .select()
     .from(payrollRuns)
     .where(and(q.status ? eq(payrollRuns.status, q.status) : undefined, q.year ? sql`${payrollRuns.month} like ${`${q.year}-%`}` : undefined))
-    .orderBy(sql`${payrollRuns.month} desc`, sql`${payrollRuns.createdAt} desc`);
-  return { runs: rows };
+    .orderBy(sql`${payrollRuns.month} desc`, sql`${payrollRuns.createdAt} desc`)
+    .$dynamic();
+  const pg = paged(page ? await query.limit(page.limit + 1).offset(page.offset) : await query, page);
+  return { runs: pg.rows, truncated: pg.truncated };
 }
 
 export async function getRun(tx: Tx, id: string) {

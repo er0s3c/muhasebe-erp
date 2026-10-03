@@ -103,7 +103,9 @@ export async function deletePriceList(tx: Tx, id: string) {
     select count(*)::int as n from parties where sales_price_list_id = ${id} or purchase_price_list_id = ${id}`);
   if ((used.rows[0]?.n ?? 0) > 0) throw unprocessable('Cariye atanmış liste silinemez; pasifleştirin', 'PRICE_LIST_IN_USE');
   await tx.delete(priceListItems).where(eq(priceListItems.priceListId, id));
-  await tx.delete(priceLists).where(eq(priceLists.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(priceLists).where(eq(priceLists.id, id)).returning({ id: priceLists.id });
+  if (deleted.length === 0) throw notFound('Fiyat listesi');
 }
 
 // --- Liste satırları -------------------------------------------------------------

@@ -177,7 +177,7 @@ describe('puantaj (Faz D2)', async () => {
     expect((await w.c.post('/api/attendance/months/close', { month: `${thisYear + 1}-01` })).json().error.code).toBe('ATTENDANCE_MONTH_FUTURE');
     const closed = await ok(w.c.post('/api/attendance/months/close', { month: MONTH, note: 'Mart bordroya gitti' }));
     expect(closed.lock).toMatchObject({ closed: true, closeNote: 'Mart bordroya gitti', reopenCount: 0 });
-    expect((await w.c.post('/api/attendance/months/close', { month: MONTH })).statusCode).toBe(409);
+    expect((await w.c.post('/api/attendance/months/close', { month: MONTH })).statusCode).toBe(422);
     expect((await sheet(w.c)).lock.closed).toBe(true);
 
     // API: kapalı ayda her yazım 422 (kullanıcıya anlaşılır kod)

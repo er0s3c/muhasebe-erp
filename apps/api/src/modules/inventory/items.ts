@@ -112,7 +112,9 @@ export async function deleteItem(tx: Tx, id: string) {
   if (await hasMovements(tx, id)) {
     throw unprocessable('Hareketi olan stok kartı silinemez; pasifleştirin', 'ITEM_HAS_MOVEMENTS');
   }
-  await tx.delete(items).where(eq(items.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(items).where(eq(items.id, id)).returning({ id: items.id });
+  if (deleted.length === 0) throw notFound('Stok kartı');
 }
 
 interface Balance extends Record<string, unknown> {

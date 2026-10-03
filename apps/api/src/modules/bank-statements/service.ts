@@ -341,7 +341,9 @@ export async function deleteStatement(tx: Tx, id: string) {
     throw unprocessable('Eşleşmiş satırı olan ekstre geri alınamaz; önce eşleşmeleri kaldırın', 'STATEMENT_HAS_MATCHES');
   }
   await tx.delete(bankStatementLines).where(eq(bankStatementLines.statementId, id));
-  await tx.delete(bankStatements).where(eq(bankStatements.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(bankStatements).where(eq(bankStatements.id, id)).returning({ id: bankStatements.id });
+  if (deleted.length === 0) throw notFound('Banka ekstresi');
 }
 
 export { createFromLineSchema };

@@ -15,6 +15,7 @@ import type { Tx } from '../../db/client';
 import { directoryContacts, directoryNotes, directoryOrganizations, employees, parties, personalDataAccessLog, projects } from '../../db/schema';
 import { trContains } from '../../db/search';
 import { notFound, unprocessable } from '../../http/errors';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 export interface DirCtx {
   companyId: string;
@@ -47,7 +48,7 @@ export async function assertRefs(tx: Tx, refs: { partyId?: string | null; projec
 
 // --- Kurumlar ----------------------------------------------------------------------------------------------
 
-export async function listOrganizations(tx: Tx, q: { q?: string; category?: string; archived: 'active' | 'archived' | 'all'; partyId?: string }) {
+export async function listOrganizations(tx: Tx, q: { q?: string; category?: string; archived: 'active' | 'archived' | 'all'; partyId?: string }, page?: PageQuery) {
   const where: SQL[] = [];
   if (q.archived !== 'all') where.push(sql`o.is_archived = ${q.archived === 'archived'}`);
   if (q.q) where.push(trContains(['o.name', "coalesce(o.phone, '')", "coalesce(o.email, '')"], q.q));
@@ -59,8 +60,9 @@ export async function listOrganizations(tx: Tx, q: { q?: string; category?: stri
            (select count(*)::int from directory_contacts c where c.organization_id = o.id and not c.is_archived) as "contactCount"
       from directory_organizations o left join parties p on p.id = o.party_id
      ${where.length ? sql`where ${sql.join(where, sql` and `)}` : sql``}
-     order by lower(o.name) collate "tr-TR-x-icu"`);
-  return { organizations: rows.rows };
+     order by lower(o.name) collate "tr-TR-x-icu" ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { organizations: pg.rows, truncated: pg.truncated };
 }
 
 export async function getOrganization(tx: Tx, id: string) {

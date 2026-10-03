@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dec } from '../money';
+import { dec, decCheck, tryDec } from '../money';
 import type { Sector } from '../module-registry';
 import { currencyCode, DB_AMOUNT_LIMIT, isoDate, rateString, uuid } from './common';
 import { ITEM_UNITS, positiveQuantity, unitCostString } from './inventory';
@@ -191,7 +191,7 @@ const optionalText = (max: number) =>
 export const percentString = z
   .string()
   .regex(/^\d{1,3}(\.\d{1,4})?$/, 'Geçersiz oran')
-  .refine((v) => dec(v).lte(100), 'Oran 100\'ü aşamaz');
+  .refine(decCheck((d) => d.lte(100)), 'Oran 100\'ü aşamaz');
 
 export const invoiceLineSchema = z.object({
   /** Boşsa serbest satır (hizmet, gider…): açıklama ve hesap ile girilir. */
@@ -261,10 +261,14 @@ function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx)
     ctx.addIssue({ code: 'custom', path: ['dueDate'], message: 'Vade tarihi fatura tarihinden önce olamaz' });
   }
   // Hesaplanan tutar sınırı: satır ve fatura tutarı (KDV en çok %100 varsayımıyla iki katı) × kur, veritabanı sütununa sığmalı
-  const fx = doc.fxRate ? dec(doc.fxRate) : dec(1);
+  // Geçersiz sayı alanları zaten kendi hatasını verdi; tutar sınırı yalnızca geçerli sayılarla hesaplanır (API-2).
+  const fx = (doc.fxRate ? tryDec(doc.fxRate) : dec(1)) ?? dec(1);
   let net = dec(0);
   doc.lines.forEach((l, i) => {
-    const lineNet = dec(l.quantity).times(l.unitPrice);
+    const q = tryDec(l.quantity);
+    const p = tryDec(l.unitPrice);
+    if (!q || !p) return;
+    const lineNet = q.times(p);
     net = net.plus(lineNet);
     if (lineNet.times(2).times(fx).gte(DB_AMOUNT_LIMIT)) {
       ctx.addIssue({ code: 'custom', path: ['lines', i, 'unitPrice'], message: 'Satır tutarı çok büyük (miktar × fiyat × kur en çok 15 tam basamak olabilir)' });

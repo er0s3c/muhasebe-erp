@@ -29,6 +29,7 @@ import { requireOpenPeriod } from '../settings/periods';
 import { lockTreasuryAccounts, type TreasuryAccountRow } from '../treasury/accounts';
 import { buildSettlementJournal, planSettlement, type SettleItemInput } from '../treasury/journal';
 import { trContains } from '../../db/search';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 /**
  * Çek/senet yaşam döngüsü ve yevmiyeleri (Faz X1). Tek para birimi: defter para birimi (döviz çek/senet yoktur: belgelenmiş sınır).
@@ -119,7 +120,7 @@ export type ChequeView = {
 
 export const OPEN_SQL = sql`((c.direction = 'received' and c.status in ('portfolio','in_collection')) or (c.direction = 'issued' and c.status = 'issued'))`;
 
-export async function listCheques(tx: Tx, q: ChequeListQuery) {
+export async function listCheques(tx: Tx, q: Omit<ChequeListQuery, 'limit' | 'offset'>, page?: PageQuery) {
   const res = await tx.execute<ChequeView>(sql`
     select ${COLS} ${FROM}
      where true
@@ -131,11 +132,12 @@ export async function listCheques(tx: Tx, q: ChequeListQuery) {
        ${q.dueFrom ? sql`and c.due_date >= ${q.dueFrom}::date` : sql``}
        ${q.dueTo ? sql`and c.due_date <= ${q.dueTo}::date` : sql``}
        ${q.q ? sql`and ${trContains(['c.doc_no', 'c.bank_name', 'p.name'], q.q)}` : sql``}
-     order by c.due_date, c.doc_no`);
+     order by c.due_date, c.doc_no ${pageSql(page)}`);
+  const pg = paged(res.rows, page);
   const summary = await tx.execute<{ direction: string; status: string; count: number; amount: string }>(sql`
     select c.direction, c.status, count(*)::int as count, sum(c.amount)::numeric(19,2)::text as amount
       from cheques c group by c.direction, c.status order by c.direction, c.status`);
-  return { cheques: res.rows, summary: summary.rows, asOf: todayIso() };
+  return { cheques: pg.rows, truncated: pg.truncated, summary: summary.rows, asOf: todayIso() };
 }
 
 export async function getCheque(tx: Tx, id: string) {

@@ -75,7 +75,9 @@ export async function getFiscalYear(tx: Tx, id: string, forUpdate = false): Prom
 export async function deleteFiscalYear(tx: Tx, id: string) {
   const y = await getFiscalYear(tx, id, true);
   if (y.status !== 'open') throw conflict('Kapatılmış mali yıl silinemez', 'FISCAL_YEAR_CLOSED');
-  await tx.delete(fiscalYears).where(eq(fiscalYears.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(fiscalYears).where(eq(fiscalYears.id, id)).returning({ id: fiscalYears.id });
+  if (deleted.length === 0) throw notFound('Mali yıl');
 }
 
 // ---- Kapanış hesabı ------------------------------------------------------------------------------------------------------

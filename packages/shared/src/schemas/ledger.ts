@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { boolQuery, currencyCode, isoDate, moneyString, rateString, uuid } from './common';
+import { boolQuery, currencyCode, isoDate, moneyString, pageParams, rateString, uuid } from './common';
 
 export const ACCOUNT_TYPES = ['asset', 'liability', 'equity', 'income', 'expense', 'cost', 'memo'] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
@@ -105,3 +105,6 @@ export const accountLedgerQuerySchema = z.object({
   excludeClosing: boolQuery,
 });
 export type AccountLedgerQuery = z.infer<typeof accountLedgerQuerySchema>;
+
+/** Hesap planı listesi: seçicilerde bütün olarak kullanılır; geniş ama sınırlı (API-7). */
+export const accountListQuerySchema = z.object(pageParams(5000, 10000));

@@ -9,7 +9,8 @@ import {
   verifyFeeScheduleSchema,
   createUnitSchema,
   handoverContractSchema,
-  overdueQuerySchema,
+  installmentListQuerySchema,
+  feeEstimateQuerySchema,
   idParam,
   salesContractListQuerySchema,
   terminateContractSchema,
@@ -19,6 +20,7 @@ import {
 } from '@erp/shared';
 import { todayIso } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import { activateContract, cancelContract, createContract, getContract, handoverContract, listContracts, listInstallments, loadSalesCtx, salesSummary, updateContract } from './contracts';
 import { createFeeSchedule, deleteFeeSchedule, feeEstimate, listFeeSchedules, verifyFeeSchedule } from './fees';
 import { terminateContract } from './termination';
@@ -34,7 +36,10 @@ export const realEstateRoutes: FastifyPluginAsync = async (app) => {
   const approve = { module: MODULE, permission: 'realestate.approve' } as const;
 
   // --- Birimler ---------------------------------------------------------------------------------
-  app.get('/api/real-estate/units', tenantRoute(app, read, async ({ tx, req }) => listUnits(tx, unitListQuerySchema.parse(req.query))));
+  app.get('/api/real-estate/units', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = unitListQuerySchema.parse(req.query);
+    return listUnits(tx, q, pageOf(q));
+  }));
   app.post(
     '/api/real-estate/units',
     tenantRoute(app, manage, async (c) => {
@@ -84,10 +89,20 @@ export const realEstateRoutes: FastifyPluginAsync = async (app) => {
       void reply.code(204);
     }),
   );
-  app.get('/api/projects/:id/fee-estimate', tenantRoute(app, read, async ({ tx, req, company }) => feeEstimate(tx, idParam.parse(req.params).id, ((req.query as { asOf?: string }).asOf) ?? todayIso(), company.baseCurrency)));
+  app.get(
+    '/api/projects/:id/fee-estimate',
+    tenantRoute(app, read, async ({ tx, req, company }) => {
+      const { id } = idParam.parse(req.params);
+      const q = feeEstimateQuerySchema.parse(req.query);
+      return feeEstimate(tx, id, q.asOf ?? todayIso(), company.baseCurrency);
+    }),
+  );
 
   // --- Satış sözleşmeleri -----------------------------------------------------------------------------
-  app.get('/api/sales-contracts', tenantRoute(app, read, async ({ tx, req }) => listContracts(tx, salesContractListQuerySchema.parse(req.query))));
+  app.get('/api/sales-contracts', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = salesContractListQuerySchema.parse(req.query);
+    return listContracts(tx, q, pageOf(q));
+  }));
   app.post(
     '/api/sales-contracts',
     tenantRoute(app, manage, async (c) => {
@@ -96,7 +111,10 @@ export const realEstateRoutes: FastifyPluginAsync = async (app) => {
       return out;
     }),
   );
-  app.get('/api/real-estate/installments', tenantRoute(app, read, async ({ tx, req }) => listInstallments(tx, { ...overdueQuerySchema.parse(req.query), overdueOnly: (req.query as { overdue?: string }).overdue === 'true' })));
+  app.get('/api/real-estate/installments', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = installmentListQuerySchema.parse(req.query);
+    return listInstallments(tx, { asOf: q.asOf, projectId: q.projectId, overdueOnly: q.overdue }, pageOf(q));
+  }));
   app.get('/api/sales-contracts/:id', tenantRoute(app, read, async ({ tx, req }) => getContract(tx, idParam.parse(req.params).id)));
   app.put('/api/sales-contracts/:id', tenantRoute(app, manage, async (c) => updateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, updateSalesContractSchema.parse(c.req.body))));
   app.post('/api/sales-contracts/:id/activate', tenantRoute(app, approve, async (c) => activateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, activateContractSchema.parse(c.req.body ?? {}).date)));

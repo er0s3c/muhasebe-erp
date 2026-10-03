@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDate } from './common';
+import { isoDate, pageParams } from './common';
 
 export const EMPLOYEE_STATUSES = ['active', 'left'] as const;
 export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
@@ -43,6 +43,7 @@ export const updateEmployeeSchema = z.object(employeeBody).partial();
 export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
 
 export const employeeListQuerySchema = z.object({
+  ...pageParams(2000, 5000),
   status: z.enum(EMPLOYEE_STATUSES).optional(),
   q: z.string().trim().max(100).optional(),
 });

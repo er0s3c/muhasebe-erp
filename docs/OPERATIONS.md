@@ -155,7 +155,8 @@ Geçersiz/eksik değerde uygulama başlamaz ve nedenini yazar. Boş değer "tan�
 | `ACCESS_TOKEN_TTL_SECONDS` / `REFRESH_TOKEN_TTL_DAYS` | `900` / `30` | |
 | `RATE_LIMIT_ENABLED` | `true` | Yalnızca testlerde kapatılır |
 | `LOG_LEVEL` | `info` | pino: `fatal…trace`, `silent` |
-| `DB_POOL_MAX` | `10` | Bağlantı havuzu üst sınırı |
+| `DB_POOL_MAX` | `20` | Bağlantı havuzu üst sınırı. PostgreSQL `max_connections` (varsayılan 100) değerini aşmayın; havuz doluyken bağlantı `DB_CONNECT_TIMEOUT_MS` içinde boşalmazsa istek **503 `BUSY`** + `Retry-After` alır (arayüz okuma isteklerini bir kez yeniden dener). Sık 503 görülürse artırın |
+| `DB_CONNECT_TIMEOUT_MS` | `5000` | Havuzdan bağlantı bekleme üst süresi |
 | `DB_STATEMENT_TIMEOUT_MS` | `60000` | Tek SQL ifadesi üst süresi; `0` kapalı |
 | `EXPORT_CONCURRENCY` | `2` | Eşzamanlı (bellek içi) dışa aktarma sayısı; fazlası `429 EXPORT_BUSY` |
 | `SHUTDOWN_TIMEOUT_MS` | `20000` | Kapanışta bekleme süresi |

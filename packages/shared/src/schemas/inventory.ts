@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dec } from '../money';
+import { decCheck } from '../money';
 import { currencyCode, isoDate, rateString, uuid } from './common';
 
 export const ITEM_KINDS = ['goods', 'service'] as const;
@@ -54,7 +54,7 @@ export const INBOUND_DOC_TYPES: readonly StockDocType[] = ['opening', 'receipt']
 
 /** Miktar: en çok 15 tam, 4 ondalık basamak; eksi değer yok, sıfır olabilir. */
 export const quantityString = z.string().regex(/^\d{1,15}(\.\d{1,4})?$/, 'Geçersiz miktar');
-export const positiveQuantity = quantityString.refine((v) => dec(v).gt(0), 'Miktar sıfırdan büyük olmalı');
+export const positiveQuantity = quantityString.refine(decCheck((d) => d.gt(0)), 'Miktar sıfırdan büyük olmalı');
 
 /** Birim maliyet/fiyat: en çok 6 ondalık basamak. */
 export const unitCostString = z.string().regex(/^\d{1,15}(\.\d{1,6})?$/, 'Geçersiz birim maliyet');

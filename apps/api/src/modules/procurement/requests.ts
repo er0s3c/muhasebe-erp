@@ -11,6 +11,7 @@ import { items, projectWbs, projects, purchaseRequestLines, purchaseRequests } f
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { registerApprovalHandler, requestApproval, requestsForDoc, cancelRequest, type ApprovalCtx } from '../approvals/service';
 import { nextNumber } from '../settings/numbering';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 export interface ProcurementCtx {
   companyId: string;
@@ -88,7 +89,9 @@ export async function updateRequest(tx: Tx, ctx: ProcurementCtx, id: string, inp
 export async function deleteRequest(tx: Tx, id: string) {
   const r = await lockRequest(tx, id);
   if (r.status !== 'draft' && r.status !== 'cancelled') throw unprocessable('Yalnızca taslak talep silinir', 'REQUEST_NOT_DRAFT');
-  await tx.delete(purchaseRequests).where(eq(purchaseRequests.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(purchaseRequests).where(eq(purchaseRequests.id, id)).returning({ id: purchaseRequests.id });
+  if (deleted.length === 0) throw notFound('Satın alma talebi');
 }
 
 /** Onaya gönderir: tahmini toplam (defter para birimi) onay tutarıdır. */
@@ -159,7 +162,7 @@ export async function getRequest(tx: Tx, id: string) {
   };
 }
 
-export async function listRequests(tx: Tx, q: { projectId?: string; status?: string }) {
+export async function listRequests(tx: Tx, q: { projectId?: string; status?: string }, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select r.id, r.code, r.title, r.status, r.need_date::text as "needDate", r.project_id as "projectId", p.code as "projectCode",
            (select count(*)::int from purchase_request_lines l where l.request_id = r.id) as "lineCount",
@@ -168,7 +171,8 @@ export async function listRequests(tx: Tx, q: { projectId?: string; status?: str
       from purchase_requests r join projects p on p.id = r.project_id
      where (${q.projectId ?? null}::uuid is null or r.project_id = ${q.projectId ?? null}::uuid)
        and (${q.status ?? null}::text is null or r.status = ${q.status ?? null}::text)
-     order by r.code desc`);
-  return { requests: rows.rows };
+     order by r.code desc ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { requests: pg.rows, truncated: pg.truncated };
 }
 

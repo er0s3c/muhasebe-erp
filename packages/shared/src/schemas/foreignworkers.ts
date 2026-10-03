@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { currencyCode, isoDate, uuid } from './common';
+import { currencyCode, isoDate, uuid, pageParams } from './common';
 
 /**
  * Yabancı işçi belge ve teminat takibi (Faz D5). Hiçbir yasal süre, ücret, teminat tutarı ya da makam bilgisi kodda YOKTUR:
@@ -57,6 +57,7 @@ export const revokeForeignDocSchema = z.object({ reason });
 export const revealForeignDocNoSchema = z.object({ reason });
 
 export const foreignDocListQuerySchema = z.object({
+  ...pageParams(),
   employeeId: uuid.optional(),
   typeId: uuid.optional(),
   status: z.enum(FOREIGN_DOC_STATUSES).optional(),
@@ -105,6 +106,7 @@ export const createGuaranteeSchema = z.object({
 export type CreateGuaranteeInput = z.infer<typeof createGuaranteeSchema>;
 export const resolveGuaranteeSchema = z.object({ status: z.enum(['refunded', 'forfeited']), resolvedDate: isoDate, note: optText(300) });
 export const guaranteeListQuerySchema = z.object({
+  ...pageParams(),
   employeeId: uuid.optional(),
   projectId: uuid.optional(),
   status: z.enum(GUARANTEE_STATUSES).optional(),

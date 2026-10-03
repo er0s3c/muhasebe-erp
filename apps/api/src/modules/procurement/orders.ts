@@ -12,6 +12,7 @@ import { parties, projects, purchaseOrderLines, purchaseOrders, purchaseRequests
 import { notFound, unprocessable } from '../../http/errors';
 import { nextNumber } from '../settings/numbering';
 import { validateLineRefs, type ProcurementCtx } from './requests';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 export const formatOrderCode = (n: number) => `SIP-${String(n).padStart(4, '0')}`;
 
@@ -102,7 +103,9 @@ export async function updateOrder(tx: Tx, ctx: ProcurementCtx, id: string, input
 export async function deleteOrder(tx: Tx, id: string) {
   const o = await lockOrder(tx, id);
   if (o.status !== 'draft') throw unprocessable('Yalnızca taslak sipariş silinir', 'ORDER_NOT_DRAFT');
-  await tx.delete(purchaseOrders).where(eq(purchaseOrders.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(purchaseOrders).where(eq(purchaseOrders.id, id)).returning({ id: purchaseOrders.id });
+  if (deleted.length === 0) throw notFound('Satın alma siparişi');
   await releaseRequest(tx, o.requestId);
 }
 
@@ -196,7 +199,7 @@ export async function getOrder(tx: Tx, id: string) {
   };
 }
 
-export async function listOrders(tx: Tx, q: { projectId?: string; partyId?: string; status?: string }) {
+export async function listOrders(tx: Tx, q: { projectId?: string; partyId?: string; status?: string }, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select o.id, o.code, o.status, o.project_id as "projectId", p.code as "projectCode", o.party_id as "partyId", pa.name as "partyName",
            o.currency_code as "currencyCode", o.created_at as "createdAt",
@@ -211,6 +214,7 @@ export async function listOrders(tx: Tx, q: { projectId?: string; partyId?: stri
      where (${q.projectId ?? null}::uuid is null or o.project_id = ${q.projectId ?? null}::uuid)
        and (${q.partyId ?? null}::uuid is null or o.party_id = ${q.partyId ?? null}::uuid)
        and (${q.status ?? null}::text is null or o.status = ${q.status ?? null}::text)
-     order by o.code desc`);
-  return { orders: rows.rows };
+     order by o.code desc ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { orders: pg.rows, truncated: pg.truncated };
 }

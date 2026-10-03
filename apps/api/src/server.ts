@@ -17,6 +17,7 @@ let log: { error: (obj: unknown, msg?: string) => void } = { error: (obj, msg) =
 
 const handle = createDb(config.DATABASE_URL, {
   max: config.DB_POOL_MAX,
+  connectTimeoutMs: config.DB_CONNECT_TIMEOUT_MS,
   statementTimeoutMs: config.DB_STATEMENT_TIMEOUT_MS,
   onError: (err) => log.error({ err }, 'veritabanı bağlantı hatası (boşta bağlantı)'),
 });

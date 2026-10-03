@@ -209,15 +209,18 @@ export async function updateItem(tx: Tx, id: string, input: { name?: string; aff
   if (!cur) throw notFound('Bordro kalemi');
   if (cur.code === ADVANCE_DEDUCTION_ITEM_CODE) throw conflict('Avans kesintisi kalemi sistem kalemidir; değiştirilemez', 'PAYROLL_ITEM_RESERVED');
   const earning = cur.kind === 'earning';
+  const values = {
+    ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+    ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+    ...(earning && input.affectsSocialBase !== undefined ? { affectsSocialBase: input.affectsSocialBase } : {}),
+    ...(earning && input.affectsTaxBase !== undefined ? { affectsTaxBase: input.affectsTaxBase } : {}),
+    ...(!earning && input.liability !== undefined ? { liability: input.liability } : {}),
+  };
+  // Değiştirilecek alan yoksa (boş gövde ya da kesinti kalemine yalnızca matrah bayrakları) güncel kayıt döner (API-6)
+  if (Object.keys(values).length === 0) return cur;
   const [row] = await tx
     .update(payrollItems)
-    .set({
-      ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-      ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
-      ...(earning && input.affectsSocialBase !== undefined ? { affectsSocialBase: input.affectsSocialBase } : {}),
-      ...(earning && input.affectsTaxBase !== undefined ? { affectsTaxBase: input.affectsTaxBase } : {}),
-      ...(!earning && input.liability !== undefined ? { liability: input.liability } : {}),
-    })
+    .set(values)
     .where(eq(payrollItems.id, id))
     .returning();
   return row!;

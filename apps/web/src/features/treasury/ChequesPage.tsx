@@ -1,6 +1,7 @@
 import { CHEQUE_STATUSES, MATURITY_BUCKETS, allowedChequeActions, todayIso, type ChequeAction, type ChequeDirection, type ChequeDocType } from '@erp/shared';
 import { History, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -68,7 +69,8 @@ function PortfolioTab() {
   const [dueTo, setDueTo] = useState('');
   const params = { direction, docType, status, q, dueFrom, dueTo };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
-  const { data, isPending } = useCQuery<ChequeList>(['cheques', 'list', qs], `/api/cheques${qs ? `?${qs}` : ''}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<ChequeList & { truncated?: boolean }>(['cheques', 'list', qs, lim.limit], `/api/cheques?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const [creating, setCreating] = useState<ChequeDirection | null>(null);
   const [acting, setActing] = useState<{ action: ChequeAction; cheque: ChequeRow } | null>(null);
   const [detail, setDetail] = useState<ChequeRow | null>(null);
@@ -133,7 +135,8 @@ function PortfolioTab() {
           <EmptyState title={t('cheques.empty')} description={t('cheques.emptyDesc')} />
         </Card>
       ) : (
-        <TableWrap>
+        <>
+          <TableWrap>
           <Table aria-label={t('cheques.tabs.portfolio')}>
             <thead>
               <tr>
@@ -183,6 +186,8 @@ function PortfolioTab() {
             </tbody>
           </Table>
         </TableWrap>
+          <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+        </>
       )}
       <ChequeSheet direction={creating} onClose={() => setCreating(null)} />
       <ActionModal target={acting} onClose={() => setActing(null)} />

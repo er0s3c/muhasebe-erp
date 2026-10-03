@@ -1,5 +1,6 @@
 import { FileSignature, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -27,7 +28,8 @@ export function SalesContractsPage() {
     if (status) q.set('status', status);
     return q.toString();
   }, [projectId, status]);
-  const { data, isPending } = useCQuery<{ contracts: SalesContractRow[] }>(['sales-contracts', 'list', qs], `/api/sales-contracts?${qs}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<{ contracts: SalesContractRow[] } & { truncated?: boolean }>(['sales-contracts', 'list', qs, lim.limit], `/api/sales-contracts?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.contracts ?? [];
   const filtered = !!(projectId || status);
   const add = canManage && (
@@ -71,7 +73,8 @@ export function SalesContractsPage() {
           {rows.length === 0 ? (
             <Card><EmptyState title={t('common.noResults')} /></Card>
           ) : (
-            <TableWrap>
+            <>
+              <TableWrap>
               <Table>
                 <thead>
                   <tr>
@@ -101,6 +104,8 @@ export function SalesContractsPage() {
                 </tbody>
               </Table>
             </TableWrap>
+              <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+            </>
           )}
         </div>
       )}

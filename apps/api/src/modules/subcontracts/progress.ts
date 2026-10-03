@@ -42,6 +42,7 @@ import { postTreasuryTransaction } from '../treasury/posting';
 import { cancelRequest, registerApprovalHandler, requestApproval, requestsForDoc, type ApprovalCtx, type ApprovalRequestWithSteps } from '../approvals/service';
 import { buildProgressJournal } from './journal';
 import { currentRevision, type SubcontractCtx } from './service';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 export interface ProgressCtx extends SubcontractCtx {
   baseCurrency: string;
@@ -254,7 +255,9 @@ export async function updateProgress(tx: Tx, ctx: ProgressCtx, id: string, input
 export async function deleteProgress(tx: Tx, id: string) {
   const p = await lockPayment(tx, id);
   if (p.status !== 'draft') throw unprocessable('Yalnızca taslak hakediş silinir', 'PROGRESS_NOT_DRAFT');
-  await tx.delete(progressPayments).where(eq(progressPayments.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(progressPayments).where(eq(progressPayments.id, id)).returning({ id: progressPayments.id });
+  if (deleted.length === 0) throw notFound('Hakediş');
 }
 
 // --- Gönderme, onay, kayıt -----------------------------------------------------------------------------
@@ -588,7 +591,7 @@ export async function getProgress(tx: Tx, id: string) {
   return { payment, lines: lines.rows, deductions, approvals };
 }
 
-export async function listProgress(tx: Tx, q: { subcontractId?: string; projectId?: string; status?: string; direction?: string }) {
+export async function listProgress(tx: Tx, q: { subcontractId?: string; projectId?: string; status?: string; direction?: string }, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select p.id, p.number, p.payment_no as "paymentNo", p.status, p.direction, p.period_end::text as "periodEnd",
            p.subcontract_id as "subcontractId", s.code as "subcontractCode", pa.name as "partyName",
@@ -603,8 +606,9 @@ export async function listProgress(tx: Tx, q: { subcontractId?: string; projectI
        and (${q.projectId ?? null}::uuid is null or p.project_id = ${q.projectId ?? null}::uuid)
        and (${q.status ?? null}::text is null or p.status = ${q.status ?? null}::text)
        and (${q.direction ?? null}::text is null or p.direction = ${q.direction ?? null}::text)
-     order by p.created_at desc`);
-  return { payments: rows.rows };
+     order by p.created_at desc ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { payments: pg.rows, truncated: pg.truncated };
 }
 
 /**

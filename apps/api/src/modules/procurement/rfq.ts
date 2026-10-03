@@ -7,6 +7,7 @@ import { nextNumber } from '../settings/numbering';
 import { findRate } from '../settings/rates';
 import { createOrder } from './orders';
 import type { ProcurementCtx } from './requests';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 export const formatRfqCode = (n: number) => `RFQ-${String(n).padStart(4, '0')}`;
 
@@ -150,11 +151,12 @@ export async function getRfq(tx: Tx, id: string) {
   };
 }
 
-export async function listRfqs(tx: Tx) {
+export async function listRfqs(tx: Tx, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select q.id, q.code, q.status, q.due_date::text as "dueDate", r.id as "requestId", r.code as "requestCode", r.title, p.code as "projectCode",
            (select count(*)::int from rfq_offers o where o.rfq_id = q.id) as "offerCount", q.created_at as "createdAt"
       from rfqs q join purchase_requests r on r.id = q.request_id join projects p on p.id = r.project_id
-     order by q.code desc`);
-  return { rfqs: rows.rows };
+     order by q.code desc ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { rfqs: pg.rows, truncated: pg.truncated };
 }

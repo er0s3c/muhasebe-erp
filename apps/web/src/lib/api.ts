@@ -115,6 +115,13 @@ async function send(path: string, opts: RequestOptions): Promise<Response> {
       onSessionLost?.();
     }
   }
+  // Sunucu yoğun (503 + Retry-After; bağlantı havuzu dolu): okuma isteği bir kez, bekleyip yeniden denenir.
+  if (res.status === 503 && (opts.method ?? 'GET') === 'GET' && res.headers.get('retry-after')) {
+    const wait = Math.min(5, Math.max(1, Number(res.headers.get('retry-after')) || 1));
+    void res.body?.cancel();
+    await new Promise((r) => setTimeout(r, wait * 1000));
+    res = await raw(path, opts);
+  }
   if (!res.ok) throw await parseError(res);
   return res;
 }

@@ -276,7 +276,7 @@ describe('raporlar ve dışa aktarma', async () => {
     expect(by['Cariler']!.map((r) => r[0]).every((v) => /^CR-/.test(v!))).toBe(true);
     expect(by['Stok kartları']).toHaveLength(1);
     expect(by['Hesap planı']!.length).toBe((await ok(c.get('/api/accounts'))).accounts.length);
-    const jb = await ok(c.get(`/api/reports/journal-book?from=1900-01-01&to=2999-12-31`));
+    const jb = await ok(c.get(`/api/reports/journal-book?from=1900-01-01&to=2100-12-31`));
     expect(by['Yevmiye satırları']).toHaveLength(jb.total);
     const invoices = (await ok(c.get('/api/invoices?limit=500'))).invoices as any[];
     expect(by['Faturalar']).toHaveLength(invoices.length);

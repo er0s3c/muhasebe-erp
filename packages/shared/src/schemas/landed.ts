@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { LANDED_COST_KINDS, LANDED_METHODS } from '../landed-cost';
-import { dec } from '../money';
+import { decCheck } from '../money';
 import { currencyCode, isoDate, moneyString, rateString, uuid } from './common';
 
 const text = (max: number) => z.string().trim().max(max);
 const optText = (max: number) => text(max).nullable().optional();
-const positive = moneyString.refine((v) => dec(v).gt(0), 'Tutar sıfırdan büyük olmalı');
+const positive = moneyString.refine(decCheck((d) => d.gt(0)), 'Tutar sıfırdan büyük olmalı');
 
 // --- İthalat dosyası (Faz X4) --------------------------------------------------------------------------------------
 
@@ -92,7 +92,7 @@ export const importFileReportQuerySchema = z.object({ id: uuid });
 const percent = z
   .string()
   .regex(/^\d{1,3}(\.\d{1,4})?$/, 'Geçersiz oran')
-  .refine((v) => dec(v).lte(100), 'Oran 100\'ü aşamaz');
+  .refine(decCheck((d) => d.lte(100)), 'Oran 100\'ü aşamaz');
 
 export const createExpenseCardSchema = z.object({
   code: text(20).min(1, 'Kod gerekli'),

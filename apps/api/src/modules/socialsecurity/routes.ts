@@ -15,6 +15,7 @@ import {
   verifySupportRuleSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import { createEligibility, createProfile, createRule, deleteEligibility, deleteProfile, deleteRule, listEligibility, listProfiles, listRules, revealSocialNo, updateRule, verifyRule, type SocialCtx } from './config';
 import { buildDeclaration, deleteDeclaration, finalizeDeclaration, getDeclaration, listDeclarations, reopenDeclaration } from './declarations';
 import { premiumSummary } from './reports';
@@ -72,7 +73,10 @@ export const socialSecurityRoutes: FastifyPluginAsync = async (app) => {
   app.delete('/api/social-security/eligibility/:id', tenantRoute(app, manage, (c) => noContent(c, deleteEligibility)));
 
   // --- Aylık bildirim -------------------------------------------------------------------------------------
-  app.get('/api/social-security/declarations', tenantRoute(app, read, async ({ tx, req }) => listDeclarations(tx, declarationListQuerySchema.parse(req.query))));
+  app.get('/api/social-security/declarations', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = declarationListQuerySchema.parse(req.query);
+    return listDeclarations(tx, q, pageOf(q));
+  }));
   app.post(
     '/api/social-security/declarations',
     tenantRoute(app, manage, async (c) => {

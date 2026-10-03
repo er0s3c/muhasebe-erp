@@ -7,9 +7,11 @@ import {
   idParam,
   listExpenseEntriesQuerySchema,
   updateExpenseCardSchema,
+  pageParams,
 } from '@erp/shared';
 import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import type { LedgerCtx } from '../ledger/journal';
 import { expenseReport } from './reports';
 import {
@@ -37,7 +39,10 @@ export const expenseRoutes: FastifyPluginAsync = async (app) => {
   const manage = { module: mod, permission: 'treasury.manage' } as const;
   const post = { module: mod, permission: 'treasury.post' } as const;
 
-  app.get('/api/expense-cards', tenantRoute(app, read, async ({ tx, req }) => listExpenseCards(tx, { all: z.object({ all: z.enum(['true', 'false']).optional() }).parse(req.query).all === 'true' })));
+  app.get('/api/expense-cards', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = z.object({ all: z.enum(['true', 'false']).optional(), ...pageParams(2000, 5000) }).parse(req.query);
+    return listExpenseCards(tx, { all: q.all === 'true' }, pageOf(q));
+  }));
   app.post(
     '/api/expense-cards',
     tenantRoute(app, manage, async (c) => {

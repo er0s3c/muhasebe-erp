@@ -1,5 +1,6 @@
 import { Building2, Layers, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { generateUnitNumbers } from '@erp/shared';
@@ -47,7 +48,8 @@ export function UnitsPage() {
     if (status) q.set('status', status);
     return q.toString();
   }, [projectId, status]);
-  const { data, isPending } = useCQuery<{ units: UnitRow[] }>(['units', 'list', qs], `/api/real-estate/units?${qs}`);
+  const lim = useListLimit(qs, 2000, 5000);
+  const { data, isPending } = useCQuery<{ units: UnitRow[] } & { truncated?: boolean }>(['units', 'list', qs, lim.limit], `/api/real-estate/units?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = useMemo(() => data?.units ?? [], [data]);
   const filtered = !!(projectId || status);
 
@@ -111,7 +113,8 @@ export function UnitsPage() {
           {rows.length === 0 ? (
             <Card><EmptyState title={t('common.noResults')} /></Card>
           ) : view === 'table' ? (
-            <TableWrap>
+            <>
+              <TableWrap>
               <Table>
                 <thead>
                   <tr>
@@ -141,6 +144,8 @@ export function UnitsPage() {
                 </tbody>
               </Table>
             </TableWrap>
+              <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+            </>
           ) : (
             <div className="flex flex-col gap-4">
               {groups.map(([title, floors]) => (

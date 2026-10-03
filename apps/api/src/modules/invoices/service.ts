@@ -411,10 +411,12 @@ export async function createInvoiceDraft(tx: Tx, ctx: InvoiceCtx, input: CreateI
   return writeDraft(tx, ctx, input.type, input);
 }
 
-async function getDraftRow(tx: Tx, id: string) {
+async function getDraftRow(tx: Tx, id: string, action: 'düzenlenebilir' | 'silinebilir' = 'düzenlenebilir') {
   const [row] = await tx.select().from(invoices).where(eq(invoices.id, id));
   if (!row) throw notFound('Fatura');
-  if (row.status !== 'draft') throw unprocessable('Yalnızca taslak fatura düzenlenebilir', 'INVOICE_NOT_DRAFT');
+  if (row.status !== 'draft') {
+    throw unprocessable(action === 'silinebilir' ? 'Yalnızca taslak fatura silinebilir; kayıtlı fatura iptal edilir' : 'Yalnızca taslak fatura düzenlenebilir', 'INVOICE_NOT_DRAFT');
+  }
   return row;
 }
 
@@ -425,8 +427,10 @@ export async function updateInvoiceDraft(tx: Tx, ctx: InvoiceCtx, id: string, in
 }
 
 export async function deleteInvoiceDraft(tx: Tx, id: string) {
-  await getDraftRow(tx, id);
-  await tx.delete(invoices).where(eq(invoices.id, id));
+  await getDraftRow(tx, id, 'silinebilir');
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(invoices).where(eq(invoices.id, id)).returning({ id: invoices.id });
+  if (deleted.length === 0) throw notFound('Fatura');
 }
 
 interface HeadRow extends Record<string, unknown> {

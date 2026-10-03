@@ -9,7 +9,8 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions, type RouteOpt
 import type { Config } from './config';
 import type { Db } from './db/client';
 import { existsSync } from 'node:fs';
-import { errorHandler } from './http/errors';
+import { badRequest, errorHandler } from './http/errors';
+import { installZodTurkish } from '@erp/shared';
 import { MemoryLimiter, Semaphore } from './http/limits';
 import { createMailer, type Mailer } from './modules/mail/mailer';
 import { assertLicensed, createLicenseService, type LicenseSetup } from './licensing';
@@ -66,6 +67,15 @@ export interface BuildAppOptions {
   mailer?: Mailer;
   /** Lisanslama. Verilmezse yapılandırmadan kurulur: üretim paketinde denetim her zaman açık, geliştirmede LICENSE_ENFORCEMENT_DEV ile. Testler hizmeti/taşımayı enjekte eder. */
   license?: LicenseSetup;
+}
+
+/** Gövde/sorgu içinde (anahtar ya da değer olarak) NUL karakteri var mı. */
+export function containsNul(v: unknown, depth = 0): boolean {
+  if (typeof v === 'string') return v.includes('\u0000');
+  if (depth > 32 || v === null || typeof v !== 'object' || Buffer.isBuffer(v)) return false;
+  if (Array.isArray(v)) return v.some((x) => containsNul(x, depth + 1));
+  for (const [k, x] of Object.entries(v)) if (k.includes('\u0000') || containsNul(x, depth + 1)) return true;
+  return false;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -142,6 +152,32 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   }
 
   app.setErrorHandler(errorHandler);
+  installZodTurkish();
+
+  // JSON gövdesi: Fastify'ın güvenli ayrıştırıcısı (__proto__ / constructor.prototype reddedilir) korunur; yalnızca
+  // sözdizimi geçerli ama yasak anahtar içeren gövdede yanıltıcı "geçerli JSON değil" yerine doğru ileti verilir (API-9).
+  const defaultJson = app.getDefaultJsonParser('error', 'error');
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    defaultJson(req, body as string, (err: Error | null, value?: unknown) => {
+      if (err && (err as { code?: string }).code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+        try {
+          JSON.parse(body as string);
+          done(Object.assign(new Error('forbidden key'), { statusCode: 400, code: 'FORBIDDEN_JSON_KEY' }), undefined);
+          return;
+        } catch {
+          // gerçek sözdizimi hatası: Fastify'ın hatası (Türkçe iletiyle eşlenir)
+        }
+      }
+      done(err, value);
+    });
+  });
+  // NUL karakteri (\u0000) PostgreSQL metin sütunlarına yazılamaz (500 yerine anlaşılır 400; API-4).
+  app.addHook('preValidation', async (req) => {
+    if (containsNul(req.body) || containsNul(req.query) || containsNul(req.params)) {
+      throw badRequest('Metinde geçersiz karakter (NUL) var', 'INVALID_TEXT');
+    }
+  });
   app.setNotFoundHandler(
     config.WEB_DIST_DIR
       ? webNotFoundHandler

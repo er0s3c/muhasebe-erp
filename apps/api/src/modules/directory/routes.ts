@@ -26,6 +26,7 @@ import {
   type VCardContact,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import { forbidden } from '../../http/errors';
 import { agendaSummary, createAgendaItem, createFollowUp, getAgendaItem, listAgenda, setAgendaStatus, updateAgendaItem, type AgendaCtx } from './agenda';
 import {
@@ -60,7 +61,10 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
   const actx = (c: TenantCtx): AgendaCtx => ({ companyId: c.company.id, userId: c.user.id, canManage: hasPermission(c.role, 'directory.manage') });
 
   // --- Kurumlar -------------------------------------------------------------------------------------
-  app.get('/api/directory/organizations', tenantRoute(app, read, async ({ tx, req }) => listOrganizations(tx, organizationListQuerySchema.parse(req.query))));
+  app.get('/api/directory/organizations', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = organizationListQuerySchema.parse(req.query);
+    return listOrganizations(tx, q, pageOf(q));
+  }));
   app.get('/api/directory/organizations/:id', tenantRoute(app, read, async ({ tx, req }) => getOrganization(tx, idParam.parse(req.params).id)));
   app.post(
     '/api/directory/organizations',

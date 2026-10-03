@@ -1,5 +1,6 @@
 import { ClipboardCheck, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -28,7 +29,8 @@ export function PurchaseRequestsPage() {
     if (status) q.set('status', status);
     return q.toString();
   }, [projectId, status]);
-  const { data, isPending } = useCQuery<{ requests: PurchaseRequestRow[] }>(['purchase-requests', 'list', qs], `/api/purchase-requests?${qs}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<{ requests: PurchaseRequestRow[] } & { truncated?: boolean }>(['purchase-requests', 'list', qs, lim.limit], `/api/purchase-requests?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.requests ?? [];
   const filtered = !!(projectId || status);
 
@@ -66,7 +68,8 @@ export function PurchaseRequestsPage() {
           {rows.length === 0 ? (
             <Card><EmptyState title={t('common.noResults')} /></Card>
           ) : (
-            <TableWrap>
+            <>
+              <TableWrap>
               <Table>
                 <thead>
                   <tr>
@@ -94,6 +97,8 @@ export function PurchaseRequestsPage() {
                 </tbody>
               </Table>
             </TableWrap>
+              <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+            </>
           )}
         </div>
       )}

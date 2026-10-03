@@ -1,6 +1,7 @@
 import { todayIso } from '@erp/shared';
 import { Eye, EyeOff, History, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -62,7 +63,8 @@ function DocumentsTab() {
   const [q, setQ] = useState('');
   const params = { status, withinDays: within, nationality, typeId, q };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
-  const { data, isPending } = useCQuery<ForeignDocList>(['foreign', 'docs', qs], `/api/foreign-workers/documents${qs ? `?${qs}` : ''}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<ForeignDocList & { truncated?: boolean }>(['foreign', 'docs', qs, lim.limit], `/api/foreign-workers/documents?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const { data: types } = useCQuery<{ types: ForeignDocTypeRow[] }>(['foreign', 'types'], '/api/foreign-workers/doc-types');
   const { data: emps } = useEmployees();
   const [error, setError] = useState<Error | null>(null);
@@ -171,7 +173,8 @@ function DocumentsTab() {
           <EmptyState title={qs ? t('foreign.emptyFiltered') : t('foreign.empty')} description={qs ? undefined : t('foreign.emptyDesc')} action={qs ? undefined : addButton || undefined} />
         </Card>
       ) : (
-        <TableWrap>
+        <>
+          <TableWrap>
           <Table aria-label={t('foreign.tabs.documents')}>
             <thead>
               <tr>
@@ -245,6 +248,8 @@ function DocumentsTab() {
             </tbody>
           </Table>
         </TableWrap>
+          <TruncatedNote truncated={data?.truncated} shown={docs.length} onMore={lim.more} atMax={lim.atMax} />
+        </>
       )}
 
       <Modal

@@ -84,7 +84,9 @@ async function getPartyRow(tx: Tx, id: string) {
 }
 
 export async function deleteParty(tx: Tx, id: string) {
-  await getPartyRow(tx, id);
+  // Satır kilitlenir: eşzamanlı silmeler sıraya girer, ikincisi 404 alır (API-11)
+  const [locked] = await tx.select({ id: parties.id }).from(parties).where(eq(parties.id, id)).for('update');
+  if (!locked) throw notFound('Cari');
   const [used] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(journalLines)
@@ -92,7 +94,9 @@ export async function deleteParty(tx: Tx, id: string) {
   if (used && used.n > 0) {
     throw unprocessable('Hareketi olan cari silinemez; pasifleştirin', 'PARTY_HAS_MOVEMENTS');
   }
-  await tx.delete(parties).where(eq(parties.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(parties).where(eq(parties.id, id)).returning({ id: parties.id });
+  if (deleted.length === 0) throw notFound('Cari');
 }
 
 interface BalanceRow extends Record<string, unknown> {
@@ -258,7 +262,14 @@ interface LineRow extends Record<string, unknown> {
  * Ters çevrilmiş fiş çiftleri (orijinal + ters kayıt, ters kayıt `asOf`'a kadar yapılmışsa) açık kalem
  * hesabında nötr sayılır: iptal edilen fatura/tahsilat hayalet kalem bırakmaz. Ekstre etkilenmez.
  */
-async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, partyId?: string) {
+async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, partyId?: string | readonly string[]) {
+  // Tek cari, cari listesi (toplu; N+1 yerine tek sorgu — API-7) ya da tümü
+  const only = (col: string) =>
+    partyId === undefined
+      ? sql``
+      : typeof partyId === 'string'
+        ? sql`and ${sql.raw(col)} = ${partyId}`
+        : sql`and ${sql.raw(col)} = any(${`{${partyId.join(',')}}`}::uuid[])`;
   const rows = await tx.execute<LineRow>(sql`
     select l.id as line_id, l.party_id, p.code as party_code, p.name as party_name,
            e.id as entry_id, e.entry_no, e.entry_date::text as entry_date, l.line_no,
@@ -271,7 +282,7 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
     join parties p on p.id = l.party_id
     where a.party_control = ${type} and e.entry_date <= ${asOf}::date
       and e.reversal_of_id is null and rv.id is null
-      ${partyId ? sql`and l.party_id = ${partyId}` : sql``}`);
+      ${only('l.party_id')}`);
 
   const byParty = new Map<string, { code: string; name: string; lines: PartyLine[]; allocations: PartyAllocation[] }>();
   for (const r of rows.rows) {
@@ -305,7 +316,7 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
     left join journal_entries cj on cj.id = t.cancel_journal_entry_id
     where a.control = ${type} and t.txn_date <= ${asOf}::date
       and (t.status = 'posted' or cj.entry_date > ${asOf}::date)
-      ${partyId ? sql`and a.party_id = ${partyId}` : sql``}`);
+      ${only('a.party_id')}`);
   // Kasasız kalem kapatma (gayrimenkul fesih yevmiyesi): fesih tarihinde geçerlidir
   const writeoffs = type === 'receivable'
     ? await tx.execute<{ party_id: string; charge_line_id: string; settle_line_id: string; amount: string; amount_base: string }>(sql`
@@ -313,7 +324,7 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
         from sales_writeoffs w
         join journal_entries e on e.id = w.entry_id
         where e.entry_date <= ${asOf}::date
-          ${partyId ? sql`and w.party_id = ${partyId}` : sql``}`)
+          ${only('w.party_id')}`)
     : { rows: [] as { party_id: string; charge_line_id: string; settle_line_id: string; amount: string; amount_base: string }[] };
   // Çek/senet kaydı ve cirosunun kalem kapatması (Faz X1): olay tarihinde geçerlidir
   const chequeAllocs = await tx.execute<{ party_id: string; charge_line_id: string; settle_line_id: string; amount: string; amount_base: string }>(sql`
@@ -321,7 +332,7 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
     from cheque_allocations a
     join cheque_events ev on ev.id = a.event_id
     where a.control = ${type} and ev.event_date <= ${asOf}::date
-      ${partyId ? sql`and a.party_id = ${partyId}` : sql``}`);
+      ${only('a.party_id')}`);
   for (const a of [...allocs.rows, ...writeoffs.rows, ...chequeAllocs.rows]) {
     byParty.get(a.party_id)?.allocations.push({
       chargeLineId: a.charge_line_id,
@@ -356,6 +367,18 @@ export async function openItemsFor(tx: Tx, partyId: string, type: PartyControlTy
   const byParty = await loadPartyLines(tx, type, asOf, partyId);
   const p = byParty.get(partyId);
   return computeOpenItems(p?.lines ?? [], type, asOf, p?.allocations ?? []);
+}
+
+/** Birden çok carinin açık kalemleri tek seferde (cari başına sorgu yerine). */
+export async function openItemsForParties(tx: Tx, partyIds: readonly string[], type: PartyControlType, asOf: string) {
+  const out = new Map<string, ReturnType<typeof computeOpenItems>>();
+  if (partyIds.length === 0) return out;
+  const byParty = await loadPartyLines(tx, type, asOf, partyIds);
+  for (const id of partyIds) {
+    const p = byParty.get(id);
+    out.set(id, computeOpenItems(p?.lines ?? [], type, asOf, p?.allocations ?? []));
+  }
+  return out;
 }
 
 export async function partyAging(tx: Tx, q: { type: PartyControlType; asOf: string }) {

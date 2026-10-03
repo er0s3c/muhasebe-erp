@@ -170,10 +170,12 @@ export async function createDeliveryDraft(tx: Tx, ctx: DeliveryCtx, input: Creat
   return writeDraft(tx, ctx, input.type, input);
 }
 
-async function getDraftRow(tx: Tx, id: string) {
+async function getDraftRow(tx: Tx, id: string, action: 'düzenlenebilir' | 'silinebilir' = 'düzenlenebilir') {
   const [row] = await tx.select().from(deliveryNotes).where(eq(deliveryNotes.id, id));
   if (!row) throw notFound('İrsaliye');
-  if (row.status !== 'draft') throw unprocessable('Yalnızca taslak irsaliye düzenlenebilir', 'DELIVERY_NOT_DRAFT');
+  if (row.status !== 'draft') {
+    throw unprocessable(action === 'silinebilir' ? 'Yalnızca taslak irsaliye silinebilir; kayıtlı irsaliye iptal edilir' : 'Yalnızca taslak irsaliye düzenlenebilir', 'DELIVERY_NOT_DRAFT');
+  }
   return row;
 }
 
@@ -184,8 +186,10 @@ export async function updateDeliveryDraft(tx: Tx, ctx: DeliveryCtx, id: string, 
 }
 
 export async function deleteDeliveryDraft(tx: Tx, id: string) {
-  await getDraftRow(tx, id);
-  await tx.delete(deliveryNotes).where(eq(deliveryNotes.id, id));
+  await getDraftRow(tx, id, 'silinebilir');
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(deliveryNotes).where(eq(deliveryNotes.id, id)).returning({ id: deliveryNotes.id });
+  if (deleted.length === 0) throw notFound('İrsaliye');
 }
 
 // --- Okuma -------------------------------------------------------------------

@@ -300,7 +300,9 @@ export async function deleteDraftEntry(tx: Tx, id: string) {
   if (existing.status !== 'draft') {
     throw unprocessable('Kaydedilmiş yevmiye silinemez; ters kayıt oluşturun', 'ENTRY_NOT_DRAFT');
   }
-  await tx.delete(journalEntries).where(eq(journalEntries.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(journalEntries).where(eq(journalEntries.id, id)).returning({ id: journalEntries.id });
+  if (deleted.length === 0) throw notFound('Yevmiye');
 }
 
 /**

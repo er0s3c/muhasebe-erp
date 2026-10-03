@@ -1,5 +1,6 @@
 import { Building2, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
@@ -30,7 +31,8 @@ export function OrganizationsPage() {
     if (q) p.set('q', q);
     return p.toString();
   }, [q, archived]);
-  const { data, isPending } = useCQuery<{ organizations: DirOrg[] }>(['directory', 'orgs', qs], `/api/directory/organizations?${qs}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<{ organizations: DirOrg[] } & { truncated?: boolean }>(['directory', 'orgs', qs, lim.limit], `/api/directory/organizations?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.organizations ?? [];
   const addButton = canManage && (
     <Button variant="primary" onClick={() => setAdding(true)}>
@@ -66,7 +68,8 @@ export function OrganizationsPage() {
           {rows.length === 0 ? (
             <Card><EmptyState title={t('common.noResults')} /></Card>
           ) : (
-            <TableWrap>
+            <>
+              <TableWrap>
               <Table>
                 <thead>
                   <tr>
@@ -90,6 +93,8 @@ export function OrganizationsPage() {
                 </tbody>
               </Table>
             </TableWrap>
+              <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+            </>
           )}
         </div>
       )}

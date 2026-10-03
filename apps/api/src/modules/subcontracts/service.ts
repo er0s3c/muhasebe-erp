@@ -132,7 +132,9 @@ export async function setSubcontractStatus(tx: Tx, id: string, status: 'complete
 
 export async function deleteSubcontract(tx: Tx, id: string) {
   await lockSubcontract(tx, id);
-  await tx.delete(subcontracts).where(eq(subcontracts.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(subcontracts).where(eq(subcontracts.id, id)).returning({ id: subcontracts.id });
+  if (deleted.length === 0) throw notFound('Taşeron sözleşmesi');
 }
 
 // --- Revizyon ve BOQ ---------------------------------------------------------------------
@@ -266,7 +268,9 @@ export async function deleteRevision(tx: Tx, revisionId: string) {
   await lockSubcontract(tx, revision.subcontractId);
   const [vo] = await tx.select({ code: variationOrders.code }).from(variationOrders).where(eq(variationOrders.revisionId, revisionId));
   if (vo) throw unprocessable(`Bu revizyon ${vo.code} değişiklik emrine bağlı; değişiklik emrini iptal edin`, 'REVISION_IN_VARIATION');
-  await tx.delete(subcontractRevisions).where(eq(subcontractRevisions.id, revisionId));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(subcontractRevisions).where(eq(subcontractRevisions.id, revisionId)).returning({ id: subcontractRevisions.id });
+  if (deleted.length === 0) throw notFound('Revizyon');
 }
 
 export async function getRevision(tx: Tx, revisionId: string) {

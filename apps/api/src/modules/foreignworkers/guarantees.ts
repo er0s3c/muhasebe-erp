@@ -4,6 +4,7 @@ import type { Tx } from '../../db/client';
 import { employees, foreignWorkerDocs, foreignWorkerGuarantees } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { resolveParamAt, type ForeignCtx } from './params';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 /**
  * Teminat tutarı İSTEKTEN ALINMAZ: yatırma tarihinde geçerli, açık ve en yeni `guarantee_amount` parametresinden anlık görüntü
@@ -61,15 +62,16 @@ export type GuaranteeView = {
   resolutionNote: string | null;
 };
 
-export async function listGuarantees(tx: Tx, q: { employeeId?: string; projectId?: string; status?: string }) {
+export async function listGuarantees(tx: Tx, q: { employeeId?: string; projectId?: string; status?: string }, page?: PageQuery) {
   const res = await tx.execute<GuaranteeView>(sql`
     select ${COLS} from foreign_worker_guarantees g
       join employees e on e.id = g.employee_id and e.company_id = g.company_id
       left join projects p on p.id = g.project_id
      where true ${q.employeeId ? sql`and g.employee_id = ${q.employeeId}` : sql``} ${q.projectId ? sql`and g.project_id = ${q.projectId}` : sql``}
        ${q.status ? sql`and g.status = ${q.status}` : sql``}
-     order by e.code, g.deposited_date desc`);
-  return { guarantees: res.rows };
+     order by e.code, g.deposited_date desc ${pageSql(page)}`);
+  const pg = paged(res.rows, page);
+  return { guarantees: pg.rows, truncated: pg.truncated };
 }
 
 async function getGuarantee(tx: Tx, id: string) {

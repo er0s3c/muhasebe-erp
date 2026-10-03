@@ -6,6 +6,7 @@ import { notFound, unprocessable } from '../../http/errors';
 import { postStockDocument, type StockCtx } from '../inventory/documents';
 import { requireRate } from '../settings/rates';
 import { getBalances } from './progress';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 /**
  * Taşerona malzeme verme: sözleşmenin projesine ve iş kalemine etiketli stok sarfı (`issue`) belgesi açılır
@@ -50,12 +51,13 @@ export async function giveMaterial(tx: Tx, ctx: StockCtx, subcontractId: string,
   return { document: posted.document, balances: await getBalances(tx, sc.id) };
 }
 
-export async function listMaterialIssues(tx: Tx, subcontractId: string) {
+export async function listMaterialIssues(tx: Tx, subcontractId: string, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select i.id, i.issue_date::text as "issueDate", i.amount::text as amount, i.amount_base::text as "amountBase", i.note,
            i.stock_document_id as "stockDocumentId", d.doc_no as "docNo", d.description
       from subcontract_material_issues i join stock_documents d on d.id = i.stock_document_id
      where i.subcontract_id = ${subcontractId}
-     order by i.issue_date desc, i.created_at desc`);
-  return { issues: rows.rows, balances: await getBalances(tx, subcontractId) };
+     order by i.issue_date desc, i.created_at desc ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { issues: pg.rows, truncated: pg.truncated, balances: await getBalances(tx, subcontractId) };
 }

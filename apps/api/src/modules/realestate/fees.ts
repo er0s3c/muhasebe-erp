@@ -51,6 +51,8 @@ export async function deleteFeeSchedule(tx: Tx, id: string) {
  * satış bedeli; bütçeye karşılık gerçekleşen "fon ve harç" maliyet kodu harcamasıyla karşılaştırılır (defter para birimi).
  */
 export async function feeEstimate(tx: Tx, projectId: string, asOf: string, base: string) {
+  const [project] = await tx.execute<{ id: string }>(sql`select id from projects where id = ${projectId}`).then((r) => r.rows);
+  if (!project) throw notFound('Proje');
   const [stats] = await tx.execute<{ units: number; m2: string }>(sql`select count(*)::int as units, coalesce(sum(gross_m_2), 0)::text as m2 from real_estate_units where project_id = ${projectId}`).then((r) => r.rows);
   const [sold] = await tx.execute<{ base: string }>(sql`select coalesce(sum(round(price * activation_fx, 2)), 0)::text as base from sales_contracts where project_id = ${projectId} and status in ('active','handed_over')`).then((r) => r.rows);
   const schedules = (await listFeeSchedules(tx, { side: 'project', date: asOf })).feeSchedules;

@@ -101,14 +101,20 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
     '/api/company',
     tenantRoute(app, { permission: 'company.manage' }, async ({ tx, company, req }) => {
       const input = updateCompanySchema.parse(req.body);
+      const values = {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.taxNumber !== undefined ? { taxNumber: input.taxNumber } : {}),
+        ...(input.taxOffice !== undefined ? { taxOffice: input.taxOffice } : {}),
+        ...(input.allowNegativeStock !== undefined ? { allowNegativeStock: input.allowNegativeStock } : {}),
+      };
+      // Değiştirilecek alan yoksa güncel kayıt döner (API-6)
+      if (Object.keys(values).length === 0) {
+        const [cur] = await tx.select().from(companies).where(eq(companies.id, company.id));
+        return { company: cur };
+      }
       const [row] = await tx
         .update(companies)
-        .set({
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.taxNumber !== undefined ? { taxNumber: input.taxNumber } : {}),
-          ...(input.taxOffice !== undefined ? { taxOffice: input.taxOffice } : {}),
-          ...(input.allowNegativeStock !== undefined ? { allowNegativeStock: input.allowNegativeStock } : {}),
-        })
+        .set(values)
         .where(and(eq(companies.id, company.id)))
         .returning();
       return { company: row };

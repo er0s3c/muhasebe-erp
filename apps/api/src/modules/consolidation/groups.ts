@@ -148,7 +148,7 @@ export interface EliminationDto {
   lines: { lineNo: number; accountCode: string; debit: string; credit: string; memo: string | null }[];
 }
 
-export async function listEliminations(ctx: AuthCtx, groupId: string, opts: { from?: string; to?: string; includeVoided?: boolean } = {}): Promise<EliminationDto[]> {
+export async function listEliminations(ctx: AuthCtx, groupId: string, opts: { from?: string; to?: string; includeVoided?: boolean; limit?: number; offset?: number } = {}): Promise<EliminationDto[]> {
   await ownGroup(ctx, groupId);
   const heads = await ctx.tx
     .select()
@@ -162,7 +162,10 @@ export async function listEliminations(ctx: AuthCtx, groupId: string, opts: { fr
         opts.to ? lte(consolidationEliminations.periodTo, opts.to) : undefined,
       ),
     )
-    .orderBy(desc(consolidationEliminations.createdAt));
+    .orderBy(desc(consolidationEliminations.createdAt))
+    .$dynamic()
+    .limit(opts.limit ?? 1_000_000)
+    .offset(opts.offset ?? 0);
   if (heads.length === 0) return [];
   const lines = await ctx.tx
     .select()

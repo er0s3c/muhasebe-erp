@@ -83,7 +83,9 @@ export async function updateWarehouse(tx: Tx, id: string, input: UpdateWarehouse
 }
 
 export async function deleteWarehouse(tx: Tx, id: string) {
-  const current = await getWarehouseRow(tx, id);
+  // Satır kilitlenir: eşzamanlı silmeler sıraya girer, ikincisi 404 alır (API-11)
+  const [current] = await tx.select().from(warehouses).where(eq(warehouses.id, id)).for('update');
+  if (!current) throw notFound('Depo');
   if (current.isDefault) throw unprocessable('Varsayılan depo silinemez', 'WAREHOUSE_IS_DEFAULT');
   const [docs] = await tx
     .select({ n: sql<number>`count(*)::int` })
@@ -96,7 +98,9 @@ export async function deleteWarehouse(tx: Tx, id: string) {
   if ((docs?.n ?? 0) > 0 || (counts?.n ?? 0) > 0) {
     throw unprocessable('Hareketi olan depo silinemez; pasifleştirin', 'WAREHOUSE_HAS_MOVEMENTS');
   }
-  await tx.delete(warehouses).where(eq(warehouses.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(warehouses).where(eq(warehouses.id, id)).returning({ id: warehouses.id });
+  if (deleted.length === 0) throw notFound('Depo');
 }
 
 export async function requireActiveWarehouse(tx: Tx, id: string, label = 'Depo') {

@@ -1,6 +1,7 @@
 import { BANK_GUARANTEE_STATUSES, todayIso, type GuaranteeDirection } from '@erp/shared';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -48,7 +49,8 @@ export function GuaranteesPage() {
   const [q, setQ] = useState('');
   const params = { direction, status, withinDays: within, q };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
-  const { data, isPending } = useCQuery<BankGuaranteeList>(['guarantees', 'list', qs], `/api/bank-guarantees${qs ? `?${qs}` : ''}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<BankGuaranteeList & { truncated?: boolean }>(['guarantees', 'list', qs, lim.limit], `/api/bank-guarantees?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const report = useCQuery<BankGuaranteeReport>(['guarantees', 'report'], '/api/bank-guarantees/report');
   const [editing, setEditing] = useState<BankGuaranteeRow | 'new' | null>(null);
   const [resolving, setResolving] = useState<BankGuaranteeRow | null>(null);
@@ -159,7 +161,8 @@ export function GuaranteesPage() {
           <EmptyState title={t('guarantees.empty')} description={t('guarantees.emptyDesc')} />
         </Card>
       ) : (
-        <TableWrap>
+        <>
+          <TableWrap>
           <Table aria-label={t('guarantees.title')}>
             <thead>
               <tr>
@@ -211,6 +214,8 @@ export function GuaranteesPage() {
             </tbody>
           </Table>
         </TableWrap>
+          <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+        </>
       )}
 
       {report.data && (report.data.byBank.length > 0 || report.data.byProject.length > 0) && (

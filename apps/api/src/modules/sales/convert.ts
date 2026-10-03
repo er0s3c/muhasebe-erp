@@ -1,11 +1,38 @@
 import { sql } from 'drizzle-orm';
 import { dec, todayIso, type CreateDeliveryNoteInput, type CreateInvoiceInput, type MoneyValue, type OrderToDeliveryInput, type OrderToInvoiceInput } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { unprocessable } from '../../http/errors';
+import { AppError, unprocessable } from '../../http/errors';
 import { createDeliveryDraft, type DeliveryCtx } from '../deliveries/service';
 import { uuidList } from '../inventory/balances';
 import { createInvoiceDraft, type InvoiceCtx } from '../invoices/service';
 import { lockDoc, orderLinesWithUsage } from './orders';
+
+/**
+ * Aynı siparişten kaydedilmemiş (taslak) bir belge zaten varsa yenisi açılmaz (API-11): tekrarlanan tıklama/istek ikinci bir taslak
+ * üretip aynı kalan miktarı iki kez önermesin. Sipariş satırı kilitli olduğundan eşzamanlı istekler de sıraya girer.
+ */
+async function assertNoOpenDraft(tx: Tx, orderId: string, kind: 'delivery' | 'invoice') {
+  const r =
+    kind === 'delivery'
+      ? await tx.execute<{ id: string }>(sql`
+          select n.id from delivery_notes n
+          where n.status = 'draft' and exists (
+            select 1 from delivery_note_lines l join sales_order_lines s on s.id = l.sales_order_line_id
+             where l.note_id = n.id and s.order_id = ${orderId})
+          limit 1`)
+      : await tx.execute<{ id: string }>(sql`
+          select i.id from invoices i
+          where i.status = 'draft' and exists (
+            select 1 from invoice_lines l join sales_order_lines s on s.id = l.sales_order_line_id
+             where l.invoice_id = i.id and s.order_id = ${orderId})
+          limit 1`);
+  const id = r.rows[0]?.id;
+  if (id) {
+    throw kind === 'delivery'
+      ? new AppError(409, 'SO_DRAFT_EXISTS', 'Bu siparişten açılmış, henüz kaydedilmemiş bir irsaliye taslağı var; önce onu kaydedin ya da silin', { noteId: id })
+      : new AppError(409, 'SO_DRAFT_EXISTS', 'Bu siparişten açılmış, henüz kaydedilmemiş bir fatura taslağı var; önce onu kaydedin ya da silin', { invoiceId: id });
+  }
+}
 
 /**
  * Siparişten irsaliye TASLAĞI: satış irsaliyesi satırları sipariş satırına bağlanır (karşılanan miktar oradan türer). Verilmeyen
@@ -15,6 +42,7 @@ export async function orderToDelivery(tx: Tx, ctx: DeliveryCtx, orderId: string,
   const order = await lockDoc(tx, orderId);
   if (order.kind !== 'order') throw unprocessable('Yalnızca siparişten irsaliye düzenlenir', 'SO_NOT_ORDER');
   if (order.status !== 'confirmed') throw unprocessable('Yalnızca onaylı siparişten irsaliye düzenlenir', 'SO_NOT_CONFIRMED');
+  await assertNoOpenDraft(tx, orderId, 'delivery');
   const rows = await orderLinesWithUsage(tx, orderId);
   const asked = new Map((input.lines ?? []).map((l) => [l.lineId, dec(l.quantity)]));
   for (const id of asked.keys()) {
@@ -64,6 +92,7 @@ export async function orderToInvoice(tx: Tx, ctx: InvoiceCtx, orderId: string, i
   const order = await lockDoc(tx, orderId);
   if (order.kind !== 'order') throw unprocessable('Yalnızca siparişten fatura düzenlenir', 'SO_NOT_ORDER');
   if (order.status !== 'confirmed' && order.status !== 'closed') throw unprocessable('Yalnızca onaylı ya da kapalı siparişten fatura düzenlenir', 'SO_NOT_CONFIRMED');
+  await assertNoOpenDraft(tx, orderId, 'invoice');
   const rows = await orderLinesWithUsage(tx, orderId);
   const lineIds = rows.map((r) => r.line.id);
 

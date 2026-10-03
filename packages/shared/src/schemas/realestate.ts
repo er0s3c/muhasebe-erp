@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { currencyCode, isoDate, uuid } from './common';
+import { boolQuery, currencyCode, isoDate, uuid, pageParams } from './common';
 
 // --- Birim ---------------------------------------------------------------------------------------
 
@@ -53,6 +53,7 @@ export const bulkUnitsSchema = z
 export type BulkUnitsInput = z.infer<typeof bulkUnitsSchema>;
 
 export const unitListQuerySchema = z.object({
+  ...pageParams(2000, 5000),
   projectId: uuid.optional(),
   status: z.enum(UNIT_STATUSES).optional(),
   block: z.string().trim().max(40).optional(),
@@ -102,6 +103,7 @@ export const terminateContractSchema = z.object({
 export type TerminateContractInput = z.infer<typeof terminateContractSchema>;
 
 export const salesContractListQuerySchema = z.object({
+  ...pageParams(),
   projectId: uuid.optional(),
   partyId: uuid.optional(),
   status: z.enum(SALES_CONTRACT_STATUSES).optional(),
@@ -111,6 +113,12 @@ export const overdueQuerySchema = z.object({
   asOf: isoDate.optional(),
   projectId: uuid.optional(),
 });
+
+/** Tahsil edilecek taksitler listesi (`overdue=true`: yalnızca gecikenler). */
+export const installmentListQuerySchema = overdueQuerySchema.extend({ overdue: boolQuery, ...pageParams() });
+
+/** Proje fon/harç tahmini. */
+export const feeEstimateQuerySchema = z.object({ asOf: isoDate.optional() });
 
 // --- Altyapı fonları ve harçlar (B4) --------------------------------------------------------------------
 

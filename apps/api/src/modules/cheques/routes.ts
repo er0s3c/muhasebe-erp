@@ -15,6 +15,7 @@ import {
   updatePortfolioSettingsSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import type { LedgerCtx } from '../ledger/journal';
 import { createGuarantee, deleteGuarantee, getGuarantee, getSettings, guaranteeReport, guaranteeWarnings, listGuarantees, resolveGuarantee, updateGuarantee, updateSettings } from './guarantees';
 import { chequeMaturity, chequesBounced, chequesDue } from './reports';
@@ -38,7 +39,10 @@ export const chequeRoutes: FastifyPluginAsync = async (app) => {
   const gManage = { module: gua, permission: 'treasury.manage' } as const;
 
   // --- Çek/senet ---------------------------------------------------------------------------------------------
-  app.get('/api/cheques', tenantRoute(app, read, async ({ tx, req }) => listCheques(tx, chequeListQuerySchema.parse(req.query))));
+  app.get('/api/cheques', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = chequeListQuerySchema.parse(req.query);
+    return listCheques(tx, q, pageOf(q));
+  }));
   app.get('/api/cheques/batches', tenantRoute(app, read, async ({ tx }) => listBatches(tx)));
   app.get('/api/cheques/reports/maturity', tenantRoute(app, read, async ({ tx, req }) => chequeMaturity(tx, chequeMaturityQuerySchema.parse(req.query))));
   app.get('/api/cheques/reports/due', tenantRoute(app, read, async ({ tx, req }) => chequesDue(tx, chequeDueQuerySchema.parse(req.query))));
@@ -56,7 +60,10 @@ export const chequeRoutes: FastifyPluginAsync = async (app) => {
   app.post('/api/cheques/actions', tenantRoute(app, post, async (c) => runChequeAction(c.tx, ledgerCtx(c), chequeActionSchema.parse(c.req.body))));
 
   // --- Banka teminat mektubu ---------------------------------------------------------------------------------------
-  app.get('/api/bank-guarantees', tenantRoute(app, gRead, async ({ tx, req }) => listGuarantees(tx, bankGuaranteeListQuerySchema.parse(req.query))));
+  app.get('/api/bank-guarantees', tenantRoute(app, gRead, async ({ tx, req }) => {
+    const q = bankGuaranteeListQuerySchema.parse(req.query);
+    return listGuarantees(tx, q, pageOf(q));
+  }));
   app.get('/api/bank-guarantees/settings', tenantRoute(app, gRead, async ({ tx }) => getSettings(tx)));
   app.put('/api/bank-guarantees/settings', tenantRoute(app, gManage, async ({ tx, company, user, req }) => updateSettings(tx, { companyId: company.id, userId: user.id }, updatePortfolioSettingsSchema.parse(req.body))));
   app.get('/api/bank-guarantees/warnings', tenantRoute(app, gRead, async ({ tx }) => guaranteeWarnings(tx)));

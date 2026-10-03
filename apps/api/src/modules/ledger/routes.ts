@@ -12,9 +12,11 @@ import {
   updateAccountMappingsSchema,
   updateAccountSchema,
   uuid,
+  accountListQuerySchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { unprocessable } from '../../http/errors';
+import { pageOf, paged } from '../../http/paging';
 import { createAccount, listAccounts, updateAccount } from './accounts';
 import { generalLedger, journalBook } from './books';
 import {
@@ -47,7 +49,12 @@ export const ledgerRoutes: FastifyPluginAsync = async (app) => {
   // ---- Hesap planı ------------------------------------------------------
   app.get(
     '/api/accounts',
-    tenantRoute(app, ledger('ledger.read'), async ({ tx }) => ({ accounts: await listAccounts(tx) })),
+    tenantRoute(app, ledger('ledger.read'), async ({ tx, req }) => {
+      // Hesap planı seçicilerde bütün olarak kullanılır: geniş ama sınırlı sayfa (API-7)
+      const page = pageOf(accountListQuerySchema.parse(req.query));
+      const pg = paged(await listAccounts(tx, page), page);
+      return { accounts: pg.rows, truncated: pg.truncated };
+    }),
   );
 
   app.post(

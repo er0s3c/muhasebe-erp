@@ -1,5 +1,6 @@
 import { CalendarClock } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
@@ -28,7 +29,8 @@ export function SalesInstallmentsPage() {
     if (mode === 'overdue') q.set('overdue', 'true');
     return q.toString();
   }, [projectId, mode]);
-  const { data, isPending } = useCQuery<{ asOf: string; installments: DueInstallmentRow[] }>(['sales-installments', 'list', qs], `/api/real-estate/installments?${qs}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<{ asOf: string; installments: DueInstallmentRow[] } & { truncated?: boolean }>(['sales-installments', 'list', qs, lim.limit], `/api/real-estate/installments?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.installments ?? [];
   return (
     <>
@@ -51,7 +53,8 @@ export function SalesInstallmentsPage() {
       ) : rows.length === 0 ? (
         <Card><EmptyState icon={<CalendarClock className="size-5" />} title={t('realEstate.installments.empty')} description={t('realEstate.installments.emptyDesc')} /></Card>
       ) : (
-        <TableWrap>
+        <>
+          <TableWrap>
           <Table>
             <thead>
               <tr>
@@ -81,6 +84,8 @@ export function SalesInstallmentsPage() {
             </tbody>
           </Table>
         </TableWrap>
+          <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+        </>
       )}
     </>
   );

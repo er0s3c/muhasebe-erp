@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { dec, monthBounds, todayIso, type AttendanceDayType, type UpsertAttendanceInput } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { attendanceEntries, attendanceMonths, employees } from '../../db/schema';
-import { conflict, unprocessable } from '../../http/errors';
+import { unprocessable } from '../../http/errors';
 import { validateDimensions } from '../projects/dimension';
 
 export interface AttendanceCtx {
@@ -62,7 +62,8 @@ export async function getMonthLock(tx: Tx, month: string): Promise<MonthLock> {
 export async function closeMonth(tx: Tx, ctx: AttendanceCtx, month: string, note: string | null | undefined): Promise<MonthLock> {
   if (month > currentMonth()) throw unprocessable('Henüz başlamamış ay kapatılamaz', 'ATTENDANCE_MONTH_FUTURE');
   const [cur] = await tx.select().from(attendanceMonths).where(eq(attendanceMonths.month, month)).for('update');
-  if (cur?.status === 'closed') throw conflict(`${month} ayı zaten kapalı`, 'ATTENDANCE_MONTH_CLOSED');
+  // Ay durumu kodları (ATTENDANCE_MONTH_CLOSED / _NOT_CLOSED) her yerde 422 (API-10)
+  if (cur?.status === 'closed') throw unprocessable(`${month} ayı zaten kapalı`, 'ATTENDANCE_MONTH_CLOSED');
   if (!cur) {
     await tx.insert(attendanceMonths).values({ companyId: ctx.companyId, month, status: 'closed', closedBy: ctx.userId, closeNote: note ?? null });
   } else {

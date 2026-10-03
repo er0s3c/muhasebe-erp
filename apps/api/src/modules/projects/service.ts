@@ -165,7 +165,9 @@ export async function setProjectStatus(tx: Tx, id: string, status: ProjectStatus
 }
 
 export async function deleteProject(tx: Tx, id: string) {
-  await getProjectRow(tx, id);
+  // Satır kilitlenir: eşzamanlı silmeler sıraya girer, ikincisi 404 alır (API-11)
+  const [locked] = await tx.select({ id: projects.id }).from(projects).where(eq(projects.id, id)).for('update');
+  if (!locked) throw notFound('Proje');
   const used = await tx.execute<{ used: boolean }>(sql`select project_has_postings(${id}) as used`);
   if (used.rows[0]?.used) {
     throw unprocessable('Maliyet kaydı olan proje silinemez; tamamlandı olarak işaretleyin', 'PROJECT_HAS_POSTINGS');
@@ -175,5 +177,7 @@ export async function deleteProject(tx: Tx, id: string) {
   if ((structure.rows[0]?.n ?? 0) > 0) {
     throw unprocessable('İş kalemi veya bütçesi olan proje silinemez; iptal edin', 'PROJECT_HAS_STRUCTURE');
   }
-  await tx.delete(projects).where(eq(projects.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(projects).where(eq(projects.id, id)).returning({ id: projects.id });
+  if (deleted.length === 0) throw notFound('Proje');
 }

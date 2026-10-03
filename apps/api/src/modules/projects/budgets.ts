@@ -160,5 +160,7 @@ export async function deleteBudget(tx: Tx, budgetId: string) {
   if (budget.status !== 'draft') {
     throw unprocessable('Onaylanmış bütçe revizyonu silinemez', 'BUDGET_NOT_DRAFT');
   }
-  await tx.delete(projectBudgets).where(eq(projectBudgets.id, budgetId));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(projectBudgets).where(eq(projectBudgets.id, budgetId)).returning({ id: projectBudgets.id });
+  if (deleted.length === 0) throw notFound('Bütçe');
 }

@@ -14,6 +14,30 @@ export const dec = (value: Decimal.Value): MoneyValue => new Money(value);
 
 export const ZERO = dec(0);
 
+/**
+ * Güvenli dönüşüm: sonlu bir sayı değilse (`'1,5'`, `'abc'`, `''`, `'NaN'`, `'Infinity'`, `'1e999'`) `null` döner, asla fırlatmaz.
+ * Doğrulama şemalarının `.refine`/`.superRefine` gövdeleri bunu kullanır: Zod, `.regex` başarısız olsa da sonraki
+ * kuralları çalıştırır; `dec()` orada DecimalError fırlatıp 500'e yol açıyordu (API-2).
+ */
+export function tryDec(value: unknown): MoneyValue | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  if (typeof value === 'string' && !/^-?\d+(\.\d+)?$/.test(value.trim())) return null;
+  try {
+    const d = new Money(value);
+    return d.isFinite() ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `tryDec(v)` sonucu verilen koşulu sağlıyor mu (geçersiz sayı → false). Şema kurallarında kullanılır. */
+export const decCheck =
+  (pred: (d: MoneyValue) => boolean) =>
+  (value: unknown): boolean => {
+    const d = tryDec(value);
+    return d !== null && pred(d);
+  };
+
 export function sum(values: Iterable<Decimal.Value>): MoneyValue {
   let total = dec(0);
   for (const v of values) total = total.plus(v);

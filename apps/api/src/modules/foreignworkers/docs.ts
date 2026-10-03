@@ -6,6 +6,7 @@ import { conflict, notFound, unprocessable } from '../../http/errors';
 import { decryptField, encryptField, lastFour, maskTail } from '../hr/crypto';
 import { warningAt, type ForeignCtx } from './params';
 import { trContains } from '../../db/search';
+import { slicePage, type PageQuery } from '../../http/paging';
 
 const GENERIC_TYPES = [
   { code: 'WORK_PERMIT', name: 'Çalışma izni' },
@@ -82,7 +83,7 @@ function view(r: DocRow, extra: { employeeCode: string; employeeName: string; na
   };
 }
 
-export async function listDocs(tx: Tx, q: ForeignDocListQuery) {
+export async function listDocs(tx: Tx, q: Omit<ForeignDocListQuery, 'limit' | 'offset'>, page?: PageQuery) {
   const today = q.asOf ?? todayIso();
   const warn = await warningAt(tx, today);
   const rows = await tx
@@ -102,11 +103,12 @@ export async function listDocs(tx: Tx, q: ForeignDocListQuery) {
   const all = rows.map((r) => view(r.d, { employeeCode: r.code, employeeName: r.name, nationality: r.nationality, typeName: r.typeName, typeCode: r.typeCode }, today, warn.days));
   const summary = { valid: 0, expiring: 0, expired: 0, revoked: 0 };
   for (const d of all) summary[d.status]++;
-  const docs = all.filter(
+  const filtered = all.filter(
     (d) => (!q.status || d.status === q.status) && (q.withinDays === undefined || (d.status !== 'revoked' && d.daysToExpiry !== null && d.daysToExpiry <= q.withinDays)),
   );
+  const { rows: docs, truncated } = slicePage(filtered, page);
   await logForeignAccess(tx, docs.map((d) => d.employeeId), 'Yabancı işçi belge kaydı görüntüleme');
-  return { asOf: today, warning: { days: warn.days, configured: warn.configured, verified: warn.verified }, summary, docs };
+  return { asOf: today, warning: { days: warn.days, configured: warn.configured, verified: warn.verified }, summary, docs, truncated };
 }
 
 export async function getDoc(tx: Tx, id: string) {
@@ -193,7 +195,9 @@ export async function renewDoc(tx: Tx, ctx: ForeignCtx, id: string, input: { iss
   const newIssue = input.issueDate === undefined ? cur.issueDate : input.issueDate;
   const newNoEnc = no ? encryptField(no, ctx.secret) : cur.numberEnc;
   const newLast4 = no ? lastFour(no) : cur.numberLast4;
-  if (newIssue === cur.issueDate && input.expiryDate === cur.expiryDate && newLast4 === cur.numberLast4 && !no) throw unprocessable('Yenilemede bilgi değişmedi', 'RENEWAL_NO_CHANGE');
+  // Aynı bilgilerle (aynı numara dahil) tekrarlanan yenileme geçmişe ikinci kez yazılmaz (API-11)
+  const sameNo = !no || (cur.numberEnc !== null && decryptField(cur.numberEnc, ctx.secret) === no);
+  if (newIssue === cur.issueDate && input.expiryDate === cur.expiryDate && sameNo) throw conflict('Yenilemede bilgi değişmedi (aynı tarih ve numara)', 'RENEWAL_NO_CHANGE');
   if (newIssue && input.expiryDate < newIssue) throw unprocessable('Son kullanma tarihi veriliş tarihinden önce olamaz', 'FOREIGN_DOC_DATES');
   await tx.insert(foreignDocRenewals).values({
     companyId: ctx.companyId,

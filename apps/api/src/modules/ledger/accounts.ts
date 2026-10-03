@@ -5,6 +5,7 @@ import type { Tx } from '../../db/client';
 import { accounts, journalLines } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { CHART_TEMPLATE } from './chart-template';
+import type { PageQuery } from '../../http/paging';
 
 /**
  * Cari kontrol hesapları: bu hesaplara atılan her satır bir cariye bağlanmalıdır.
@@ -31,8 +32,9 @@ export async function seedChartOfAccounts(tx: Tx, companyId: string): Promise<vo
   );
 }
 
-export async function listAccounts(tx: Tx) {
-  return tx.select().from(accounts).orderBy(asc(accounts.code));
+export async function listAccounts(tx: Tx, page?: PageQuery) {
+  const q = tx.select().from(accounts).orderBy(asc(accounts.code)).$dynamic();
+  return page ? q.limit(page.limit + 1).offset(page.offset) : q;
 }
 
 /** "120.001" -> "120"; "120" -> "12"; "12" -> "1"; "1" -> null */
@@ -89,12 +91,15 @@ export async function createAccount(tx: Tx, companyId: string, input: CreateAcco
 }
 
 export async function updateAccount(tx: Tx, id: string, input: UpdateAccountInput) {
+  const values = {
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+  };
+  // Değiştirilecek alan yoksa güncel kayıt döner (boş UPDATE 500 veriyordu; API-6)
+  if (Object.keys(values).length === 0) return getAccount(tx, id);
   const [updated] = await tx
     .update(accounts)
-    .set({
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
-    })
+    .set(values)
     .where(eq(accounts.id, id))
     .returning();
   if (!updated) throw notFound('Hesap');
