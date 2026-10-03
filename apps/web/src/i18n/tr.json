@@ -1381,14 +1381,15 @@
       "returned": "İade edilen: {{qty}}",
       "internalNote": "Bu çıktı iç kullanım belgesidir; yasal fatura biçimi doğrulanmamıştır (bkz. docs/LEGAL-NOTES.md).",
       "cancelTitle": "Faturayı iptal et",
-      "cancelDesc": "Stok hareketi ve yevmiye ters kayıtla geri alınır; fatura numarası serinin parçası olarak kalır. Faturadan sonra aynı ürünlerde stok hareketi ya da iade varsa iptal edilemez.",
+      "cancelDesc": "Stok hareketi ve yevmiye ters kayıtla geri alınır; fatura numarası serinin parçası olarak kalır. Faturadan sonra aynı ürünlerde stok hareketi ya da iade varsa ya da faturaya tahsilat/ödeme (çek/senet dahil) eşleştirilmişse iptal edilemez; önce tahsilatı/ödemeyi iptal edin.",
+      "cancelBlocked": "Fatura iptal edilemedi",
       "cancelDate": "İptal tarihi",
       "cancelReason": "İptal nedeni",
       "cancelledMsg": "Fatura iptal edildi"
     },
     "vat": {
       "title": "KDV özeti",
-      "subtitle": "Kaydedilmiş faturalardan hesaplanan ve indirilecek KDV; iadeler düşülür, iptal edilenler dahil edilmez.",
+      "subtitle": "Faturalar, gider fişleri ve hakedişlerden hesaplanan ve indirilecek KDV; iadeler düşülür. Belge kendi tarihinde sayılır, iptali iptal tarihinin döneminde eksi olarak görünür (verilmiş dönem değişmez).",
       "unverified": "Şu KDV kodlarının oranı henüz resmi kaynaktan doğrulanmadı: {{codes}}.",
       "output": "Hesaplanan KDV",
       "input": "İndirilecek KDV",
@@ -1398,7 +1399,9 @@
       "rate": "Oran",
       "salesNet": "Satış matrahı",
       "purchaseNet": "Alış matrahı",
-      "note": "Tutarlar faturada saklanan oranlar ve defter para birimi üzerinden hesaplanır; beyanname yerine geçmez."
+      "note": "Tutarlar belgede saklanan oranlar ve defter para birimi üzerinden hesaplanır; KDV tevkifatı ayrı hesapta izlenir; beyanname yerine geçmez.",
+      "reconciled": "KDV hesaplarıyla uyumlu: hesaplanan {{output}}, indirilecek {{input}} (dönem hareketi).",
+      "unreconciled": "KDV hesaplarının dönem hareketi özetten farklı (elle yevmiye ya da açılış kaydı olabilir): hesaplanan KDV hesabı {{output}} (fark {{outputDiff}}), indirilecek KDV hesabı {{input}} (fark {{inputDiff}})."
     }
   },
   "deliveries": {
@@ -1876,7 +1879,8 @@
       "gross": "Brüt",
       "total": "Toplam",
       "empty": "Bu dönemde kaydedilmiş fatura yok",
-      "note": "İade faturaları düşülmüştür; iptal edilen ve taslak faturalar dahil değildir. Tutarlar defter para birimindedir."
+      "cancellation": "iptal",
+      "note": "İade faturaları düşülmüştür; taslaklar dahil değildir. İptal edilen fatura kendi döneminde kalır, iptal tarihinin döneminde eksi satır olarak düşülür (KDV özeti ve 600/621 hareketiyle aynı kural). Tutarlar defter para birimindedir."
     },
     "purchases": {
       "title": "Alış raporu",

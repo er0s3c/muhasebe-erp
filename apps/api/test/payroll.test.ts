@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readXlsx } from '../src/files/xlsx-read';
-import { addMember, asDb, asOwner, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear } from './helpers';
+import { addMember, asDb, asOwner, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear, TODAY_LOCAL } from './helpers';
 
 /**
  * Bordro motoru (Faz D3). Bu dosyadaki oranlar/çarpanlar YALNIZCA TEST DEĞERİDİR; kodda ve veritabanında varsayılan oran yoktur.
  * Tarihler içinde bulunulan aydadır (cari yıl dönemleri vardır; ay kapatılabilir; gelecek ay değildir).
  */
-const MONTH = new Date().toISOString().slice(0, 7);
+const MONTH = TODAY_LOCAL.slice(0, 7);
 const d = (n: number) => `${MONTH}-${String(n).padStart(2, '0')}`;
 const monthEnd = () => {
   const y = Number(MONTH.slice(0, 4));
@@ -329,7 +329,7 @@ describe('bordro motoru (Faz D3)', async () => {
     expect((await w.c.post(`/api/payroll/runs/${r.run.id}/pay`, { paidAt: d(1) })).json().error.code).toBe('PAYROLL_NOT_APPROVED');
     const ap = await ok(w.c.post(`/api/payroll/runs/${r.run.id}/approve`));
     expect((await w.c.post(`/api/payroll/runs/${r.run.id}/pay`, { paidAt: `${thisYear + 1}-01-01` })).json().error.code).toBe('PAYROLL_PAID_FUTURE');
-    const today = new Date().toISOString().slice(0, 10);
+    const today = TODAY_LOCAL;
     const paid = await ok(w.c.post(`/api/payroll/runs/${r.run.id}/pay`, { paidAt: today, note: 'Banka havalesi' }));
     expect(paid.run).toMatchObject({ status: 'paid', paidAt: today, paidNote: 'Banka havalesi' });
     expect((await w.c.post(`/api/payroll/runs/${r.run.id}/cancel`, { reason: 'Yanlış ay' })).json().error.code).toBe('PAYROLL_PAID');

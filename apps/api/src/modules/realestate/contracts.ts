@@ -14,7 +14,7 @@ import { companies, journalLines, parties, realEstateUnits, salesContracts, sale
 import { notFound, unprocessable } from '../../http/errors';
 import { createJournalEntry, reverseJournalEntry, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
-import { openItemsFor } from '../parties/service';
+import { describeSettlements, entrySettlements, openItemsFor } from '../parties/service';
 import { requireOpenPeriod } from '../settings/periods';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireRate } from '../settings/rates';
@@ -174,6 +174,8 @@ export async function cancelContract(tx: Tx, ctx: SalesCtx, id: string, reason: 
   const c = await lockContract(tx, id);
   if (c.status !== 'draft' && c.status !== 'active') throw unprocessable('Bu durumdaki sözleşme iptal edilemez', 'CONTRACT_CANNOT_CANCEL');
   if (c.status === 'active') {
+    const paid = await entrySettlements(tx, c.activationEntryId!);
+    if (paid.length > 0) throw unprocessable(`Tahsilatı olan sözleşme iptal edilemez (${describeSettlements(paid)}); fesih kaydı açın`, 'CONTRACT_HAS_PAYMENTS');
     await requireOpenPeriod(tx, todayIso());
     await reverseJournalEntry(tx, ledgerCtx(ctx), c.activationEntryId!, { entryDate: todayIso(), description: `Satış sözleşmesi iptali ${c.code}: ${reason}`.slice(0, 300), source: { type: 'sales_contract', id } });
   }

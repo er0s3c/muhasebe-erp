@@ -100,6 +100,24 @@ export function VatSummaryPage() {
               </Table>
             </TableWrap>
           )}
+          {data.reconciliation && (
+            <div className="mt-4">
+              {dec(data.reconciliation.outputDifference).isZero() && dec(data.reconciliation.inputDifference).isZero() ? (
+                <p className="text-[13px] text-muted">
+                  {t('invoices.vat.reconciled', { output: money(data.reconciliation.ledgerOutput), input: money(data.reconciliation.ledgerInput) })}
+                </p>
+              ) : (
+                <Callout tone="warning">
+                  {t('invoices.vat.unreconciled', {
+                    output: money(data.reconciliation.ledgerOutput),
+                    outputDiff: money(data.reconciliation.outputDifference),
+                    input: money(data.reconciliation.ledgerInput),
+                    inputDiff: money(data.reconciliation.inputDifference),
+                  })}
+                </Callout>
+              )}
+            </div>
+          )}
           <p className="mt-3 text-xs text-muted">{t('invoices.vat.note')}</p>
         </>
       )}

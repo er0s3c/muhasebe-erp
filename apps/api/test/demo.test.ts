@@ -1,7 +1,15 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+// Demo zaman çizelgesi "bugün"e göre kurulur (modül yüklenirken okunur): beklenen sayılar için tarih sabitlenir (yalnızca Date taklit
+// edilir; zamanlayıcılar gerçek kalır). Bu ayar içe aktarmalardan önce çalışır.
+const PINNED_NOW = '2026-10-05T09:00:00Z';
+vi.hoisted(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-05T09:00:00Z'));
+});
 import { createDb, withContext } from '../src/db/client';
 import { DEMO_EMAIL, seedDemo } from '../src/db/demo';
 import { runMigrations } from '../src/db/migrate';
@@ -14,6 +22,11 @@ const dbName = `erp_demo_test_${randomUUID().slice(0, 8)}`;
 const swap = (url: string, name: string) => url.replace(/\/[^/]*$/, `/${name}`);
 const ownerUrl = swap(ownerTestUrl, dbName);
 const appUrl = swap(appTestUrl, dbName);
+
+/** Tohumlamanın her tarihte çalıştığını gösteren "bugün"ler: gece yarısı sınırı (Lefkoşa saatiyle ertesi gün), ay başı, yıl sonu ve yıl başı. */
+const ROBUST_DATES = ['2026-10-02T22:00:00Z', '2026-12-20T10:00:00Z', '2027-01-02T10:00:00Z', '2027-03-01T10:00:00Z'];
+const robustDbs = ROBUST_DATES.map((_, i) => `${dbName}_d${i}`);
+const failDb = `${dbName}_fail`;
 
 async function admin<T>(fn: (c: pg.Client) => Promise<T>): Promise<T> {
   const c = new pg.Client({ connectionString: swap(ownerTestUrl, 'postgres') });
@@ -42,10 +55,20 @@ beforeAll(async () => {
     await c.query(`GRANT CONNECT ON DATABASE "${dbName}" TO erp_app`);
   });
   await runMigrations(ownerUrl);
+  // Farklı "bugün"lerde tohumlama denemesi için aynı şemanın kopyaları (şablon bağlantısızken kopyalanır)
+  await admin(async (c) => {
+    for (const name of [...robustDbs, failDb]) {
+      await c.query(`CREATE DATABASE "${name}" OWNER erp TEMPLATE "${dbName}"`);
+      await c.query(`GRANT CONNECT ON DATABASE "${name}" TO erp_app`);
+    }
+  });
 });
 
 afterAll(async () => {
-  await admin((c) => c.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`));
+  vi.useRealTimers();
+  await admin(async (c) => {
+    for (const name of [dbName, ...robustDbs, failDb]) await c.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+  });
 });
 
 describe('demo aracı', () => {
@@ -178,6 +201,58 @@ describe('demo aracı', () => {
       await handle.close();
     }
   });
+
+  it('seedDemo herhangi bir tarihte tek işlemde ve dengeli yüklenir (fesih kur artığı, yıl başı, gece yarısı)', async () => {
+    expect(new Date().toISOString()).toBe(new Date(PINNED_NOW).toISOString());
+    for (const [i, now] of ROBUST_DATES.entries()) {
+      vi.setSystemTime(new Date(now));
+      vi.resetModules();
+      const mod = (await import('../src/db/demo')) as typeof import('../src/db/demo');
+      const { createDb: create } = (await import('../src/db/client')) as typeof import('../src/db/client');
+      const handle = create(swap(appTestUrl, robustDbs[i]!));
+      try {
+        expect(await mod.seedDemo(handle.db, () => {}), now).toBe(true);
+      } finally {
+        await handle.close();
+      }
+      const c = new pg.Client({ connectionString: swap(ownerTestUrl, robustDbs[i]!) });
+      await c.connect();
+      try {
+        const q = async (text: string) => (await c.query(text)).rows[0];
+        expect((await q(`select count(*)::int as n from (select entry_id from journal_lines group by entry_id having sum(debit_base) <> sum(credit_base)) x`)).n, now).toBe(0);
+        expect((await q(`select count(*)::int as n from sales_contracts where status = 'terminated'`)).n, now).toBe(1);
+        // Hiçbir belge "bugün"den sonraya yazılmaz
+        expect((await q(`select count(*)::int as n from journal_entries where entry_date > '${now.slice(0, 10)}'::date + 1`)).n, now).toBe(0);
+      } finally {
+        await c.end();
+      }
+    }
+    vi.setSystemTime(new Date(PINNED_NOW));
+  }, 180_000);
+
+  it('seedDemo bir adımda hata verirse hiçbir şey bırakmaz (tek işlem); sorun giderilince yeniden çalışır', async () => {
+    const url = swap(ownerTestUrl, failDb);
+    const c = new pg.Client({ connectionString: url });
+    await c.connect();
+    try {
+      // Tohumlamanın sonlarına doğru (puantaj ayı kapatma) yapay hata
+      await c.query(`create function demo_fail() returns trigger language plpgsql as $$ begin raise exception 'demo yapay hata'; end $$`);
+      await c.query(`create trigger demo_fail before insert on attendance_months for each row execute function demo_fail()`);
+      const handle = createDb(swap(appTestUrl, failDb));
+      try {
+        await expect(seedDemo(handle.db, () => {})).rejects.toThrow();
+        expect((await c.query(`select count(*)::int as n from organizations`)).rows[0].n).toBe(0);
+        expect((await c.query(`select count(*)::int as n from users`)).rows[0].n).toBe(0);
+        expect((await c.query(`select count(*)::int as n from journal_entries`)).rows[0].n).toBe(0);
+        await c.query(`drop trigger demo_fail on attendance_months`);
+        expect(await seedDemo(handle.db, () => {})).toBe(true);
+      } finally {
+        await handle.close();
+      }
+    } finally {
+      await c.end();
+    }
+  }, 60_000);
 
   it('CLI reset: onay yoksa ya da ad yanlışsa silmez', async () => {
     const before = await admin(async () => {

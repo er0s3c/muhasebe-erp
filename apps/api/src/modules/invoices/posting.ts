@@ -22,6 +22,7 @@ import { insertDocument, loadStockableItems, reverseStockDocument, type StockCtx
 import { StockPlanner, type DraftRow } from '../inventory/planner';
 import { createJournalEntry, reverseJournalEntry, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
+import { describeSettlements, entrySettlements } from '../parties/service';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
@@ -418,6 +419,14 @@ export async function cancelInvoice(tx: Tx, ctx: InvoiceCtx, id: string, input: 
     select invoice_no from invoices where return_of_id = ${id} and status = 'posted' limit 1`);
   if (active.rows.length > 0) {
     throw unprocessable(`Bu faturaya ${active.rows[0]!.invoice_no} numaralı iade kesilmiş; önce iadeyi iptal edin`, 'INVOICE_HAS_RETURNS');
+  }
+  // Tahsil edilmiş/ödenmiş (eşleştirilmiş) fatura iptal edilemez: kapatma havada kalır, yaşlandırma defterden ayrışır (ACC-1)
+  const settled = await entrySettlements(tx, inv.journalEntryId!);
+  if (settled.length > 0) {
+    throw unprocessable(
+      `Bu fatura kapatılmış: ${describeSettlements(settled)}. Önce tahsilatı/ödemeyi iptal edin (Kasa/Banka > hareket > İptal); çek/senet ya da fesihle kapatıldıysa faturayı iptal etmek yerine iade faturası kesin`,
+      'INVOICE_HAS_PAYMENTS',
+    );
   }
 
   const date = input.date ?? todayIso();

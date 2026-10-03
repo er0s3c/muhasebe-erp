@@ -72,6 +72,8 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
   const [cancelling, setCancelling] = useState(false);
   const [cancelDate, setCancelDate] = useState(todayIso());
   const [reason, setReason] = useState('');
+  // İptal reddedilirse (ör. tahsil edilmiş fatura) gerekçe ve yönlendirme pencerede kalır: kullanıcı önce tahsilatı iptal eder
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const creditLimit = (location.state as { creditLimit?: { limit: string; balance: string } } | null)?.creditLimit;
 
   const cancel = useCMutation(
@@ -296,12 +298,15 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
 
       <Modal
         open={cancelling}
-        onOpenChange={setCancelling}
+        onOpenChange={(o) => {
+          setCancelling(o);
+          if (!o) setCancelError(null);
+        }}
         title={t('invoices.view.cancelTitle')}
         description={t('invoices.view.cancelDesc')}
         footer={
           <>
-            <Button onClick={() => setCancelling(false)}>{t('common.cancel')}</Button>
+            <Button onClick={() => { setCancelling(false); setCancelError(null); }}>{t('common.cancel')}</Button>
             <Button
               variant="danger"
               loading={cancel.isPending}
@@ -314,10 +319,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                       toast.success(t('invoices.view.cancelledMsg'));
                       setCancelling(false);
                     },
-                    onError: (e) => {
-                      setCancelling(false);
-                      toast.error(errorMessage(e));
-                    },
+                    onError: (e) => setCancelError(errorMessage(e)),
                   },
                 )
               }
@@ -328,6 +330,11 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
         }
       >
         <div className="flex flex-col gap-4">
+          {cancelError && (
+            <Callout tone="danger" title={t('invoices.view.cancelBlocked')}>
+              {cancelError}
+            </Callout>
+          )}
           <Field label={t('invoices.view.cancelDate')}>{(fid) => <Input id={fid} type="date" value={cancelDate} min={inv.invoiceDate} onChange={(e) => setCancelDate(e.target.value)} />}</Field>
           <Field label={t('invoices.view.cancelReason')} required>{(fid) => <Input id={fid} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />}</Field>
         </div>

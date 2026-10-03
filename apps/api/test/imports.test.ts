@@ -7,7 +7,7 @@ import { readXlsx } from '../src/files/xlsx-read';
 import { suggestMapping } from '../src/modules/imports/mapping';
 import { detectDelimiter, parseDelimited, readTable, splitHeader } from '../src/modules/imports/table';
 import { foldKey, parseDate, parseDecimal, parseInteger } from '../src/modules/imports/values';
-import { PASSWORD, client, createCompany, makeApp, registerUser } from './helpers';
+import { PASSWORD, client, createCompany, makeApp, registerUser, thisYear } from './helpers';
 
 /** windows-1254 (Türkçe Excel'in eski CSV kod sayfası): yalnızca Türkçe harfleri eşler, gerisi ASCII. */
 const CP1254: Record<string, number> = { Ü: 0xdc, ü: 0xfc, Ç: 0xc7, ç: 0xe7, Ğ: 0xd0, ğ: 0xf0, İ: 0xdd, ı: 0xfd, Ö: 0xd6, ö: 0xf6, Ş: 0xde, ş: 0xfe };
@@ -428,7 +428,7 @@ describe('içe aktarma: cari ve stok kartları', async () => {
     const site = await memberClient(c, company.id, 'site_manager');
     const viewer = await memberClient(c, company.id, 'viewer');
     const accountant = await memberClient(c, company.id, 'accountant');
-    const body = { rows: rowsOf([{ name: 'Yetki Deneme' }]), options: { openingDate: `${new Date().getUTCFullYear()}-01-15` } };
+    const body = { rows: rowsOf([{ name: 'Yetki Deneme' }]), options: { openingDate: `${thisYear}-01-15` } };
 
     expect((await sales.post('/api/imports/parties/preview', body)).statusCode).toBe(200);
     expect((await sales.post('/api/imports/items/preview', body)).statusCode).toBe(200);

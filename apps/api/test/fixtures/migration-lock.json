@@ -322,5 +322,9 @@
   "0080_audit_security_rules": {
     "sha256": "33b52e3c05c7f58ded2bff46405749630eb2bca1742e6e6d378a74d353543ae3",
     "when": 1791036120732
+  },
+  "0081_audit_accounting": {
+    "sha256": "b37204bb2aa1be296f21fe2aa5974a6aedeaaec1730155452f9ca6982e4d045d",
+    "when": 1791039726643
   }
 }

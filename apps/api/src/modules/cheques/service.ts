@@ -23,7 +23,7 @@ import { conflict, notFound, unprocessable } from '../../http/errors';
 import { uuidList } from '../inventory/balances';
 import { createJournalEntry, type AutoJournalLine, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
-import { openItemsFor } from '../parties/service';
+import { assertAllocatable, openItemsFor } from '../parties/service';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { lockTreasuryAccounts, type TreasuryAccountRow } from '../treasury/accounts';
@@ -191,7 +191,8 @@ export async function createCheque(tx: Tx, ctx: LedgerCtx, input: CreateChequeIn
     if (!o) throw unprocessable(`Kalem ${n + 1}: açık kalem bulunamadı ya da tümüyle kapanmış`, 'ITEM_NOT_OPEN', { lineId: it.lineId });
     return { lineId: it.lineId, currency: o.currencyCode, remainingDoc: dec(o.remaining), remainingBase: dec(o.remainingBase), amount: dec(it.amount), settleAmount: dec(it.settleAmount) };
   });
-  const plan = planSettlement({ kind: received ? 'receipt' : 'payment', amount, rate: dec(1), items });
+  await assertAllocatable(tx, control, input.items);
+  const plan = planSettlement({ kind: received ? 'receipt' : 'payment', amount, rate: dec(1), currency: ctx.baseCurrency, items });
   const key = docKey(input.direction, input.docType);
   const fxKeys: AccountMappingKey[] = [...(plan.fxGain.gt(0) ? (['fx_gain'] as const) : []), ...(plan.fxLoss.gt(0) ? (['fx_loss'] as const) : [])];
   const map = await requireMappings(tx, [key, control, ...fxKeys] as AccountMappingKey[]);
@@ -368,7 +369,8 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
     });
     const used = settleItems.reduce((s, i) => s.plus(i.settleAmount), dec(0));
     if (used.gt(total)) throw unprocessable('Kalemlere ayrılan tutar belge toplamını aşıyor', 'ALLOCATION_EXCEEDS_AMOUNT');
-    plan = planSettlement({ kind: 'payment', amount: total, rate: dec(1), items: settleItems });
+    await assertAllocatable(tx, 'payable', input.items);
+    plan = planSettlement({ kind: 'payment', amount: total, rate: dec(1), currency: ctx.baseCurrency, items: settleItems });
     if (plan.fxGain.gt(0)) keys.add('fx_gain');
     if (plan.fxLoss.gt(0)) keys.add('fx_loss');
   }

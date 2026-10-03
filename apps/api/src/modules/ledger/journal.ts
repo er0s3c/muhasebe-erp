@@ -17,6 +17,7 @@ import {
 import type { Tx } from '../../db/client';
 import { accounts, costCodes, fiscalPeriods, journalEntries, journalLines, parties, projects, projectWbs } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
+import { describeSettlements, entrySettlements } from '../parties/service';
 import { validateDimensions, type DimensionLine } from '../projects/dimension';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
@@ -353,6 +354,15 @@ export async function reverseJournalEntry(
     where b.status = 'matched' and l.entry_id = ${id} limit 1`);
   if (reconciled.rows.length > 0) {
     throw unprocessable('Bu fişin banka satırı ekstreyle eşleşmiş; ters kayıttan önce Banka ekstresi sekmesinden eşleşmeyi kaldırın', 'ENTRY_RECONCILED');
+  }
+
+  // Cari kalemi kapatılmış fiş (tahsil edilmiş fatura vb.) ters çevrilemez: kapatma açıkta kalır, yaşlandırma ile defter ayrışır (ACC-1)
+  const settled = await entrySettlements(tx, id);
+  if (settled.length > 0) {
+    throw unprocessable(
+      `Bu fişin cari kalemi kapatılmış: ${describeSettlements(settled)}. Önce kapatan tahsilat/ödemeyi iptal edin (çek/senetle kapatılmışsa iade/ters belge kesin)`,
+      'ENTRY_HAS_SETTLEMENTS',
+    );
   }
 
   const date = opts.entryDate ?? todayIso();

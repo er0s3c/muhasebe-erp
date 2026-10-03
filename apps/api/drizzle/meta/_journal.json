@@ -568,6 +568,13 @@
       "when": 1791036120732,
       "tag": "0080_audit_security_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1791039726643,
+      "tag": "0081_audit_accounting",
+      "breakpoints": true
     }
   ]
 }

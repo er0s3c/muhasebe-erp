@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { dec } from '../money';
 import type { Sector } from '../module-registry';
-import { currencyCode, isoDate, rateString, uuid } from './common';
+import { currencyCode, DB_AMOUNT_LIMIT, isoDate, rateString, uuid } from './common';
 import { ITEM_UNITS, positiveQuantity, unitCostString } from './inventory';
 
 // --- Fatura türleri ----------------------------------------------------------
@@ -259,6 +259,19 @@ type InvoiceBase = z.infer<typeof invoiceBase>;
 function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx) {
   if (doc.dueDate && doc.dueDate < doc.invoiceDate) {
     ctx.addIssue({ code: 'custom', path: ['dueDate'], message: 'Vade tarihi fatura tarihinden önce olamaz' });
+  }
+  // Hesaplanan tutar sınırı: satır ve fatura tutarı (KDV en çok %100 varsayımıyla iki katı) × kur, veritabanı sütununa sığmalı
+  const fx = doc.fxRate ? dec(doc.fxRate) : dec(1);
+  let net = dec(0);
+  doc.lines.forEach((l, i) => {
+    const lineNet = dec(l.quantity).times(l.unitPrice);
+    net = net.plus(lineNet);
+    if (lineNet.times(2).times(fx).gte(DB_AMOUNT_LIMIT)) {
+      ctx.addIssue({ code: 'custom', path: ['lines', i, 'unitPrice'], message: 'Satır tutarı çok büyük (miktar × fiyat × kur en çok 15 tam basamak olabilir)' });
+    }
+  });
+  if (net.times(2).times(fx).gte(DB_AMOUNT_LIMIT)) {
+    ctx.addIssue({ code: 'custom', path: ['lines'], message: 'Fatura tutarı çok büyük (toplam × kur en çok 15 tam basamak olabilir)' });
   }
   doc.lines.forEach((l, i) => {
     if (l.wbsId && !l.projectId) {

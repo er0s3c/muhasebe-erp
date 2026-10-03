@@ -32,6 +32,13 @@ export interface ProgressJournalInput {
   advance: MoneyValue;
   /** Tevkif edilen KDV (KDV'nin bir kısmı); cari satırı net'i ondan arındırır. */
   vatWithholding: MoneyValue;
+  /**
+   * Dövizli sözleşmede avans mahsubunun TARİHSEL defter tutarı (avansın verildiği/alındığı kurdan, kalan avans bakiyesiyle
+   * orantılı; tamamı mahsup ediliyorsa kalan defter tutarının tamamı). Verilmezse hakediş kuru kullanılır. Hakediş kuruyla
+   * farkı kambiyo kârı/zararıdır (ACC-5): avans hesabında kalıcı TL artığı kalmaz, cari satırı hakediş kurunda kalır.
+   */
+  advanceBase?: MoneyValue;
+  fxAccounts?: { gain?: string; loss?: string };
 }
 
 /**
@@ -84,14 +91,37 @@ export function buildProgressJournal(i: ProgressJournalInput): { lines: AutoJour
 
   let otherCreditsDoc = dec(0);
   let otherCreditsBase = dec(0);
-  const credit = (accountId: string, amount: MoneyValue, description: string) => {
+  const credit = (accountId: string, amount: MoneyValue, description: string, baseOverride?: MoneyValue) => {
     if (amount.isZero()) return;
     otherCreditsDoc = otherCreditsDoc.plus(amount);
-    otherCreditsBase = otherCreditsBase.plus(push(otherSide, accountId, amount, { description }));
+    // Tarihsel defter tutarıyla yazılan satırın kuru o tutardan türetilir (satır kuru = defter tutarı / tutar)
+    const extra: Partial<AutoJournalLine> = { description, ...(foreign && baseOverride ? { fxRate: toDbRate(baseOverride.div(amount)) } : {}) };
+    otherCreditsBase = otherCreditsBase.plus(push(otherSide, accountId, amount, extra, baseOverride));
   };
   credit(i.accounts.retention, i.retention, receivable ? 'İşverence tutulan teminat' : 'Tutulan teminat');
   credit(i.accounts.withholding, i.withholding, receivable ? 'İşverence kesilen stopaj' : 'Stopaj');
-  credit(i.accounts.advance, i.advance, 'Avans mahsubu');
+  if (!i.advance.isZero()) {
+    const atRate = foreign ? applyRate(i.advance, i.fx) : i.advance;
+    const hist = foreign && i.advanceBase ? i.advanceBase : atRate;
+    credit(i.accounts.advance, i.advance, 'Avans mahsubu', hist);
+    const diff = atRate.minus(hist);
+    if (!diff.isZero()) {
+      // Cari satırı hakediş kurunda kalsın: fark kambiyo satırına (karşı tarafta kâr, gövde tarafında zarar)
+      otherCreditsBase = otherCreditsBase.plus(diff);
+      const side = diff.gt(0) ? otherSide : bodySide;
+      const accountId = side === 'credit' ? i.fxAccounts?.gain : i.fxAccounts?.loss;
+      if (!accountId) throw new Error('Kur farkı hesabı eşlenmemiş');
+      out.push({
+        accountId,
+        currency: i.baseCurrency,
+        debit: side === 'debit' ? toDbAmount(diff.abs()) : '0',
+        credit: side === 'credit' ? toDbAmount(diff.abs()) : '0',
+        debitBase: side === 'debit' ? toDbAmount(diff.abs()) : '0',
+        creditBase: side === 'credit' ? toDbAmount(diff.abs()) : '0',
+        description: 'Avans mahsubu kur farkı',
+      } as AutoJournalLine);
+    }
+  }
   credit(i.accounts.vatWithholding, i.vatWithholding, receivable ? 'İşverence tevkif edilen KDV' : 'KDV tevkifatı');
 
   const net = debitsDoc.minus(otherCreditsDoc);

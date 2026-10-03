@@ -37,6 +37,8 @@ function pgError(err: unknown): { code?: string; message: string; constraint?: s
   return null;
 }
 
+const AMOUNT_OUT_OF_RANGE_MESSAGE = 'Tutar izin verilen aralığı aşıyor: hesaplanan tutar (miktar × fiyat, kur karşılığı) en çok 15 tam basamak olabilir';
+
 const PG_RULE_CODES: Record<string, string> = {
   ERP01: 'LEDGER_RULE_VIOLATION',
   ERP02: 'STOCK_RULE_VIOLATION',
@@ -60,6 +62,7 @@ export function describeError(err: unknown): { code: string; message: string } {
   const pg = pgError(err);
   if (pg?.code && PG_RULE_CODES[pg.code]) return { code: PG_RULE_CODES[pg.code]!, message: pg.message };
   if (pg?.code === '40001' || pg?.code === '40P01') return { code: 'RETRY', message: 'Eşzamanlı işlem çakışması; yeniden deneyin' };
+  if (pg?.code === '22003') return { code: 'AMOUNT_OUT_OF_RANGE', message: AMOUNT_OUT_OF_RANGE_MESSAGE };
   return { code: 'ERROR', message: 'Beklenmeyen hata' };
 }
 
@@ -254,6 +257,11 @@ export function errorHandler(
     void reply
       .status(409)
       .send({ error: { code: 'RETRY', message: 'Eşzamanlı işlem çakışması; lütfen tekrar deneyin' } });
+    return;
+  }
+  if (pg?.code === '22003') {
+    // Sayısal taşma: hesaplanan tutar (miktar × fiyat, × kur) numeric(19,4) sütununa sığmıyor (ACC-8)
+    void reply.status(400).send({ error: { code: 'AMOUNT_OUT_OF_RANGE', message: AMOUNT_OUT_OF_RANGE_MESSAGE } });
     return;
   }
   if (pg?.code === '22P02') {

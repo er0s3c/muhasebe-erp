@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readXlsx } from '../src/files/xlsx-read';
-import { addMember, asDb, asOwner, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser } from './helpers';
+import { addMember, asDb, asOwner, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser, TODAY_LOCAL } from './helpers';
 
 /**
  * Rehber, ajanda ve görüşme notları (Faz X6). Rehber üçüncü kişilerin kişisel verisini tutar; testler gizlilik kurallarını
  * (not görünürlüğü, silme yasağı, anonimleştirme, günlüklü dışa aktarma) ve işlevleri sınar. Hukuki dayanaklar doğrulanmamıştır.
  */
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = TODAY_LOCAL;
 const plus = (n: number) => {
   const d = new Date(`${TODAY}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);

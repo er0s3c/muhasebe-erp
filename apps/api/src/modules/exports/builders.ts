@@ -1,4 +1,4 @@
-import { formatDateTR, hasPermission, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type Role, type TreasuryTxnType, type ContactListQuery, type AgendaListQuery } from '@erp/shared';
+import { dec, formatDateTR, hasPermission, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type Role, type TreasuryTxnType, type ContactListQuery, type AgendaListQuery } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -187,7 +187,7 @@ export async function partyStatementTable(ctx: BuildCtx, q: { partyId: string; f
       description: l.description,
       due: l.dueDate,
       currency: l.currencyCode,
-      fx: l.currencyCode === b ? null : Number(l.debit) > 0 ? l.debit : l.credit,
+      fx: l.currencyCode === b ? null : dec(l.debit).gt(0) ? l.debit : l.credit,
       debit: l.debitBase,
       credit: l.creditBase,
       balance: l.balance,
@@ -226,7 +226,7 @@ export async function partyOpenItemsTable(ctx: BuildCtx, q: { partyId: string; a
     for (const it of r.items) {
       rows.push({ type: label, due: it.dueDate, entryNo: it.entryNo, description: it.description, currency: it.currencyCode, amount: it.amount, remaining: it.remaining, remainingBase: it.remainingBase, days: it.daysOverdue });
     }
-    if (Number(r.unapplied) !== 0) rows.push({ type: label, description: 'Avans / uygulanamayan tutar', remainingBase: r.unapplied });
+    if (!dec(r.unapplied).isZero()) rows.push({ type: label, description: 'Avans / uygulanamayan tutar', remainingBase: r.unapplied });
   }
   const b = ctx.company.baseCurrency;
   return [
@@ -312,12 +312,20 @@ export async function itemCardTable(ctx: BuildCtx, q: { itemId: string; from: st
 export async function vatSummaryTable(ctx: BuildCtx, q: { from: string; to: string }): Promise<ReportTable[]> {
   const d = await vatSummary(ctx.tx, q);
   const b = ctx.company.baseCurrency;
-  const pay = (s: string, p: string) => (Number(s) - Number(p)).toFixed(4);
+  const pay = (s: string, p: string) => dec(s).minus(p).toFixed(4);
   return [
     {
       key: 'kdv-ozeti',
       title: 'KDV özeti',
-      subtitle: sub(ctx, period(q.from, q.to), `${b} cinsinden`, d.unverifiedCodes.length ? `Doğrulanmamış oran kodları: ${d.unverifiedCodes.join(', ')}` : 'Oranlar mali müşavirce doğrulanmalıdır'),
+      subtitle: sub(
+        ctx,
+        period(q.from, q.to),
+        `${b} cinsinden; iptaller iptal tarihinin döneminde eksi`,
+        d.unverifiedCodes.length ? `Doğrulanmamış oran kodları: ${d.unverifiedCodes.join(', ')}` : 'Oranlar mali müşavirce doğrulanmalıdır',
+        dec(d.reconciliation.outputDifference).isZero() && dec(d.reconciliation.inputDifference).isZero()
+          ? 'KDV hesaplarıyla uyumlu'
+          : `KDV hesapları farkı: hesaplanan ${d.reconciliation.outputDifference}, indirilecek ${d.reconciliation.inputDifference}`,
+      ),
       columns: [
         col('code', 'KDV kodu', 'text', 14),
         col('rate', 'Oran (%)', 'rate'),
@@ -339,7 +347,7 @@ export async function treasuryStatementTable(ctx: BuildCtx, q: { accountId: stri
   const foreign = d.account.currencyCode !== b;
   const rows: Record<string, CellValue>[] = [{ description: 'Açılış bakiyesi', balanceDoc: d.openingDoc, balanceBase: d.openingBase }];
   for (const l of d.lines) {
-    rows.push({ date: l.entryDate, entryNo: l.entryNo, txnNo: l.txnNo, description: l.description, debit: Number(l.debit) === 0 ? null : l.debit, credit: Number(l.credit) === 0 ? null : l.credit, balanceDoc: l.balanceDoc, balanceBase: l.balanceBase });
+    rows.push({ date: l.entryDate, entryNo: l.entryNo, txnNo: l.txnNo, description: l.description, debit: dec(l.debit).isZero() ? null : l.debit, credit: dec(l.credit).isZero() ? null : l.credit, balanceDoc: l.balanceDoc, balanceBase: l.balanceBase });
   }
   const columns = [
     col('date', 'Tarih', 'date'),
@@ -427,16 +435,17 @@ export async function generalLedgerTable(ctx: BuildCtx, q: { from: string; to: s
   const d = await generalLedger(ctx.tx, q);
   const b = ctx.company.baseCurrency;
   const rows: Record<string, CellValue>[] = [];
-  let debit = 0;
-  let credit = 0;
+  // Genel toplam ondalık aritmetikle (JS sayısı büyük defterlerde kuruş kaybeder; ACC-7)
+  let debit = dec(0);
+  let credit = dec(0);
   for (const a of d.accounts) {
     rows.push({ account: a.code, accountName: a.name, description: 'Devir (dönem başı)', balance: a.opening });
     for (const l of a.lines) {
       rows.push({ account: a.code, accountName: a.name, date: l.entryDate, entryNo: l.entryNo, description: l.description, currency: l.currencyCode, debit: l.debitBase, credit: l.creditBase, balance: l.balance });
     }
     rows.push({ account: a.code, accountName: a.name, description: 'Hesap toplamı / kapanış', debit: a.debit, credit: a.credit, balance: a.closing });
-    debit += Number(a.debit);
-    credit += Number(a.credit);
+    debit = debit.plus(a.debit);
+    credit = credit.plus(a.credit);
   }
   return [
     {
@@ -1582,7 +1591,7 @@ export async function salesScheduleTable(ctx: BuildCtx, q: { contractId: string 
         col('days', 'Gecikme (gün)', 'int'),
       ],
       rows: d.installments.map((i) => ({ seq: i.seq, kind: KIND_LABEL[i.kind] ?? i.kind, due: i.dueDate, amount: i.amount, paid: i.paid, remaining: i.remaining, days: i.daysOverdue || null })),
-      totals: { amount: d.installments.reduce((s, i) => s + Number(i.amount), 0).toFixed(2), paid: String(c.paid), remaining: String(c.remaining) },
+      totals: { amount: sum(d.installments.map((i) => i.amount)).toFixed(2), paid: String(c.paid), remaining: String(c.remaining) },
     },
   ];
 }
@@ -1714,7 +1723,7 @@ export async function cashForecastTable(ctx: BuildCtx, q: { from?: string; weeks
         col('amountBase', `Karşılık (${b})`, 'money', undefined, b),
         col('overdue', 'Gecikmiş', 'text', 10),
       ],
-      rows: d.items.map((i) => ({ date: i.date, week: i.week, source: i.source === 'receivable' ? 'Alacak' : i.source === 'payable' ? 'Borç' : i.direction === 'in' ? 'Elle giriş' : 'Elle çıkış', party: i.partyName, description: i.description, currency: i.currencyCode, amount: i.direction === 'in' ? i.amount : `${i.amount}`, amountBase: i.direction === 'in' ? i.amountBase : (-Number(i.amountBase)).toFixed(2), overdue: i.overdue ? 'Evet' : null })),
+      rows: d.items.map((i) => ({ date: i.date, week: i.week, source: i.source === 'receivable' ? 'Alacak' : i.source === 'payable' ? 'Borç' : i.direction === 'in' ? 'Elle giriş' : 'Elle çıkış', party: i.partyName, description: i.description, currency: i.currencyCode, amount: i.direction === 'in' ? i.amount : `${i.amount}`, amountBase: i.direction === 'in' ? i.amountBase : dec(i.amountBase).neg().toFixed(2), overdue: i.overdue ? 'Evet' : null })),
     },
   ];
 }

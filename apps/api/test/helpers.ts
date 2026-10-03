@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterAll } from 'vitest';
+import { todayIso } from '@erp/shared';
 import { buildApp } from '../src/app';
 import { loadConfig, type Config } from '../src/config';
 import { createDb, type DbHandle } from '../src/db/client';
@@ -118,7 +119,9 @@ export async function addMember(
   return { client: client(app, token, companyId), userId: add.json().member.userId as string, email, token };
 }
 
-export const thisYear = new Date().getUTCFullYear();
+/** Sunucuyla aynı "bugün" (şirket saat dilimi, Europe/Nicosia): UTC 21:00–24:00 arasında UTC tarihi bir gün geride kalır. */
+export const TODAY_LOCAL = todayIso();
+export const thisYear = Number(TODAY_LOCAL.slice(0, 4));
 export const day = (m: number, d: number, y = thisYear) =>
   `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 

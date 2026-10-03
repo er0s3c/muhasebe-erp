@@ -77,13 +77,13 @@ export async function consolidatedReport(app: FastifyInstance, ctx: AuthCtx, gro
   const columns = [
     ...companies.map((c) => ({
       id: c.companyId,
-      rows: agg.rows.map((r) => ({ code: r.code, name: names.get(r.code)!, net: r.perCompany[c.companyId]! })),
+      rows: agg.rows.map((r) => ({ code: r.code, name: names.get(r.code)!, net: r.perCompany[c.companyId]!, prior: r.perCompanyPrior[c.companyId]! })),
       translationDiff: agg.translationDiff[c.companyId]!,
     })),
     {
       id: CONSOLIDATED_COLUMN,
       // Konsolide sütun: şirket toplamları + eliminasyon (satır başına), çevrim farkı ayrı
-      rows: agg.rows.map((r) => ({ code: r.code, name: names.get(r.code)!, net: r.consolidated })),
+      rows: agg.rows.map((r) => ({ code: r.code, name: names.get(r.code)!, net: r.consolidated, prior: r.consolidatedPrior })),
       translationDiff: agg.totals.translationDiff,
     },
   ];

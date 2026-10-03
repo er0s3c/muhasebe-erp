@@ -130,6 +130,32 @@ describe('buildStatements', () => {
   });
 });
 
+describe('buildStatements — dönem (ACC-6)', () => {
+  it('sonuç hesaplarının dönem başı bakiyesi gelir tablosuna girmez; bilançoda önceki dönemler sonucu olarak ayrılır', () => {
+    const X: ConsolidationCompanyInput = {
+      companyId: 'x',
+      name: 'X',
+      baseCurrency: 'TRY',
+      rates: { closing: '1', pl: '1' },
+      rows: [
+        { code: '100', name: 'Kasa', opening: '1000', debit: '500', credit: '0' },
+        { code: '600', name: 'Satış', opening: '-1000', debit: '0', credit: '500' },
+      ],
+      chart: [{ code: '100', name: 'Kasa' }, { code: '600', name: 'Satış' }],
+    };
+    const r = aggregateConsolidation([X], [], '3');
+    const cols = [{ id: 'x', rows: r.rows.map((x) => ({ code: x.code, name: x.name, net: x.perCompany.x!, prior: x.perCompanyPrior.x! })), translationDiff: r.translationDiff.x! }];
+    const s = buildStatements(cols);
+    const is = (k: string) => s.incomeStatement.find((l) => l.key === k)!.values.x;
+    const bs = (k: string) => s.balanceSheet.find((l) => l.key === k)!.values.x;
+    expect(is('is60')).toBe('500.0000');
+    expect(is('net_profit')).toBe('500.0000');
+    expect(bs('period_result')).toBe('500.0000');
+    expect(bs('prior_result')).toBe('1000.0000');
+    expect(s.difference.x).toBe('0.0000');
+  });
+});
+
 describe('summarizeIncome', () => {
   it('gelir, gider ve kâr sınıflaması', () => {
     const s = summarizeIncome([

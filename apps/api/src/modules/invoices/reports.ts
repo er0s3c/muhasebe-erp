@@ -12,22 +12,56 @@ interface VatRow extends Record<string, unknown> {
 }
 
 /**
- * KDV özeti (defter para birimi): hesaplanan KDV (satışlar − satış iadeleri) ve indirilecek KDV
- * (alış + gider − alış iadeleri), oran bazında. Yalnızca kaydedilmiş faturalar; iptal edilenler hariç
- * (iptal edilen faturanın yevmiyesi de ters çevrildiği için defterle tutarlıdır).
- * Oranlar faturada saklanan anlık görüntüdür; resmî doğrulaması yapılmamış kodlar ayrıca bildirilir.
+ * KDV özeti (defter para birimi): hesaplanan KDV (satışlar − satış iadeleri + işveren hakedişleri) ve indirilecek KDV
+ * (alış + gider faturası + gider fişi + taşeron hakedişi − alış iadeleri), oran bazında.
+ *
+ * Dönem kuralı (ACC-4): her belge KENDİ yevmiye tarihinde (+) sayılır; iptal edilen belge orijinal döneminden SİLİNMEZ,
+ * iptal (ters kayıt) tarihinin döneminde eksi (−) satır olarak görünür. Böylece verilmiş bir dönemin özeti sonradan
+ * değişmez ve her dönem için hesaplanan/indirilecek KDV, KDV hesaplarının (391/191 eşlemesi) o dönemdeki hareketine eşittir.
+ * Elle yevmiyeyle KDV hesabına yazılan tutarlar belgeye bağlı olmadığından özette yoktur; `reconciliation` farkı gösterir.
+ * KDV tevkifatı (hakediş) ayrı hesaplarda izlenir ve burada yer almaz. Oranlar belgede saklanan anlık görüntüdür;
+ * resmî doğrulaması yapılmamış kodlar ayrıca bildirilir.
  */
 export async function vatSummary(tx: Tx, q: { from: string; to: string }) {
   const rows = await tx.execute<VatRow>(sql`
-    select l.vat_code as code, l.vat_rate as rate,
-      coalesce(sum(case i.type when 'sales' then l.net_base when 'sales_return' then -l.net_base else 0 end), 0) as sales_net,
-      coalesce(sum(case i.type when 'sales' then l.vat_base when 'sales_return' then -l.vat_base else 0 end), 0) as sales_vat,
-      coalesce(sum(case when i.type in ('purchase', 'expense') then l.net_base when i.type = 'purchase_return' then -l.net_base else 0 end), 0) as purchase_net,
-      coalesce(sum(case when i.type in ('purchase', 'expense') then l.vat_base when i.type = 'purchase_return' then -l.vat_base else 0 end), 0) as purchase_vat
-    from invoice_lines l join invoices i on i.id = l.invoice_id
-    where i.status = 'posted' and i.invoice_date between ${q.from}::date and ${q.to}::date
-    group by l.vat_code, l.vat_rate
-    order by l.vat_rate, l.vat_code nulls first`);
+    with ev as (
+      -- Belge yevmiyesi kendi tarihinde (+), ters kaydı (iptal) kendi tarihinde (−)
+      select e.id as entry_id, 1 as sgn
+        from journal_entries e
+       where e.status = 'posted' and e.reversal_of_id is null and e.entry_date between ${q.from}::date and ${q.to}::date
+      union all
+      select e.id, -1
+        from journal_entries e join journal_entries r on r.id = e.reversed_by_id and r.status = 'posted'
+       where e.status = 'posted' and r.entry_date between ${q.from}::date and ${q.to}::date
+    ),
+    docs as (
+      select l.vat_code as code, l.vat_rate as rate, ev.sgn,
+             case i.type when 'sales' then 1 when 'sales_return' then -1 else 0 end as s_sign,
+             case when i.type in ('purchase', 'expense') then 1 when i.type = 'purchase_return' then -1 else 0 end as p_sign,
+             l.net_base as net, l.vat_base as vat
+        from invoice_lines l
+        join invoices i on i.id = l.invoice_id and i.status in ('posted', 'cancelled')
+        join ev on ev.entry_id = i.journal_entry_id
+      union all
+      select x.vat_code, x.vat_rate, ev.sgn, 0, 1, x.net, x.vat
+        from expense_entries x join ev on ev.entry_id = x.journal_entry_id
+      union all
+      select p.vat_code, p.vat_rate, ev.sgn,
+             case when p.direction = 'receivable' then 1 else 0 end,
+             case when p.direction = 'receivable' then 0 else 1 end,
+             round(p.gross * coalesce(p.fx_rate, 1), 2), round(p.vat * coalesce(p.fx_rate, 1), 2)
+        from progress_payments p join ev on ev.entry_id = p.entry_id
+       where p.status in ('posted', 'cancelled')
+    )
+    select code, rate,
+      coalesce(sum(sgn * s_sign * net), 0) as sales_net,
+      coalesce(sum(sgn * s_sign * vat), 0) as sales_vat,
+      coalesce(sum(sgn * p_sign * net), 0) as purchase_net,
+      coalesce(sum(sgn * p_sign * vat), 0) as purchase_vat
+    from docs
+    group by code, rate
+    having sum(abs(net)) <> 0 or sum(abs(vat)) <> 0
+    order by rate, code nulls first`);
 
   let salesNet = dec(0);
   let salesVat = dec(0);
@@ -56,6 +90,18 @@ export async function vatSummary(tx: Tx, q: { from: string; to: string }) {
         order by code`)
     : { rows: [] as { code: string }[] };
 
+  // Mutabakat: KDV hesaplarının (eşlenmiş 391/191) dönem hareketi
+  const ledger = await tx.execute<{ output: string; input: string }>(sql`
+    select
+      coalesce(sum(l.credit_base - l.debit_base) filter (where l.account_id = (select account_id from account_mappings where key = 'vat_output')), 0) as output,
+      coalesce(sum(l.debit_base - l.credit_base) filter (where l.account_id = (select account_id from account_mappings where key = 'vat_input')), 0) as input
+    from journal_lines l
+    join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+    where e.entry_date between ${q.from}::date and ${q.to}::date
+      and l.account_id in (select account_id from account_mappings where key in ('vat_output', 'vat_input'))`);
+  const ledgerOutput = dec(ledger.rows[0]?.output ?? 0);
+  const ledgerInput = dec(ledger.rows[0]?.input ?? 0);
+
   return {
     from: q.from,
     to: q.to,
@@ -67,6 +113,13 @@ export async function vatSummary(tx: Tx, q: { from: string; to: string }) {
       purchaseVat: toDbAmount(purchaseVat),
       /** Hesaplanan − indirilecek: pozitif ödenecek, negatif devreden KDV. */
       payable: toDbAmount(salesVat.minus(purchaseVat)),
+    },
+    /** KDV hesaplarının dönem hareketi ile özetin farkı (elle yevmiye vb.); belgelerden oluşan defterde 0. */
+    reconciliation: {
+      ledgerOutput: toDbAmount(ledgerOutput),
+      ledgerInput: toDbAmount(ledgerInput),
+      outputDifference: toDbAmount(ledgerOutput.minus(salesVat)),
+      inputDifference: toDbAmount(ledgerInput.minus(purchaseVat)),
     },
     unverifiedCodes: unverified.rows.map((r) => r.code),
   };

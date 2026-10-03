@@ -10,6 +10,12 @@ export const moneyString = z
   .string()
   .regex(/^\d{1,15}(\.\d{1,4})?$/, 'Geçersiz tutar');
 
+/**
+ * Veritabanı tutar sütunlarının (numeric(19,4)) üst sınırı: mutlak değer 10^15'ten küçük olmalı. Tek tek girilen tutarlar
+ * `moneyString` ile zaten sınırlıdır; HESAPLANAN tutarlar (miktar × fiyat, × kur, + KDV) için şemalar bu sınırı kullanır (ACC-8).
+ */
+export const DB_AMOUNT_LIMIT = '1000000000000000';
+
 /** Kanonik kur: en çok 11 tam, 8 ondalık basamak; sıfırdan büyük olmalı (servis doğrular). */
 export const rateString = z
   .string()

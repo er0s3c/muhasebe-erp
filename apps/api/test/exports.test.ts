@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { unzipSync } from 'fflate';
 import { readXlsx } from '../src/files/xlsx-read';
-import { PASSWORD, client, createCompany, day, makeApp, registerUser } from './helpers';
+import { PASSWORD, client, createCompany, day, makeApp, registerUser, thisYear } from './helpers';
 
 describe('raporlar ve dışa aktarma', async () => {
   const { app } = await makeApp();
@@ -125,7 +125,7 @@ describe('raporlar ve dışa aktarma', async () => {
     expect(Number(stock.opening)).toBeGreaterThan(0);
   });
 
-  it('satış/alış raporu: her kırılımda toplam net, KDV özetindeki net tutarla aynı; iade düşer, iptal hariç', async () => {
+  it('satış/alış raporu: her kırılımda toplam net, KDV özetindeki net tutarla aynı; iade düşer, iptal iptal tarihinde eksi', async () => {
     const { c } = await books('Satis');
     const vat = await ok(c.get(`/api/reports/vat-summary?from=${day(1, 1)}&to=${day(12, 31)}`));
     for (const groupBy of ['party', 'item', 'month', 'invoice']) {
@@ -139,7 +139,12 @@ describe('raporlar ve dışa aktarma', async () => {
     // 4×100 − 1×100 iade + 100 GBP × 40 + 50 GBP × 40 (iptal edilen 2×100 yok)
     const s = await ok(c.get(`/api/reports/sales-report?from=${day(1, 1)}&to=${day(12, 31)}&groupBy=invoice`));
     expect(Number(s.totals.net)).toBe(300 + 4000 + 2000);
-    expect(s.rows.map((r: any) => r.type)).toEqual(['sales', 'sales_return', 'sales', 'sales']);
+    // İptal edilen fatura kendi tarihinde (+) ve iptal tarihinde (−) iki satırdır; birbirini götürür (ACC-11)
+    const cancelled = s.rows.filter((r: any) => r.cancellation);
+    expect(cancelled).toHaveLength(1);
+    const orig = s.rows.find((r: any) => r.invoiceId === cancelled[0].invoiceId && !r.cancellation);
+    expect(Number(orig.net) + Number(cancelled[0].net)).toBe(0);
+    expect(s.rows.filter((r: any) => r.invoiceId !== cancelled[0].invoiceId).map((r: any) => r.type)).toEqual(['sales', 'sales_return', 'sales', 'sales']);
     expect(s.rows.find((r: any) => r.type === 'sales_return').net).toBe('-100.0000');
     // Cari bazında: en yüksek net başta
     const byParty = await ok(c.get(`/api/reports/sales-report?from=${day(1, 1)}&to=${day(12, 31)}&groupBy=party`));
@@ -150,7 +155,8 @@ describe('raporlar ve dışa aktarma', async () => {
     expect(byItem.rows.find((r: any) => r.label === 'Dış cephe boyası')).toMatchObject({ qty: '3.0000', net: '300.0000' });
     // Ay bazında
     const byMonth = await ok(c.get(`/api/reports/sales-report?from=${day(1, 1)}&to=${day(12, 31)}&groupBy=month`));
-    expect(byMonth.rows.map((r: any) => r.key)).toEqual([`${new Date().getUTCFullYear()}-04`, `${new Date().getUTCFullYear()}-07`]);
+    // Mayıs: iptal satırı (eksi); iptal edilen fatura kendi ayında kalır
+    expect(byMonth.rows.map((r: any) => r.key)).toEqual([`${thisYear}-04`, `${thisYear}-05`, `${thisYear}-07`]);
   });
 
   it('stok kârlılığı: toplam kâr = 600 − 610 − 621 hareketi; iade maliyeti düşer; kartsız satır maliyetsiz', async () => {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { accountIds, addMember, asDb, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser } from './helpers';
+import { accountIds, addMember, asDb, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear } from './helpers';
 
 describe('taşeron hakedişi (B2c): kümülatif hakediş, kesintiler, onay, yevmiye, ödeme, iptal, avans, teminat', async () => {
   const { app, handle } = await makeApp();
@@ -82,7 +82,7 @@ describe('taşeron hakedişi (B2c): kümülatif hakediş, kesintiler, onay, yevm
 
     const done = await w.approveFlow(p.id);
     expect(done.payment.status).toBe('posted');
-    expect(done.payment.number).toBe(`HKD-${new Date().getUTCFullYear()}-000001`);
+    expect(done.payment.number).toBe(`HKD-${thisYear}-000001`);
     expect(done.approvals[0].status).toBe('approved');
 
     const j = await w.entry(done.payment.entryId);

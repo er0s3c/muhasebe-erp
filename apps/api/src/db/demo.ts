@@ -29,7 +29,7 @@ import {
   type Sector,
 } from '@erp/shared';
 import type { CompanyInfo } from '../http/context';
-import { withContext, type Db, type Tx } from './client';
+import { setContext, type Db, type Tx } from './client';
 import { customCodes, exchangeRates, items as itemsTable, memberships, subcontractRevisions, users, warehouses } from './schema';
 import { createParty } from '../modules/parties/service';
 import { createAccount, listAccounts } from '../modules/ledger/accounts';
@@ -52,7 +52,7 @@ import { cancelTreasuryTransaction, postTreasuryTransaction } from '../modules/t
 import { cancelInvoice, postInvoice } from '../modules/invoices/posting';
 import { createInvoiceDraft, getInvoice, type InvoiceCtx } from '../modules/invoices/service';
 import { createWarehouse } from '../modules/inventory/warehouses';
-import { closePeriod, findPeriodForDate } from '../modules/settings/periods';
+import { closePeriod, findPeriodForDate, generatePeriods } from '../modules/settings/periods';
 import { createCompany, insertOrganization } from '../modules/tenancy/service';
 import { approveBudget, createBudget, putBudgetLines } from '../modules/projects/budgets';
 import { recordProgress } from '../modules/projects/progress';
@@ -80,7 +80,13 @@ export const DEMO_EMAIL = 'demo@ornek.local';
 export const DEMO_PASSWORD = 'Demo-Sifre-123';
 
 const today = todayIso();
-const year = isoYear(today);
+/**
+ * Demo zaman çizelgesi bir takvim yılının Ocak–Eylül aralığına yazılmıştır (sabit ay/gün tarihleri). Bugün o yılın 30 Eylül'ünden
+ * önceyse (yılın ilk aylarında demo kurulursa) çizelge bir önceki yıla yazılır: hiçbir belge "gelecek" tarihli olmaz, kurlar ve
+ * dönemler her tarih için bulunur. Bugüne göre olan kısımlar (geçen ayın puantajı, son günlerin kurları) bugünü esas alır.
+ */
+const DEMO_LAST_DAY = '09-30';
+const year = today >= `${isoYear(today)}-${DEMO_LAST_DAY}` ? isoYear(today) : isoYear(today) - 1;
 const pad = (n: number) => String(n).padStart(2, '0');
 const addDays = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -603,8 +609,8 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
     const inst = det.installments.find((i) => i.seq === seq)!;
     const rate = rateAt('GBP', on);
     await postTreasuryTransaction(tx, ctx, createTreasuryTransactionSchema.parse({
-      type: 'receipt', date: on, accountId: bankId, amount: (Number(inst.remaining) * rate).toFixed(2), partyId: det.contract.partyId as string,
-      items: [{ lineId: inst.journalLineId!, amount: inst.remaining, settleAmount: (Number(inst.remaining) * rate).toFixed(2) }], description: `Taksit ${seq} tahsilatı (${det.contract.code})`,
+      type: 'receipt', date: on, accountId: bankId, amount: applyRate(inst.remaining, rate).toFixed(2), partyId: det.contract.partyId as string,
+      items: [{ lineId: inst.journalLineId!, amount: inst.remaining, settleAmount: applyRate(inst.remaining, rate).toFixed(2) }], description: `Taksit ${seq} tahsilatı (${det.contract.code})`,
     }));
   };
   // Fon/harç tarifeleri (tarihli, kaynak notlu; biri doğrulanmış örnek, hepsi demo değeridir)
@@ -761,16 +767,16 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
   }
 
   const passwordHash = await hash(DEMO_PASSWORD);
-  const { orgId, userId } = await db.transaction(async (tx) => {
+  // Tüm demo TEK işlemdir: bir adım hata verirse kuruluş/kullanıcı dahil hiçbir şey kalmaz (yarım yüklenmiş veritabanı ve
+  // ardından "Demo verisi zaten var" durumu oluşmaz; düzeltip yeniden çalıştırılabilir).
+  await db.transaction(async (tx) => {
     const orgId = await insertOrganization(tx, 'Örnek Holding');
     const [u] = await tx
       .insert(users)
       .values({ organizationId: orgId, email: DEMO_EMAIL, passwordHash, fullName: 'Ayşe Demir', emailVerifiedAt: new Date() })
       .returning({ id: users.id });
-    return { orgId, userId: u!.id };
-  });
-
-  await withContext(db, { userId, orgId }, async (tx) => {
+    const userId = u!.id;
+    await setContext(tx, { userId, orgId });
     const company = await createCompany(
       tx,
       { id: userId, orgId },
@@ -789,6 +795,8 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
       baseCurrency: 'TRY',
       reportingCurrency: 'GBP',
     };
+    // Şirket açılışı bugünün yılının dönemlerini üretir; çizelge önceki yıla yazılıyorsa o yılın dönemleri de gerekir
+    await generatePeriods(tx, company.id, year);
 
     // Ekip: muhasebeci ve izleyici
     for (const [email, fullName, role] of [

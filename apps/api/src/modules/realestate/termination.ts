@@ -46,8 +46,11 @@ export async function terminateContract(tx: Tx, ctx: SalesCtx, id: string, input
   // Ödenmemiş kalemler (açık kalem hesabı: tahsilat eşleştirmeleri düşülmüş)
   const inst = await tx.select().from(salesInstallments).where(eq(salesInstallments.contractId, id)).orderBy(asc(salesInstallments.seq));
   const lineIds = new Set(inst.map((i) => i.journalLineId!).filter(Boolean));
-  const open = (await openItemsFor(tx, c.partyId, 'receivable', on)).items.filter((o) => lineIds.has(o.lineId));
-  const remainingOf = new Map(open.map((o) => [o.lineId, dec(o.remaining)]));
+  // Belge tutarı kalmamış kalem (yalnızca kur/yuvarlama artığı: kalan 0,00, defter tutarı > 0) kapatma satırı almaz: sıfır tutarlı
+  // satır yazılamaz; defter artığı aşağıdaki kur farkı satırına düşer.
+  const allOpen = (await openItemsFor(tx, c.partyId, 'receivable', on)).items.filter((o) => lineIds.has(o.lineId));
+  const open = allOpen.filter((o) => dec(o.remaining).gt(0));
+  const remainingOf = new Map(allOpen.map((o) => [o.lineId, dec(o.remaining)]));
   let collectedPrice = dec(0);
   let collectedFees = dec(0);
   let feesTotal = dec(0);

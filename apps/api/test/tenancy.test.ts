@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accountIds, asDb, client, createCompany, expectDbError, makeApp, orgOf, registerUser } from './helpers';
+import { accountIds, asDb, client, createCompany, expectDbError, makeApp, orgOf, registerUser, thisYear } from './helpers';
 
 describe('şirket kurulumu ve kiracı yalıtımı', async () => {
   const { app, handle } = await makeApp();
@@ -16,7 +16,7 @@ describe('şirket kurulumu ve kiracı yalıtımı', async () => {
     const grup = accounts.find((a: any) => a.code === '10');
     expect(grup.isPostable).toBe(false);
 
-    const year = new Date().getUTCFullYear();
+    const year = thisYear;
     const periods = (await c.get(`/api/periods?year=${year}`)).json().periods;
     expect(periods).toHaveLength(12);
     expect(periods.every((p: any) => p.status === 'open')).toBe(true);

@@ -56,7 +56,8 @@ export type SaveImportFileInput = z.infer<typeof saveImportFileSchema>;
 
 /** Elle dağıtım: maliyet kalemi sıra no → (mal satırı sıra no → tutar). */
 export const allocateImportSchema = z.object({
-  manual: z.record(z.string(), z.record(z.string(), moneyString)).optional(),
+  // Elle dağıtım kuruş hassasiyetindedir: 2'den fazla ondalık yuvarlanınca toplam maliyetten sapar (ACC-9)
+  manual: z.record(z.string(), z.record(z.string(), moneyString.refine((v) => !/\.\d{3,}$/.test(v), 'Elle dağıtım tutarı en çok 2 ondalık basamak olabilir'))).optional(),
 });
 export type AllocateImportInput = z.infer<typeof allocateImportSchema>;
 

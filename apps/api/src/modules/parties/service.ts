@@ -335,10 +335,20 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
 
 /** Tüm carilerin açık kalemleri (nakit projeksiyonu): vade, kalan tutar (kalem para biriminde ve defterde), cari adı. */
 export async function allOpenItems(tx: Tx, type: PartyControlType, asOf: string) {
+  return (await allOpenItemsAndAdvances(tx, type, asOf)).items;
+}
+
+/** Tüm carilerin açık kalemleri ve uygulanamayan tutarları (avans/fazla ödeme; para birimi kırılımıyla). */
+export async function allOpenItemsAndAdvances(tx: Tx, type: PartyControlType, asOf: string) {
   const byParty = await loadPartyLines(tx, type, asOf);
-  const out: (ReturnType<typeof computeOpenItems>['items'][number] & { partyName: string })[] = [];
-  for (const p of byParty.values()) for (const it of computeOpenItems(p.lines, type, asOf, p.allocations).items) out.push({ ...it, partyName: p.name });
-  return out;
+  const items: (ReturnType<typeof computeOpenItems>['items'][number] & { partyName: string })[] = [];
+  const advances: { partyId: string; partyName: string; currencyCode: string; amount: string; amountBase: string }[] = [];
+  for (const [partyId, p] of byParty) {
+    const r = computeOpenItems(p.lines, type, asOf, p.allocations);
+    for (const it of r.items) items.push({ ...it, partyName: p.name });
+    for (const u of r.unappliedByCurrency) advances.push({ partyId, partyName: p.name, ...u });
+  }
+  return { items, advances };
 }
 
 /** Bir carinin açık kalemleri (kasa/banka tahsilat ve ödemesinde eşleştirme için de kullanılır). */
@@ -362,4 +372,74 @@ export async function partyOpenItems(tx: Tx, id: string, q: { asOf: string; type
     result[type] = computeOpenItems(p?.lines ?? [], type, q.asOf, p?.allocations ?? []);
   }
   return { asOf: q.asOf, ...result };
+}
+
+/** Bir kalemin (cari borç/alacak satırı) tarihten bağımsız etkin kapatmaları: kasa/banka (kaydedilmiş), çek/senet ve fesih. */
+interface ChargeUsageRow extends Record<string, unknown> {
+  id: string;
+  live: boolean;
+  debit: string;
+  credit: string;
+  used: string;
+}
+
+/**
+ * Seçilen kalemlerin kapatılabilirliğini tarihten BAĞIMSIZ denetler (ACC-3): açık kalem hesabı hareket tarihindeki durumu
+ * gösterir; sonraki tarihli bir çek/senet ya da tahsilat aynı kalemi zaten kapatmış olabilir. Kalem satırları önceden
+ * kilitlenmiş olmalıdır. İptal edilmiş belgenin kalemi de reddedilir. Veritabanı tetikleyicisi aynı kuralı ayrıca uygular.
+ */
+export async function assertAllocatable(tx: Tx, control: PartyControlType, items: readonly { lineId: string; amount: Parameters<typeof dec>[0] }[]) {
+  if (items.length === 0) return;
+  const ids = [...new Set(items.map((i) => i.lineId))];
+  const rows = await tx.execute<ChargeUsageRow>(sql`
+    select l.id, (e.status = 'posted' and e.reversed_by_id is null and e.reversal_of_id is null) as live,
+           l.debit::text as debit, l.credit::text as credit, (charge_line_used(l.id)).amount::text as used
+      from journal_lines l join journal_entries e on e.id = l.entry_id
+     where l.id in (${sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `)})`);
+  const byId = new Map(rows.rows.map((r) => [r.id, r]));
+  const asked = new Map<string, ReturnType<typeof dec>>();
+  items.forEach((it, n) => {
+    const r = byId.get(it.lineId);
+    if (!r || !r.live) {
+      throw unprocessable(`Kalem ${n + 1}: belge iptal edilmiş ya da kalem bulunamadı`, 'ITEM_NOT_OPEN', { lineId: it.lineId });
+    }
+    const total = (asked.get(it.lineId) ?? dec(0)).plus(dec(it.amount));
+    asked.set(it.lineId, total);
+    const charge = dec(control === 'receivable' ? r.debit : r.credit);
+    const left = charge.minus(r.used);
+    if (total.gt(left)) {
+      throw unprocessable(
+        `Kalem ${n + 1}: kalemin ${dec(r.used).toFixed(2)} tutarı başka bir tahsilat/ödeme, çek/senet ya da fesihle (başka tarihte) zaten kapatılmış; en çok ${left.toFixed(2)} kapatılabilir`,
+        'ALLOCATION_EXCEEDED',
+        { lineId: it.lineId, remaining: left.toFixed(2) },
+      );
+    }
+  });
+}
+
+/** Fişin cari kalemlerini kapatan etkin işlemler (kasa/banka, çek/senet, fesih). Belge iptali/ters kayıt öncesi denetim için. */
+export async function entrySettlements(tx: Tx, entryId: string) {
+  const r = await tx.execute<{ kind: string; ref: string | null }>(sql`
+    select 'treasury' as kind, t.txn_no as ref
+      from party_allocations a
+      join journal_lines l on l.id = a.charge_line_id
+      join treasury_transactions t on t.id = a.transaction_id and t.status = 'posted'
+     where l.entry_id = ${entryId}
+    union all
+    select 'cheque', c.doc_no
+      from cheque_allocations a join journal_lines l on l.id = a.charge_line_id join cheques c on c.id = a.cheque_id
+     where l.entry_id = ${entryId}
+    union all
+    select 'writeoff', null
+      from sales_writeoffs w join journal_lines l on l.id = w.charge_line_id
+     where l.entry_id = ${entryId}`);
+  return r.rows;
+}
+
+/** Kapatmaları kullanıcıya okunur listeler: "TAH-2026-000003 (kasa/banka), 1234 (çek/senet)". */
+export function describeSettlements(rows: readonly { kind: string; ref: string | null }[]): string {
+  const label: Record<string, string> = { treasury: 'tahsilat/ödeme', cheque: 'çek/senet', writeoff: 'fesih kapatması' };
+  const seen = new Set<string>();
+  for (const r of rows) seen.add(r.ref ? `${r.ref} (${label[r.kind] ?? r.kind})` : (label[r.kind] ?? r.kind));
+  return [...seen].slice(0, 5).join(', ') + (seen.size > 5 ? ` ve ${seen.size - 5} diğer` : '');
 }

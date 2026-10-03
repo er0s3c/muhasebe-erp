@@ -40,6 +40,8 @@ export function planSettlement(i: {
   amount: MoneyValue;
   /** Kasa/banka para biriminin defter para birimine kuru (defter para biriminde 1) */
   rate: MoneyValue;
+  /** Kasa/banka (ya da çek/senet) para birimi: kalemle aynıysa karşılık kapatılan tutara eşit olmalıdır */
+  currency: string;
   items: SettleItemInput[];
 }): SettlementPlan {
   let usedSettle = dec(0);
@@ -52,6 +54,15 @@ export function planSettlement(i: {
         `Kalem ${n + 1}: kapatılan tutar (${it.amount.toFixed(2)}) kalanı (${it.remainingDoc.toFixed(2)}) aşıyor`,
         'ALLOCATION_EXCEEDED',
         { lineId: it.lineId, remaining: it.remainingDoc.toFixed(2) },
+      );
+    }
+    // Kur farkı yalnızca kur ayrımından doğar: aynı para biriminde eksik/fazla karşılık kur farkı olarak yazılamaz (ACC-2).
+    // Eksik ödeme kısmi kapatmadır (kapatılan tutar = karşılık); fazlası avanstır.
+    if (it.currency === i.currency && !it.settleAmount.eq(it.amount)) {
+      throw unprocessable(
+        `Kalem ${n + 1}: aynı para biriminde karşılık (${it.settleAmount.toFixed(2)}) kapatılan tutara (${it.amount.toFixed(2)}) eşit olmalı; eksik ödemede kapatılan tutarı karşılık kadar girin (kısmi kapatma)`,
+        'SETTLE_AMOUNT_MISMATCH',
+        { lineId: it.lineId },
       );
     }
     const carry = proportionalBase(it.amount, it.remainingDoc, it.remainingBase);

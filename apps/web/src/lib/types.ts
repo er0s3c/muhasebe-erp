@@ -618,6 +618,8 @@ export interface VatSummary {
   to: string;
   rows: { code: string | null; rate: string; salesNet: string; salesVat: string; purchaseNet: string; purchaseVat: string }[];
   totals: { salesNet: string; salesVat: string; purchaseNet: string; purchaseVat: string; payable: string };
+  /** KDV hesaplarının dönem hareketi ve özetle farkı (elle yevmiye vb.) */
+  reconciliation: { ledgerOutput: string; ledgerInput: string; outputDifference: string; inputDifference: string };
   unverifiedCodes: string[];
 }
 
@@ -1082,6 +1084,8 @@ export interface SalesReportRow {
   invoiceId: string | null;
   type: string | null;
   externalNo: string | null;
+  /** Fatura kırılımında iptal satırı (iptal tarihinde eksi) */
+  cancellation?: boolean;
 }
 
 export interface SalesReportData {

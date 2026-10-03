@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accountIds, addMember, asDb, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser } from './helpers';
+import { accountIds, addMember, asDb, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear } from './helpers';
 
 describe('işveren (alınan) hakedişi (B2e)', async () => {
   const { app, handle } = await makeApp();
@@ -83,7 +83,7 @@ describe('işveren (alınan) hakedişi (B2e)', async () => {
     expect(d.json().payment).toMatchObject({ direction: 'receivable', gross: '400000.00', vat: '64000.00', retention: '40000.00', advance: '50000.00', withholding: '20000.00', otherDeductions: '5000.00', net: '349000.00' });
     const done = await w.approveFlow(d.json().payment.id);
     expect(done.payment.status).toBe('posted');
-    expect(done.payment.number).toBe(`AHK-${new Date().getUTCFullYear()}-000001`);
+    expect(done.payment.number).toBe(`AHK-${thisYear}-000001`);
 
     const j = await w.entry(done.payment.entryId);
     expect(j.of('120')[0]).toMatchObject({ debitBase: '349000.0000', partyId: w.employer.id, dueDate: day(4, 30) });
