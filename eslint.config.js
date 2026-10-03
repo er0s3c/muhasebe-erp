@@ -13,6 +13,7 @@ export default tseslint.config(
       'test-results/**',
       'release/**',
       'reference-materials/**',
+      'video/**',
     ],
   },
   js.configs.recommended,
