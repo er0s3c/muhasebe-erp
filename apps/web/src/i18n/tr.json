@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Muhasebe ERP",
+    "name": "Ada Muhasebe",
     "tagline": "KKTC işletmeleri için sade ve güçlü muhasebe"
   },
   "common": {
@@ -40,6 +40,13 @@
     "unverified": "Doğrulanmamış",
     "verified": "Doğrulandı",
     "today": "Bugün",
+    "clear": "Temizle",
+    "thisMonth": "Bu ay",
+    "pickDate": "Takvimi aç",
+    "prevMonth": "Önceki ay",
+    "nextMonth": "Sonraki ay",
+    "prevYear": "Önceki yıl",
+    "nextYear": "Sonraki yıl",
     "year": "Yıl",
     "month": "Ay",
     "export": "CSV olarak indir",

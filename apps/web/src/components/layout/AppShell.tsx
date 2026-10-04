@@ -15,7 +15,7 @@ import { Callout } from '../ui/Feedback';
 import { Field, Input } from '../ui/Field';
 import { Modal } from '../ui/Sheet';
 import { useToast } from '../ui/Toast';
-import { BrandMark } from './Brand';
+import { BrandLogo } from './Brand';
 import { CommandPalette } from './CommandPalette';
 import { navIcon } from './icons';
 import { PrintLetterhead } from '../print/PrintLetterhead';
@@ -172,8 +172,8 @@ function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggl
       <div className={cn('flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4', collapsed && 'lg:justify-center lg:px-0')}>
         {/* Logo ve ad ana sayfaya götürür (dar ekranda menüyü de kapatır) */}
         <Link to="/" onClick={onClose} className="flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand" aria-label={t('shell.home')}>
-          <BrandMark />
-          <span className={cn('text-base', collapsed && 'lg:hidden')}>{t('app.name')}</span>
+          <BrandLogo mark className={cn('h-8', !collapsed && 'lg:hidden')} />
+          <BrandLogo className={cn('h-8', collapsed && 'lg:hidden', 'max-lg:hidden')} />
         </Link>
         <button className="ml-auto rounded-md p-1.5 text-muted hover:bg-surface-2 lg:hidden" onClick={onClose} aria-label={t('common.close')}>
           <X className="size-5" />

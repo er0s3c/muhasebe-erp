@@ -30,25 +30,25 @@ interface Metric {
 }
 
 /**
- * Sayaç şeridi: tek koyu (Obsidian) şerit; 10px büyük harf etiket, 28px tek ağırlıklı değer.
- * Bağlantılı göstergeler tıklanabilir ve odak halkası sarıdır (koyu zeminde Ink görünmez).
+ * Sayaç şeridi: tema yüzeyinde (açık temada beyaz, koyu temada koyu) tek şerit; 10px büyük harf etiket, 28px tek ağırlıklı değer.
+ * Bağlantılı göstergeler tıklanabilir.
  */
 function CounterBand({ metrics, label }: { metrics: Metric[]; label: string }) {
   return (
-    <section aria-label={label} className="overflow-hidden rounded-2xl bg-inverted text-on-inverted">
+    <section aria-label={label} className="overflow-hidden rounded-2xl border border-border bg-surface text-text">
       <ul className="flex flex-wrap">
         {metrics.map((m) => {
           const body = (
             <>
-              <p className="text-caption uppercase tracking-[0.05em] text-inverted-muted">{m.label}</p>
-              <p className={cn('mt-2 truncate text-heading', m.tone === 'warning' && 'text-warning-on-inverted', m.tone === 'danger' && 'text-danger-on-inverted')}>{m.value}</p>
+              <p className="text-caption uppercase tracking-[0.05em] text-muted">{m.label}</p>
+              <p className={cn('mt-2 truncate text-heading', m.tone === 'warning' && 'text-warning', m.tone === 'danger' && 'text-danger')}>{m.value}</p>
             </>
           );
           const cell = 'block h-full p-5';
           return (
-            <li key={m.key} className="-ml-px -mt-px grow basis-[200px] border-l border-t border-white/10">
+            <li key={m.key} className="-ml-px -mt-px grow basis-[200px] border-l border-t border-border">
               {m.to ? (
-                <Link to={m.to} aria-label={m.label} className={cn(cell, 'transition-colors hover:bg-white/5 focus-visible:outline-brand')}>
+                <Link to={m.to} aria-label={m.label} className={cn(cell, 'transition-colors hover:bg-surface-2')}>
                   {body}
                 </Link>
               ) : (
