@@ -19,6 +19,18 @@ async function signUpWithCompany(page: Page, tag: string, sector?: string) {
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
 
+/** Kurulum sahibi olarak giriş (lisans ayrıntıları yalnızca kurulum sahibi kuruluşa açıktır; hesap e2e/global-setup.ts'de açılır). */
+async function loginAsInstallationOwner(page: Page) {
+  const email = process.env.E2E_OWNER_EMAIL;
+  const password = process.env.E2E_OWNER_PASSWORD;
+  if (!email || !password) throw new Error('E2E_OWNER_* yok: veritabanı temiz değil (global-setup kurulum sahibini yalnızca ilk etkinleştirmede açar)');
+  await page.goto('/login');
+  await page.getByLabel('E-posta').fill(email);
+  await page.getByLabel('Şifre').fill(password);
+  await page.getByRole('button', { name: 'Giriş yap' }).click();
+  await expect(page.getByRole('heading', { name: 'Merhaba, Kurulum' })).toBeVisible();
+}
+
 /** `GET /api/license` yanıtı (alanlar apps/api/src/licensing/routes.ts `view` ile aynıdır). */
 function licenseInfo(over: Record<string, unknown> = {}) {
   return {
@@ -56,7 +68,7 @@ function licenseInfo(over: Record<string, unknown> = {}) {
 }
 
 test('ayarlar: lisans durumu/kapsam/kullanım, yenileme; cihaz listesi ve yeniden adlandırma (gerçek lisans sunucusu)', async ({ page }) => {
-  await signUpWithCompany(page, 'lisans');
+  await loginAsInstallationOwner(page);
   const nav = page.getByRole('navigation', { name: 'Ana menü' });
 
   await nav.getByRole('link', { name: 'Lisans' }).click();
