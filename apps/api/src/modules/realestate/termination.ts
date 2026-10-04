@@ -74,10 +74,13 @@ export async function terminateContract(tx: Tx, ctx: SalesCtx, id: string, input
   if (feesTotal.gt(0) && !baseFee) throw unprocessable('Etkinleşme yevmiyesinde fon/harç yükümlülük satırı bulunamadı (hesap eşlemesi değişmiş olabilir)', 'FEE_LINE_MISSING');
   const debitBase = dec(base380.base).plus(baseFee?.base ?? 0);
 
+  // Belge tutarı tamamen kapanmış ama kur farkından küçük bir defter kalıntısı kalmış kalem için satır açılmaz (borç/alacak
+  // sıfır olamaz); kalıntı aşağıdaki kambiyo satırına düşer.
+  const closing = open.filter((o) => dec(o.remaining).gt(0));
   const lines: AutoJournalLine[] = [amountLine(map.deferred_revenue, 'debit', price, dec(base380.base), c.currencyCode, dec(c.activationFx!), foreign, { description: `Fesih ${c.code}: ertelenmiş gelir iptali` })];
   if (feesTotal.gt(0)) lines.push(amountLine(map.fee_payable, 'debit', feesTotal, dec(baseFee!.base), c.currencyCode, dec(c.activationFx!), foreign, { description: `Fesih ${c.code}: fon/harç yükümlülüğü iptali` }));
   let creditsBase = dec(0);
-  for (const o of open) {
+  for (const o of closing) {
     creditsBase = creditsBase.plus(o.remainingBase);
     lines.push(amountLine(map.receivable, 'credit', dec(o.remaining), dec(o.remainingBase), c.currencyCode, dec(c.activationFx!), foreign, { partyId: c.partyId, description: `Fesih ${c.code}: ödenmemiş taksit kapatma` }));
   }
@@ -112,10 +115,10 @@ export async function terminateContract(tx: Tx, ctx: SalesCtx, id: string, input
 
   // Kasasız kapatma kayıtları: kapatan satırlar fesih yevmiyesinin 120 satırlarıdır (aynı sırada)
   const settle = await tx.select({ id: journalLines.id }).from(journalLines).where(and(eq(journalLines.entryId, entry.id), eq(journalLines.accountId, map.receivable))).orderBy(asc(journalLines.lineNo));
-  if (settle.length !== open.length) throw unprocessable('Fesih satırları kalemlerle eşleşmedi', 'TERMINATION_LINE_MISMATCH');
-  if (open.length > 0) {
+  if (settle.length !== closing.length) throw unprocessable('Fesih satırları kalemlerle eşleşmedi', 'TERMINATION_LINE_MISMATCH');
+  if (closing.length > 0) {
     await tx.insert(salesWriteoffs).values(
-      open.map((o, n) => ({
+      closing.map((o, n) => ({
         companyId: ctx.companyId,
         contractId: id,
         partyId: c.partyId,
