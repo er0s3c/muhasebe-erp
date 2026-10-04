@@ -256,6 +256,59 @@ describe('demo aracı', () => {
     }
   }, 60_000);
 
+  it('seedDemo: tamamlayıcı modüller (satış, İK, portföy, gider, rehber, ithalat, onay) dolu ve defter dengeli', async () => {
+    const c = new pg.Client({ connectionString: ownerUrl });
+    await c.connect();
+    try {
+      const q = async (sql: string) => (await c.query(sql)).rows;
+      const n = async (table: string, where = 'true') => (await q(`select count(*)::int as n from ${table} where ${where}`))[0].n as number;
+      // Tüm fişler (yeni modüllerin otomatik yevmiyeleri dahil) dengeli
+      expect(await n(`(select entry_id from journal_lines group by entry_id having sum(debit_base) <> sum(credit_base)) x`)).toBe(0);
+      // Satış: fiyat listeleri (varsayılan satış/alış), cariye özel fiyat, teklif/sipariş durumları, toplu faturalama
+      expect(await n('price_lists')).toBe(3);
+      expect(await n('price_lists', `is_default and kind = 'sales'`)).toBe(1);
+      expect(await n('party_prices')).toBeGreaterThanOrEqual(3);
+      expect((await q(`select kind, status, count(*)::int as n from sales_orders group by kind, status order by kind, status`)).map((r) => `${r.kind}:${r.status}:${r.n}`)).toEqual(
+        expect.arrayContaining(['order:confirmed:2', 'order:cancelled:1', 'order:draft:1', 'quote:converted:1', 'quote:sent:1', 'quote:rejected:1', 'quote:draft:1']),
+      );
+      expect(await n('invoice_batches')).toBe(1);
+      // Bu ayın satışları dolu (gösterge panosu): ay başından bugüne kaydedilmiş satış faturası
+      expect(await n('invoices', `type = 'sales' and status = 'posted' and invoice_date >= date_trunc('month', current_date)`)).toBeGreaterThan(0);
+      // İK: onaylı bordro (4 satır), avanslar, net ödemeler, sosyal güvenlik bildirimi, yabancı işçi belgeleri (yenilenen + dolmuş)
+      expect(await q(`select status from payroll_runs`)).toEqual([{ status: 'approved' }]);
+      expect(await n('payroll_lines')).toBe(4);
+      expect(await n('employee_advances')).toBe(2);
+      expect(await n('employee_salary_payments')).toBe(2);
+      expect(await n('social_declarations', `status = 'finalized'`)).toBe(1);
+      expect(await n('employee_social_profiles')).toBe(4);
+      expect(await n('foreign_worker_docs')).toBeGreaterThanOrEqual(4);
+      expect(await n('foreign_doc_renewals')).toBe(1);
+      expect(await n('foreign_worker_guarantees')).toBe(1);
+      // Yasal parametreler yalnızca demo değeri ve DOĞRULANMAMIŞ (bordro/bildirim "doğrulanmadı" uyarısı çıkar)
+      expect(await n('payroll_params', 'verified_at is not null')).toBe(0);
+      expect(await n('payroll_params', `source_note like 'Demo%'`)).toBe(await n('payroll_params'));
+      // Çek/senet: durumların çeşitliliği, kalem eşleştirmesi; teminat mektupları (biri iade edilmiş)
+      expect((await q(`select distinct status from cheques order by status`)).map((r) => r.status)).toEqual(expect.arrayContaining(['portfolio', 'collected', 'bounced', 'endorsed', 'issued', 'paid']));
+      expect(await n('cheque_allocations')).toBeGreaterThan(0);
+      expect(await n('bank_guarantees')).toBe(3);
+      expect(await n('bank_guarantees', `status = 'returned'`)).toBe(1);
+      // Gider kartı/fişleri (1 iptal), rehber ve ajanda, ithalat dosyaları, onay kuralları
+      expect(await n('expense_cards')).toBe(4);
+      expect(await n('expense_entries', `status = 'cancelled'`)).toBe(1);
+      expect(await n('directory_organizations')).toBe(4);
+      expect(await n('directory_contacts')).toBe(5);
+      expect(await n('agenda_items', `status = 'done'`)).toBe(1);
+      expect(await n('import_files', `status = 'posted'`)).toBe(1);
+      expect(await n('import_files', `status = 'draft'`)).toBe(1);
+      expect(await n('approval_rules')).toBe(4);
+      expect(await n('retention_releases')).toBe(1);
+      // SGK numaraları şifreli saklanır (düz metin değil)
+      expect(await n('employee_social_profiles', `ssn_enc is not null and ssn_enc not like '%SGK-%'`)).toBe(4);
+    } finally {
+      await c.end();
+    }
+  });
+
   it('CLI reset: onay yoksa ya da ad yanlışsa silmez', async () => {
     const before = await admin(async () => {
       const c = new pg.Client({ connectionString: ownerUrl });

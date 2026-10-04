@@ -75,6 +75,10 @@ import { approveRevision, createSubcontract, getRevision, putBoqLines } from '..
 import { createVariation, submitVariation } from '../modules/subcontracts/variations';
 import { giveMaterial } from '../modules/subcontracts/materials';
 import { decide } from '../modules/approvals/service';
+import { seedHr } from './demo-hr';
+import { seedSales } from './demo-sales';
+import { seedDirectory, seedExpenses, seedPortfolio } from './demo-misc';
+import { seedApprovalRules, seedImports, seedSettingsMisc } from './demo-late';
 
 export const DEMO_EMAIL = 'demo@ornek.local';
 export const DEMO_PASSWORD = 'Demo-Sifre-123';
@@ -759,7 +763,7 @@ async function seedBankStatement(tx: Tx, ctx: LedgerCtx, company: CompanyInfo, b
  * Demo verisini yükler. Demo kullanıcı zaten varsa hiçbir şey yapmaz ve `false` döner.
  * Tarih duyarlıdır: "bugün"e göre bir yıllık hareket üretir (modül yüklenme anı esas alınır).
  */
-export async function seedDemo(db: Db, log: (message: string) => void = console.log): Promise<boolean> {
+export async function seedDemo(db: Db, log: (message: string) => void = console.log, options: { secret?: string } = {}): Promise<boolean> {
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, DEMO_EMAIL));
   if (existing) {
     log(`Demo verisi zaten var (${DEMO_EMAIL}). Sıfırdan yüklemek için veritabanını sıfırlayın (demo:reset).`);
@@ -923,6 +927,16 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
     const treasurySummary = `${treasury.summary}; ${await seedBankStatement(tx, ctx, { ...company, sector: company.sector as Sector }, treasury.bankTlId)}`;
     const projectSummary = await seedProjects(tx, ctx, partyId, acc, treasury.cashId, treasury.bankTlId);
     const attendanceSummary = await seedAttendance(tx, ctx);
+    const hrSummary = await seedHr(tx, ctx, { secret: options.secret ?? 'demo', cashId: treasury.cashId, bankTlId: treasury.bankTlId, yearStart: date(1, 1) });
+
+    const salesSummary = await seedSales(tx, ctx, partyId);
+    const misc = { partyId, acc, bankTlId: treasury.bankTlId, cashId: treasury.cashId };
+    const portfolioSummary = await seedPortfolio(tx, ctx, misc);
+    const expenseSummary = await seedExpenses(tx, ctx, misc);
+    const directorySummary = await seedDirectory(tx, ctx, { partyId });
+    const importSummary = await seedImports(tx, ctx, partyId);
+    const approvalSummary = await seedApprovalRules(tx, ctx);
+    const settingsSummary = await seedSettingsMisc(tx, ctx);
 
     // Geçmiş aylar kapansın (yılın ilk yarısı)
     for (let m = 1; m <= 6; m++) {
@@ -931,7 +945,7 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
       if (p && date(m, last) < today) await closePeriod(tx, p.id, userId);
     }
 
-    log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary}, ${treasurySummary}, ${projectSummary}, ${attendanceSummary})`);
+    log(`Demo verisi yüklendi: ${company.name} (${created} yevmiye, ${stockSummary}, ${treasurySummary}, ${projectSummary}, ${attendanceSummary}, ${hrSummary}, ${salesSummary}, ${portfolioSummary}, ${expenseSummary}, ${directorySummary}, ${importSummary}, ${approvalSummary}, ${settingsSummary})`);
     log(`  Giriş:  ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
     log('  Ekip:   muhasebe@ornek.local (muhasebeci), izleyici@ornek.local (izleyici) — aynı şifre');
   });

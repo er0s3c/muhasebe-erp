@@ -32,7 +32,7 @@ try {
   if (command === 'seed') {
     const handle = createDb(config.DATABASE_URL);
     try {
-      await seedDemo(handle.db);
+      await seedDemo(handle.db, console.log, { secret: config.JWT_SECRET });
     } finally {
       await handle.close();
     }
@@ -50,7 +50,7 @@ try {
     if (license) await restoreLicenseState(ownerUrl, license);
     const handle = createDb(config.DATABASE_URL);
     try {
-      await seedDemo(handle.db);
+      await seedDemo(handle.db, console.log, { secret: config.JWT_SECRET });
     } finally {
       await handle.close();
     }

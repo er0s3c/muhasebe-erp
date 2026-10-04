@@ -1,4 +1,4 @@
-# Muhasebe ERP
+# Ada Muhasebe
 
 KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef sektör inşaat ve taahhüt; market ve ticaret modülleri aynı çekirdeğin üstüne eklenecek şekilde tasarlandı.
 
@@ -63,7 +63,8 @@ docker compose up -d db
 # 2) Şema
 npm run db:migrate
 
-# 3) (İsteğe bağlı) demo verisi: örnek inşaat şirketi, cariler, stok, kurlar, bir yıllık yevmiye
+# 3) (İsteğe bağlı) demo verisi: örnek inşaat şirketi, cariler, stok, kurlar, bir yıllık yevmiye; satış (fiyat listesi, teklif/sipariş),
+#    İK (bordro, avans, sosyal güvenlik, yabancı işçi), çek/senet, teminat, gider, rehber/ajanda, ithalat dosyası, onay kuralları
 npm run db:seed        # giriş: demo@ornek.local / Demo-Sifre-123
 #    (sıfırdan: npm run demo:reset -- --confirm=erp_dev  → şemayı siler, migration + demo verisi)
 

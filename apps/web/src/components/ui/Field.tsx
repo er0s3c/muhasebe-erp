@@ -1,5 +1,8 @@
-import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { cn } from '../../lib/cn';
+import { DateInput } from './DateInput';
+
+export { Select } from './Select';
 
 /** Girdi: 10px yarıçap, hairline çerçeve; odakta Ink çerçeve (sarı yalnızca eylem yüzeylerinde). */
 const control =
@@ -7,19 +10,14 @@ const control =
   'transition-colors focus:border-text focus:outline-none disabled:bg-surface-2 disabled:opacity-70';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...props }, ref) {
+  // Tarih/ay girdileri tema renkli takvimle gelir (tarayıcının kendi açılırı stillenemez)
+  const { type, ...rest } = props;
+  if (type === 'date' || type === 'month') return <DateInput ref={ref} className={className} {...rest} type={type as 'date' | 'month'} />;
   return <input ref={ref} className={cn(control, 'h-10', className)} {...props} />;
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...props }, ref) {
   return <textarea ref={ref} className={cn(control, 'min-h-20 py-2.5', className)} {...props} />;
-});
-
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function Select({ className, children, ...props }, ref) {
-  return (
-    <select ref={ref} className={cn(control, 'h-10 pr-8', className)} {...props}>
-      {children}
-    </select>
-  );
 });
 
 interface FieldProps {
