@@ -14,13 +14,28 @@ export function useCompanyApi() {
   };
 }
 
-export function useCQuery<T>(key: QueryKey, path: string | null, opts: { enabled?: boolean; allowForbidden?: boolean } = {}) {
+export function useCQuery<T>(
+  key: QueryKey,
+  path: string | null,
+  opts: {
+    enabled?: boolean;
+    allowForbidden?: boolean;
+    /** Düzenli yoklama (ms); arka plandaki sekmede yoklanmaz. */
+    refetchInterval?: number;
+    /** Pencere odağına dönüldüğünde yenile (varsayılan kapalı). */
+    refetchOnWindowFocus?: boolean;
+    staleTime?: number;
+  } = {},
+) {
   const { company, call } = useCompanyApi();
   return useQuery<T>({
     queryKey: [company.id, ...key],
     queryFn: () => call<T>(path as string),
     enabled: path !== null && (opts.enabled ?? true),
     ...(opts.allowForbidden ? { meta: { allowForbidden: true } } : {}),
+    ...(opts.refetchInterval ? { refetchInterval: opts.refetchInterval, refetchIntervalInBackground: false } : {}),
+    ...(opts.refetchOnWindowFocus !== undefined ? { refetchOnWindowFocus: opts.refetchOnWindowFocus } : {}),
+    ...(opts.staleTime !== undefined ? { staleTime: opts.staleTime } : {}),
   });
 }
 

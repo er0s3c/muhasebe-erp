@@ -41,3 +41,20 @@ export function passwordChangedMail(to: string, name: string): MailMessage {
   ]);
   return { to, subject: 'Şifreniz değiştirildi', text, html };
 }
+
+/**
+ * Günlük bildirim özeti. İçerik GENELDİR: yalnızca bildirim başlıkları (tür + sayı) ve uygulamaya bağlantı; ad, kimlik no, IBAN, ücret,
+ * belge numarası ya da tutar yazılmaz (LEGAL-NOTES §5). Şirket adı yalnızca birden çok şirketli kullanıcı hangisi olduğunu bilsin diye geçer.
+ */
+export function notificationDigestMail(to: string, name: string, company: string, lines: readonly string[], url: string): MailMessage {
+  const { text, html } = layout(
+    name,
+    [
+      `${company ? `${company} şirketinde ` : ''}okumadığınız ${lines.length} bildirim var:`,
+      ...lines.map((l) => `• ${l}`),
+      'Bildirim özeti e-postasını Bildirim tercihleri sayfasından kapatabilirsiniz. Ayrıntılar için uygulamaya girin; bu ileti kişisel veri ya da tutar içermez.',
+    ],
+    { url, label: 'Bildirimleri aç' },
+  );
+  return { to, subject: `Bildirim özeti: ${lines.length} okunmamış bildirim`, text, html };
+}

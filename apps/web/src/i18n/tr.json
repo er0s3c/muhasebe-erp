@@ -227,7 +227,8 @@
     "importFiles": "İthalat dosyaları",
     "expenseEntries": "Gider fişleri",
     "expenseCards": "Gider kartları",
-    "expenseReports": "Gider raporları"
+    "expenseReports": "Gider raporları",
+    "notifications": "Bildirimler"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -258,7 +259,9 @@
     "newPayment": "Ödeme yap",
     "newProject": "Yeni proje",
     "security": "Güvenlik (iki adımlı doğrulama)",
-    "home": "Ana sayfa"
+    "home": "Ana sayfa",
+    "notifications": "Bildirimler",
+    "notificationPrefs": "Bildirim tercihleri"
   },
   "auth": {
     "loginTitle": "Hesabınıza giriş yapın",
@@ -3918,7 +3921,7 @@
     "title": "Ajanda",
     "subtitle": "Görevler, hatırlatmalar ve randevular.",
     "add": "Kalem ekle",
-    "reminderNote": "Hatırlatma ofseti yalnızca kayıttır; bildirim gönderilmez. Bugün, yaklaşan ve gecikmiş kalemler bu sayfada listelenir.",
+    "reminderNote": "Bugün vadesi gelen, geciken ve hatırlatma zamanı gelen kalemler Bildirimler'e de düşer (tercihlerden değiştirilebilir; hatırlatma tarama aralığı kadar gecikebilir). Bugün, yaklaşan ve gecikmiş kalemler bu sayfada listelenir.",
     "empty": "Açık ajanda kalemi yok",
     "emptyDesc": "Görev ya da randevu ekleyin.",
     "showClosed": "Biten ve iptal edilenleri göster",
@@ -3962,7 +3965,7 @@
       "start": "Başlangıç",
       "end": "Bitiş",
       "remind": "Hatırlatma",
-      "remindHint": "Yalnızca veri; bildirim gönderilmez.",
+      "remindHint": "Hatırlatma zamanı gelince Bildirimler'de görünür (tarama aralığı kadar gecikebilir).",
       "noRemind": "Yok",
       "minutesBefore": "{{minutes}} dk önce",
       "contact": "Kişi",
@@ -4576,7 +4579,7 @@
   "foreign": {
     "title": "Yabancı işçi belge ve teminat takibi",
     "subtitle": "Personel kartındaki uyruğa göre belge (çalışma/ikamet izni, pasaport, sağlık raporu vb.), son kullanma takibi ve teminat kaydı.",
-    "notice": "Tüm süre, uyarı günü, teminat tutarı ve makam bilgileri sizin girdiğiniz kullanıcı verisidir; sistemde yasal değer yoktur ve hiçbiri doğrulanmadı. Belge numaraları şifreli saklanır ve maskeli gösterilir. Dosya yükleme yoktur: ek belge için metin atfı yazılır. Bildirim/e-posta hatırlatması yoktur; süresi dolan/dolmak üzere listesini buradan izleyin.",
+    "notice": "Tüm süre, uyarı günü, teminat tutarı ve makam bilgileri sizin girdiğiniz kullanıcı verisidir; sistemde yasal değer yoktur ve hiçbiri doğrulanmadı. Belge numaraları şifreli saklanır ve maskeli gösterilir. Dosya yükleme yoktur: ek belge için metin atfı yazılır. Süre uyarıları Bildirimler'e yalnızca sayı olarak düşer (tercihlerden değiştirilebilir); ayrıntıyı bu listeden izleyin.",
     "unverifiedBadge": "Doğrulanmadı",
     "tabs": {
       "documents": "Belgeler",
@@ -6030,5 +6033,110 @@
     "details": "Teknik ayrıntı",
     "notFoundTitle": "Sayfa bulunamadı",
     "notFoundDesc": "Aradığınız sayfa taşınmış ya da hiç var olmamış olabilir."
+  },
+  "notifications": {
+    "title": "Bildirimler",
+    "subtitle": "Vadesi gelen, süresi dolan ve sizden işlem bekleyen konular. Bildirim metni yalnızca sayı içerir; ayrıntı bağlantıdaki ekrandadır.",
+    "bellLabel": "Bildirimler, {{count}} okunmamış",
+    "bellLabelNone": "Bildirimler, okunmamış yok",
+    "viewAll": "Tümünü gör",
+    "markAllRead": "Tümünü okundu işaretle",
+    "markRead": "Okundu işaretle",
+    "dismiss": "Kapat",
+    "open": "Aç",
+    "unread": "Okunmadı",
+    "resolved": "Çözüldü",
+    "dismissed": "Kapatıldı",
+    "emptyShort": "Okunmamış bildirim yok.",
+    "empty": "Bildirim yok",
+    "emptyUnread": "Okunmamış bildirim yok",
+    "emptyDesc": "Vadesi gelen çek, süresi dolan belge ya da bekleyen onay gibi bir durum oluştuğunda burada görünür.",
+    "loadError": "Bildirimler yüklenemedi",
+    "preferences": "Bildirim tercihleri",
+    "scanNow": "Şimdi tara",
+    "scanHint": "Şirketin bildirimlerini hemen yeniden hesaplar (otomatik tarama zaten düzenli aralıkla çalışır)",
+    "scanDone": "Tarama tamam: {{created}} yeni bildirim, {{resolved}} çözüldü",
+    "kindFilter": "Bildirim türü",
+    "allKinds": "Tüm türler",
+    "filters": {
+      "unread": "Okunmamış",
+      "active": "Etkin",
+      "all": "Geçmiş dahil"
+    },
+    "severity": {
+      "info": "Bilgi",
+      "warning": "Uyarı",
+      "critical": "Kritik"
+    },
+    "privacyNote": "Bildirimler kişisel veri, tutar ya da belge numarası içermez; ayrıntıya bağlantıdaki ekrandan, kendi yetkinizle ulaşırsınız.",
+    "prefTitle": "Bildirim tercihleri",
+    "prefSubtitle": "Hangi konularda, nerede ve ne kadar önceden bildirim almak istediğinizi seçin. Tercihler yalnızca sizin içindir ve bu şirket için geçerlidir.",
+    "prefKinds": "Bildirim türleri",
+    "prefKindsDesc": "Yalnızca bu şirkette açık olan ve rolünüzün erişebildiği konular listelenir.",
+    "prefSaved": "Tercih kaydedildi",
+    "backToList": "Bildirimlere dön",
+    "inApp": "Uygulama içi",
+    "emailDigest": "E-posta özeti",
+    "emailUnavailable": "E-posta özeti kullanılamıyor: bu kurulumda e-posta (SMTP) yapılandırılmamış. Yöneticinizle iletişime geçin.",
+    "emailPrivacy": "E-posta özeti günde en çok bir kez gelir ve yalnızca bildirim başlıklarını (tür ve sayı) ile uygulamaya bağlantıyı içerir; ad, kimlik no, tutar ya da belge numarası içermez. Varsayılan olarak kapalıdır.",
+    "leadUnit": {
+      "ahead": "Kaç gün önceden",
+      "overdue": "Kaç gün gecikmeden sonra",
+      "age": "Kaç günden eski"
+    },
+    "leadDefault": "Boş: varsayılan {{days}} gün",
+    "leadFromSetting": "Boş: şirket ayarı ({{days}} gün) geçerli",
+    "leadRange": "{{min}}–{{max}} gün; boş bırakınca varsayılana döner",
+    "kinds": {
+      "cheque_due": {
+        "label": "Çek/senet vadesi",
+        "desc": "Vadesi yaklaşan ya da geçen açık çek/senet sayısı (alınan ve verilen). Gün eşiği: vadeye kaç gün kala bildirilsin."
+      },
+      "guarantee_expiring": {
+        "label": "Teminat mektubu süresi",
+        "desc": "Süresi dolmak üzere olan ya da dolmuş ama kapatılmamış aktif teminat mektuplarının sayısı. Teminat mektupları ayarındaki uyarı günü varsa o geçerlidir."
+      },
+      "foreign_doc_expiring": {
+        "label": "Yabancı işçi belge süresi",
+        "desc": "Süresi dolmak üzere olan ya da dolmuş yabancı işçi belgelerinin sayısı. Yabancı işçi ayarlarındaki uyarı günü varsa o geçerlidir. Personel adı bildirime yazılmaz."
+      },
+      "agenda_due": {
+        "label": "Ajanda: bugün ve geciken",
+        "desc": "Sizin ya da şirket ajandanızdaki bugün vadesi gelen ve geciken açık kalemlerin sayısı."
+      },
+      "agenda_reminder": {
+        "label": "Ajanda hatırlatması",
+        "desc": "Hatırlatma ofseti girilmiş kalemlerin hatırlatma zamanı geldiğinde bildirir (tarama aralığı kadar gecikebilir)."
+      },
+      "approval_pending": {
+        "label": "Onay bekleyen belge",
+        "desc": "Sıradaki onay adımı sizde olan belgelerin sayısı (hakediş, satın alma talebi vb.)."
+      },
+      "license_expiring": {
+        "label": "Lisans durumu",
+        "desc": "Lisansın bitişine yaklaşıldığında, tolerans süresinde ya da kısıtlı modda olduğunda bildirir (yalnızca kurulum sahibi)."
+      },
+      "attendance_open": {
+        "label": "Kapatılmamış puantaj ayı",
+        "desc": "Ay sonu geçtiği halde kapatılmamış puantaj aylarının sayısı."
+      },
+      "payroll_open": {
+        "label": "Onaylanmamış bordro ayı",
+        "desc": "Puantajı kapanmış ama bordrosu hazırlanmamış ya da taslakta kalmış ayların sayısı."
+      },
+      "receivable_overdue": {
+        "label": "Vadesi geçmiş alacak",
+        "desc": "Vadesi geçmiş alacağı olan cari sayısı. Gün eşiği: kaç günden uzun gecikme sayılsın."
+      },
+      "stock_below_min": {
+        "label": "Kritik stok",
+        "desc": "Eldeki miktarı kritik seviyeye eşit ya da altında olan stok kartı sayısı."
+      },
+      "draft_stale": {
+        "label": "Uzun süredir bekleyen taslak",
+        "desc": "Belirlenen günden uzun süredir kaydedilmeyen fatura ve yevmiye taslaklarının sayısı. Gün eşiği: taslak kaç günden eski olsun."
+      }
+    },
+    "emailNeedsInApp": "E-posta özeti uygulama içi bildirime dayanır; önce uygulama içini açın."
   }
 }

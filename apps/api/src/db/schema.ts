@@ -5365,8 +5365,8 @@ export const directoryNotes = pgTable(
 );
 
 /**
- * Ajanda kalemi: görev/hatırlatma ya da randevu. `ownerId` boşsa şirket ajandasıdır. Hatırlatma ofseti yalnızca veridir
- * (bildirim/push altyapısı yoktur). Silinmez; iptal edilir (ERP21).
+ * Ajanda kalemi: görev/hatırlatma ya da randevu. `ownerId` boşsa şirket ajandasıdır. Hatırlatma ofseti (dakika) bildirim kaynağı
+ * `agenda_reminder` tarafından kullanılır (Faz N1; push yoktur). Silinmez; iptal edilir (ERP21).
  */
 export const agendaItems = pgTable(
   'agenda_items',
@@ -5581,4 +5581,97 @@ export const fiscalYearEvents = pgTable(
     check('fiscal_year_events_action_ck', sql`${t.action} in ('close','reopen')`),
     check('fiscal_year_events_reason_ck', sql`${t.action} <> 'reopen' or length(btrim(coalesce(${t.reason}, ''))) >= 5`),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Bildirimler (uygulama içi + isteğe bağlı e-posta özeti)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bildirim: kullanıcıya adreslenmiş, GENEL metinli (yalnızca sayı + bağlantı; ad, kimlik, tutar, belge no yok) uyarı. Zamanlayıcı
+ * (`modules/notifications/scheduler.ts`) her kullanıcı için kaynak kontrollerini çalıştırır; aynı durum için kopya üretmez
+ * (`dedupe_key` = durum parmak izi; `bucket_date` = şirket saat dilimindeki gün) ve koşul kalkınca `resolved_at` doldurur.
+ * Kullanıcı yalnızca okur (`read_at`) ya da kapatır (`dismissed_at`); içerik alanları değiştirilemez (ERP25). Silme yalnızca
+ * kapanmış (okunmuş/kapatılmış/çözülmüş) satırların saklama süresi dolunca `notification_prune` ile olur.
+ */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    kind: text().notNull(),
+    /** info | warning | critical */
+    severity: text().notNull().default('info'),
+    title: text().notNull(),
+    body: text().notNull().default(''),
+    /** Arayüz içi yol (örn. /treasury/cheques). */
+    link: text().notNull(),
+    /** Bildirimin temsil ettiği kayıt sayısı (metinde de geçer; sıralama/özet için). */
+    count: integer().notNull().default(1),
+    dedupeKey: text().notNull(),
+    bucketDate: date({ mode: 'string' }).notNull(),
+    createdAt: createdAt(),
+    readAt: timestamp({ withTimezone: true }),
+    dismissedAt: timestamp({ withTimezone: true }),
+    resolvedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    unique('notifications_dedupe_uq').on(t.companyId, t.userId, t.kind, t.dedupeKey, t.bucketDate),
+    index('notifications_user_idx').on(t.companyId, t.userId, t.createdAt),
+    index('notifications_open_idx').on(t.companyId, t.userId).where(sql`${t.resolvedAt} is null and ${t.dismissedAt} is null`),
+    check('notifications_kind_ck', sql`${t.kind} ~ '^[a-z][a-z_]{1,40}$'`),
+    check('notifications_severity_ck', sql`${t.severity} in ('info','warning','critical')`),
+    check('notifications_title_ck', sql`length(btrim(${t.title})) between 1 and 200`),
+    check('notifications_body_ck', sql`length(${t.body}) <= 1000`),
+    check('notifications_link_ck', sql`${t.link} ~ '^/[^/]' or ${t.link} = '/'`),
+    check('notifications_count_ck', sql`${t.count} >= 0`),
+  ],
+);
+
+/** Bildirim tercihi (kullanıcı + şirket + tür): uygulama içi açık varsayılan, e-posta özeti KAPALI varsayılan; gün eşiği boşsa kaynak ayarı/varsayılan. */
+export const notificationPreferences = pgTable(
+  'notification_preferences',
+  {
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    kind: text().notNull(),
+    inApp: boolean().notNull().default(true),
+    email: boolean().notNull().default(false),
+    leadDays: integer(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.companyId, t.userId, t.kind] }),
+    check('notification_preferences_kind_ck', sql`${t.kind} ~ '^[a-z][a-z_]{1,40}$'`),
+    check('notification_preferences_lead_ck', sql`${t.leadDays} is null or ${t.leadDays} between 0 and 365`),
+  ],
+);
+
+/**
+ * Günlük e-posta özeti kaydı (kullanıcı + şirket + gün): özet o gün için TALEP EDİLDİĞİNDE yazılır; aynı gün ikinci özet doğmaz
+ * (gönderim "en çok bir kez": SMTP hatasında aynı gün yeniden denenmez).
+ */
+export const notificationDigests = pgTable(
+  'notification_digests',
+  {
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    digestDate: date({ mode: 'string' }).notNull(),
+    itemCount: integer().notNull(),
+    sentAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.userId, t.digestDate] }), check('notification_digests_count_ck', sql`${t.itemCount} >= 1`)],
 );

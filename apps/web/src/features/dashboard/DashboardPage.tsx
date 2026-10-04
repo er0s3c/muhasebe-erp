@@ -10,6 +10,7 @@ import { cn } from '../../lib/cn';
 import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCQuery, useCompanyApi, useModuleEnabled } from '../../lib/queries';
 import { useSession } from '../../lib/session';
+import { NotificationsCard } from '../notifications/NotificationsCard';
 import type { AgingReport, DeliverySummary, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData, TreasurySummary } from '../../lib/types';
 
 interface Step {
@@ -187,6 +188,8 @@ export function DashboardPage() {
               : []),
           ]}
         />
+
+        <NotificationsCard />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           {steps.length > 0 && !allDone && (

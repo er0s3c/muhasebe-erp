@@ -3,6 +3,7 @@ import { createDb } from './db/client';
 import { checkRuntimeRole } from './db/preflight';
 import { buildApp } from './app';
 import { BUILD_ENFORCED } from './licensing';
+import { startNotificationScheduler } from './modules/notifications/scheduler';
 
 const config = loadConfig();
 
@@ -48,6 +49,9 @@ if (app.license.enforced) {
   stopLicenseScheduler = app.license.startScheduler();
 }
 
+// Bildirimler: zamanlayıcı yalnızca bu giriş noktasında başlar (testler buildApp kullanır, zamanlayıcı çalışmaz).
+const stopNotificationScheduler = startNotificationScheduler(app);
+
 let closing = false;
 const shutdown = async (signal: string) => {
   if (closing) return;
@@ -60,6 +64,7 @@ const shutdown = async (signal: string) => {
   timer.unref();
   try {
     stopLicenseScheduler();
+    stopNotificationScheduler();
     await app.close();
     await handle.close();
     process.exit(0);

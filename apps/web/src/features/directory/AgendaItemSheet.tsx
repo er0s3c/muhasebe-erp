@@ -22,7 +22,7 @@ interface Defaults {
   projectId?: string;
 }
 
-/** Ajanda kalemi (görev/hatırlatma ya da randevu). Hatırlatma ofseti yalnızca veridir; bildirim gönderilmez. */
+/** Ajanda kalemi (görev/hatırlatma ya da randevu). Hatırlatma ofseti Bildirimler (agenda_reminder) tarafından kullanılır. */
 export function AgendaItemSheet({ open, onOpenChange, edit, defaults, onSaved }: { open: boolean; onOpenChange: (o: boolean) => void; edit?: AgendaItem; defaults?: Defaults; onSaved?: () => void }) {
   const { t } = useTranslation();
   const toast = useToast();

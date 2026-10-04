@@ -2173,7 +2173,7 @@ export async function agendaTable(ctx: BuildCtx, q: Partial<AgendaListQuery>): P
       key: 'ajanda',
       title: 'Ajanda',
       sheet: 'Ajanda',
-      subtitle: sub(ctx, 'Hatırlatma ofseti yalnızca veridir; bildirim gönderilmez'),
+      subtitle: sub(ctx, 'Hatırlatma ofseti dakika cinsindendir; bildirimler yalnızca kalem sayısını taşır'),
       columns: [col('date', 'Tarih', 'date'), col('time', 'Saat', 'text', 12), col('kind', 'Tür', 'text', 12), col('title', 'Başlık', 'text', 36), col('status', 'Durum', 'text', 10), col('owner', 'Sahibi', 'text', 22), col('contact', 'Kişi', 'text', 24), col('org', 'Kurum', 'text', 24), col('party', 'Cari', 'text', 24), col('project', 'Proje', 'text', 14), col('remind', 'Hatırlatma (dk önce)', 'int')],
       rows: items.map((i) => ({ date: i.dueDate as string, time: i.allDay ? 'Tüm gün' : `${i.startTime}${i.endTime ? `–${i.endTime}` : ''}`, kind: i.kind === 'appointment' ? 'Randevu' : 'Görev', title: i.title as string, status: AGENDA_STATUS_LABEL[i.status as string] ?? (i.status as string), owner: (i.ownerName as string | null) ?? 'Şirket', contact: (i.contactName as string | null) ?? null, org: (i.organizationName as string | null) ?? null, party: (i.partyName as string | null) ?? null, project: (i.projectCode as string | null) ?? null, remind: (i.remindBeforeMinutes as number | null) ?? null })),
     },

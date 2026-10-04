@@ -110,7 +110,7 @@ const agendaBody = {
   allDay: z.boolean(),
   startTime: timeHm.nullable().optional(),
   endTime: timeHm.nullable().optional(),
-  /** Hatırlatma ofseti (dakika): yalnızca veridir, bildirim gönderilmez. */
+  /** Hatırlatma ofseti (dakika): zamanı gelince uygulama içi bildirim (`agenda_reminder`) üretilir; push yoktur. */
   remindBeforeMinutes: z.number().int().min(0).max(43200).nullable().optional(),
   /** Verilmezse oturumdaki kullanıcı; null = şirket ajandası (directory.manage). */
   ownerId: uuid.nullable().optional(),

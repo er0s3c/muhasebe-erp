@@ -79,6 +79,7 @@ export const PG_RULE_CODES: Readonly<Record<string, string>> = {
   ERP22: 'CONSOLIDATION_RULE_VIOLATION', // konsolidasyon
   ERP23: 'FISCAL_YEAR_RULE_VIOLATION', // mali yıl kapanışı
   ERP24: 'SETTINGS_RULE_VIOLATION', // KDV oranı, kur
+  ERP25: 'NOTIFICATION_RULE_VIOLATION', // bildirim satırı değiştirilemez, kapanmamış bildirim silinemez
 };
 
 /** Benzersizlik kısıtı adından kullanıcıya gösterilecek alan ve ileti (kısıt adı yanıtta yer almaz; API-10). */
