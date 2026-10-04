@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { CornerDownLeft, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/cn';
@@ -25,6 +25,8 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const { data: nav } = useNavigation();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
+  const listId = useId();
+  const optionId = (i: number) => `${listId}-o${i}`;
 
   const commands = useMemo<Command[]>(() => {
     const list: Command[] = [];
@@ -65,9 +67,24 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   }, [commands, query]);
 
   useEffect(() => setActive(0), [query, open]);
+  // Ok tuşlarıyla seçilen öğe görünür kalsın
+  useEffect(() => {
+    if (open) document.getElementById(`${listId}-o${active}`)?.scrollIntoView?.({ block: 'nearest' });
+  }, [active, open, listId]);
   useEffect(() => {
     if (!open) setQuery('');
   }, [open]);
+
+  // Arka arkaya gelen aynı gruptaki sonuçlar tek başlık altında (listbox > group > option)
+  const groups = useMemo(() => {
+    const out: { name: string; index: number; items: { c: Command; i: number }[] }[] = [];
+    results.forEach((c, i) => {
+      const last = out[out.length - 1];
+      if (last && last.name === c.group) last.items.push({ c, i });
+      else out.push({ name: c.group, index: out.length, items: [{ c, i }] });
+    });
+    return out;
+  }, [results]);
 
   const run = (c: Command) => {
     onOpenChange(false);
@@ -85,6 +102,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             <Search className="size-4 text-muted" aria-hidden />
             <input
               autoFocus
+              role="combobox"
+              aria-expanded={results.length > 0}
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={results[active] ? optionId(active) : undefined}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -105,29 +127,35 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             />
             <kbd className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted">Esc</kbd>
           </div>
-          <ul role="listbox" className="max-h-80 overflow-y-auto p-2">
-            {results.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">{t('common.noResults')}</li>}
-            {results.map((c, i) => {
-              const Icon = navIcon(c.icon);
-              const showGroup = i === 0 || results[i - 1]!.group !== c.group;
-              return (
-                <li key={c.id} role="presentation">
-                  {showGroup && <p className="micro px-3 pb-1 pt-2">{c.group}</p>}
-                  <button
-                    role="option"
-                    aria-selected={i === active}
-                    onMouseEnter={() => setActive(i)}
-                    onClick={() => run(c)}
-                    className={cn('flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm', i === active && 'bg-surface-2')}
-                  >
-                    <Icon className="size-4 text-muted" aria-hidden />
-                    <span className="flex-1">{c.label}</span>
-                    {i === active && <CornerDownLeft className="size-3.5 text-muted" aria-hidden />}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <div id={listId} role="listbox" aria-label={t('shell.commandPalette')} className="max-h-80 overflow-y-auto p-2">
+            {results.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">{t('common.noResults')}</p>}
+            {groups.map((g) => (
+              <div key={g.name} role="group" aria-labelledby={`${listId}-g-${g.index}`}>
+                <p id={`${listId}-g-${g.index}`} role="presentation" className="micro px-3 pb-1 pt-2">
+                  {g.name}
+                </p>
+                {g.items.map(({ c, i }) => {
+                  const Icon = navIcon(c.icon);
+                  return (
+                    <div
+                      key={c.id}
+                      id={optionId(i)}
+                      role="option"
+                      aria-selected={i === active}
+                      onMouseEnter={() => setActive(i)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => run(c)}
+                      className={cn('flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-sm', i === active && 'bg-surface-2')}
+                    >
+                      <Icon className="size-4 text-muted" aria-hidden />
+                      <span className="flex-1">{c.label}</span>
+                      {i === active && <CornerDownLeft className="size-3.5 text-muted" aria-hidden />}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

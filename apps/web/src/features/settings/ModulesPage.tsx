@@ -7,6 +7,7 @@ import { Card, PageHeader } from '../../components/ui/Card';
 import { Switch } from '../../components/ui/Switch';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
+import { moduleDescription, moduleName } from '../../lib/modules';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 
 export function ModulesPage() {
@@ -25,8 +26,7 @@ export function ModulesPage() {
   );
 
   if (isPending || !data) return <PageLoading />;
-  const labelKeys = new Map(data.modules.map((m) => [m.key, m.labelKey]));
-  const nameOf = (key: string) => String(t((labelKeys.get(key) ?? 'modules.dashboard') as never));
+  const nameOf = moduleName;
   const list = (keys: string[]) => keys.map(nameOf).join(', ');
 
   const blockedText = (m: ModuleDescription): string | null => {
@@ -63,7 +63,7 @@ export function ModulesPage() {
                       <Badge tone={m.enabled ? 'success' : 'neutral'}>{m.enabled ? t('settings.modules.enabled') : t('settings.modules.disabled')}</Badge>
                     )}
                   </div>
-                  <p className="mt-0.5 text-[13px] text-muted">{t(`settings.modules.desc.${m.key}` as never)}</p>
+                  <p className="mt-0.5 text-[13px] text-muted">{moduleDescription(m.key)}</p>
                   {m.requires.length > 0 && (
                     <p className="mt-1 text-xs text-muted">{t('settings.modules.requires', { modules: list(m.requires) })}</p>
                   )}

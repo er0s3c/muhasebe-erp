@@ -9,6 +9,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import type { PurchaseOrderStatus, PurchaseRequestStatus, RfqStatus } from '../../lib/types';
 import { useItemOptions } from '../inventory/common';
 import { useProjectOptions } from '../projects/common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 /** Talep/teklif/sipariş/mal kabul değişince etkilenen sorgular (taahhüt proje raporunda, mal kabul stokta görünür). */
 export const PROCUREMENT_INVALIDATE = [
@@ -60,7 +61,8 @@ export interface LineDraft {
   wbsId: string;
 }
 export const emptyLine = (): LineDraft => ({ key: crypto.randomUUID(), itemId: '', description: '', unit: 'adet', quantity: '', price: '', wbsId: '' });
-export const num = (v: string) => v.trim().replace(',', '.');
+/** Alanlar MoneyInput ile kanonik değer ("1234.5") tutar; burada yalnızca boşluk kırpılır. */
+export const num = (v: string) => v.trim();
 export const lineValid = (l: LineDraft, priceRequired: boolean) =>
   l.description.trim().length > 0 && l.unit.trim().length > 0 && Number(num(l.quantity)) > 0 && (!priceRequired || (l.price.trim() !== '' && Number(num(l.price)) >= 0));
 
@@ -110,8 +112,8 @@ export function LinesEditor({ projectId, lines, onChange, disabled, priceLabel, 
                 </Td>
                 <Td><Input aria-label={`${t('procurement.lines.description')} ${i + 1}`} value={l.description} disabled={disabled} maxLength={300} onChange={(e) => set(l.key, { description: e.target.value })} /></Td>
                 <Td><Input aria-label={`${t('procurement.lines.unit')} ${i + 1}`} value={l.unit} disabled={disabled || !!l.itemId} maxLength={20} onChange={(e) => set(l.key, { unit: e.target.value })} /></Td>
-                <Td><Input aria-label={`${t('procurement.lines.quantity')} ${i + 1}`} inputMode="decimal" className="num text-right" value={l.quantity} disabled={disabled} onChange={(e) => set(l.key, { quantity: e.target.value })} /></Td>
-                <Td><Input aria-label={`${priceLabel} ${i + 1}`} inputMode="decimal" className="num text-right" value={l.price} disabled={disabled} onChange={(e) => set(l.key, { price: e.target.value })} /></Td>
+                <Td><MoneyInput aria-label={`${t('procurement.lines.quantity')} ${i + 1}`} className="text-right" value={l.quantity} disabled={disabled} onChange={(v) => set(l.key, { quantity: v })} decimals={0} maxDecimals={4} /></Td>
+                <Td><MoneyInput aria-label={`${priceLabel} ${i + 1}`} className="text-right" value={l.price} disabled={disabled} onChange={(v) => set(l.key, { price: v })} maxDecimals={6} /></Td>
                 <Td>
                   <Combobox aria-label={`${t('procurement.lines.wbs')} ${i + 1}`} options={[{ value: '', label: '—' }, ...wbsOptions]} value={l.wbsId} onChange={(v) => set(l.key, { wbsId: v })} placeholder={t('procurement.lines.wbs')} disabled={disabled || !projectId} />
                 </Td>

@@ -112,7 +112,7 @@ function PortfolioTab() {
           <Field label={t('cheques.filters.dueFrom')} className="w-40">{(id) => <Input id={id} type="date" value={dueFrom} onChange={(e) => setDueFrom(e.target.value)} />}</Field>
           <Field label={t('cheques.filters.dueTo')} className="w-40">{(id) => <Input id={id} type="date" value={dueTo} onChange={(e) => setDueTo(e.target.value)} />}</Field>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExportMenu exportKey="cheques" params={params} disabled={!data || rows.length === 0} />
           {post && (
             <>
@@ -686,7 +686,7 @@ function ReportsTab() {
       <Card>
         <CardHeader title={t('cheques.reports.due')} description={t('cheques.reports.dueDesc')} action={<ExportMenu exportKey="cheques-due" params={{ days }} />} />
         <div className="flex flex-col gap-3 px-5 pb-5">
-          <Field label={t('cheques.reports.days')} className="w-32">{(id) => <Input id={id} type="number" min={0} max={365} value={days} onChange={(e) => setDays(e.target.value)} />}</Field>
+          <Field label={t('cheques.reports.days')} className="w-32">{(id) => <Input id={id} inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ''))} />}</Field>
           {!due.data ? (
             <PageLoading />
           ) : due.data.rows.length === 0 ? (

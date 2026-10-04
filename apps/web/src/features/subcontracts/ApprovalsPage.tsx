@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { formatDateTR, money } from '../../lib/format';
+import { money } from '../../lib/format';
 import { useCompany } from '../../lib/session';
 import { useCQuery } from '../../lib/queries';
 import type { ApprovalRequestRow } from '../../lib/types';
+import { fmtDate } from '../../lib/license';
 
 /** Onay kutusu: sıradaki adımı bu kullanıcıya düşen bekleyen talepler. */
 export function ApprovalsPage() {
@@ -43,7 +44,7 @@ export function ApprovalsPage() {
                 return (
                   <Tr key={r.id} clickable tabIndex={0} onClick={() => navigate(href)} onKeyDown={(e) => e.key === 'Enter' && navigate(href)}>
                     <Td>{t(`subcontracts.approval.docTypes.${r.docType}`)}</Td>
-                    <Td className="text-muted">{formatDateTR(r.requestedAt.slice(0, 10))}</Td>
+                    <Td className="text-muted">{fmtDate(r.requestedAt)}</Td>
                     <Td>{step ? `${step.stepNo}/${r.steps.length} — ${step.label ?? t('subcontracts.approval.defaultStep')}` : '—'}</Td>
                     <Td num>{money(r.amount)}</Td>
                   </Tr>

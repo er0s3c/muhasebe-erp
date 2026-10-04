@@ -13,13 +13,14 @@ import { Field, Input, Textarea } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ApprovalRequestRow, PurchaseRequestDetail, RfqDetail } from '../../lib/types';
 import { ApprovalStatusBadge } from '../subcontracts/common';
 import { useProjectOptions } from '../projects/common';
 import { emptyLine, LinesEditor, lineValid, num, PROCUREMENT_INVALIDATE, RequestStatusBadge, RfqStatusBadge, OrderStatusBadge, type LineDraft } from './common';
+import { fmtDate } from '../../lib/license';
 
 export function PurchaseRequestEditorPage() {
   const { t } = useTranslation();
@@ -161,7 +162,7 @@ export function PurchaseRequestEditorPage() {
               <div key={a.id} className="flex flex-col gap-2">
                 <div className="flex items-center gap-2 text-sm">
                   <ApprovalStatusBadge status={a.status} />
-                  <span className="text-muted">{formatDateTR(a.requestedAt.slice(0, 10))}</span>
+                  <span className="text-muted">{fmtDate(a.requestedAt)}</span>
                 </div>
                 <ol className="flex flex-col gap-1 text-sm">
                   {a.steps.map((s) => (

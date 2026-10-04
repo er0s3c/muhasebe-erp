@@ -127,6 +127,8 @@ test('çek/senet: alınan çek (fatura kalemi kapanır) → tahsile ver → taka
 
   // 9) Cari: karşılıksız çek 400 TL alacağı yeniden açtı
   await nav.getByRole('link', { name: 'Cari hesaplar' }).click();
+  // Çek tablosunda da "Ali Veli" hücresi var: önce cari listesine geçildiğini bekle (aksi halde eski sayfadaki hücreye tıklanır)
+  await expect(page.getByRole('heading', { name: 'Cari hesaplar', level: 1 })).toBeVisible();
   await page.getByRole('cell', { name: /Ali Veli/ }).click();
   await expect(page.getByRole('heading', { name: 'Ali Veli', level: 1 })).toBeVisible();
   await expect(page.getByText(/Karşılıksız: Çek C-1002/).first()).toBeVisible();

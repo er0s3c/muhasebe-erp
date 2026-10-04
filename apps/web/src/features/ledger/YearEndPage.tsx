@@ -16,6 +16,7 @@ import { errorMessage } from '../../lib/errors';
 import { formatDateTR, isZero, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { ClosingPreviewData, ClosingPreviewLine, FiscalYear, FiscalYearsData, PreflightCheck, PreflightData } from '../../lib/types';
+import { fmtDate } from '../../lib/license';
 
 const SEVERITY_ICON: Record<PreflightCheck['severity'], ReactNode> = {
   ok: <CheckCircle2 className="size-4 text-success" aria-hidden />,
@@ -83,7 +84,7 @@ export function YearEndPage() {
                       </Td>
                       <Td>
                         <Badge tone={y.status === 'closed' ? 'neutral' : 'success'}>{y.status === 'closed' ? t('yearend.years.closed') : t('yearend.years.open')}</Badge>
-                        {y.status === 'closed' && y.closedAt && <p className="mt-1 text-xs text-muted">{t('yearend.years.closedAt', { date: formatDateTR(y.closedAt.slice(0, 10)) })}</p>}
+                        {y.status === 'closed' && y.closedAt && <p className="mt-1 text-xs text-muted">{t('yearend.years.closedAt', { date: fmtDate(y.closedAt) })}</p>}
                         {y.status === 'open' && y.reopenReason && <p className="mt-1 max-w-xs text-xs text-muted">{t('yearend.years.reopenedNote', { reason: y.reopenReason })}</p>}
                       </Td>
                       <Td num>
@@ -388,7 +389,7 @@ function ClosedPanel({ year, canExport }: { year: FiscalYear; canExport: boolean
         {[...year.events].reverse().map((e) => (
           <li key={e.id} className="flex flex-wrap items-center gap-x-3 border-b border-border px-5 py-3 text-sm last:border-b-0">
             <Badge tone={e.action === 'close' ? 'neutral' : 'warning'}>{t(`yearend.history.${e.action}` as never)}</Badge>
-            <span className="text-muted">{formatDateTR(e.at.slice(0, 10))}</span>
+            <span className="text-muted">{fmtDate(e.at)}</span>
             {e.action === 'close' && e.resultBase != null && <span>{t('yearend.history.result', { amount: money(e.resultBase) })}</span>}
             {e.reason && <span className="text-muted">{t('yearend.history.reason', { reason: e.reason })}</span>}
           </li>

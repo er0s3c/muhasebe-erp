@@ -30,6 +30,7 @@ export function Button({ variant = 'secondary', size = 'md', loading, className,
   return (
     <button
       type={type}
+      data-variant={variant}
       disabled={disabled || loading}
       className={cn(
         'inline-flex shrink-0 items-center justify-center rounded-md transition-colors',

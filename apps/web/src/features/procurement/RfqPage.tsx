@@ -21,6 +21,7 @@ import type { PurchaseOrderDetail, RfqDetail, RfqOfferRow } from '../../lib/type
 import { usePartyOptions } from '../invoices/common';
 import { qtyText } from '../inventory/common';
 import { num, PROCUREMENT_INVALIDATE, RfqStatusBadge } from './common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 export function RfqPage() {
   const { t } = useTranslation();
@@ -228,7 +229,7 @@ function OfferSheet({ rfqId, data, offer, open, onOpenChange }: { rfqId: string;
           {data.lines.map((l) => (
             <div key={l.id} className="flex items-center gap-2">
               <span className="flex-1 text-sm">{l.lineNo}. {l.description} <span className="text-xs text-muted">({qtyText(l.quantity)} {l.unit})</span></span>
-              <Input aria-label={`${t('procurement.rfqs.unitPrice')} ${l.lineNo}`} inputMode="decimal" className="num w-32 text-right" value={prices[l.id] ?? ''} onChange={(e) => setPrices((p) => ({ ...p, [l.id]: e.target.value }))} />
+              <MoneyInput aria-label={`${t('procurement.rfqs.unitPrice')} ${l.lineNo}`} className="w-32 text-right" value={prices[l.id] ?? ''} onChange={(v) => setPrices((p) => ({ ...p, [l.id]: v }))} maxDecimals={6} />
             </div>
           ))}
         </fieldset>

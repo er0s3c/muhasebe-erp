@@ -16,6 +16,7 @@ import { formatDateTR } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { ForeignDocTypeRow, ForeignParamRow } from '../../lib/types';
 import { FOREIGN_INVALIDATE, ForeignUnverifiedBadge } from './foreign-common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 /** Yabancı işçi ayarları: belge türü kataloğu ve tarihli parametreler (uyarı günü, teminat tutarı; varsayılan kapalı, doğrulanmadı). */
 export function ForeignSettingsPage() {
@@ -113,7 +114,7 @@ function ParamsCard() {
     (_: void, call) =>
       call('/api/foreign-workers/params', {
         method: 'POST',
-        body: { key, value: value.replace(',', '.'), effectiveFrom: from, enabled, ...(isAmount ? { currency } : {}), ...(source.trim() ? { sourceNote: source.trim() } : {}) },
+        body: { key, value: value, effectiveFrom: from, enabled, ...(isAmount ? { currency } : {}), ...(source.trim() ? { sourceNote: source.trim() } : {}) },
       }),
     FOREIGN_INVALIDATE,
   );
@@ -187,7 +188,7 @@ function ParamsCard() {
                 </Select>
               )}
             </Field>
-            <Field label={t('foreign.settings.params.value')}>{(id) => <Input id={id} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
+            <Field label={t('foreign.settings.params.value')}>{(id) => <MoneyInput id={id} value={value} onChange={(v) => setValue(v)} decimals={0} maxDecimals={6} />}</Field>
             {isAmount ? (
               <Field label={t('foreign.settings.params.currency')}>
                 {(id) => (

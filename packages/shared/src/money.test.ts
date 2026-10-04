@@ -57,6 +57,42 @@ describe('money', () => {
     expect(parseTR('abc')).toBeNull();
     expect(parseTR('')).toBeNull();
   });
+
+  it('parseTR: binlik nokta, ondalık virgül; belirsiz giriş sessizce büyümez (UI-1/UI-2)', () => {
+    const cases: [string, string | null][] = [
+      ['250.000', '250000'],
+      ['1.234,56', '1234.56'],
+      ['12,5', '12.5'],
+      ['1.234.567,8', '1234567.8'],
+      ['250000', '250000'],
+      ['12.5', '12.5'],
+      ['12.50', '12.50'],
+      ['0.75', '0.75'],
+      ['1234.5', '1234.5'],
+      ['1.500', '1500'],
+      ['.5', '0.5'],
+      ['12,', '12'],
+      [' 1 250,5 ', '1250.5'],
+      ['1\u00A0250,5', '1250.5'],
+      ['-1.234,5', '-1234.5'],
+      ['+7', '7'],
+      ['-0', '0'],
+      ['007,5', '7.5'],
+      ['1.2.3', null],
+      ['1.23,4', null],
+      ['1,234.56', null],
+      ['1,2,3', null],
+      ['12.34.5', null],
+      ['abc', null],
+      ['1e5', null],
+      ['-', null],
+      [',', null],
+      ['.', null],
+      ['12-3', null],
+      ['₺100', null],
+    ];
+    for (const [input, expected] of cases) expect(parseTR(input), input).toBe(expected);
+  });
 });
 
 describe('dates', () => {

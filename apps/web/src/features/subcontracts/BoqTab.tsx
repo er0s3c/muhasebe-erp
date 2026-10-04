@@ -7,11 +7,12 @@ import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Select } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { SubcontractDetail, SubcontractRevisionDetail } from '../../lib/types';
 import { BoqEditor, type BoqBody } from './BoqEditor';
 import { SUBCONTRACT_INVALIDATE } from './common';
+import { fmtDate } from '../../lib/license';
 
 /**
  * Revizyonlu BOQ: onaylı revizyon salt okunur. Taslak sözleşmenin ilk BOQ'su burada düzenlenip onaylanır;
@@ -61,7 +62,7 @@ export function BoqTab({ detail }: { detail: SubcontractDetail }) {
           ))}
         </Select>
         {revision?.status === 'approved' && <Badge tone="brand">{t('subcontracts.boq.current')}</Badge>}
-        {revision?.approvedAt && <span className="text-xs text-muted">{t('subcontracts.boq.approvedAt', { date: formatDateTR(revision.approvedAt.slice(0, 10)) })}</span>}
+        {revision?.approvedAt && <span className="text-xs text-muted">{t('subcontracts.boq.approvedAt', { date: fmtDate(revision.approvedAt) })}</span>}
         {selectedRow?.variationId && (
           <Link className="text-sm underline" to={`/variation-orders/${selectedRow.variationId}`}>
             {t('variations.openLinked', { code: selectedRow.variationCode })}

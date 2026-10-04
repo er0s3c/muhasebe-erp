@@ -16,6 +16,7 @@ import { formatDateTR } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { EmployeeRow, SocialProfileRow, SupportEligibilityRow, SupportRuleRow } from '../../lib/types';
 import { SOCIAL_INVALIDATE, SocialUnverifiedBadge } from './social-common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 /** Sosyal güvenlik ayarları: tarihli personel profilleri, prim desteği kuralları (varsayılan kapalı, doğrulanmamış) ve uygunluk beyanları. */
 export function SocialSettingsPage() {
@@ -210,7 +211,7 @@ function RulesCard() {
     (_: void, call) =>
       call('/api/social-security/support-rules', {
         method: 'POST',
-        body: { code: code.trim(), name: name.trim(), effectiveFrom: from, ...(to ? { effectiveTo: to } : {}), target, mode, value: value.replace(',', '.'), enabled, ...(source.trim() ? { sourceNote: source.trim() } : {}) },
+        body: { code: code.trim(), name: name.trim(), effectiveFrom: from, ...(to ? { effectiveTo: to } : {}), target, mode, value: value, enabled, ...(source.trim() ? { sourceNote: source.trim() } : {}) },
       }),
     SOCIAL_INVALIDATE,
   );
@@ -303,7 +304,7 @@ function RulesCard() {
               )}
             </Field>
             <Field label={`${t('social.rules.value')} (${mode === 'percent_of_premium' ? t('social.rules.valueHintPercent') : t('social.rules.valueHintAmount')})`}>
-              {(id) => <Input id={id} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />}
+              {(id) => <MoneyInput id={id} value={value} onChange={(v) => setValue(v)} decimals={0} maxDecimals={6} />}
             </Field>
             <Field label={t('social.rules.source')} className="sm:col-span-5">{(id) => <Input id={id} maxLength={500} value={source} onChange={(e) => setSource(e.target.value)} />}</Field>
             <Field label={t('social.rules.enabled')}>{() => <Switch checked={enabled} label={t('social.rules.enableLabel', { code: code || '—' })} onChange={setEnabled} />}</Field>

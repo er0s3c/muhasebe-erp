@@ -1,5 +1,6 @@
 import { dayTypeAllowsHours, monthBounds, MAX_HOURS_PER_DAY, type AttendanceDayType } from '@erp/shared';
 import { useTranslation } from 'react-i18next';
+import { parseTR } from '@erp/shared';
 import { Select } from '../../components/ui/Field';
 import { useProjectOptions } from '../projects/common';
 import { useCostCodes } from '../subcontracts/common';
@@ -41,10 +42,11 @@ export function inEmploymentRange(e: Pick<AttendanceEmployee, 'hireDate' | 'leav
   return !!e.hireDate && date >= e.hireDate && (!e.leaveDate || date <= e.leaveDate);
 }
 
-/** Kullanıcı girdisini ("7,5") API biçimine ("7.5") çevirir; geçersizse null, boşsa "0". */
+/** Kullanıcı girdisini ("7,5" ya da "7.5") API biçimine ("7.5") çevirir (Türkçe ayrıştırıcı `parseTR`); geçersizse null, boşsa "0". */
 export function parseHours(v: string): string | null {
-  const s = v.trim().replace(',', '.');
-  if (s === '') return '0';
+  if (v.trim() === '') return '0';
+  const s = parseTR(v);
+  if (s === null) return null;
   return /^\d{1,2}(\.\d{1,2})?$/.test(s) ? s : null;
 }
 

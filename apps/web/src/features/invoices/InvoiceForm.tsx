@@ -1,5 +1,5 @@
 import { ArrowLeft, ClipboardList, Plus, Trash2, Truck, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, ITEM_UNITS, calcInvoice, dec, formatTR, todayIso } from '@erp/shared';
@@ -127,8 +127,11 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const taxRates = useMemo(() => taxData?.taxRates ?? [], [taxData]);
   const { data: whData } = useWarehouses();
   const warehouses = (whData?.warehouses ?? []).filter((w) => w.isActive);
-  const accountOptions = useLineAccountOptions(meta.side);
-  const { data: mapData } = useCQuery<{ mappings: AccountMapping[] }>(['account-mappings'], '/api/account-mappings');
+  // Hesap seçici ve eşlemeler muhasebe okuma izni ister (satış rolünde yok): izin yoksa hiç sorgulanmaz, seçici yerine
+  // "varsayılan eşlemeden atanır" notu gösterilir; sunucu boş hesabı şirketin varsayılan eşlemesiyle doldurur (UI-8).
+  const canLedger = can('ledger.read');
+  const accountOptions = useLineAccountOptions(meta.side, canLedger);
+  const { data: mapData } = useCQuery<{ mappings: AccountMapping[] }>(['account-mappings'], '/api/account-mappings', { enabled: canLedger });
   const defaultAccount = mapData?.mappings.find((m) => m.key === (salesSide ? (meta.isReturn ? 'sales_return' : 'sales_revenue') : 'default_expense'))?.accountCode;
   const { data: itemData } = useCQuery<{ items: ItemListRow[] }>(['items', 'options', 'invoice'], '/api/items?limit=500&active=true');
   const items = useMemo(() => (itemData?.items ?? []).filter((i) => meta.stock || i.kind === 'service'), [itemData, meta.stock]);
@@ -338,12 +341,25 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       ];
     });
 
+  /**
+   * Satır başına istek sırası: aynı satır için birden çok öneri yoldayken (kart değişti, miktar değişti, "yenile")
+   * yalnızca EN SON isteğin yanıtı uygulanır; elle girilen fiyat da yoldaki öneriyi geçersiz kılar. Eskiden geç gelen
+   * eski yanıt yenisini eziyordu.
+   */
+  const suggestSeq = useRef(new Map<number, number>());
+  const bumpSuggest = (key: number) => {
+    const n = (suggestSeq.current.get(key) ?? 0) + 1;
+    suggestSeq.current.set(key, n);
+    return n;
+  };
   /** Fiyat çözümleyici (cari özel fiyat > cari listesi > varsayılan liste > kart) ve iskonto önerisi; kullanıcı her zaman değiştirebilir. */
   const suggest = async (key: number, itemId: string, qty: string) => {
     if (!partyId || !itemId || !/^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) || !qty || dec(qty).lte(0)) return;
     const qs = new URLSearchParams({ partyId, itemId, kind: salesSide ? 'sales' : 'purchase', date: invoiceDate, currency, quantity: qty });
+    const seq = bumpSuggest(key);
     try {
       const r = await call<PriceResolution>(`/api/price-resolution?${qs}`);
+      if (suggestSeq.current.get(key) !== seq) return;
       if (r.unitPrice === null && dec(r.discountPct).isZero()) return;
       setLines((cur) =>
         cur.map((l) =>
@@ -582,7 +598,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                       />
                       <Input className="col-span-2 lg:col-span-1" value={l.description} maxLength={300} aria-label={`${t('common.description')} ${i + 1}`} placeholder={t('common.description')} onChange={(e) => patch(l.key, { description: e.target.value })} />
                       <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.quantity')} ${i + 1}`} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
-                      <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('invoices.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => patch(l.key, { unitPrice: v, priceNote: '' })} />
+                      <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('invoices.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => { bumpSuggest(l.key); patch(l.key, { unitPrice: v, priceNote: '' }); }} />
                       <MoneyInput value={l.discountPct} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.discount')} ${i + 1}`} placeholder="%" className="text-right" onChange={(v) => patch(l.key, { discountPct: v })} />
                       <Select className="px-2 pr-6" value={l.vatCode} aria-label={`${t('invoices.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
                         <option value="">{t('invoices.form.noVat')}</option>
@@ -615,7 +631,12 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                     )}
                     {free || l.returnable || l.deliveryLineId || l.orderLineId || l.priceNote || (it?.tracksSerial && !l.deliveryLineId) ? (
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 pl-1 text-[13px] text-muted">
-                        {free && (
+                        {free && !canLedger && (
+                          <span title={t('invoices.form.accountByDefaultHint')} data-testid="account-by-default">
+                            {t('invoices.form.accountByDefault')}
+                          </span>
+                        )}
+                        {free && canLedger && (
                           <span className="flex items-center gap-2">
                             {t('invoices.form.account')}
                             <Combobox

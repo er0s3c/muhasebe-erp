@@ -1,8 +1,9 @@
 import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from 'react';
 import { cn } from '../../lib/cn';
 
+/** Tablo kabı: geniş tablo kendi içinde kayar. `relative`: hücrelerdeki mutlak konumlu öğeler (sr-only vb.) kabın dışına taşıp belgeyi yatay kaydırmasın; `min-w-0`: esnek sütunda kab tablo genişliğine uzamasın (UI-9). */
 export function TableWrap({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('overflow-auto rounded-2xl border border-border bg-surface', className)} {...props} />;
+  return <div className={cn('relative min-w-0 max-w-full overflow-auto rounded-2xl border border-border bg-surface', className)} {...props} />;
 }
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
   return <table className={cn('w-full border-collapse text-sm', className)} {...props} />;

@@ -12,6 +12,7 @@ import { money, moneyIn } from '../../lib/format';
 import type { SubcontractRevisionDetail } from '../../lib/types';
 import { useProjectOptions } from '../projects/common';
 import { useCostCodes } from './common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 interface Draft {
   key: string;
@@ -121,8 +122,8 @@ export function BoqEditor({
                             <Td><Input aria-label={`${t('subcontracts.boq.cols.itemNo')} ${i + 1}`} value={l.itemNo} onChange={(e) => patch(l.key, { itemNo: e.target.value })} maxLength={40} /></Td>
                             <Td><Input aria-label={`${t('subcontracts.boq.cols.description')} ${i + 1}`} value={l.description} onChange={(e) => patch(l.key, { description: e.target.value })} maxLength={300} /></Td>
                             <Td><Input aria-label={`${t('subcontracts.boq.cols.unit')} ${i + 1}`} value={l.unit} onChange={(e) => patch(l.key, { unit: e.target.value })} maxLength={20} /></Td>
-                            <Td num><Input aria-label={`${t('subcontracts.boq.cols.quantity')} ${i + 1}`} inputMode="decimal" className="num text-right" value={l.quantity} onChange={(e) => patch(l.key, { quantity: e.target.value.replace(',', '.') })} /></Td>
-                            <Td num><Input aria-label={`${t('subcontracts.boq.cols.unitPrice')} ${i + 1}`} inputMode="decimal" className="num text-right" value={l.unitPrice} onChange={(e) => patch(l.key, { unitPrice: e.target.value.replace(',', '.') })} /></Td>
+                            <Td num><MoneyInput aria-label={`${t('subcontracts.boq.cols.quantity')} ${i + 1}`} className="text-right" value={l.quantity} onChange={(v) => patch(l.key, { quantity: v })} decimals={0} maxDecimals={4} /></Td>
+                            <Td num><MoneyInput aria-label={`${t('subcontracts.boq.cols.unitPrice')} ${i + 1}`} className="text-right" value={l.unitPrice} onChange={(v) => patch(l.key, { unitPrice: v })} maxDecimals={6} /></Td>
                             <Td num>{money(lineTotal(l).toFixed(2))}</Td>
                             <Td><Combobox aria-label={`${t('subcontracts.boq.cols.wbs')} ${i + 1}`} options={wbsOptions} value={l.wbsId || null} onChange={(v) => patch(l.key, { wbsId: v })} placeholder={t('subcontracts.boq.pickWbs')} /></Td>
                             <Td>

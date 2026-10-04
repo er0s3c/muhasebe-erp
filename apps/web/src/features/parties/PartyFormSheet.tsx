@@ -218,7 +218,7 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
           </Field>
           <Field label={t('parties.form.paymentTerm')} error={errors.paymentTermDays}>
             {(id) => (
-              <Input id={id} type="number" min={0} max={365} value={f.paymentTermDays} onChange={(e) => set('paymentTermDays', e.target.value)} className="num" />
+              <Input id={id} inputMode="numeric" value={f.paymentTermDays} onChange={(e) => set('paymentTermDays', e.target.value.replace(/\D/g, ''))} className="num" />
             )}
           </Field>
         </div>

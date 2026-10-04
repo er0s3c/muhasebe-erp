@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import type { z } from 'zod';
 import { registerSchema, type RegisterInput } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
@@ -18,7 +18,6 @@ type FormInput = z.input<typeof registerSchema>;
 export function RegisterPage() {
   const { t } = useTranslation();
   const { register: signUp } = useSession();
-  const navigate = useNavigate();
   const publicConfig = usePublicConfig();
   const [error, setError] = useState<string | null>(null);
   const {
@@ -32,7 +31,7 @@ export function RegisterPage() {
     setError(null);
     try {
       await signUp(values);
-      navigate('/company/new', { replace: true });
+      // Yönlendirmeyi PublicOnly yapar (şirketi olmayan kullanıcı → /company/new); ayrıca navigate etmek yarış yaratıyordu (UI-21)
     } catch (e) {
       const fe = fieldErrors(e);
       for (const [path, message] of Object.entries(fe)) {

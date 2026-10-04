@@ -13,6 +13,7 @@ import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, moneyIn } from '../../lib/format';
+import { fmtDate } from '../../lib/license';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { SubcontractDetail, VariationDetail, VariationReason, VariationRow } from '../../lib/types';
 import { cn } from '../../lib/cn';
@@ -59,7 +60,7 @@ export function VariationTable({ rows, showContract }: { rows: VariationRow[]; s
               <Td><VariationStatusBadge status={r.status} /></Td>
               <Td num><DeltaText value={r.amountDelta} currency={r.currencyCode} /></Td>
               <Td num>{r.timeExtensionDays > 0 ? t('variations.daysValue', { n: r.timeExtensionDays }) : '—'}</Td>
-              <Td className="text-muted">{formatDateTR((r.appliedAt ?? r.createdAt).slice(0, 10))}</Td>
+              <Td className="text-muted">{fmtDate(r.appliedAt ?? r.createdAt)}</Td>
             </Tr>
           ))}
         </tbody>

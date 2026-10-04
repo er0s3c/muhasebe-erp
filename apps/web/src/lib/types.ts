@@ -1278,22 +1278,6 @@ export interface ProjectOption {
   wbs: { id: string; code: string; name: string }[];
 }
 
-/** Modül anahtarı -> çeviri anahtarı */
-export const MODULE_LABEL_KEYS = {
-  'core.dashboard': 'modules.dashboard',
-  'core.ledger': 'modules.ledger',
-  'core.settings': 'modules.settings',
-  'core.parties': 'modules.parties',
-  'core.inventory': 'modules.inventory',
-  'core.invoices': 'modules.invoices',
-  'core.treasury': 'modules.treasury',
-  'construction.projects': 'modules.constructionProjects',
-  'construction.subcontracts': 'modules.constructionSubcontracts',
-  'construction.procurement': 'modules.constructionProcurement',
-  'construction.realestate': 'modules.constructionRealestate',
-  'hr.core': 'modules.hrCore',
-  'retail.pos': 'modules.retailPos',
-} as const;
 
 // --- Taşeron ve hakediş (B2) ---------------------------------------------------------------
 

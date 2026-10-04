@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
-import { Input } from '../../components/ui/Field';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal } from '../../components/ui/Sheet';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, money } from '../../lib/format';
@@ -33,7 +33,7 @@ export function AdvanceDeductionModal({ runId, employeeId, employeeName, onClose
   );
   const rows = (data?.advances ?? []).filter((a) => a.employeeId === employeeId);
   const chosen = Object.entries(values)
-    .map(([advanceId, amount]) => ({ advanceId, amount: amount.trim().replace(',', '.') }))
+    .map(([advanceId, amount]) => ({ advanceId, amount: amount.trim() }))
     .filter((d) => Number(d.amount) > 0);
   const over = chosen.some((d) => Number(d.amount) > Number(rows.find((r) => r.id === d.advanceId)?.remaining ?? '0'));
   const total = chosen.reduce((s, d) => s + Number(d.amount), 0);
@@ -76,11 +76,11 @@ export function AdvanceDeductionModal({ runId, employeeId, employeeName, onClose
                   <span className="font-mono text-[13px]">{a.number}</span> · {formatDateTR(a.advanceDate)} · {a.purpose}
                   <span className="ml-2 text-muted">{t('employeeLedger.deduct.remaining', { amount: money(a.remaining) })}</span>
                 </span>
-                <Input
-                  inputMode="decimal"
+                <MoneyInput
                   aria-label={t('employeeLedger.deduct.amountFor', { no: a.number })}
                   value={values[a.id] ?? ''}
-                  onChange={(e) => setAmounts({ ...values, [a.id]: e.target.value })}
+                  allowNegative={false}
+                  onChange={(v) => setAmounts({ ...values, [a.id]: v })}
                 />
               </li>
             ))}

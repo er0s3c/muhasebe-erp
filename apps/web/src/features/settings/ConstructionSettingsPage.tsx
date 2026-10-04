@@ -15,6 +15,7 @@ import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import { FeeSchedulesCard } from './FeeSchedulesCard';
 import type { ApprovalRuleRow, ConstructionParam, CostCode } from '../../lib/types';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 const INV = [['cost-codes'], ['construction-params'], ['approval-rules']];
 
@@ -128,7 +129,7 @@ function ParamsCard() {
   const [verifiedBy, setVerifiedBy] = useState('');
   const [error, setError] = useState<Error | null>(null);
 
-  const add = useCMutation((_: void, call) => call('/api/construction-params', { method: 'POST', body: { kind, value: value.replace(',', '.'), validFrom, ...(sourceNote.trim() ? { sourceNote: sourceNote.trim() } : {}) } }), INV);
+  const add = useCMutation((_: void, call) => call('/api/construction-params', { method: 'POST', body: { kind, value: value, validFrom, ...(sourceNote.trim() ? { sourceNote: sourceNote.trim() } : {}) } }), INV);
   const verify = useCMutation((_: void, call) => call(`/api/construction-params/${verifying!.id}/verify`, { method: 'POST', body: { verifiedBy: verifiedBy.trim() } }), INV);
   const remove = useCMutation((id: string, call) => call(`/api/construction-params/${id}`, { method: 'DELETE' }), INV);
   const rows = data?.params ?? [];
@@ -198,7 +199,7 @@ function ParamsCard() {
                 </Select>
               )}
             </Field>
-            <Field label={t('constructionSettings.params.value')}>{(id) => <Input id={id} inputMode="decimal" className="num text-right" value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
+            <Field label={t('constructionSettings.params.value')}>{(id) => <MoneyInput id={id} className="text-right" value={value} onChange={(v) => setValue(v)} decimals={0} maxDecimals={6} />}</Field>
             <Field label={t('constructionSettings.params.from')}>{(id) => <Input id={id} type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />}</Field>
             <Field label={t('constructionSettings.params.source')}>{(id) => <Input id={id} value={sourceNote} onChange={(e) => setSourceNote(e.target.value)} maxLength={500} placeholder={t('constructionSettings.params.sourcePlaceholder')} />}</Field>
             <Button type="submit" variant="primary" loading={add.isPending} disabled={!value.trim() || !validFrom}>
@@ -244,7 +245,7 @@ function RulesCard() {
     (_: void, call) =>
       call('/api/approval-rules', {
         method: 'POST',
-        body: { docType, minAmount: minAmount.replace(',', '.') || '0', maxAmount: maxAmount.trim() ? maxAmount.replace(',', '.') : null, separateRequester: separate, steps: steps.map((role) => ({ role })) },
+        body: { docType, minAmount: minAmount || '0', maxAmount: maxAmount.trim() ? maxAmount : null, separateRequester: separate, steps: steps.map((role) => ({ role })) },
       }),
     INV,
   );
@@ -316,8 +317,8 @@ function RulesCard() {
               )}
             </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Field label={t('constructionSettings.rules.min')}>{(id) => <Input id={id} inputMode="decimal" className="num text-right" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />}</Field>
-              <Field label={t('constructionSettings.rules.max')} hint={t('constructionSettings.rules.maxHint')}>{(id) => <Input id={id} inputMode="decimal" className="num text-right" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />}</Field>
+              <Field label={t('constructionSettings.rules.min')}>{(id) => <MoneyInput id={id} className="text-right" value={minAmount} onChange={(v) => setMinAmount(v)} />}</Field>
+              <Field label={t('constructionSettings.rules.max')} hint={t('constructionSettings.rules.maxHint')}>{(id) => <MoneyInput id={id} className="text-right" value={maxAmount} onChange={(v) => setMaxAmount(v)} />}</Field>
               <label className="flex items-center gap-2 pt-6 text-sm">
                 <input type="checkbox" checked={separate} onChange={(e) => setSeparate(e.target.checked)} />
                 {t('constructionSettings.rules.separate')}

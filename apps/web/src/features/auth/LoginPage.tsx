@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
@@ -21,8 +21,6 @@ export function LoginPage() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
   const publicConfig = usePublicConfig();
   const [error, setError] = useState<string | null>(null);
   const {
@@ -39,7 +37,7 @@ export function LoginPage() {
         setMfaToken(step.mfaToken);
         return;
       }
-      navigate((location.state as { from?: string } | null)?.from ?? '/', { replace: true });
+      // Yönlendirmeyi PublicOnly yapar (derin bağlantıya ya da ana sayfaya; UI-12)
     } catch (e) {
       setError(errorMessage(e));
     }
@@ -51,7 +49,7 @@ export function LoginPage() {
     setError(null);
     try {
       await verifyMfa(mfaToken, code.trim());
-      navigate((location.state as { from?: string } | null)?.from ?? '/', { replace: true });
+      // Yönlendirmeyi PublicOnly yapar
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -63,6 +61,7 @@ export function LoginPage() {
     return (
       <AuthLayout title={t('auth.mfa.title')} subtitle={t('auth.mfa.subtitle')} footer={null}>
         <form
+          key="mfa"
           onSubmit={(e) => {
             e.preventDefault();
             void onVerify();
@@ -108,7 +107,7 @@ export function LoginPage() {
         )
       }
     >
-      <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+      <form key="password" onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
         {error && <Callout tone="danger">{error}</Callout>}
         <Field label={t('auth.email')} error={errors.email?.message}>
           {(id) => <Input id={id} type="email" autoComplete="username" autoFocus {...register('email')} />}

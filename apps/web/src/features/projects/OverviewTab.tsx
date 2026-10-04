@@ -11,11 +11,12 @@ import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { cn } from '../../lib/cn';
-import { formatDateTR, money, moneyIn } from '../../lib/format';
+import { money, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ProjectCostReport, ProjectDetail } from '../../lib/types';
 import { VarianceText } from './common';
+import { fmtDate } from '../../lib/license';
 
 interface Props {
   project: ProjectDetail;
@@ -45,7 +46,7 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
         <div className="flex items-center gap-3">
           <Field label={t('projects.overview.asOf')}>{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => e.target.value && setAsOf(e.target.value)} className="w-44" />}</Field>
           {budget ? (
-            <Badge tone="brand">{t('projects.overview.budgetRev', { rev: budget.revisionNo, date: formatDateTR(budget.approvedAt.slice(0, 10)) })}</Badge>
+            <Badge tone="brand">{t('projects.overview.budgetRev', { rev: budget.revisionNo, date: fmtDate(budget.approvedAt) })}</Badge>
           ) : (
             <Badge tone="warning">{t('projects.overview.noBudget')}</Badge>
           )}

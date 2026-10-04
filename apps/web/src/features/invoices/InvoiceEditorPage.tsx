@@ -20,6 +20,7 @@ import { qtyText, useUnitLabel } from '../inventory/common';
 import { INVOICE_INVALIDATE, InvoiceStatusBadge, InvoiceTypeBadge } from './common';
 import { InvoiceForm } from './InvoiceForm';
 import { MatchCard } from './MatchCard';
+import { fmtDate } from '../../lib/license';
 
 /**
  * /invoices/new (yeni ve iade) ve /invoices/:id: taslaksa düzenlenebilir form,
@@ -130,7 +131,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
 
       <div className="flex flex-col gap-4">
         {inv.status === 'cancelled' && (
-          <Callout tone="danger" title={t('invoices.view.cancelledTitle', { date: inv.cancelledAt ? formatDateTR(inv.cancelledAt.slice(0, 10)) : '' })}>
+          <Callout tone="danger" title={t('invoices.view.cancelledTitle', { date: inv.cancelledAt ? fmtDate(inv.cancelledAt) : '' })}>
             {inv.cancelReason}
             {inv.cancelJournalEntryId && (
               <>

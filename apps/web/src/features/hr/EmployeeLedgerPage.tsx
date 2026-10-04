@@ -24,6 +24,7 @@ import type { AdvanceDetail, AdvanceRegister, AdvanceRegisterRow, EmployeeBalanc
 import { useProjectOptions } from '../projects/common';
 import { accountLabel, useTreasuryAccounts } from '../treasury/common';
 import { AdvanceStatusBadge, LEDGER_INVALIDATE, LedgerUnverifiedBadge } from './employee-ledger-common';
+import { fmtDateTime } from '../../lib/license';
 
 type Tab = 'balances' | 'advances' | 'payments' | 'settings';
 
@@ -349,7 +350,7 @@ function AdvanceDetailModal({ row, onClose }: { row: AdvanceRegisterRow; onClose
             <ul className="flex flex-col gap-1">
               {data.events.map((e, i) => (
                 <li key={i} className="text-muted">
-                  {new Date(e.at).toLocaleString('tr-TR')} — {e.fromStatus ? `${t(`employeeLedger.status.${e.fromStatus}`)} → ` : ''}{t(`employeeLedger.status.${e.toStatus}`)} ({money(e.settledAmount)}){e.by ? ` · ${e.by}` : ''}
+                  {fmtDateTime(e.at)} — {e.fromStatus ? `${t(`employeeLedger.status.${e.fromStatus}`)} → ` : ''}{t(`employeeLedger.status.${e.toStatus}`)} ({money(e.settledAmount)}){e.by ? ` · ${e.by}` : ''}
                 </li>
               ))}
             </ul>
@@ -588,11 +589,11 @@ function SettingsTab({ canManage }: { canManage: boolean }) {
           onSubmit={(e) => {
             e.preventDefault();
             setError(null);
-            save.mutate({ deductionCapPct: capValue.trim() ? capValue.trim().replace(',', '.') : null, sourceNote: noteValue.trim() || null }, { onSuccess: () => { toast.success(t('employeeLedger.settings.saved')); setCap(null); setNote(null); }, onError: setError });
+            save.mutate({ deductionCapPct: capValue.trim() ? capValue.trim() : null, sourceNote: noteValue.trim() || null }, { onSuccess: () => { toast.success(t('employeeLedger.settings.saved')); setCap(null); setNote(null); }, onError: setError });
           }}
         >
           <Field label={t('employeeLedger.settings.cap')} hint={t('employeeLedger.settings.capHint')}>
-            {(id) => <Input id={id} inputMode="decimal" disabled={!canManage} value={capValue} onChange={(e) => setCap(e.target.value)} />}
+            {(id) => <MoneyInput id={id} disabled={!canManage} value={capValue} onChange={(v) => setCap(v)} decimals={0} maxDecimals={4} />}
           </Field>
           <Field label={t('employeeLedger.settings.source')}>{(id) => <Input id={id} maxLength={300} disabled={!canManage} value={noteValue} onChange={(e) => setNote(e.target.value)} />}</Field>
           {canManage && (

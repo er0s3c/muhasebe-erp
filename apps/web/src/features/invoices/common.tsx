@@ -30,6 +30,12 @@ export const INVOICE_INVALIDATE = [
   ['account-ledger'],
   ['vat-summary'],
   ['dashboard'],
+  // Raporlar (kebir, döviz pozisyonu, yönetici özeti, satış/alış), nakit tahmini ve proje kârlılığı da defterden türer (UI-18)
+  ['reports'],
+  ['cash-forecast'],
+  ['projects'],
+  ['project'],
+  ['sales-summary'],
 ];
 
 const STATUS_TONE = { draft: 'warning', posted: 'success', cancelled: 'danger' } as const;

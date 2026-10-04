@@ -13,6 +13,7 @@ import { api } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, money, moneyIn } from '../../lib/format';
 import type { Elimination, IntercompanyHint } from '../../lib/types';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 interface Line { code: string; side: 'debit' | 'credit'; amount: string }
 
@@ -100,7 +101,7 @@ export function EliminationsPanel({ groupId, currency, archived }: { groupId: st
                     </Select>
                   )}
                 </Field>
-                <Field label={t('consolidation.amount', { cur: currency })}>{(id) => <Input id={id} inputMode="decimal" value={l.amount} onChange={(e) => setLine(i, { amount: e.target.value })} className="w-40" />}</Field>
+                <Field label={t('consolidation.amount', { cur: currency })}>{(id) => <MoneyInput id={id} value={l.amount} onChange={(v) => setLine(i, { amount: v })} className="w-40" />}</Field>
                 {lines.length > 2 && <Button size="sm" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>{t('consolidation.removeLine')}</Button>}
               </div>
             ))}

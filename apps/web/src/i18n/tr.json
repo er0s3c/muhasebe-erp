@@ -57,7 +57,14 @@
     "balanceCreditor": "Alacaklı",
     "loadMore": "Daha fazla göster",
     "back": "Geri",
-    "confirm": "Onayla"
+    "confirm": "Onayla",
+    "invalidNumber": "Geçersiz sayı. Örnek: 1.234,56",
+    "forbiddenTitle": "Bu sayfayı görme yetkiniz yok",
+    "forbiddenDesc": "Rolünüz bu bölüme erişim içermiyor. Erişim gerekiyorsa şirket yöneticinizden yetki isteyin.",
+    "forbiddenPartial": "Bu sayfadaki bazı bilgileri görme yetkiniz yok; ilgili alanlar boş görünebilir.",
+    "goHome": "Ana sayfaya dön",
+    "mainMenu": "Ana menü",
+    "loadingLabel": "Yükleniyor"
   },
   "months": [
     "Ocak",
@@ -500,15 +507,33 @@
       },
       "manage": "Modülleri yönet",
       "desc": {
-        "core.dashboard": "Genel bakış ve sayaçlar.",
-        "core.ledger": "Hesap planı, yevmiye, mizan, kebir ve açılış bakiyeleri.",
-        "core.parties": "Müşteri ve tedarikçi kartları, ekstre, yaşlandırma.",
-        "core.inventory": "Stok kartları, depolar, hareketler, sayım ve stok durumu.",
-        "core.invoices": "Satış, alış ve gider faturaları, iadeler ve irsaliyeler.",
-        "core.treasury": "Kasa ve banka hesapları, tahsilat, ödeme, virman, döviz ve banka mutabakatı.",
-        "core.settings": "Şirket, kullanıcılar, kurlar, dönemler ve bu ekran.",
-        "construction.projects": "Proje, iş kırılımı, bütçe revizyonları ve maliyet takibi (şantiye).",
-        "retail.pos": "Market için hızlı satış ekranı."
+        "dashboard": "Genel bakış ve sayaçlar.",
+        "ledger": "Hesap planı, yevmiye, mizan, kebir, açılış bakiyeleri ve yıl sonu kapanışı.",
+        "parties": "Müşteri ve tedarikçi kartları, ekstre, yaşlandırma.",
+        "inventory": "Stok kartları, depolar, hareketler, sayım ve stok durumu.",
+        "invoices": "Satış, alış ve gider faturaları, iadeler ve irsaliyeler.",
+        "invoicesOrders": "Satış teklifleri ve siparişleri; irsaliye ve faturaya dönüştürme.",
+        "salesPricelists": "Fiyat listeleri ve cariye özel fiyat/iskonto; fatura satırlarına otomatik fiyat.",
+        "inventorySerials": "Seri numarası takipli stok kartları için seri sorgulama ve geçmişi.",
+        "inventoryImports": "İthalat dosyaları ve ek maliyetlerin (navlun, gümrük…) stok maliyetine dağıtımı.",
+        "treasury": "Kasa ve banka hesapları, tahsilat, ödeme, virman, döviz ve banka mutabakatı.",
+        "settings": "Şirket, kullanıcılar, kurlar, dönemler ve bu ekran.",
+        "constructionProjects": "Proje, iş kırılımı, bütçe revizyonları ve maliyet takibi (şantiye).",
+        "constructionSubcontracts": "Taşeron ve işveren sözleşmeleri, keşif, hakediş, değişiklik emirleri ve onaylar.",
+        "constructionProcurement": "Satın alma talebi, teklif toplama, sipariş, mal kabul ve üçlü eşleştirme.",
+        "constructionRealestate": "Bağımsız birimler, satış sözleşmeleri, taksit planları ve tahsilat takibi.",
+        "directory": "Kişi ve kurum rehberi, ajanda ve görüşme notları.",
+        "reportsExecutive": "Nakit, cari, stok, proje ve personel özetini tek sayfada toplayan yönetici raporu.",
+        "reportsConsolidation": "Birden çok şirketin tablolarını tek grupta birleştirme ve eliminasyon.",
+        "hrCore": "Personel kartları, puantaj (devam, izin, mesai) ve kişisel veri envanteri.",
+        "hrPayroll": "Aylık bordro, ücret parametreleri ve bordro yevmiyesi.",
+        "hrEmployeeLedger": "Personel cari hesabı, avans verme ve bordrodan avans kesintisi.",
+        "hrSocialSecurity": "Onaylı bordrodan aylık sosyal sigorta ve ihtiyat sandığı bildirimleri.",
+        "hrForeign": "Yabancı işçilerin çalışma izni, belge süreleri ve teminat takibi.",
+        "treasuryCheques": "Alınan ve verilen çek/senet portföyü, ciro, tahsil ve takas.",
+        "treasuryGuarantees": "Alınan ve verilen banka teminat mektuplarının süre ve tutar takibi.",
+        "treasuryExpenses": "Gider kartları, gider fişleri ve gider raporları.",
+        "retailPos": "Market için hızlı satış ekranı."
       }
     }
   },
@@ -1367,7 +1392,9 @@
       "postedMsg": "Fatura kaydedildi: {{no}}",
       "deleteDraft": "Taslağı sil",
       "deleteConfirm": "Bu taslak fatura silinecek. Stok, cari ve yevmiye etkilenmez.",
-      "deleted": "Taslak silindi"
+      "deleted": "Taslak silindi",
+      "accountByDefault": "Hesap: varsayılan eşlemeden atanır",
+      "accountByDefaultHint": "Hesap seçmek için muhasebe görüntüleme yetkisi gerekir; kayıt şirketin varsayılan gelir/gider hesabına yazılır."
     },
     "view": {
       "print": "Yazdır",
@@ -4196,15 +4223,27 @@
     "unverifiedBadge": "Oranlar doğrulanmadı",
     "verifiedRates": "Doğrulanmış oranlar",
     "noRates": "Yasal oran yok",
-    "tabs": { "runs": "Bordrolar", "cost": "Bordro maliyeti" },
+    "tabs": {
+      "runs": "Bordrolar",
+      "cost": "Bordro maliyeti"
+    },
     "newRun": "Yeni bordro",
     "newRunDesc": "Ay için bordro taslağı açılır; puantajdan, ücret şartlarından ve açık parametrelerden hesaplanır.",
     "createRun": "Bordro aç",
     "month": "Ay",
     "empty": "Henüz bordro yok",
     "emptyDesc": "Önce personel ücret şartlarını girin (Bordro ayarları), puantajı doldurun, sonra ay için bordro açın.",
-    "status": { "draft": "Taslak", "approved": "Onaylı", "paid": "Ödendi", "cancelled": "İptal" },
-    "basis": { "monthly": "Aylık", "daily": "Günlük", "hourly": "Saatlik" },
+    "status": {
+      "draft": "Taslak",
+      "approved": "Onaylı",
+      "paid": "Ödendi",
+      "cancelled": "İptal"
+    },
+    "basis": {
+      "monthly": "Aylık",
+      "daily": "Günlük",
+      "hourly": "Saatlik"
+    },
     "cols": {
       "number": "Numara",
       "month": "Ay",
@@ -4354,7 +4393,13 @@
       "verifyHint": "Kaynağı yazın (örn. mali müşavir yazısı, mevzuat maddesi)",
       "verifiedToast": "Parametre doğrulandı",
       "added": "Parametre eklendi",
-      "units": { "percent": "yüzde", "multiplier": "çarpan", "amount": "tutar", "count": "sayı", "flag": "0 / 1" },
+      "units": {
+        "percent": "yüzde",
+        "multiplier": "çarpan",
+        "amount": "tutar",
+        "count": "sayı",
+        "flag": "0 / 1"
+      },
       "keys": {
         "days_per_month": "Aylık gün sayısı (gün ücreti böleni)",
         "hours_per_day": "Günlük saat sayısı (saat ücreti böleni)",
@@ -4386,11 +4431,18 @@
       "code": "Kod",
       "name": "Ad",
       "kind": "Tür",
-      "kinds": { "earning": "Ek ödeme", "deduction": "Kesinti" },
+      "kinds": {
+        "earning": "Ek ödeme",
+        "deduction": "Kesinti"
+      },
       "socialBase": "Prim esası",
       "taxBase": "Vergi esası",
       "liability": "Yükümlülük",
-      "liabilities": { "tax": "Ödenecek vergi/fon", "social": "Ödenecek sosyal güvenlik", "other": "Diğer borç" },
+      "liabilities": {
+        "tax": "Ödenecek vergi/fon",
+        "social": "Ödenecek sosyal güvenlik",
+        "other": "Diğer borç"
+      },
       "flagsNote": "Bayraklar yalnızca ek ödeme için, yükümlülük yalnızca kesinti için geçerlidir. Kalem kodu ve türü sonradan değişmez; kalem pasife alınabilir.",
       "added": "Kalem eklendi"
     }
@@ -4411,7 +4463,15 @@
     "saved": "Puantaj kaydedildi",
     "missingHire": "{{count}} aktif personelin işe giriş tarihi girilmemiş; çizelgede görünmez ve puantaj yazılamaz.",
     "missingHireLink": "Personel kartları",
-    "weekdays": ["Pz", "Pt", "Sa", "Ça", "Pe", "Cu", "Ct"],
+    "weekdays": [
+      "Pz",
+      "Pt",
+      "Sa",
+      "Ça",
+      "Pe",
+      "Cu",
+      "Ct"
+    ],
     "tabs": {
       "grid": "Aylık çizelge",
       "day": "Günlük giriş",
@@ -5131,9 +5191,9 @@
     "source": {
       "order": "sipariş fiyatı",
       "item": "kart fiyatı",
-    "party_item": "cariye özel fiyat",
-    "party_list": "cari fiyat listesi",
-    "default_list": "varsayılan fiyat listesi"
+      "party_item": "cariye özel fiyat",
+      "party_list": "cari fiyat listesi",
+      "default_list": "varsayılan fiyat listesi"
     },
     "selected": "{{count}} irsaliye seçili",
     "run": "Seçilenleri faturala",
@@ -5155,7 +5215,10 @@
     "order": "Fiyat sırası: cariye özel kalem fiyatı, carinin fiyat listesi, şirket varsayılan listesi, stok kartı fiyatı. İskonto fiyattan sonra uygulanır; satırda her zaman elle değiştirebilirsiniz. Para birimi çevrilmez: belge para birimiyle aynı olmayan fiyat kullanılmaz.",
     "priceFrom": "Fiyat: {{source}}",
     "refresh": "Fiyatı güncelle",
-    "kinds": { "sales": "Satış", "purchase": "Alış" },
+    "kinds": {
+      "sales": "Satış",
+      "purchase": "Alış"
+    },
     "source": {
       "party_item": "cariye özel fiyat",
       "party_list": "cari listesi: {{list}}",
@@ -5285,7 +5348,13 @@
       "transfer": "Depo transferi",
       "reversal": "Ters kayıt"
     },
-    "hist": { "date": "Tarih", "event": "Hareket", "warehouse": "Depo", "party": "Cari", "document": "Belge" },
+    "hist": {
+      "date": "Tarih",
+      "event": "Hareket",
+      "warehouse": "Depo",
+      "party": "Cari",
+      "document": "Belge"
+    },
     "entry": {
       "count": "Seri no: {{n}}/{{qty}}",
       "button": "Seri no gir",
@@ -5943,5 +6012,16 @@
     "compareNone": "Karşılaştırma yok",
     "comparePrevious": "Önceki dönem",
     "compareLastYear": "Geçen yıl aynı dönem"
+  },
+  "errorPage": {
+    "title": "Beklenmeyen bir hata oluştu",
+    "desc": "Sayfa görüntülenirken bir sorun çıktı. Sayfayı yenileyip tekrar deneyin; sorun sürerse yöneticinize bildirin.",
+    "chunkTitle": "Yeni sürüm yüklendi",
+    "chunkDesc": "Uygulama güncellendi ya da bağlantı kesildi. Devam etmek için sayfayı yenileyin.",
+    "reload": "Sayfayı yenile",
+    "home": "Ana sayfaya dön",
+    "details": "Teknik ayrıntı",
+    "notFoundTitle": "Sayfa bulunamadı",
+    "notFoundDesc": "Aradığınız sayfa taşınmış ya da hiç var olmamış olabilir."
   }
 }

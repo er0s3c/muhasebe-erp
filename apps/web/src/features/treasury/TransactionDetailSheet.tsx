@@ -15,6 +15,7 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { TreasuryTxnDetail } from '../../lib/types';
 import { TREASURY_INVALIDATE, TxnStatusBadge, TxnTypeBadge } from './common';
+import { fmtDate } from '../../lib/license';
 
 interface Props {
   /** Açılacak hareket; null ise kapalı */
@@ -86,7 +87,7 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
             </div>
 
             {tx.status === 'cancelled' && (
-              <Callout tone="danger" title={t('treasury.view.cancelledTitle', { date: tx.cancelledAt ? formatDateTR(tx.cancelledAt.slice(0, 10)) : '' })}>
+              <Callout tone="danger" title={t('treasury.view.cancelledTitle', { date: tx.cancelledAt ? fmtDate(tx.cancelledAt) : '' })}>
                 {tx.cancelReason}
                 {tx.cancelJournalEntryId && (
                   <>

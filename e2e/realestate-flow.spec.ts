@@ -63,8 +63,8 @@ test('gayrimenkul satışı: toplu birim → sözleşme + taksit planı → yür
   await page.getByLabel('Taksit sayısı').fill('4');
   await page.getByLabel('İlk taksit vadesi').fill('2027-01-15');
   await page.getByRole('button', { name: 'Planı oluştur' }).click();
-  await expect(page.getByLabel('Tutar 1')).toHaveValue('20000.00');
-  await expect(page.getByLabel('Tutar 5')).toHaveValue('20000.00');
+  await expect(page.getByLabel('Tutar 1')).toHaveValue('20.000,00');
+  await expect(page.getByLabel('Tutar 5')).toHaveValue('20.000,00');
   await page.getByRole('button', { name: 'Taslak kaydet' }).click();
   await expect(page.getByRole('heading', { name: /SSZ-\d{4}-000001/, level: 1 })).toBeVisible();
   await expect(page.getByText('Taslak', { exact: true }).first()).toBeVisible();

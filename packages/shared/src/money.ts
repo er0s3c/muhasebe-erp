@@ -98,18 +98,53 @@ export function formatMoney(value: Decimal.Value | null | undefined, currency: s
 }
 
 /**
- * Türkçe girişi kanonik ondalık string'e çevirir: "1.234,56" -> "1234.56".
- * Nokta binlik ayracı, virgül ondalık ayracıdır. Geçersizse null.
+ * Türkçe girişi kanonik ondalık string'e çevirir; geçersizse `null` (asla sessizce başka bir sayı üretmez).
+ *
+ * Kurallar (UI-1/UI-2):
+ * - Virgül ondalık ayracıdır ve en fazla bir kez yazılır: "12,5" → "12.5", "1.234,56" → "1234.56", ",5" → "0.5".
+ * - Nokta binlik ayracıdır ancak YALNIZCA doğru gruplanmışsa: "250.000" → "250000", "1.234.567" → "1234567"
+ *   (ilk grup 1–3, sonrakiler tam 3 basamak).
+ * - Virgül yokken tek nokta doğru binlik gruplaması değilse ondalık ayracı sayılır: "12.5" → "12.5", "0.75" → "0.75",
+ *   "1234.5" → "1234.5" (İngilizce klavye/sayısal tuş takımı alışkanlığı). Yani "1.500" bin beş yüzdür, "1.5" bir buçuk.
+ * - Virgül varken noktalar yalnızca binlik olabilir: "1.23,4", "1,234.56" geçersizdir; birden çok virgül ya da
+ *   yanlış gruplanmış birden çok nokta ("1.2.3") geçersizdir.
+ * - Boşluklar (bölünmez boşluk dahil) yok sayılır; baştaki "-" negatif, "+" pozitif işarettir.
  */
 export function parseTR(input: string): string | null {
-  const trimmed = input.trim().replace(/\s/g, '');
-  if (trimmed === '') return null;
-  if (!/^-?[\d.]*(,\d*)?$/.test(trimmed)) return null;
-  const [intRaw = '', fracRaw] = trimmed.split(',');
-  const intPart = intRaw.replace(/\./g, '');
-  if (intPart === '' || intPart === '-') {
-    if (fracRaw === undefined || fracRaw === '') return null;
-    return `${intPart === '-' ? '-' : ''}0.${fracRaw}`;
+  let s = input.replace(/[\s\u00A0\u202F]/g, '');
+  if (s === '') return null;
+  let sign = '';
+  if (s[0] === '-' || s[0] === '+') {
+    sign = s[0] === '-' ? '-' : '';
+    s = s.slice(1);
   }
-  return fracRaw ? `${intPart}.${fracRaw}` : intPart;
+  if (s === '' || !/^[\d.,]+$/.test(s)) return null;
+  const grouped = (v: string) => /^\d{1,3}(\.\d{3})+$/.test(v);
+  let intPart: string;
+  let frac: string;
+  const commas = s.split(',').length - 1;
+  if (commas > 1) return null;
+  if (commas === 1) {
+    const [i = '', f = ''] = s.split(',');
+    if (!/^\d*$/.test(f)) return null;
+    if (i.includes('.')) {
+      if (!grouped(i)) return null;
+      intPart = i.replace(/\./g, '');
+    } else intPart = i;
+    frac = f;
+  } else if (!s.includes('.')) {
+    intPart = s;
+    frac = '';
+  } else if (grouped(s)) {
+    intPart = s.replace(/\./g, '');
+    frac = '';
+  } else {
+    const parts = s.split('.');
+    if (parts.length !== 2) return null;
+    [intPart = '', frac = ''] = parts;
+  }
+  if (!/^\d*$/.test(intPart) || (intPart === '' && frac === '')) return null;
+  intPart = intPart.replace(/^0+(?=\d)/, '') || '0';
+  const body = frac === '' ? intPart : `${intPart}.${frac}`;
+  return /^0(\.0*)?$/.test(body) ? body : `${sign}${body}`;
 }

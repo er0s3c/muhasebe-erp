@@ -13,7 +13,6 @@ import { useToast } from '../../components/ui/Toast';
 import { ApiError, apiBlob } from '../../lib/api';
 import { saveBlob } from '../../lib/download';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { AgendaItem, DirContact } from '../../lib/types';
@@ -21,6 +20,7 @@ import { AgendaRow } from './AgendaPage';
 import { ContactFormSheet } from './ContactFormSheet';
 import { DIRECTORY_INVALIDATE, useContactOptions } from './common';
 import { NotesPanel } from './NotesPanel';
+import { fmtDate } from '../../lib/license';
 
 export function ContactDetailPage() {
   const { t } = useTranslation();
@@ -85,7 +85,7 @@ export function ContactDetailPage() {
         }
       />
       <div className="flex flex-col gap-5">
-        {c.anonymizedAt && <Callout tone="warning">{t('directory.contact.anonymizedNote', { date: formatDateTR(c.anonymizedAt.slice(0, 10)) })}</Callout>}
+        {c.anonymizedAt && <Callout tone="warning">{t('directory.contact.anonymizedNote', { date: fmtDate(c.anonymizedAt) })}</Callout>}
         {c.mergedIntoId && <Callout tone="info">{t('directory.contact.mergedNote')} <Link className="underline" to={`/directory/contacts/${c.mergedIntoId}`}>{t('directory.contact.openMerged')}</Link></Callout>}
         {c.isArchived && !frozen && <Callout tone="info">{t('directory.contact.archivedNote')}</Callout>}
         <Card>

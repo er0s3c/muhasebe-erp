@@ -19,6 +19,7 @@ import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/que
 import type { PayrollItemRow, PayrollLineRow, PayrollRunDetail } from '../../lib/types';
 import { AdvanceDeductionModal } from './AdvanceDeductionModal';
 import { formatParamValue, PAYROLL_INVALIDATE, PayrollStatusBadge, UnverifiedBadge, useWarningText } from './payroll-common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 type DoneKey = 'payroll.run.approved' | 'payroll.run.paid' | 'payroll.run.unpaid' | 'payroll.run.cancelled';
 type Dlg = null | 'approve' | 'pay' | 'unpay' | 'cancel' | 'delete';
@@ -301,7 +302,7 @@ function AdjustModal({ runId, line, detail, onClose }: { runId: string; line: Pa
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState<Error | null>(null);
-  const add = useCMutation((_: void, call) => call(`/api/payroll/runs/${runId}/adjustments`, { method: 'PUT', body: { employeeId: line.employeeId, itemId, amount: amount.replace(',', '.'), ...(note.trim() ? { note: note.trim() } : {}) } }), PAYROLL_INVALIDATE);
+  const add = useCMutation((_: void, call) => call(`/api/payroll/runs/${runId}/adjustments`, { method: 'PUT', body: { employeeId: line.employeeId, itemId, amount: amount, ...(note.trim() ? { note: note.trim() } : {}) } }), PAYROLL_INVALIDATE);
   const del = useCMutation((adjId: string, call) => call(`/api/payroll/runs/${runId}/adjustments/${adjId}`, { method: 'DELETE' }), PAYROLL_INVALIDATE);
   const mine = detail.adjustments.filter((a) => a.employeeId === line.employeeId);
   const valid = !!itemId && /^\d{1,15}([.,]\d{1,4})?$/.test(amount.trim());
@@ -337,7 +338,7 @@ function AdjustModal({ runId, line, detail, onClose }: { runId: string; line: Pa
                 </Select>
               )}
             </Field>
-            <Field label={t('payroll.adjust.amount')}>{(fid) => <Input id={fid} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
+            <Field label={t('payroll.adjust.amount')}>{(fid) => <MoneyInput id={fid} value={amount} onChange={(v) => setAmount(v)} />}</Field>
             <Button type="submit" variant="primary" loading={add.isPending} disabled={!valid}>{t('common.add')}</Button>
             <div className="sm:col-span-3">
               <Field label={t('payroll.adjust.note')}>{(fid) => <Input id={fid} maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
