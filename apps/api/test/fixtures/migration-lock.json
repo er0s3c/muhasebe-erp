@@ -326,5 +326,9 @@
   "0081_audit_accounting": {
     "sha256": "b37204bb2aa1be296f21fe2aa5974a6aedeaaec1730155452f9ca6982e4d045d",
     "when": 1791039726643
+  },
+  "0082_termination_fx_residue": {
+    "sha256": "74efd015f3bdd93a81e9f5371c48e9ff7e8ed9cd911dec80faaff00a407fa4a9",
+    "when": 1791110025188
   }
 }

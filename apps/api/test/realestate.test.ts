@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readXlsx } from '../src/files/xlsx-read';
-import { accountIds, asDb, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser, TODAY_LOCAL } from './helpers';
+import { accountIds, asDb, asOwner, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser, TODAY_LOCAL } from './helpers';
 
 describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat → teslim', async () => {
   const { app, handle } = await makeApp();
@@ -235,6 +235,79 @@ describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat �
     const closing = (code: string) => Number(Object.fromEntries(tb.rows.map((r: any) => [r.code, r.closing]))[code] ?? 0);
     expect(closing('380')).toBe(0);
     expect(closing('120')).toBe(0);
+  });
+
+  it('fesih: FIFO havuzundaki TL tahsilatın bıraktığı kur artığı (kalan 0,00 GBP, 0,23 TL) defter para biriminde kapanır, fark kambiyoya', async () => {
+    const w = await world('FesihKurArtigi');
+    const bank = (await w.c.post('/api/treasury/accounts', { kind: 'bank', name: 'KTB TL', currency: 'TRY' })).json().account as { id: string };
+    // Kalemsiz (avans) TL tahsilat FIFO havuzuna girer ve en eski taksidi (30.000 GBP × 50 = 1.500.000 TL) 0,23 TL eksik kapatır:
+    // kalan defter tutarı 0,23 TL, GBP karşılığı 0,0046 → 0,00
+    const pooled = async (partyId: string, amount: string) => {
+      const r = await w.c.post('/api/treasury/transactions', { type: 'receipt', date: day(3, 5), accountId: bank.id, amount, partyId });
+      expect(r.statusCode, r.body).toBe(201);
+    };
+    const residueOf = async (partyId: string) => (await w.c.get(`/api/parties/${partyId}/open-items?asOf=${day(3, 10)}&type=receivable`)).json().receivable.items[0];
+    const entryOf = async (contractId: string) => {
+      const entryId = (await asDb(handle, { userId: w.s.userId, orgId: w.orgId, companyId: w.company.id }, async (q) => (await q(`select entry_id from sales_terminations where contract_id = $1`, [contractId])).rows[0].entry_id)) as string;
+      const e = (await w.c.get(`/api/journal-entries/${entryId}`)).json().entry;
+      return { id: entryId, lines: e.lines.map((l: any) => [l.accountCode, l.currencyCode, Number(l.debit), Number(l.credit), Number(l.debitBase), Number(l.creditBase)]) as [string, string, number, number, number, number][] };
+    };
+    const writeoffs = (contractId: string) =>
+      asDb(handle, { userId: w.s.userId, orgId: w.orgId, companyId: w.company.id }, async (q) =>
+        (await q(`select w.amount::text, w.amount_base::text, l.currency_code as cur from sales_writeoffs w join journal_lines l on l.id = w.settle_line_id where w.contract_id = $1 order by l.line_no`, [contractId])).rows);
+    await w.c.put('/api/exchange-rates', { rateDate: day(3, 10), currencyCode: 'GBP', quoteCode: 'TRY', buy: '54' });
+
+    const d = await w.draft('F3');
+    expect((await w.c.post(`/api/sales-contracts/${d.contract.id}/activate`, {})).statusCode).toBe(200);
+    await pooled(w.buyer.id, '1499999.77');
+    expect(await residueOf(w.buyer.id)).toMatchObject({ amount: '30000.00', remaining: '0.00', remainingBase: '0.23' });
+
+    const term = await w.c.post(`/api/sales-contracts/${d.contract.id}/terminate`, { date: day(3, 10), reason: 'Alıcı vazgeçti', retained: '3000', refundAccountId: bank.id });
+    expect(term.statusCode, term.body).toBe(200);
+    expect(term.json().termination).toMatchObject({ collected: '30000.0000', retained: '3000.0000', refund: '27000.0000' });
+    expect(term.json().installments.map((i: any) => [i.paid, i.remaining])).toEqual([['30000.00', '0.00'], ['0.00', '0.00'], ['0.00', '0.00']]);
+    // Yevmiye: artık TL satırıyla kapanır (sıfır tutarlı satır yok); kambiyo zararı artığı da içerir:
+    // 6.000.000 − (2 × 2.250.000 + 0,23 + 3.000 × 54 + 27.000 × 54) = −120.000,23
+    const j = await entryOf(d.contract.id);
+    expect(j.lines).toEqual([
+      ['380', 'GBP', 120000, 0, 6_000_000, 0],
+      ['120', 'TRY', 0, 0.23, 0, 0.23],
+      ['120', 'GBP', 0, 45000, 0, 2_250_000],
+      ['120', 'GBP', 0, 45000, 0, 2_250_000],
+      ['679', 'GBP', 0, 3000, 0, 162_000],
+      ['102.001', 'TRY', 0, 1_458_000, 0, 1_458_000],
+      ['656', 'TRY', 120_000.23, 0, 120_000.23, 0],
+    ]);
+    // Fesih kapatmaları kalem başına: artık kaleminde kalem para biriminde 0, defter tutarında 0,23 (TL satırına bağlı)
+    expect(await writeoffs(d.contract.id)).toEqual([
+      { amount: '0.0000', amount_base: '0.2300', cur: 'TRY' },
+      { amount: '45000.0000', amount_base: '2250000.0000', cur: 'GBP' },
+      { amount: '45000.0000', amount_base: '2250000.0000', cur: 'GBP' },
+    ]);
+    // Cari: feshedilen sözleşmenin kalemi (artık dahil) kalmadı; 120 sıfır
+    const open = (await w.c.get(`/api/parties/${w.buyer.id}/open-items?asOf=${day(12, 31)}&type=receivable`)).json().receivable;
+    expect(open.items).toEqual([]);
+    expect(open.unapplied).toBe('0.00');
+    const tb = (await w.c.get(`/api/reports/trial-balance?from=${day(1, 1)}&to=${day(12, 31)}`)).json();
+    expect(Number(Object.fromEntries(tb.rows.map((r: any) => [r.code, r.closing]))['120'] ?? 0)).toBe(0);
+
+    // Tek kalemi yalnızca artıkla (kalem para biriminde 0) kapatılmış fiş de "kapatılmış" sayılır: doğrudan ters bağlanamaz
+    const other = (await w.c.post('/api/parties', { name: 'Tek Taksit Alıcı', kind: 'customer' })).json().party as { id: string };
+    const single = await w.draft('F4', { partyId: other.id, price: '30000', installments: [{ kind: 'down_payment', dueDate: day(3, 1), amount: '30000' }] });
+    const act = await w.c.post(`/api/sales-contracts/${single.contract.id}/activate`, {});
+    expect(act.statusCode, act.body).toBe(200);
+    await pooled(other.id, '1499999.77');
+    expect(await residueOf(other.id)).toMatchObject({ remaining: '0.00', remainingBase: '0.23' });
+    const term2 = await w.c.post(`/api/sales-contracts/${single.contract.id}/terminate`, { date: day(3, 10), reason: 'Vazgeçti', retained: '3000', refundAccountId: bank.id });
+    expect(term2.statusCode, term2.body).toBe(200);
+    expect(await writeoffs(single.contract.id)).toEqual([{ amount: '0.0000', amount_base: '0.2300', cur: 'TRY' }]);
+    const j2 = await entryOf(single.contract.id);
+    await asOwner(async (q) => {
+      await q('ALTER TABLE journal_entries DISABLE TRIGGER journal_entries_guard');
+      const err = await expectDbError(q, `update journal_entries set reversed_by_id = $2 where id = $1`, [act.json().contract.activationEntryId, j2.id]);
+      expect(err.code).toBe('ERP01');
+      expect(err.message).toContain('fesihle kapatılmış');
+    });
   });
 
   it('taksit listesi, proje satış özeti ve dışa aktarmalar', async () => {

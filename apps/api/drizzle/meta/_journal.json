@@ -575,6 +575,13 @@
       "when": 1791039726643,
       "tag": "0081_audit_accounting",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1791110025188,
+      "tag": "0082_termination_fx_residue",
+      "breakpoints": true
     }
   ]
 }

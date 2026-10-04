@@ -28,7 +28,8 @@ const amountLine = (accountId: string, side: 'debit' | 'credit', doc: MoneyValue
  * Teslim öncesi fesih + iade. Tek yevmiye:
  *   B 380 (sözleşme bedeli, etkinleşmedeki defter tutarı)
  *   A 120 (ödenmemiş taksit kalemleri, kalem bazında kapatılır) + A 679 (kesinti, proje etiketli) + A kasa/banka (iade)
- *   ± kambiyo (tahsilat günü kurundan fesih günü kuruna fark)
+ *   ± kambiyo (tahsilat günü kurundan fesih günü kuruna fark; yalnızca kur artığı kalmış kalemin defter para birimindeki
+ *     kapatması da buraya düşer)
  * Tahsil edilen tutar = kesinti + iade. İade, seçilen kasa/banka hesabından yevmiyeyle ödenir (hesap para birimi:
  * sözleşme ya da defter para birimi).
  */
@@ -46,11 +47,8 @@ export async function terminateContract(tx: Tx, ctx: SalesCtx, id: string, input
   // Ödenmemiş kalemler (açık kalem hesabı: tahsilat eşleştirmeleri düşülmüş)
   const inst = await tx.select().from(salesInstallments).where(eq(salesInstallments.contractId, id)).orderBy(asc(salesInstallments.seq));
   const lineIds = new Set(inst.map((i) => i.journalLineId!).filter(Boolean));
-  // Belge tutarı kalmamış kalem (yalnızca kur/yuvarlama artığı: kalan 0,00, defter tutarı > 0) kapatma satırı almaz: sıfır tutarlı
-  // satır yazılamaz; defter artığı aşağıdaki kur farkı satırına düşer.
-  const allOpen = (await openItemsFor(tx, c.partyId, 'receivable', on)).items.filter((o) => lineIds.has(o.lineId));
-  const open = allOpen.filter((o) => dec(o.remaining).gt(0));
-  const remainingOf = new Map(allOpen.map((o) => [o.lineId, dec(o.remaining)]));
+  const open = (await openItemsFor(tx, c.partyId, 'receivable', on)).items.filter((o) => lineIds.has(o.lineId));
+  const remainingOf = new Map(open.map((o) => [o.lineId, dec(o.remaining)]));
   let collectedPrice = dec(0);
   let collectedFees = dec(0);
   let feesTotal = dec(0);
@@ -82,7 +80,14 @@ export async function terminateContract(tx: Tx, ctx: SalesCtx, id: string, input
   let creditsBase = dec(0);
   for (const o of open) {
     creditsBase = creditsBase.plus(o.remainingBase);
-    lines.push(amountLine(map.receivable, 'credit', dec(o.remaining), dec(o.remainingBase), c.currencyCode, dec(c.activationFx!), foreign, { partyId: c.partyId, description: `Fesih ${c.code}: ödenmemiş taksit kapatma` }));
+    if (dec(o.remaining).isZero()) {
+      // Belge tutarı kalmamış kalem (yalnızca kur/yuvarlama artığı: kalan 0,00, defter tutarı > 0; örn. FIFO havuzundaki TL tahsilat
+      // dövizli taksidi kuruşun altında bir farkla kapatmış): sıfır tutarlı döviz satırı yazılamaz. Artık defter para biriminde
+      // kapatılır (cari kalem açık kalmaz) ve karşılığı aşağıdaki kur farkı satırına düşer.
+      lines.push(amountLine(map.receivable, 'credit', dec(o.remainingBase), dec(o.remainingBase), ctx.baseCurrency, dec(1), false, { partyId: c.partyId, description: `Fesih ${c.code}: taksit kur artığı kapatma` }));
+    } else {
+      lines.push(amountLine(map.receivable, 'credit', dec(o.remaining), dec(o.remainingBase), c.currencyCode, dec(c.activationFx!), foreign, { partyId: c.partyId, description: `Fesih ${c.code}: ödenmemiş taksit kapatma` }));
+    }
   }
   if (retained.gt(0)) {
     const rb = foreign ? applyRate(retained, fx) : retained;
@@ -113,7 +118,7 @@ export async function terminateContract(tx: Tx, ctx: SalesCtx, id: string, input
   const text = `Satış sözleşmesi feshi ${c.code}: ${input.reason}`.slice(0, 300);
   const entry = await createJournalEntry(tx, { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: ctx.baseCurrency, reportingCurrency: ctx.reportingCurrency }, { entryDate: on, description: text, lines, post: true }, { source: { type: 'sales_termination', id } });
 
-  // Kasasız kapatma kayıtları: kapatan satırlar fesih yevmiyesinin 120 satırlarıdır (aynı sırada)
+  // Kasasız kapatma kayıtları: kapatan satırlar fesih yevmiyesinin 120 satırlarıdır (aynı sırada; kur artığı kaleminde tutar 0)
   const settle = await tx.select({ id: journalLines.id }).from(journalLines).where(and(eq(journalLines.entryId, entry.id), eq(journalLines.accountId, map.receivable))).orderBy(asc(journalLines.lineNo));
   if (settle.length !== open.length) throw unprocessable('Fesih satırları kalemlerle eşleşmedi', 'TERMINATION_LINE_MISMATCH');
   if (open.length > 0) {

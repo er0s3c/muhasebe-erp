@@ -175,7 +175,9 @@ describe('demo aracı', () => {
       expect((await q(`select count(*)::int as n from fee_schedules`))[0].n).toBe(3);
       expect((await q(`select count(*)::int as n from sales_installments where kind = 'fee'`))[0].n).toBe(1);
       expect((await q(`select count(*)::int as n from cash_forecast_items`))[0].n).toBe(2);
-      expect((await q(`select count(*)::int as n from sales_writeoffs`))[0].n).toBe(4); // fesihte kapatılan taksitler
+      // Fesihte kapatılan taksitler; tarihe (demo kurlarına) bağlı olarak ek olarak FIFO havuzunun bıraktığı kur artığı kalemi
+      // (kalem para biriminde 0, defter tutarı 1 TL'nin altında) olabilir
+      expect((await q(`select count(*) filter (where amount > 0)::int as n, count(*) filter (where amount = 0 and amount_base >= 1)::int as big from sales_writeoffs`))[0]).toEqual({ n: 4, big: 0 });
       expect((await q(`select coalesce(sum(credit_base - debit_base), 0)::int as n from journal_lines jl join accounts a on a.id = jl.account_id where a.code = '380'`))[0].n).toBe(
         Math.round(Number((await q(`select coalesce(sum(price * activation_fx), 0) as v from sales_contracts where status = 'active'`))[0].v)),
       );
