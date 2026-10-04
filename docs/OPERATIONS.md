@@ -56,9 +56,9 @@ Her sorunun varsayılanı vardır (Enter kabul eder), bir satırlık açıklamas
 | Gönderen adresi / adı | `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | kullanıcı adı / `Muhasebe ERP` | `MAIL_FROM` olur |
 | Uygulamanın adresi | `APP_BASE_URL` | erişim ayarından türetilir | E-postalardaki bağlantı kökü |
 | Test e-postası adresi | `MAIL_TEST_TO` | boş (test yok) | Doluysa **gerçek bir test e-postası gönderilir**. Başarısızsa nedeni düz Türkçe yazılır ve seçenek sunulur: tekrar dene / ayarları düzenle / e-postasız devam / yine de kaydet. Yanıt dosyası kipinde başarısızlık kurulumu **durdurur** |
-| Lisans sunucusu adresi | `LICENSE_SERVER_URL` | boş (kitteki/imajdaki varsayılan) | Yalnızca https; verilirse `/healthz` ile erişimi sınanır, ulaşılamazsa uyarılır |
+| Lisans sunucusu adresi | `LICENSE_SERVER_URL` | boş (kitteki/imajdaki varsayılan) | Yalnızca https; verilirse `/healthz` ile erişimi sınanır, ulaşılamazsa uyarılır. Sihirbaz kitte adres gömülü olup olmadığını söyler (`kit.json` → `licenseServerUrl`); kitte de yoksa yalnızca çevrimdışı etkinleştirme yapılabilir |
 | Lisans etkinleştirme kodu | `LICENSE_CODE` | boş (tarayıcıda girilir) | Girilirse uygulama açıldıktan sonra yerel `POST /api/license/activate` ile etkinleştirilir (belgeli akış; kod yazdırılmaz/saklanmaz). Girilmezse ilk açılışta "Lisans etkinleştirme" ekranından girilir |
-| Yedek klasörü, kaç yedek, saat | `BACKUP_DIR`, `BACKUP_KEEP`, `BACKUP_TIME` | `/var/lib/muhasebe-erp/backups` (Docker: `<kurulum>/backups`), `14`, `02:30` | Günlük yedek (systemd zamanlayıcısı, yoksa cron; Windows'ta zamanlanmış görev). Ofis dışı kopya (rsync/UNC) elle kurulur (§6) |
+| Yedek klasörü, kaç yedek, saat | `BACKUP_DIR`, `BACKUP_KEEP`, `BACKUP_TIME` | Linux yerel: `/var/backups/muhasebe-erp` (yalnız root); Windows yerel: `ProgramData\MuhasebeERP\backups`; Docker: `<kurulum klasörü>/backups`; `14` (en az 1), `02:30` | Günlük yedek (systemd zamanlayıcısı, yoksa cron; Windows'ta — Docker yolu dahil — zamanlanmış görev). Temizlik yalnızca yedek betiğinin adlandırdığı dosyalara dokunur. Eski kurulumlardaki `/var/lib/muhasebe-erp/backups` (hizmet kullanıcısının klasörü) yeniden çalıştırmada buraya taşınır. Ofis dışı kopya (rsync/UNC) elle kurulur (§6) |
 | Yeni kullanıcı/şirket kaydı açık olsun mu? | `REGISTRATION` | evet | İlk sahip hesabı için gerekli; sonra `--reconfigure` ile kapatın (`REGISTRATION_ENABLED=false`) |
 
 Saat dilimi/dil ve şirket görünen adı için sihirbaz soru **sormaz**: uygulamada bunlar yapılandırma ayarı değildir (şirket adı ilk kayıtta girilir).
@@ -71,18 +71,32 @@ Saat dilimi/dil ve şirket görünen adı için sihirbaz soru **sormaz**: uygula
 |---|---|---|---|
 | Etkileşimli | `./install.sh` | `Kur.cmd` | Terminal varsa sorar |
 | Varsayılanlarla | `--yes` | `-Yes` | Hiçbir şey sormaz (güncelleyici böyle çağırır) |
-| Yanıt dosyası | `--answers=DOSYA` | `-AnswersFile DOSYA` | Sormaz; `KEY=VALUE` dosyasından okur |
+| Yanıt dosyası | `--answers=DOSYA` | `-AnswersFile DOSYA` | Sormaz; `KEY=VALUE` dosyasından okur. Yalnızca **yeni kurulumda** ya da `--reconfigure` ile; kurulu sistemde yanıt dosyası (ya da mevcut ayardan farklı `--port`/`--access`/`--domain`/`--tls`/`--demo` bayrağı) verilirse sihirbaz yok saymaz, **durur** ve `--reconfigure`'u önerir |
 | Yeniden yapılandırma | `--reconfigure` | `-Reconfigure` | Kurulu sistemde yalnızca yapılandırmayı yeniden sorar |
-| Kuru çalıştırma | `--dry-run` | `-DryRun` | Sistemi değiştirmeden ne yazılacağını gösterir (parolalar `********`) |
+| Kuru çalıştırma | `--dry-run` | `-DryRun` | Sistemi değiştirmeden ne yazılacağını gösterir (parolalar `********`); `--uninstall [--purge]` ile birlikte neyin durdurulup silineceğini listeler |
+| Kaldırma | `--uninstall [--purge]` | `-Uninstall [-Purge]` | Yerel ya da Docker kurulumunu kaldırır; ayrıntı aşağıda |
 
-Diğer bayraklar: `--check`, `--mode=dev|prod`, `--path=docker|native`, `--access=…`, `--domain=…`, `--port=…`, `--tls=auto|byo|selfsigned|none`, `--http-port`, `--https-port`, `--demo`/`--no-demo`, `--start`, `--uninstall [--purge]`, `--restore-db=…` (Windows'ta aynı adlar `-Mode`, `-Path`, `-Access`, `-Domain`, `-Port`, `-Tls`, `-HttpPort`, `-HttpsPort`, `-Demo`/`-NoDemo`, …). Komut satırı bayrakları yanıt dosyasından önceliklidir.
+Diğer bayraklar: `--check`, `--mode=dev|prod`, `--path=docker|native`, `--access=…`, `--domain=…`, `--port=…`, `--tls=auto|byo|selfsigned|none`, `--http-port`, `--https-port`, `--demo`/`--no-demo`, `--start`, `--uninstall [--purge [--i-understand-purge]]`, `--allow-downgrade`, `--restore-db=…` (Windows'ta aynı adlar `-Mode`, `-Path`, `-Access`, `-Domain`, `-Port`, `-Tls`, `-HttpPort`, `-HttpsPort`, `-Demo`/`-NoDemo`, `-IUnderstandPurge`, `-AllowDowngrade`, `-RestoreDb`, `-PgSuperPasswordFile`, …). Komut satırı bayrakları yanıt dosyasından önceliklidir.
 
-**Yanıt dosyası.** `installer/answers.example` dosyasını kopyalayıp düzenleyin; her satır `ANAHTAR=değer`, `#` yorumdur, boş değer = varsayılan. Anahtarlar yukarıdaki tablodaki sütundur; ayrıca `MODE` (`prod`/`dev`) ve `INSTALL_PATH` (`docker`/`native`). Dosya **çalıştırılmaz**, yalnızca okunur; bilinmeyen anahtar hata verir; sihirbaz dosyayı hiçbir yere **kopyalamaz**. `SMTP_PASSWORD` ve `LICENSE_CODE` gizlidir: dosyada bulunabilir ancak sihirbaz uyarır ve **kurulum bitince dosyayı silmeniz** gerekir (Linux'ta `chmod 600`).
+**Sürüm düşürme yapılmaz.** Kurulu sürümden (ayar dosyasındaki `APP_VERSION`) eski bir kit çalıştırılırsa sihirbaz durur: migration'lar ileri yönlüdür, eski kod yeni şemayla çalışmaz. İstisnalar: güncelleyicinin geri dönüşü (`--restore-db=…`: eski sürümün yedeği de geri yüklenir) ve bilinçli `--allow-downgrade`. Uzaktan güncellemede de yalnızca **daha yeni** sürüm teklif edilir, onaylanır ve kurulur (aynı sürümü yeniden kurmak için kitin sihirbazını yerelde çalıştırın).
+
+**Yanıt dosyası.** Yanıt dosyası **sürüm kitinin içinden** kullanılır (müşteri kurulumu; depo klasöründe `MODE=prod` + `INSTALL_PATH=native` kit olmadan çalışmaz, depoda Docker yolu ya da `MODE=dev` kullanın). `installer/answers.example` dosyasını kopyalayıp düzenleyin (örnek olduğu gibi de geçerlidir: yerel yol, boş uygulama, e-postasız). Kurallar (Linux ve Windows'ta aynı):
+
+- Satır başına bir `ANAHTAR=değer`; `#` ile başlayan satır yorumdur. Dosya UTF-8'dir (Windows Not Defteri'nin eklediği BOM ve CRLF satır sonları sorun değildir).
+- Tırnaksız değerde baştaki/sondaki boşluk atılır; **"boşluk + `#`" sonrası yorumdur** (`PORT=3000   # uygulama portu` → `3000`); `#` ile başlayan değer yorum sayılır, yani `SMTP_HOST=   # açıklama` **boş** değerdir (= varsayılan).
+- Değer `#`, ` #` ya da baştaki/sondaki boşluk içeriyorsa (parolalarda olabilir) **tırnak** kullanın: `SMTP_PASSWORD="a #b c"` ya da `'…'`. Tırnak içi olduğu gibi alınır; kaçış dizisi yoktur, değer aynı tırnak karakterini içeremez (diğer tırnak türünü seçin).
+- Boş değer = varsayılan. Anahtarlar yukarıdaki tablodaki sütundur; ayrıca `MODE` (`prod`/`dev`) ve `INSTALL_PATH` (`docker`/`native`). Bilinmeyen anahtar hata verir.
+
+Dosya **çalıştırılmaz**, yalnızca okunur; sihirbaz dosyayı hiçbir yere **kopyalamaz**. `SMTP_PASSWORD` ve `LICENSE_CODE` gizlidir: dosyada bulunabilir ancak sihirbaz uyarır ve **kurulum bitince dosyayı silmeniz** gerekir (Linux'ta `chmod 600`).
 
 ```bash
-./install.sh --answers=musteri.answers --dry-run     # önce ne yazılacağına bakın
-./install.sh --answers=musteri.answers                # sonra uygulayın
+tar -xzf muhasebe-erp-1.2.0-linux-x64.tar.gz && cd muhasebe-erp-1.2.0-linux-x64
+cp installer/answers.example ../musteri.answers && chmod 600 ../musteri.answers   # düzenleyin
+./install.sh --answers=../musteri.answers --dry-run     # önce ne yazılacağına bakın
+./install.sh --answers=../musteri.answers                # sonra uygulayın; sonra dosyayı silin
 ```
+
+Windows: kiti açın, `installer\answers.example` dosyasını kopyalayıp düzenleyin, yönetici PowerShell'de `powershell -ExecutionPolicy Bypass -File installer\install.ps1 -AnswersFile C:\yol\musteri.answers -DryRun`, sonra `-DryRun` olmadan.
 
 **Yeniden yapılandırma** (`--reconfigure`). Kurulumdan sonra e-posta, HTTPS/sertifika, yedek, lisans adresi/kodu ve kayıt kapısını **yeniden sorar** (mevcut değerler varsayılandır; parola için Enter = koru). Sürüm, veritabanı ve veriler değişmez; demo sorulmaz. Uygulama: eski ayar dosyaları zaman damgalı yedeklenir (`erp.env.bak-YYYYMMDD-HHMMSS`, chmod 600), yenisi önce geçici dosyaya yazılıp yerine taşınır (atomik), hizmet yeniden başlatılır ve `/api/health/ready` doğrulanır; **sağlık başarısızsa eski ayarlar otomatik geri yazılır**. Yerel (Linux) kurulumda kurulu kopyadan: `sudo erp-setup --reconfigure`; Docker'da kit klasöründen: `./install.sh --reconfigure`; Windows yerelde `Program Files\MuhasebeERP\current\installer\install.ps1 -Reconfigure`. Sihirbazın durum dosyası (`/etc/muhasebe-erp/wizard.conf`, Docker'da `deploy/wizard.conf`, Windows'ta `ProgramData\MuhasebeERP\wizard.conf`) **gizli bilgi içermez**; yalnızca soruların varsayılanlarını ve demo durumunu tutar.
 
@@ -92,15 +106,25 @@ Diğer bayraklar: `--check`, `--mode=dev|prod`, `--path=docker|native`, `--acces
 |---|---|
 | dev / docker | `.env` (rastgele JWT), `docker compose up -d db`, geliştirme rolleri, `npm ci`, migration, demo verisi → `npm run dev` |
 | dev / native | Aynısı; veritabanı yerel PostgreSQL'de (`infra/postgres/init.sql`) |
-| prod / docker | İmaj kitteki derlenmiş dosyalardan yerelde oluşturulur (kaynak gerekmez); `deploy/.env` rastgele parolalar ve yanıtlarla yazılır (chmod 600 / yalnız yöneticiler), HTTPS seçildiyse `deploy/Caddyfile.local` + sertifikalar, `docker compose up -d`, sağlık kontrolü, (seçildiyse) demo verisi, lisans kapısı doğrulaması ve kod girildiyse etkinleştirme, Linux'ta günlük yedek zamanlayıcısı (`scripts/backup.sh --compose`). Windows'ta makine kimliği `ProgramData\MuhasebeERP\host-machine-id` dosyasına yazılıp `ERP_HOST_ID_FILE` ile bağlanır |
-| prod / native (Linux) | `/opt/muhasebe-erp/versions/<sürüm>` + `current` bağı, `/etc/muhasebe-erp/erp.env` (640, uygulama) ve `migrate.env` (600, şema sahibi), `muhasebe-erp` sistem kullanıcısı, systemd hizmeti (yoksa `erpctl start|stop|status|logs`; WSL'de systemd'yi açmayı önerir), günlük yedek zamanlayıcısı (varsayılan 02:30, son 14; `/var/lib/muhasebe-erp/backups`; hepsi sorulur), `erp-setup` kısayolu, isteğe bağlı ufw kuralı |
+| prod / docker | İmaj kitteki derlenmiş dosyalardan yerelde oluşturulur (kaynak gerekmez); `deploy/.env` rastgele parolalar ve yanıtlarla yazılır (chmod 600 / yalnız yöneticiler), HTTPS seçildiyse `deploy/Caddyfile.local` + sertifikalar, `docker compose up -d`, sağlık kontrolü, (seçildiyse) demo verisi, lisans kapısı doğrulaması ve kod girildiyse etkinleştirme, günlük yedek: Linux'ta systemd zamanlayıcısı/cron (`scripts/backup.sh --compose`), Windows'ta **Muhasebe ERP Yedek** görevi (`docker compose exec db pg_dump`; Docker Desktop o saatte çalışıyor olmalı). Kaplarda günlük döndürme açıktır (json-file, 5 × 10 MB). Windows'ta makine kimliği `ProgramData\MuhasebeERP\host-machine-id` dosyasına yazılıp `ERP_HOST_ID_FILE` ile bağlanır |
+| prod / native (Linux) | `/opt/muhasebe-erp/versions/<sürüm>` + `current` bağı, `/etc/muhasebe-erp/erp.env` (640, uygulama) ve `migrate.env` (600, şema sahibi), `muhasebe-erp` sistem kullanıcısı, systemd hizmeti (yoksa `erpctl start|stop|status|logs`; WSL'de systemd'yi açmayı önerir), günlük yedek zamanlayıcısı (varsayılan 02:30, son 14; `/var/backups/muhasebe-erp`, yalnız root; hepsi sorulur), uzaktan güncelleyicinin root'a ait çalışma klasörü `/var/lib/muhasebe-erp-updater`, `erp-setup` kısayolu, isteğe bağlı ufw kuralı |
 | prod / native (Windows) | `Program Files\MuhasebeERP\versions\<sürüm>` + `current` bağlantısı (junction), `ProgramData\MuhasebeERP` (yalnız SYSTEM ve Yöneticiler; ayarlar, günlükler, yedekler), **Muhasebe ERP** Windows hizmeti (WinSW; otomatik başlar, çökmede yeniden başlar; LocalService hesabıyla), günlük yedek zamanlanmış görevi (varsayılan 02:30, son 14), isteğe bağlı güvenlik duvarı kuralı, masaüstü kısayolu |
 
-Yeniden çalıştırma = yükseltme: yeni kitin sihirbazı ayarları korur, uygulamayı durdurur, yeni sürümü yan klasöre kopyalar, `current`'ı çevirir, migration'ı uygular, başlatır; migration başarısızsa önceki sürüme döner. **Yükseltmeden önce yedek alın** (`sudo /opt/muhasebe-erp/bin/erp-backup` / `ProgramData\MuhasebeERP` altındaki yedek görevi; Docker: `scripts/backup.sh --compose`). Kaldırma: `./install.sh --uninstall` (veri korunur), `--uninstall --purge` (veritabanı, ayarlar ve yedekler silinir; Windows: `-Uninstall -Purge`).
+Yeniden çalıştırma = yükseltme: yeni kitin sihirbazı ayarları korur, uygulamayı durdurur, yeni sürümü yan klasöre kopyalar, `current`'ı çevirir, migration'ı uygular, başlatır; migration başarısızsa önceki sürüme döner. **Yükseltmeden önce yedek alın** (`sudo /opt/muhasebe-erp/bin/erp-backup` / `ProgramData\MuhasebeERP` altındaki yedek görevi; Docker: `scripts/backup.sh --compose`).
 
-**Sürüm kiti üretimi (satıcı):** `npm run release -- --version=1.2.0 [--targets=linux-x64,win-x64]` → `release/1.2.0/` altında arşivler ve `SHA256SUMS`. Kitte derlenmiş API + web (kaynak haritası yok), hedef platformun üretim bağımlılıkları (yerel argon2 dahil), resmî Node.js çalışma zamanı, kurulum sihirbazı, Docker yolu dosyaları; Windows kitinde ayrıca WinSW (MIT, sabit SHA-256) ve Docker yolu için Linux bağımlılıkları bulunur. Kitte `dist/demo.js` de bulunur: yalnızca sihirbazın demo sorusuna "evet" denirse ve `ALLOW_DEMO=true` verilerek çalıştırılır (üretimde aksi halde reddedilir). Kit lisanslı derlenir (satıcı açık anahtarı gömülü; [LICENSING.md §5](LICENSING.md)). Kitler şimdilik yalnızca x64'tür.
+**Docker kurulum klasörü sabittir.** Docker yolunda kurulum, kitin açıldığı klasördür (`deploy/.env`, `deploy/Caddyfile.local`, `deploy/certs/`, `deploy/wizard.conf`, varsayılan `backups/` burada). Uzaktan güncelleme bu klasörü **yerinde** günceller (program dosyaları değişir, ayarlar/sertifikalar/yedekler taşınmaz); güncellemeden sonra da sihirbazı, yedek betiğini ve `docker compose` komutlarını aynı klasörden çalıştırın. Elle yükseltmede yeni kiti başka bir klasöre açıp oradan `./install.sh` çalıştırırsanız sihirbaz çalışan kurulumu (compose etiketi) bulur, onayınızla ayarları yeni klasöre **taşır**, yedek zamanlayıcısını yeni yola çevirir ve eski klasöre `.erp-tasindi` notu bırakır; o klasördeki sihirbaz artık çalışmaz ve yeni yeri söyler. Eski bir kopyadan (canlı kurulum başka klasördeyken) sihirbaz çalışmaz. Eski sürümlerin güncelleyicisiyle güncellenmiş kurulumlarda canlı klasör `/var/lib/muhasebe-erp/updater/kits/<sürüm>/…` olabilir: `docker compose ls` (CONFIG FILES sütunu) ile bulun.
 
-**Sınamalar:** Linux yerel ve Docker yolları (dev ve prod) Ubuntu 24.04 üzerinde uçtan uca denenmiştir; yapılandırma aşaması (boş/demo kurulum, lisans kapısı, e-posta testi, yeniden yapılandırma, kuru çalıştırma) Linux yerel yolunda sahte bir kitle denenmiştir (Docker/Caddy/HTTPS ve gerçek SMTP sağlayıcısı bu ortamda denenmedi). Windows sihirbazı **Windows'ta çalıştırılarak denenmemiştir**: PowerShell ayrıştırıcısıyla sözdizimi, kitaplık işlevleri (doğrulayıcılar, SMTP adresi, yanıt dosyası, ortam düzenleyici, sertifika denetimi, e-posta sorusu) PowerShell 7 ile Linux'ta sınanmış, Windows PowerShell 5.1 uyumluluğu ise okuyarak denetlenmiştir; gerçek bir Windows makinede ilk kurulumu bu bölüme göre doğrulayın (özellikle PostgreSQL sessiz kurulumu, hizmet hesabı, ACL'ler, UAC ile yeniden başlatma ve yeni sorular).
+**Kaldırma.** `./install.sh --uninstall` (Windows `-Uninstall`) programı ve hizmetleri kaldırır, **veriyi korur**: yerelde hizmet, zamanlayıcılar, `/opt/muhasebe-erp`, kısayollar silinir; veritabanı, `/etc/muhasebe-erp` ve yedekler kalır. Docker'da kaplar `docker compose down` ile durdurulur (veritabanı birimi, `deploy/.env` ve yedekler kalır), yedek/güncelleyici zamanlayıcıları silinir. Önce `--dry-run` ile neyin silineceğini görün. `--purge` ayrıca **kalıcı olarak** siler ve terminalde **`SIL` yazarak onay** ister (`--yes` bu onayı vermez; betikten bilerek silmek için `--i-understand-purge` / `-IUnderstandPurge`):
+
+| Yol | `--purge` siler | `--purge` korur |
+|---|---|---|
+| Linux yerel | Sihirbazın **oluşturduğu** veritabanı (`wizard.conf` → `DB_NAME`, `DB_CREATED`; kurulumdan önce var olan veritabanı silinmez), `erp`/`erp_app` rolleri (başka veritabanı kullanıyorsa korunur; kurulumdan önce varsa silinmez), `/etc/muhasebe-erp`, `/var/lib/muhasebe-erp`, varsayılan yedek klasörü `/var/backups/muhasebe-erp`, `muhasebe-erp` kullanıcısı | Özel yedek klasörü, PostgreSQL programı ve kümesi |
+| Windows yerel | Sihirbazın oluşturduğu veritabanı ve roller (aynı kurallar), `ProgramData\MuhasebeERP` (ayarlar, günlükler, varsayılan yedekler) | Özel yedek klasörü, PostgreSQL programı |
+| Docker (Linux/Windows) | Compose birimleri (`docker compose down -v`: **veritabanı** ve Caddy sertifika verisi), `deploy/.env`, `Caddyfile.local`, `certs/`, `wizard.conf`, varsayılan `backups/` | Özel yedek klasörü, kit klasörünün program dosyaları, Docker imajları |
+
+**Sürüm kiti üretimi (satıcı):** `LICENSE_SERVER_URL=https://lisans.firma.com npm run release -- --version=1.2.0 [--targets=linux-x64,win-x64] [--out=DİZİN]` → `release/1.2.0/` (ya da `DİZİN/1.2.0/`, göreli/mutlak) altında arşivler ve `SHA256SUMS`. Lisans sunucusu adresi verilmeden kit üretilmez (yalnızca çevrimdışı etkinleştirilecek bir kit için bilerek `--allow-no-license-server`); adres derlemeye gömülür ve `kit.json`'a (`licenseServerUrl`) yazılır. Kitte derlenmiş API + web (kaynak haritası yok), hedef platformun üretim bağımlılıkları (yerel argon2 dahil), resmî Node.js çalışma zamanı, kurulum sihirbazı, Docker yolu dosyaları; Windows kitinde ayrıca WinSW (MIT, sabit SHA-256) ve Docker yolu için Linux bağımlılıkları bulunur. Kitte `dist/demo.js` de bulunur: yalnızca sihirbazın demo sorusuna "evet" denirse ve `ALLOW_DEMO=true` verilerek çalıştırılır (üretimde aksi halde reddedilir). Kit lisanslı derlenir (satıcı açık anahtarı gömülü; [LICENSING.md §5](LICENSING.md)). Kitler şimdilik yalnızca x64'tür.
+
+**Sınamalar:** Linux yerel ve Docker yolları (dev ve prod) Ubuntu 24.04 üzerinde uçtan uca denenmiştir; yapılandırma aşaması (boş/demo kurulum, lisans kapısı, e-posta testi, yeniden yapılandırma, kuru çalıştırma) Linux yerel yolunda sahte bir kitle denenmiştir (Docker/Caddy/HTTPS ve gerçek SMTP sağlayıcısı bu ortamda denenmedi). Windows sihirbazı **Windows'ta çalıştırılarak denenmemiştir**: PowerShell ayrıştırıcısıyla sözdizimi, kitaplık işlevleri (doğrulayıcılar, SMTP adresi, yanıt dosyası, ortam düzenleyici, sertifika denetimi, e-posta sorusu) PowerShell 7 ile Linux'ta sınanmış, Windows PowerShell 5.1 uyumluluğu ise okuyarak denetlenmiştir; gerçek bir Windows makinede ilk kurulumu bu bölüme göre doğrulayın (özellikle PostgreSQL sessiz kurulumu, hizmet hesabı, ACL'ler, UAC ile yeniden başlatma ve yeni sorular). Yanıt dosyası kuralları (bash ve PowerShell aynı dosyalarla), sürüm karşılaştırması, kaldırmanın kuru çalıştırması ve kalıcı silme onayı (bash ve PowerShell), yedek temizliği ve parolanın komut satırında olmaması, üretilen JSON/yedek betiklerinin tırnaklaması taklit yönetici komutlarıyla otomatik sınanır (`apps/api/test/installer-ops.test.ts`); Docker kurulum klasörünün yerinde güncellenmesi ve HTTPS doğrulaması güncelleyicinin birim sınamalarındadır. Gerçek Docker motoruyla yerinde güncelleme/taşıma, Windows'ta Docker yedek görevi (SYSTEM hesabıyla Docker Desktop erişimi) ve EDB kurulum programının `--optionfile` seçeneği bu ortamda **denenmedi**: ilk müşteri kurulumunda doğrulayın.
 
 ### Docker Compose ile elle kurulum
 
@@ -195,8 +219,18 @@ Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceli
 - **Parola kurtarma:** SMTP açıksa kullanıcı "Şifremi unuttum" ile sıfırlar. SMTP kapalıysa operatör, geçici parola üretir (oturumlar kapanır, ilk girişte parola değişimi zorunlu olur):
 
   ```bash
+  # Docker (kurulum klasöründe)
   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env exec app \
     node dist/admin.js reset-password --email=kisi@ornek.com
+  # Linux yerel (Docker'sız)
+  sudo /opt/muhasebe-erp/current/app/runtime/node --env-file=/etc/muhasebe-erp/erp.env \
+    /opt/muhasebe-erp/current/app/dist/admin.js reset-password --email=kisi@ornek.com
+  ```
+
+  ```powershell
+  # Windows yerel (yönetici PowerShell)
+  & "$env:ProgramFiles\MuhasebeERP\current\app\runtime\node.exe" --env-file="$env:ProgramData\MuhasebeERP\erp.env" `
+    "$env:ProgramFiles\MuhasebeERP\current\app\dist\admin.js" reset-password --email=kisi@ornek.com
   ```
 
   Komut çalışma zamanı rolüyle (`DATABASE_URL`) çalışır; şema sahibi parolası gerekmez. Geçici parola yalnızca komut çıktısında görünür; kullanıcıya güvenli bir kanaldan iletin. İşlem `security_events` tablosuna `via: operator-cli` imzasıyla yazılır.
@@ -207,7 +241,11 @@ Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceli
   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env exec app node dist/admin.js devices
   docker compose … exec app node dist/admin.js devices:revoke --id=<kimlik|ön ek>
   docker compose … exec app node dist/admin.js devices:revoke-all --yes      # herkes yeniden giriş yapar
+  # Linux yerel: aynı komutlar ("node dist/admin.js" yerine)
+  sudo /opt/muhasebe-erp/current/app/runtime/node --env-file=/etc/muhasebe-erp/erp.env /opt/muhasebe-erp/current/app/dist/admin.js devices
   ```
+
+  Windows yerelde parola sıfırlamadaki `node.exe … admin.js` satırının sonuna `devices`, `devices:revoke --id=…` ya da `devices:revoke-all --yes` yazın.
 - Rol değişiklikleri: `owner` rolünü yalnızca sahip verir/alır; son sahip düşürülemez.
 - **Yeni şirket ve kurulum yönetimi:** yeni şirketi yalnızca mevcut bir şirketin sahibi/yöneticisi açar. Lisans, uzaktan güncelleme ve cihaz yönetimi **kurulumun sahibi kuruluşa** aittir (ilk şirketi açan kuruluş; yükseltilen kurulumlarda en eski şirketin kuruluşu). Açık kayıtla (`REGISTRATION_ENABLED=true`) gelen başka bir kuruluş bunları yönetemez ama kendi ilk şirketini açabilir (lisans şirket sınırından düşer) — özel kurulumda kaydı kapatın. Sahip kuruluşu değiştirmek gerekirse (ör. yanlış kuruluş sabitlendi) şema sahibi rolle:
 
@@ -228,13 +266,16 @@ Satıcı yeni sürümü lisans panelinden **gönderir**; müşteride **kurulum s
 2. Sahip aynı kartta sürüm notunu görür: **Şimdi güncelle** ya da **Bu gece güncelle (02:00, sunucu saati)**. Onay `security_events`'e yazılır (`update_requested`).
 3. Güncelleyici (Linux: `muhasebe-erp-updater.timer`, dakikada bir; Windows: **Muhasebe ERP Güncelleyici** zamanlanmış görevi, SYSTEM) onaylı işi alır: kiti lisans sunucusundan kısa ömürlü, kuruluma özel bir belirteçle indirir, **SHA-256 ve boyutu** manifestoyla karşılaştırır, **yedek alır** (yedek alınamazsa güncelleme yapılmaz), kiti açar ve **yeni kitin kurulum sihirbazını** etkileşimsiz çalıştırır (durdurma, yan klasöre kopyalama, migration, başlatma, sağlık). Uygulama yeni sürümle yanıt verince durum **Tamamlandı** olur.
 4. **Başarısızlıkta:** migration tek işlemde çalıştığından migration hatası veritabanını değiştirmez; eski sürüm çalışmaya devam eder → **Başarısız**. Yeni sürüm migration sonrası ayağa kalkmazsa güncelleyici **önceki sürümün sihirbazını yedekten veritabanı geri yüklemesiyle** çalıştırır → **Geri alındı** (güncelleme sonrası girilen veri yoktur, çünkü uygulama kapalıydı). İkisi de olmazsa durum ve yedeğin yolu günlükte kalır; §6'ya göre elle geri yükleyin.
-   Güncelleyicinin durum bildirimi (`POST /api/system/updater/report`) lisans salt-okunur moddayken de kabul edilir; sonuç (başarısız/geri alındı) böylece kaydedilir.
+   Güncelleyicinin durum bildirimi (`POST /api/system/updater/report`) lisans salt-okunur moddayken de kabul edilir; sonuç (başarısız/geri alındı) böylece kaydedilir. Bildirim yine de gidemezse aynı güncelleme her dakika baştan denenmez: en çok 3 deneme yapılır (aralarında 15 dk ve 1 saat beklenir), sonra **Başarısız** bildirilir; sahip yeniden onaylayabilir.
+5. HTTPS (Caddy) yapılandırılmış Docker kurulumunda "Tamamlandı" demeden önce uygulamanın **HTTPS üzerinden** de yanıt verdiği doğrulanır (`https://127.0.0.1:<HTTPS portu>`, alan adı SNI ile); yanıt yoksa durum **Başarısız** olur ve iletide nedeni yazar.
 
 Gereksinimler ve notlar:
 
-- Docker'lı ve Docker'sız kurulumlarda çalışır (Docker'da yedek `pg_dump` kap içinde alınır, ayarlar yeni kit klasörüne taşınır, aynı compose projesi ve birimler kullanılır).
+- Docker'lı ve Docker'sız kurulumlarda çalışır. Docker'da yedek `pg_dump` kap içinde alınır ve **kurulum klasörü değişmez**: yeni kitin program dosyaları kurulum klasörüne yerinde konur (eskileri geri dönüş için `…/kits/<eski sürüm>-onceki` altında saklanır), `deploy/.env`, `Caddyfile.local`, `certs/`, `wizard.conf` ve `backups/` yerinde kalır; imaj sürüm etiketlidir (`muhasebe-erp:<sürüm>`), aynı compose projesi ve birimler kullanılır. Güncellemeden sonra da kurulum klasörünüz aynıdır (§2 "Docker kurulum klasörü sabittir").
+- Sürüm düşürme yapılmaz: daha eski ya da aynı sürüm teklifi saklanmaz, onaylanamaz (`UPDATE_NOT_NEWER`) ve güncelleyici eski sürümü kurmaz.
+- Güncelleme öncesi Docker dökümlerinden (`erp-oncesi-*.dump`) yalnızca son 3'ü saklanır.
 - Linux'ta **systemd** gerekir; yoksa (ör. systemd kapalı WSL) onaylanan güncellemeyi `sudo erp-update` çalıştırır.
-- Günlük: Linux `/var/lib/muhasebe-erp/updater/updater.log`, Windows `C:\ProgramData\MuhasebeERP\updater-work\updater.log`. Ayar: `/etc/muhasebe-erp/updater.json` / `C:\ProgramData\MuhasebeERP\updater.json`.
+- Günlük: Linux `/var/lib/muhasebe-erp-updater/updater.log` (yalnız root; eski kurulumlardaki `/var/lib/muhasebe-erp/updater` — hizmet kullanıcısının klasörü — sihirbaz yeniden çalışınca buraya taşınır), Windows `C:\ProgramData\MuhasebeERP\updater-work\updater.log`. Ayar: `/etc/muhasebe-erp/updater.json` / `C:\ProgramData\MuhasebeERP\updater.json`. Kilit dosyası, sahibi süreç yaşıyorsa (en çok 6 saat) geçerlidir; süreç ölmüşse hemen bırakılır.
 - Uygulama ile güncelleyici, sihirbazın ürettiği `ERP_UPDATER_TOKEN` ile konuşur (ayar dosyasında; yoksa uzaktan güncelleme kapalıdır, uçlar 401 döner). Kalp atışında satıcıya ayrıca kit hedefi (`linux-x64`/`win-x64`) gönderilir; başka veri gönderilmez.
 - Elle (sihirbazsız) kurulumlarda teklif yine görünür ama onay düğmesi yerine "yeni kiti indirip sihirbazla güncelleyin" uyarısı çıkar.
 
@@ -267,13 +308,15 @@ scripts/backup.sh --compose --dir /var/backups/erp --keep-days 30
 MIGRATION_DATABASE_URL=postgres://erp:…@host/erp scripts/backup.sh   # doğrudan kip (compose dışı)
 ```
 
-Bir `pg_dump -Fc` dökümü üretir: **tüm şirketlerin verisi**, erişim izinleri (GRANT) ve migration geçmişi dökümdedir. Betik kısmi dosya bırakmaz (önce geçici dosyaya yazar, `pg_restore --list` ile arşivi doğrular, sonra adlandırır), `sha256` özetini yanına yazar ve `--keep-days`'ten eski `erp-*.dump` dosyalarını siler. Dizin yalnızca sahibine açıktır (0700).
+Bir `pg_dump -Fc` dökümü üretir: **tüm şirketlerin verisi**, erişim izinleri (GRANT) ve migration geçmişi dökümdedir. Betik kısmi dosya bırakmaz (önce geçici dosyaya yazar, `pg_restore --list` ile arşivi doğrular, sonra adlandırır), `sha256` özetini yanına yazar ve yalnızca **kendi adlandırdığı** `erp-<veritabanı>-<YYYYMMDDTHHMMSSZ>.dump` dosyalarını temizler (`--keep-days N`: N günden eski; `--keep-count N`: en yeni N, en az 1; aynı klasördeki başka dosyalara dokunmaz). Parola komut satırına yazılmaz (compose: kap içi yerel soket; doğrudan kip: `PG*` ortam değişkenleri). Dizin yalnızca sahibine açıktır (0700).
 
-Günlük yedek için cron örneği (her gece 02:15):
+Sihirbazla kurulan sistemlerde günlük yedek **zaten kuruludur** (Linux: `muhasebe-erp-backup.timer` ya da `/etc/cron.d/muhasebe-erp-backup`; Windows: **Muhasebe ERP Yedek** görevi). Elle kurulan Docker sisteminde cron örneği (her gece 02:15; `cd` hedefi `deploy/` klasörünü içeren **kurulum klasörüdür**, ör. kitin açıldığı yer — `/opt/muhasebe-erp` değil):
 
 ```cron
-15 2 * * * cd /opt/muhasebe-erp && scripts/backup.sh --compose --dir /var/backups/erp >> /var/log/erp-backup.log 2>&1
+15 2 * * * cd /srv/muhasebe-erp-1.2.0-linux-x64 && bash scripts/backup.sh --compose --dir /var/backups/erp --keep-count 14 >> /var/log/erp-backup.log 2>&1
 ```
+
+Yerel (Docker'sız) Linux kurulumunda yedek komutu `sudo /opt/muhasebe-erp/bin/erp-backup`'tır (yedekler `/var/backups/muhasebe-erp`); Windows yerelde `powershell -ExecutionPolicy Bypass -File "C:\Program Files\MuhasebeERP\bin\erp-backup.ps1"`, Windows Docker'da `…\ProgramData\MuhasebeERP\bin\erp-backup-docker.ps1` (Docker Desktop çalışıyor olmalı).
 
 **Yedek dosyası müşteri verisidir.** (1) Başka bir makineye/ofis dışına kopyalayın (rclone, rsync, nesne depolama); (2) şifreleyin (`age` ya da `gpg`); (3) `deploy/.env` dosyasını ayrıca saklayın. Aynı diske alınan yedek, disk arızasına karşı yedek değildir.
 
@@ -297,7 +340,23 @@ RESTORE_DATABASE_URL=postgres://erp:…@host/BOS_VERITABANI scripts/restore.sh y
 
 Geri yükleme tek işlemde çalışır; hata olursa hedefte yarım veri kalmaz. Sonrasında `/api/health/ready` ve bir oturum açma ile doğrulayın.
 
-**Yerel (Docker'sız) kurulumda** yedekler `/var/lib/muhasebe-erp/backups` (Linux) ya da `C:\ProgramData\MuhasebeERP\backups` (Windows) altındadır. Felaket kurtarma: hizmeti durdurun (`erpctl stop` / `services.msc` → Muhasebe ERP), süper kullanıcıyla veritabanını silip `erp` sahibiyle boş yaratın (`DROP DATABASE erp; CREATE DATABASE erp OWNER erp; GRANT CONNECT ON DATABASE erp TO erp_app; REVOKE ALL ON DATABASE erp FROM PUBLIC;`), ardından `RESTORE_DATABASE_URL=<migrate.env içindeki adres> scripts/restore.sh yedek.dump` (Windows'ta `pg_restore --exit-on-error --single-transaction --no-owner --role=erp -d <adres> yedek.dump`) ve hizmeti başlatın.
+**Yerel (Docker'sız) kurulumda geri yükleme.** Yedekler `/var/backups/muhasebe-erp` (Linux; eski kurulumlarda `/var/lib/muhasebe-erp/backups`) ya da `C:\ProgramData\MuhasebeERP\backups` (Windows) altındadır; `scripts/restore.sh` yerel kuruluma kopyalanmaz. En kolay ve önerilen yol, kurulu sürümün sihirbazının yerleşik geri yüklemesidir: hizmeti durdurur, veritabanını **silip** `erp` sahibiyle yeniden yaratır, yedeği tek işlemde yükler, migration'ı uygular ve başlatır (parola komut satırına yazılmaz):
+
+```bash
+# Linux (yönetici): yedek, kurulu sürümle aynı ya da daha eski bir sürümden alınmış olmalı
+sudo erp-setup --yes --restore-db=/var/backups/muhasebe-erp/erp-20260930-023000.dump
+```
+
+```powershell
+# Windows (yönetici PowerShell)
+powershell -ExecutionPolicy Bypass -File "$env:ProgramFiles\MuhasebeERP\current\installer\install.ps1" -Yes -RestoreDb "C:\ProgramData\MuhasebeERP\backups\erp-20260930-023000.dump"
+```
+
+(PostgreSQL'i sihirbaz kurmadıysa süper kullanıcı parolası istenir: `-PgSuperPasswordFile <parolayı içeren dosya>`; dosya okunduktan sonra silinir.)
+
+Elle yapmak isterseniz: hizmeti durdurun (`sudo erpctl stop` / `services.msc` → Muhasebe ERP), süper kullanıcıyla (`sudo -u postgres psql`; Windows: `psql -U postgres`) `DROP DATABASE erp WITH (FORCE); CREATE DATABASE erp OWNER erp; REVOKE ALL ON DATABASE erp FROM PUBLIC; GRANT CONNECT ON DATABASE erp TO erp_app;`, ardından şema sahibiyle `pg_restore --exit-on-error --single-transaction --no-owner --role=erp -d erp yedek.dump` (bağlantı bilgileri `migrate.env`'deki adresten: Linux'ta `sudo` ile `PGHOST=127.0.0.1 PGUSER=erp PGPASSWORD=… /usr/lib/postgresql/16/bin/pg_restore …`; Windows'ta `C:\Program Files\PostgreSQL\16\bin\pg_restore.exe`, parolayı `$env:PGPASSWORD` ile verin, komut satırına yazmayın) ve hizmeti başlatın (`sudo erpctl start`).
+
+**Lisans ve başka sunucuya geri yükleme.** Lisans, sunucu parmak izine (ana makine kimliği + PostgreSQL **küme** kimliği) bağlıdır. Yedeği **aynı** kümeye geri yüklemek lisansı etkilemez. **Başka bir PostgreSQL kümesine** (yeni sunucu, yeniden kurulan PostgreSQL, Docker birimi silinip yeniden yaratılmış veritabanı) geri yüklerseniz parmak izi değişir ve uygulama **salt-okunur** açılır (veriler görünür, yazma kapalı). Açmak için: (1) mümkünse eski sunucuda **Ayarlar › Lisans › Bu sunucuda lisansı kaldır**; (2) yeni sunucuda **Ayarlar › Lisans**'tan **aynı lisans koduyla yeniden etkinleştirin** (internet yoksa çevrimdışı etkinleştirme); (3) eski sunucuya erişilemiyorsa satıcıdan ilgili etkinleştirmeyi devre dışı bırakmasını isteyin ([LICENSING.md §6](LICENSING.md) "Sunucu taşıma").
 
 ### Tatbikat: "yedeğim gerçekten geri yüklenir mi?"
 

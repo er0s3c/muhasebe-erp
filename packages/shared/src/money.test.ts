@@ -157,6 +157,10 @@ describe('permissions', () => {
     expect(hasPermission('viewer', 'ledger.read')).toBe(true);
     expect(hasPermission('viewer', 'ledger.post')).toBe(false);
   });
+  it('şantiye sorumlusu carileri okur (seçiciler için) ama yönetemez', () => {
+    expect(hasPermission('site_manager', 'parties.read')).toBe(true);
+    expect(hasPermission('site_manager', 'parties.manage')).toBe(false);
+  });
 });
 
 describe('ledger schemas', () => {

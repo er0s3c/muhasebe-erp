@@ -4,13 +4,22 @@
 # Gerekenler (.env): LICENSE_DOMAIN, CLOUDFLARED_DIR (içinde config.yml + <tünel-id>.json; 65532 okuyabilmeli).
 # Alan adının DNS kaydı tünele CNAME'dir (cloudflared tunnel route dns <tünel> <alan adı>).
 # Ayrıntı: docs/LICENSING.md
+# Kap günlükleri döndürülür (json-file): her kap en çok 5 × 10 MB; disk dolmasın
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
 services:
   license:
+    logging: *default-logging
     environment:
       # Caddy X-Forwarded-For'u Cf-Connecting-IP'den gelen tek istemci adresiyle yazar; license yalnızca iç ağdaki Caddy'ye güvenir.
       TRUST_PROXY: 'loopback,uniquelocal'
 
   caddy:
+    logging: *default-logging
     ports: !reset []
     volumes: !override
       - ./Caddyfile.tunnel:/etc/caddy/Caddyfile:ro
@@ -18,6 +27,7 @@ services:
       - caddy_config:/config
 
   cloudflared:
+    logging: *default-logging
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: ['tunnel', '--no-autoupdate', '--config', '/etc/cloudflared/config.yml', 'run']

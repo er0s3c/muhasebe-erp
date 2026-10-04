@@ -1,7 +1,12 @@
 /**
  * Sürüm kiti (müşteriye kaynaksız teslim) üretimi.
  *
- *   npm run release -- --version=1.2.0 [--targets=linux-x64,win-x64] [--skip-build] [--keep] [--out=release]
+ *   LICENSE_SERVER_URL=https://lisans.firma.com npm run release -- --version=1.2.0 [--targets=linux-x64,win-x64] [--skip-build]
+ *       [--keep] [--out=release] [--allow-no-license-server]
+ *
+ * Lisans sunucusu adresi (LICENSE_SERVER_URL, https) derlemeye gömülür ve kit.json'a yazılır; yoksa müşteri kurulumunda
+ * çevrimiçi etkinleştirme yapılamaz (LICENSE_SERVER_NOT_CONFIGURED). Bu yüzden adres verilmeden kit üretilmez; yalnızca
+ * çevrimdışı etkinleştirmeyle teslim edilecek bir kit için bilerek --allow-no-license-server verilir.
  *
  * Her hedef için tek arşiv üretir (release/<sürüm>/):
  *   muhasebe-erp-<sürüm>-linux-x64.tar.gz   Linux ve WSL (Ubuntu/Debian) — ./install.sh
@@ -29,7 +34,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, join, relative } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { unzipSync, zipSync, type Zippable } from 'fflate';
 
 type Target = 'linux-x64' | 'win-x64';
@@ -63,15 +68,31 @@ if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(version))
 const targets = (args.targets ? args.targets.split(',') : ALL_TARGETS) as Target[];
 for (const t of targets)
   if (!ALL_TARGETS.includes(t)) fail(`Bilinmeyen hedef: ${t} (${ALL_TARGETS.join(', ')})`);
-const outDir = join(root, args.out ?? 'release', version);
-const cache = join(root, args.out ?? 'release', '.cache');
-mkdirSync(outDir, { recursive: true });
-mkdirSync(cache, { recursive: true });
-
 function fail(msg: string): never {
   console.error(`✗ ${msg}`);
   process.exit(1);
 }
+
+// Lisans sunucusu adresi: kitin çevrimiçi etkinleştirebilmesi için zorunlu (bilinçli istisna: --allow-no-license-server)
+const licenseServerUrl = (process.env.LICENSE_SERVER_URL ?? '').trim();
+const allowNoLicenseServer = args['allow-no-license-server'] === 'true';
+if (!licenseServerUrl && !allowNoLicenseServer) {
+  fail(
+    'LICENSE_SERVER_URL verilmedi: bu kit lisansı çevrimiçi etkinleştiremez. Adresi verin (LICENSE_SERVER_URL=https://lisans.firma.com npm run release -- …) ' +
+      'ya da yalnızca çevrimdışı etkinleştirme için bilerek --allow-no-license-server ekleyin.',
+  );
+}
+if (licenseServerUrl && !/^https:\/\/[^/\s]+(\/\S*)?$/.test(licenseServerUrl) && process.env.LICENSE_ALLOW_INSECURE_URL !== 'true') {
+  fail(`LICENSE_SERVER_URL https:// ile başlamalı (verilen: ${licenseServerUrl})`);
+}
+if (!licenseServerUrl) console.warn('! UYARI: lisans sunucusu adresi YOK (--allow-no-license-server): kit yalnızca çevrimdışı etkinleştirilebilir.');
+
+// --out göreli ya da mutlak olabilir (mutlak yol depo altına eklenmez)
+const outBase = resolve(root, args.out ?? 'release');
+const outDir = join(outBase, version);
+const cache = join(outBase, '.cache');
+mkdirSync(outDir, { recursive: true });
+mkdirSync(cache, { recursive: true });
 const log = (m: string) => console.log(`• ${m}`);
 const sha256 = (buf: Buffer | Uint8Array) => createHash('sha256').update(buf).digest('hex');
 const run = (cmd: string, argv: string[], cwd = root, env: NodeJS.ProcessEnv = process.env) =>
@@ -97,6 +118,12 @@ if (args['skip-build'] !== 'true') {
 const apiDist = join(root, 'apps/api/dist');
 const webDist = join(root, 'apps/web/dist');
 const notices = join(root, 'THIRD-PARTY-NOTICES.md');
+// --skip-build: önceden derlenmiş paketin aynı lisans sunucusu adresiyle derlendiğini doğrula (derlemeye gömülüdür)
+if (args['skip-build'] === 'true' && licenseServerUrl && existsSync(join(apiDist, 'server.js'))) {
+  if (!readFileSync(join(apiDist, 'server.js'), 'utf8').includes(JSON.stringify(licenseServerUrl).slice(1, -1))) {
+    fail(`apps/api/dist bu lisans sunucusu adresiyle (${licenseServerUrl}) derlenmemiş: --skip-build olmadan yeniden derleyin`);
+  }
+}
 for (const p of [
   join(apiDist, 'server.js'),
   join(apiDist, 'migrate.js'),
@@ -184,12 +211,26 @@ function prodDeps(os: 'linux' | 'win32'): string {
   // Çalışma alanı bağları (@erp/*) pakete gömülüdür; kitte boşta kalan bağ olmasın
   rmSync(join(dir, 'node_modules/@erp'), { recursive: true, force: true });
   rmSync(join(dir, 'node_modules/.bin'), { recursive: true, force: true });
+  // --omit=dev bazı geliştirme araçlarının boş kapsam klasörlerini (ör. node_modules/@types) bırakır
+  removeEmptyDirs(join(dir, 'node_modules'));
   const argon = readdirSync(join(dir, 'node_modules/@node-rs')).filter((n) =>
     n.startsWith('argon2-'),
   );
   const want = os === 'win32' ? 'argon2-win32-x64-msvc' : 'argon2-linux-x64-gnu';
   if (!argon.includes(want)) fail(`${want} kurulmadı (bulunan: ${argon.join(', ') || 'yok'})`);
   return join(dir, 'node_modules');
+}
+
+/** Boş klasörleri (alttan üste) siler; klasörün kendisi boş kalırsa onu da. */
+function removeEmptyDirs(dir: string): boolean {
+  let empty = true;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory() && !e.isSymbolicLink()) {
+      if (!removeEmptyDirs(join(dir, e.name))) empty = false;
+    } else empty = false;
+  }
+  if (empty) rmSync(dir, { recursive: true, force: true });
+  return empty;
 }
 
 // ---- 4) Kit klasörü ----------------------------------------------------------------------------------------------------
@@ -208,10 +249,12 @@ async function stage(target: Target): Promise<string> {
   cpSync(notices, join(app, 'web', 'THIRD-PARTY-NOTICES.md'));
   const noMaps = { recursive: true, filter: (src: string) => !src.endsWith('.map') };
   cpSync(prodDeps(target === 'win-x64' ? 'win32' : 'linux'), join(app, 'node_modules'), noMaps);
+  removeEmptyDirs(join(app, 'node_modules'));
   await nodeRuntime(target, join(app, 'runtime'));
   if (target === 'win-x64') {
     // Docker yolu (Docker Desktop Linux kapları çalıştırır): imaj için Linux bağımlılıkları
     cpSync(prodDeps('linux'), join(dir, 'docker', 'node_modules'), noMaps);
+    removeEmptyDirs(join(dir, 'docker', 'node_modules'));
     const exe = await download(WINSW.url, `WinSW-${WINSW.version}-x64.exe`);
     if (sha256(exe) !== WINSW.sha256) fail('WinSW SHA-256 tutmadı');
     mkdirSync(join(dir, 'winsw'), { recursive: true });
@@ -248,7 +291,7 @@ async function stage(target: Target): Promise<string> {
   }
   writeFileSync(
     join(dir, 'kit.json'),
-    `${JSON.stringify({ product: 'muhasebe-erp', version, target, node: nodeVersion, builtAt: new Date().toISOString(), commit }, null, 2)}\n`,
+    `${JSON.stringify({ product: 'muhasebe-erp', version, target, node: nodeVersion, builtAt: new Date().toISOString(), commit, licenseServerUrl: licenseServerUrl || null }, null, 2)}\n`,
   );
   return dir;
 }

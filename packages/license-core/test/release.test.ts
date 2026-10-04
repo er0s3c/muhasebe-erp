@@ -34,4 +34,15 @@ describe('sürüm manifestosu', () => {
     expect(compareVersions('1.2.0-rc.1', '1.2.0')).toBe(-1);
     expect(compareVersions('1.2.0', '1.2.0')).toBe(0);
   });
+  it('sürüm karşılaştırma: SemVer ön sürüm önceliği', () => {
+    // SemVer 2.0 §11 örnek sırası
+    const order = ['1.0.0-alpha', '1.0.0-alpha.1', '1.0.0-alpha.beta', '1.0.0-beta', '1.0.0-beta.2', '1.0.0-beta.11', '1.0.0-rc.1', '1.0.0'];
+    for (let i = 0; i < order.length; i++) {
+      for (let j = 0; j < order.length; j++) expect(compareVersions(order[i]!, order[j]!), `${order[i]} ? ${order[j]}`).toBe(Math.sign(i - j));
+    }
+    expect(compareVersions('1.2.0-rc.10', '1.2.0-rc.9')).toBe(1);
+    expect(compareVersions('1.2.0-rc-1', '1.2.0-rc-2')).toBe(-1);
+    expect(compareVersions('1.2.0+build.5', '1.2.0')).toBe(0);
+    expect(compareVersions('1.2.0-rc.1', '1.1.9')).toBe(1);
+  });
 });

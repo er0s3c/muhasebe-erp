@@ -333,9 +333,10 @@ describe('raporlar ve dışa aktarma', async () => {
     expect((await sales.get(`/api/exports/journal-book?${q}`)).statusCode).toBe(403);
     expect((await sales.get(`/api/exports/sales-report?${q}`)).statusCode).toBe(403);
     expect((await sales.get('/api/exports/full-data')).statusCode).toBe(403);
-    // Şantiye sorumlusu: yalnızca stok
+    // Şantiye sorumlusu: stok; cari okuma (parties.read, cari seçiciler için) cari yaşlandırmayı da açar; muhasebe raporları kapalı
     expect((await sm.get(`/api/exports/stock-status?asOf=${day(12, 31)}`)).statusCode).toBe(200);
-    expect((await sm.get(`/api/exports/party-aging?asOf=${day(12, 31)}`)).statusCode).toBe(403);
+    expect((await sm.get(`/api/exports/party-aging?asOf=${day(12, 31)}`)).statusCode).toBe(200);
+    expect((await sm.get(`/api/exports/trial-balance?${q}`)).statusCode).toBe(403);
     expect((await sm.get('/api/exports/full-data')).statusCode).toBe(403);
     // Yeni JSON uçları da aynı izinle
     expect((await sales.get(`/api/reports/journal-book?${q}`)).statusCode).toBe(403);

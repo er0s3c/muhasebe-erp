@@ -19,8 +19,16 @@ x-demo-env: &demo-env
   JWT_SECRET: ${JWT_SECRET:?JWT_SECRET gerekli (openssl rand -base64 48)}
   DATABASE_URL: postgres://erp_app:${ERP_APP_PASSWORD}@db:5432/${ERP_DB_NAME:-erp_demo}
 
+# Kap günlükleri döndürülür (json-file): her kap en çok 5 × 10 MB; disk dolmasın
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
 services:
   db:
+    logging: *default-logging
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -38,6 +46,7 @@ services:
       retries: 20
 
   migrate:
+    logging: *default-logging
     <<: *image
     build:
       context: ..
@@ -56,6 +65,7 @@ services:
 
   # İlk açılışta demo verisini yükler; demo kullanıcı varsa dokunmaz (yeniden başlatmak veriyi SIFIRLAMAZ).
   demo-seed:
+    logging: *default-logging
     <<: *image
     command: ['node', 'dist/demo.js', 'seed']
     environment:
@@ -67,6 +77,7 @@ services:
 
   # Yıkıcı sıfırlama: yalnızca elle çalıştırılır (profil). Şemayı siler, migration + demo verisini yeniden yükler.
   demo-reset:
+    logging: *default-logging
     <<: *image
     profiles: ['reset']
     command: ['node', 'dist/demo.js', 'reset', '--confirm=${ERP_DB_NAME:-erp_demo}']
@@ -79,6 +90,7 @@ services:
     restart: 'no'
 
   app:
+    logging: *default-logging
     <<: *image
     restart: unless-stopped
     init: true

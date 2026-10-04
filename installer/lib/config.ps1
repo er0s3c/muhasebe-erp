@@ -15,20 +15,28 @@ $script:InputQueue = $null
 
 # ---- Yanıt dosyası ------------------------------------------------------------------------------------------------------
 # Hiçbir şey çalıştırılmaz/genişletilmez. Önceden dolu (komut satırı) değerler korunur; dosyada tekrar eden anahtarın sonuncusu geçerlidir.
+# Değer kuralları (install.sh load_answers ile aynı; belge: installer/answers.example, docs/OPERATIONS.md §2):
+#   UTF-8 (BOM olabilir), LF/CRLF; '#' ile başlayan satır yorum. Tırnaksız değerde baş/son boşluk atılır, "boşluk + #" sonrası
+#   yorumdur, '#' ile başlayan değer yorum sayılır (boş). "…" ya da '…' içi olduğu gibi alınır (kaçış yok; aynı tırnak içeremez).
 function Import-Answers([string]$file) {
   if (-not (Test-Path -LiteralPath $file)) { Die "Yanıt dosyası bulunamadı: $file" }
   $fromFile = @{}
   $n = 0
-  foreach ($raw in [IO.File]::ReadAllLines($file)) {
+  foreach ($raw in [IO.File]::ReadAllLines($file, (New-Object System.Text.UTF8Encoding $false))) {
     $n++
-    $line = $raw.TrimEnd("`r").Trim()
+    $line = $raw.TrimEnd("`r")
+    if ($n -eq 1) { $line = $line.TrimStart([char]0xFEFF) }   # UTF-8 BOM (Not Defteri)
+    $line = $line.Trim()
     if ($line -eq '' -or $line.StartsWith('#')) { continue }
     $i = $line.IndexOf('=')
     if ($i -lt 1) { Die "Yanıt dosyası $n. satır: 'ANAHTAR=değer' biçimi bekleniyor" }
     $key = $line.Substring(0, $i).Trim()
     $val = $line.Substring($i + 1).Trim()
     if ($val -match '^"([^"]*)"(\s+#.*)?$' -or $val -match "^'([^']*)'(\s+#.*)?$") { $val = $Matches[1] }
-    else { $val = ($val -replace '\s+#.*$', '').Trim() }
+    else {
+      $val = ($val -replace '\s+#.*$', '').Trim()
+      if ($val.StartsWith('#')) { $val = '' }   # "ANAHTAR=   # açıklama": değer yok, yalnızca yorum
+    }
     if ($script:AnswerKeys -notcontains $key) { Die "Yanıt dosyası $n. satır: bilinmeyen anahtar '$key' (geçerli anahtarlar: docs/OPERATIONS.md §2)" }
     if ($val -eq '') { continue }
     if ($script:A[$key] -ne '' -and -not $fromFile.ContainsKey($key)) { continue }
@@ -280,3 +288,33 @@ function Invoke-Tool([string[]]$argv) {
     return @{ Code = $LASTEXITCODE; Out = $out.Trim() }
   } finally { Remove-Item Env:\ERP_NODE_MODULES_DIR -ErrorAction SilentlyContinue }
 }
+
+# ---- Sürüm karşılaştırma (SemVer 2.0 önceliği; install.sh ver_cmp ve @erp/license-core compareVersions ile aynı) ----------
+function Test-Semver([string]$v) { return ($v -match '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$') }
+function Compare-SemVer([string]$a, [string]$b) {
+  $pa = $a.TrimStart('v').Split('+')[0]; $pb = $b.TrimStart('v').Split('+')[0]
+  $ia = $pa.IndexOf('-'); $ib = $pb.IndexOf('-')
+  $ca = if ($ia -ge 0) { $pa.Substring(0, $ia) } else { $pa }; $xa = if ($ia -ge 0) { $pa.Substring($ia + 1) } else { '' }
+  $cb = if ($ib -ge 0) { $pb.Substring(0, $ib) } else { $pb }; $xb = if ($ib -ge 0) { $pb.Substring($ib + 1) } else { '' }
+  $na = $ca.Split('.'); $nb = $cb.Split('.')
+  for ($i = 0; $i -lt 3; $i++) {
+    $x = 0; $y = 0
+    if ($i -lt $na.Count) { [void][long]::TryParse($na[$i], [ref]$x) }
+    if ($i -lt $nb.Count) { [void][long]::TryParse($nb[$i], [ref]$y) }
+    if ($x -lt $y) { return -1 }; if ($x -gt $y) { return 1 }
+  }
+  if (-not $xa -and -not $xb) { return 0 }
+  if (-not $xa) { return 1 }; if (-not $xb) { return -1 }
+  $sa = $xa.Split('.'); $sb = $xb.Split('.')
+  for ($i = 0; $i -lt [Math]::Max($sa.Count, $sb.Count); $i++) {
+    if ($i -ge $sa.Count) { return -1 }; if ($i -ge $sb.Count) { return 1 }
+    $p = $sa[$i]; $q = $sb[$i]; $pn = $p -match '^[0-9]+$'; $qn = $q -match '^[0-9]+$'
+    if ($pn -and $qn) { $d = [decimal]$p - [decimal]$q; if ($d -lt 0) { return -1 }; if ($d -gt 0) { return 1 } }
+    elseif ($pn -ne $qn) { if ($pn) { return -1 } else { return 1 } }
+    elseif ($p -cne $q) { if ([string]::CompareOrdinal($p, $q) -lt 0) { return -1 } else { return 1 } }
+  }
+  return 0
+}
+
+# PowerShell tek tırnaklı metin içine güvenli yerleştirme ('…' içinde ' iki katına çıkar)
+function ConvertTo-PsLiteral([string]$s) { return "'" + $s.Replace("'", "''") + "'" }

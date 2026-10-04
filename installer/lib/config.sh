@@ -19,6 +19,11 @@ answer_var() { # yanıt anahtarı → kabuk değişkeni (INSTALL_PATH, PATH ile 
 }
 
 # load_answers DOSYA — KEY=VALUE satırlarını okur. Hiçbir şey çalıştırılmaz/genişletilmez (eval yok). Komut satırı bayrakları dosyadan önceliklidir.
+# Değer kuralları (install.ps1 Import-Answers ile aynı; belge: installer/answers.example ve docs/OPERATIONS.md §2):
+#   - Dosya UTF-8'dir (başta BOM olabilir), satır sonu LF ya da CRLF. '#' ile başlayan satır yorumdur.
+#   - Tırnaksız değer: baştaki/sondaki boşluk atılır; "boşluk + #" sonrası yorumdur; '#' ile başlayan değer yorum sayılır (boş).
+#   - "…" ya da '…' içindeki değer olduğu gibi alınır (#, boşluk dahil; kaçış dizisi yoktur). Değer aynı tırnağı içeremez:
+#     diğer tırnak türünü kullanın. Boş değer = varsayılan.
 load_answers() {
   local f="$1" line key val n=0 var perm secret=0 k
   local -A from_file=()
@@ -26,6 +31,7 @@ load_answers() {
   while IFS= read -r line || [[ -n "$line" ]]; do
     n=$((n + 1))
     line="${line%$'\r'}"
+    (( n == 1 )) && line="${line#$'\xef\xbb\xbf'}"   # UTF-8 BOM (Windows Not Defteri)
     line="${line#"${line%%[![:space:]]*}"}"
     [[ -z "$line" || "${line:0:1}" == "#" ]] && continue
     [[ "$line" == *=* ]] || die "Yanıt dosyası $n. satır: 'ANAHTAR=değer' biçimi bekleniyor"
@@ -33,7 +39,10 @@ load_answers() {
     key="${key%"${key##*[![:space:]]}"}"
     val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
     if [[ "$val" =~ ^\"([^\"]*)\"([[:space:]]+#.*)?$ || "$val" =~ ^\'([^\']*)\'([[:space:]]+#.*)?$ ]]; then val="${BASH_REMATCH[1]}"
-    else val="${val%%[[:space:]]#*}"; val="${val%"${val##*[![:space:]]}"}"; fi
+    else
+      val="${val%%[[:space:]]#*}"; val="${val%"${val##*[![:space:]]}"}"
+      [[ "$val" == \#* ]] && val=''   # "ANAHTAR=   # açıklama": değer yok, yalnızca yorum
+    fi
     case " $ANSWER_KEYS " in *" $key "*) ;; *) die "Yanıt dosyası $n. satır: bilinmeyen anahtar '$key' (geçerli anahtarlar: docs/OPERATIONS.md §2)" ;; esac
     var="$(answer_var "$key")"
     [[ -z "$val" ]] && continue
@@ -345,3 +354,50 @@ cert_check_openssl() {
 # ---- Yedek ve zaman yardımcıları ---------------------------------------------------------------------------------------------
 time_to_oncalendar() { printf '*-*-* %s:00' "$1"; }
 time_to_cron() { printf '%d %d' "$((10#${1#*:}))" "$((10#${1%:*}))"; }
+
+# ---- Sürüm karşılaştırma (SemVer 2.0 önceliği; @erp/license-core compareVersions ile aynı) -------------------------------
+# ver_cmp A B → -1 | 0 | 1 (stdout)
+ver_cmp() {
+  local a="${1#v}" b="${2#v}" ap="" bp="" i x y xn yn
+  a="${a%%+*}"; b="${b%%+*}"
+  [[ "$a" == *-* ]] && { ap="${a#*-}"; a="${a%%-*}"; }
+  [[ "$b" == *-* ]] && { bp="${b#*-}"; b="${b%%-*}"; }
+  local -a an bn
+  IFS=. read -ra an <<< "$a"; IFS=. read -ra bn <<< "$b"
+  for i in 0 1 2; do
+    x="${an[i]:-0}"; y="${bn[i]:-0}"; [[ "$x" =~ ^[0-9]+$ ]] || x=0; [[ "$y" =~ ^[0-9]+$ ]] || y=0
+    if (( 10#$x < 10#$y )); then echo -1; return; elif (( 10#$x > 10#$y )); then echo 1; return; fi
+  done
+  if [[ -z "$ap" && -z "$bp" ]]; then echo 0; return; fi
+  [[ -z "$ap" ]] && { echo 1; return; }
+  [[ -z "$bp" ]] && { echo -1; return; }
+  local -a ai bi
+  IFS=. read -ra ai <<< "$ap"; IFS=. read -ra bi <<< "$bp"
+  for (( i = 0; i < ${#ai[@]} || i < ${#bi[@]}; i++ )); do
+    (( i >= ${#ai[@]} )) && { echo -1; return; }
+    (( i >= ${#bi[@]} )) && { echo 1; return; }
+    x="${ai[i]}"; y="${bi[i]}"; xn=0; yn=0
+    [[ "$x" =~ ^[0-9]+$ ]] && xn=1; [[ "$y" =~ ^[0-9]+$ ]] && yn=1
+    if (( xn && yn )); then
+      if (( 10#$x < 10#$y )); then echo -1; return; elif (( 10#$x > 10#$y )); then echo 1; return; fi
+    elif (( xn != yn )); then
+      if (( xn )); then echo -1; else echo 1; fi; return
+    elif [[ "$x" != "$y" ]]; then
+      if [[ "$x" < "$y" ]]; then echo -1; else echo 1; fi; return
+    fi
+  done
+  echo 0
+}
+is_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; }
+
+# ---- Üretilen dosyalarda güvenli tırnaklama --------------------------------------------------------------------------------
+# systemd birim satırı (ExecStart): "…" içinde \ " kaçışlı; % (belirteç) ve $ (değişken) iki katına çıkar
+sd_quote() { local v="$1"; v="${v//\\/\\\\}"; v="${v//\"/\\\"}"; v="${v//%/%%}"; v="${v//\$/\$\$}"; printf '"%s"' "$v"; }
+# systemd yol ayarı (WorkingDirectory=): tırnaksız; yalnızca % kaçışı
+sd_path() { printf '%s' "${1//%/%%}"; }
+# cron komut satırı: sh için %q; crontab'da % satır sonu demektir → \%
+cron_quote() { local q; q="$(printf '%q' "$1")"; printf '%s' "${q//%/\\%}"; }
+
+# ---- Ayar yedeklerinin temizliği: her dosyanın en yeni N yedeği (dosya.bak-YYYYMMDD-HHMMSS) kalır ---------------------------
+# prune_bak_list DOSYA N  (stdin: mevcut yedek yolları) → silinecek yollar (stdout)
+prune_bak_list() { grep -E "^$(printf '%s' "$1" | sed 's/[][\.*^$/]/\\&/g')\.bak-[0-9]{8}-[0-9]{6}$" | sort -r | tail -n +"$(( $2 + 1 ))"; }

@@ -12,6 +12,7 @@ import { existsSync } from 'node:fs';
 import { badRequest, errorHandler } from './http/errors';
 import { installZodTurkish } from '@erp/shared';
 import { MemoryLimiter, Semaphore } from './http/limits';
+import { isoTimestamps } from './http/timestamps';
 import { createMailer, type Mailer } from './modules/mail/mailer';
 import { assertLicensed, createLicenseService, type LicenseSetup } from './licensing';
 import { licenseRoutes } from './licensing/routes';
@@ -120,6 +121,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.addHook('onRequest', async (req) => {
     await assertLicensed(app.license, req);
   });
+  // Ham SQL'den gelen PostgreSQL zaman damgası metinleri ISO 8601 olarak gönderilir (select() ile gelen Date'lerle aynı biçim)
+  app.addHook('preSerialization', async (_req, _reply, payload) => isoTimestamps(payload));
   // API yanıtları (oturum, mali veri) tarayıcı ve ara önbelleklerde saklanmasın; dışa aktarmalar kendi başlığını koyar.
   app.addHook('onSend', async (req, reply) => {
     if (req.url.startsWith('/api/') && !reply.hasHeader('cache-control')) {

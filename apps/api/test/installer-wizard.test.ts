@@ -14,7 +14,8 @@ const ROOT = resolve(__dirname, '../../..');
 const CONFIG_SH = join(ROOT, 'installer/lib/config.sh');
 const hasBin = (cmd: string) => spawnSync(cmd, ['--version'], { stdio: 'ignore' }).status === 0 || spawnSync(cmd, ['version'], { stdio: 'ignore' }).status === 0;
 const HAS_OPENSSL = hasBin('openssl');
-const HAS_PWSH = spawnSync('pwsh', ['-NoProfile', '-Command', '1'], { stdio: 'ignore' }).status === 0;
+const PWSH = process.env.PWSH || 'pwsh';
+const HAS_PWSH = spawnSync(PWSH, ['-NoProfile', '-Command', '1'], { stdio: 'ignore' }).status === 0;
 
 /** config.sh'yi kaynak alıp betiği çalıştırır (die/warn kısaltmalarıyla). */
 function sh(script: string, env: Record<string, string> = {}): { out: string; code: number } {
@@ -54,7 +55,7 @@ describe('SMTP adresi', () => {
     const lib = join(ROOT, 'installer/lib/config.ps1');
     for (const c of cases) {
       const script = `function Die($m){throw $m}; function Warn($m){}; $Yes=$false; $AnswersFile=''; . '${lib}'; New-SmtpUrl $env:H $env:P $env:S $env:U $env:W`;
-      const r = spawnSync('pwsh', ['-NoProfile', '-Command', script], { encoding: 'utf8', env: { ...process.env, H: c.host, P: c.port, S: c.security, U: c.user, W: c.pass } });
+      const r = spawnSync(PWSH, ['-NoProfile', '-Command', script], { encoding: 'utf8', env: { ...process.env, H: c.host, P: c.port, S: c.security, U: c.user, W: c.pass } });
       expect(r.stdout.trim(), JSON.stringify(c)).toBe(buildSmtpUrl(c));
     }
   });
@@ -236,7 +237,7 @@ describe.skipIf(!HAS_OPENSSL)('sertifika denetimi (openssl ve Node aynı karara 
 
 describe('betikler', () => {
   it('bash sözdizimi geçerli; --help çalışır', () => {
-    for (const f of ['installer/install.sh', 'installer/lib/config.sh', 'installer/lib/wizard.sh', 'scripts/backup.sh']) {
+    for (const f of ['installer/install.sh', 'installer/lib/config.sh', 'installer/lib/wizard.sh', 'scripts/backup.sh', 'scripts/restore.sh']) {
       expect(spawnSync('bash', ['-n', join(ROOT, f)], { encoding: 'utf8' }).status, f).toBe(0);
     }
     const help = spawnSync('bash', [join(ROOT, 'installer/install.sh'), '--help'], { encoding: 'utf8' });
@@ -249,7 +250,7 @@ describe('betikler', () => {
       const bytes = readFileSync(join(ROOT, f));
       expect([...bytes.subarray(0, 3)], `${f} BOM`).toEqual([0xef, 0xbb, 0xbf]); // Windows PowerShell 5.1 BOM'suz dosyayı ANSI sanır
       if (HAS_PWSH) {
-        const r = spawnSync('pwsh', ['-NoProfile', '-Command', `$e=$null;$t=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('${join(ROOT, f)}',[ref]$t,[ref]$e);$e.Count`], { encoding: 'utf8' });
+        const r = spawnSync(PWSH, ['-NoProfile', '-Command', `$e=$null;$t=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('${join(ROOT, f)}',[ref]$t,[ref]$e);$e.Count`], { encoding: 'utf8' });
         expect(r.stdout.trim(), f).toBe('0');
       }
     }

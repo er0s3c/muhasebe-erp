@@ -27,13 +27,16 @@ install_file() {
   sh_w mv -f "$dst.new" "$dst"
   rm -f "$tmp"
 }
-# backup_config DOSYA… — zaman damgalı yedek (chmod 600). Yedek dosya adları yazdırılır.
+# backup_config DOSYA… — zaman damgalı yedek (chmod 600). Yedek dosya adları yazdırılır. Her dosyanın en yeni BAK_KEEP yedeği kalır
+# (yedekler parola içerir; sınırsız birikmesin).
+BAK_KEEP=5
 backup_config() {
-  local f
+  local f old
   for f in "$@"; do
     fexists "$f" || continue
     sh_w cp -p "$f" "$f.bak-$WIZARD_TS"; sh_w chmod 600 "$f.bak-$WIZARD_TS"
     info "Eski ayar yedeklendi: $f.bak-$WIZARD_TS"
+    while IFS= read -r old; do [[ -n "$old" ]] && sh_w rm -f -- "$old"; done < <(sh_w find "$(dirname "$f")" -maxdepth 1 -name "$(basename "$f").bak-*" -print 2>/dev/null | prune_bak_list "$f" "$BAK_KEEP")
   done
 }
 
@@ -88,6 +91,8 @@ load_existing_settings() { # mevcut ayarları CUR'a okur; yeniden yapılandırma
   CUR[LICENSE_SERVER_URL]="$(env_value LICENSE_SERVER_URL <<< "$envtxt")"
   CUR[APP_BASE_URL]="$(env_value APP_BASE_URL <<< "$envtxt")"
   v="$(env_value REGISTRATION_ENABLED <<< "$envtxt")"; [[ "$v" == false ]] && CUR[REGISTRATION]=no || CUR[REGISTRATION]=yes
+  CUR[APP_VERSION]="$(env_value APP_VERSION <<< "$envtxt")"
+  DB_CREATED="${CUR[DB_CREATED]:-}"; ROLES_CREATED="${CUR[ROLES_CREATED]:-}"
   if (( ! OPT_RECONFIGURE )); then
     for k in ACCESS DOMAIN PORT TLS_MODE HTTP_PORT HTTPS_PORT; do
       from="${CUR[$k]:-}"
@@ -326,18 +331,21 @@ configure_license() {
     return 0
   fi
   info "Uygulama lisans etkinleştirilmeden çalışmaz: yalnızca etkinleştirme ekranı açılır. Etkinleştirme için satıcıdan aldığınız kod gerekir."
+  if [[ -n "$KIT_LICENSE_URL" ]]; then info "Bu kitte lisans sunucusu adresi gömülü: $KIT_LICENSE_URL (boş bırakırsanız bu kullanılır)."
+  elif (( KIT )); then warn "Bu kitte lisans sunucusu adresi YOK: adres girmezseniz yalnızca çevrimdışı etkinleştirme yapılabilir (OPERATIONS §4). Satıcıdan adresi isteyin."; fi
   ask_val LICENSE_SERVER_URL "Lisans sunucusu adresi (boş = kitteki varsayılan)" "Boş bırakın: satıcının uygulamaya gömdüğü adres kullanılır. Yalnızca satıcı farklı bir adres verdiyse yazın (https://…)." "${CUR[LICENSE_SERVER_URL]:-}" v_license_url
   if [[ -n "$LICENSE_SERVER_URL" ]]; then
     if (( OPT_DRYRUN )); then info "(kuru çalıştırma: lisans sunucusuna bağlanılmaz)"
     elif [[ "$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' "${LICENSE_SERVER_URL%/}/healthz" 2>/dev/null || true)" == 200 ]]; then okm "Lisans sunucusuna erişildi: $LICENSE_SERVER_URL"
     else warn "Lisans sunucusuna (HTTPS) ulaşılamadı: $LICENSE_SERVER_URL. Bu sunucudan lisans sunucusuna 443 çıkışı açık olmalı; yoksa etkinleştirme yapılamaz (çevrimdışı etkinleştirme mümkündür: OPERATIONS §4)."; fi
-  else info "Varsayılan lisans sunucusu kullanılacak; erişimi etkinleştirme sırasında sınanır."; fi
+  elif [[ -n "$KIT_LICENSE_URL" || $KIT -eq 0 ]]; then info "Varsayılan lisans sunucusu kullanılacak; erişimi etkinleştirme sırasında sınanır."
+  else warn "Lisans sunucusu yok: çevrimiçi etkinleştirme yapılamaz (yalnızca çevrimdışı etkinleştirme)."; fi
   ask_val LICENSE_CODE "Lisans etkinleştirme kodu (boş = tarayıcıda girerim)" "Satıcıdan aldığınız 25 karakterlik kod (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX). Yazarken görünmez. Kurulum bitince burada etkinleştirilir." "" v_license_code secret
 }
 
 configure_backup() {
   section "Yedekleme"
-  local def_dir="$VARDIR/backups"
+  local def_dir="$NATIVE_BACKUP_DIR"
   [[ "$PATH_CHOICE" == docker ]] && def_dir="$ROOT/backups"
   ask_val BACKUP_DIR "Yedek klasörü" "Günlük veritabanı yedeklerinin yazılacağı klasör (yalnızca yönetici okur). Ofis dışına kopyalama (rsync/UNC) elle kurulur: OPERATIONS §6." "${CUR[BACKUP_DIR]:-$def_dir}" v_abs_path
   ask_val BACKUP_KEEP "Kaç yedek saklansın?" "En yeni bu kadar yedek tutulur, eskiler silinir." "${CUR[BACKUP_KEEP]:-14}" v_keep
@@ -359,21 +367,61 @@ print_settings() { # özet (parolasız)
   say "  Veri:             $l"
   if [[ "$MODE" == prod ]]; then
     if [[ "$MAIL_ENABLED" == yes ]]; then say "  E-posta:          açık — $SMTP_HOST:$SMTP_PORT ($SMTP_SECURITY), gönderen $MAIL_FROM_VALUE"; else say "  E-posta:          kapalı (parola sıfırlama/doğrulama yok)"; fi
-    say "  Lisans sunucusu:  ${LICENSE_SERVER_URL:-kitteki varsayılan}   kod: $([[ -n "$LICENSE_CODE" ]] && echo 'girildi (kurulumda etkinleştirilecek)' || echo 'girilmedi (tarayıcıda girilecek)')"
+    local lsu="${LICENSE_SERVER_URL:-}"
+    if [[ -z "$lsu" ]]; then if [[ -n "$KIT_LICENSE_URL" ]]; then lsu="kitteki varsayılan ($KIT_LICENSE_URL)"; elif (( KIT )); then lsu="YOK (kitte de yok: yalnızca çevrimdışı etkinleştirme)"; else lsu="derlemedeki varsayılan"; fi; fi
+    say "  Lisans sunucusu:  $lsu   kod: $([[ -n "$LICENSE_CODE" ]] && echo 'girildi (kurulumda etkinleştirilecek)' || echo 'girilmedi (tarayıcıda girilecek)')"
     say "  Yedek:            her gün $BACKUP_TIME → $BACKUP_DIR (son $BACKUP_KEEP)"
     say "  Yeni kayıt:       $([[ "$REGISTRATION" == yes ]] && echo açık || echo kapalı)"
   fi
+}
+
+# Kurulu sistemde yanıt dosyası ya da mevcut ayardan FARKLI bir ayar bayrağı sessizce yok sayılmaz: sihirbaz durur ve
+# --reconfigure'u önerir (kuru çalıştırma da aynı kararı verir). Güncelleyicinin kendi çalıştırmasında (ERP_UPDATER_RUN=1)
+# bayraklar kurulumdaki değerlerdir; uyuşmazlık yalnızca uyarılır, mevcut ayarlar korunur.
+refuse_settings_on_existing() {
+  local k cur diffs=()
+  for k in "${!FLAG_VAL[@]}"; do
+    cur="${CUR[$k]:-}"
+    case "$k" in PORT) cur="${cur:-3000}" ;; TLS_MODE) cur="${cur:-none}" ;; DEMO) cur="${cur:-no}" ;; esac
+    [[ "${FLAG_VAL[$k]}" == "$cur" ]] || diffs+=("$k: kurulu=${cur:-boş}, verilen=${FLAG_VAL[$k]}")
+  done
+  if [[ -n "${ERP_UPDATER_RUN:-}" ]]; then
+    (( ${#diffs[@]} )) && warn "Güncelleyici bayrakları mevcut ayarlardan farklı; mevcut ayarlar korunuyor (${diffs[*]})"
+    return 0
+  fi
+  if [[ -n "$ANSWERS_FILE" ]]; then
+    die "Kurulu sistem bulundu ($EXISTING_PATH): yanıt dosyası yalnızca YENİ kurulumda okunur, burada yok sayılmaz. Ayarları değiştirmek için: ./install.sh --reconfigure --answers=$ANSWERS_FILE  (önce --dry-run ile bakabilirsiniz)"
+  fi
+  if (( ${#diffs[@]} )); then
+    die "Kurulu sistemin ayarlarından farklı bayrak verildi: ${diffs[*]}. Yükseltme/onarım mevcut ayarlarla yapılır; değiştirmek için: ./install.sh --reconfigure (ilgili bayraklarla)"
+  fi
+  return 0
+}
+
+# Kurulu sürümden ESKİ kit kurulmaz (veritabanı yeni şemaya taşınmış olabilir). İstisna: --restore-db (güncelleyicinin geri dönüşü:
+# eski sürümün yedeği de geri yüklenir) ya da bilinçli --allow-downgrade.
+check_downgrade() {
+  (( EXISTING && KIT )) || return 0
+  local cur="${CUR[APP_VERSION]:-}"
+  is_semver "$cur" && is_semver "$KIT_VERSION" || return 0
+  [[ "$(ver_cmp "$KIT_VERSION" "$cur")" == -1 ]] || return 0
+  if [[ -n "$RESTORE_DB" ]]; then warn "Sürüm $cur → $KIT_VERSION geri dönülüyor (yedekten geri yüklemeyle)"; return 0; fi
+  if (( OPT_ALLOW_DOWNGRADE )); then warn "Sürüm DÜŞÜRÜLÜYOR: $cur → $KIT_VERSION (--allow-downgrade). Veritabanı şeması yeni sürümde kalır."; return 0; fi
+  die "Kurulu sürüm $cur, bu kit $KIT_VERSION (daha eski). Sürüm düşürme yapılmaz: yeni sürümün kitini kullanın. (Eski bir kit klasöründen mi çalıştırıyorsunuz? Docker kurulumunun klasörü: docker compose ls)"
 }
 
 # Tüm soruları sorar (yeni kurulum). Mevcut kurulumda atlanır (yeniden yapılandırma ayrı akıştır).
 configure() {
   stage "3/5 Yapılandırma"
   if (( EXISTING )); then
+    refuse_settings_on_existing
     info "Mevcut kurulum bulundu: ayarlar korunuyor (değiştirmek için: ./install.sh --reconfigure)."
-    PORT="${PORT:-${CUR[PORT]:-3000}}"; TLS_MODE="${TLS_MODE:-none}"; DEMO="${DEMO:-no}"
-    BACKUP_DIR="${BACKUP_DIR:-${CUR[BACKUP_DIR]:-}}"; BACKUP_KEEP="${BACKUP_KEEP:-${CUR[BACKUP_KEEP]:-14}}"; BACKUP_TIME="${BACKUP_TIME:-${CUR[BACKUP_TIME]:-02:30}}"
+    PORT="${PORT:-${CUR[PORT]:-3000}}"; TLS_MODE="${TLS_MODE:-${CUR[TLS_MODE]:-none}}"; DEMO="${CUR[DEMO]:-no}"
+    BACKUP_DIR="${CUR[BACKUP_DIR]:-}"; BACKUP_KEEP="${CUR[BACKUP_KEEP]:-14}"; BACKUP_TIME="${CUR[BACKUP_TIME]:-02:30}"
     [[ -z "$BACKUP_DIR" ]] && { if [[ "$PATH_CHOICE" == native ]]; then BACKUP_DIR="$VARDIR/backups"; else BACKUP_DIR="$ROOT/backups"; fi; }
-    MAIL_ENABLED="${CUR[MAIL_ENABLED]:-no}"; REGISTRATION="${CUR[REGISTRATION]:-yes}"
+    [[ "$PATH_CHOICE" == native && "$BACKUP_DIR" == "$VARDIR/backups" ]] && info "Yedek klasörü root'a ait konuma taşınacak: $VARDIR/backups → $NATIVE_BACKUP_DIR"
+    LICENSE_SERVER_URL="${CUR[LICENSE_SERVER_URL]:-}"; MAIL_ENABLED="${CUR[MAIL_ENABLED]:-no}"
+    REGISTRATION="${CUR[REGISTRATION]:-yes}"
     return 0
   fi
   if (( ! INTERACTIVE )); then info "Etkileşimsiz kip: sorulmayan değerler için varsayılanlar kullanılıyor."
@@ -445,7 +493,7 @@ write_wizard_conf() {
     echo "WIZARD_SAVED=$(date -Iseconds)"
     echo "INSTALL_PATH=$PATH_CHOICE"
     for k in ACCESS DOMAIN PORT TLS_MODE ACME_EMAIL HTTP_PORT HTTPS_PORT MAIL_ENABLED SMTP_HOST SMTP_PORT SMTP_SECURITY SMTP_USER MAIL_FROM_ADDRESS MAIL_FROM_NAME \
-      BACKUP_DIR BACKUP_KEEP BACKUP_TIME REGISTRATION LICENSE_SERVER_URL APP_BASE_URL DEMO DEMO_PENDING DEMO_SEEDED; do
+      BACKUP_DIR BACKUP_KEEP BACKUP_TIME REGISTRATION LICENSE_SERVER_URL APP_BASE_URL DEMO DEMO_PENDING DEMO_SEEDED DB_NAME DB_CREATED ROLES_CREATED; do
       printf '%s=%s\n' "$k" "${!k:-}"
     done
   } | install_file "$(conf_file)" 600 "$([[ "$PATH_CHOICE" == native ]] && echo root:root)"
@@ -604,19 +652,23 @@ reconfigure_main() {
   envf="$(env_file)"; conf="$(conf_file)"
   [[ "$PATH_CHOICE" == native ]] && { own="root:$SVC_USER"; mode=640; } || cad="$ROOT/deploy/Caddyfile.local"
   backup_config "$envf" "$conf" ${cad:+"$cad"}
+  snapshot_backup_units
   build_env_changes "$PATH_CHOICE"
   rd "$envf" | env_apply "${CHG[@]}" | install_file "$envf" "$mode" "$own"
   okm "Ayar dosyası güncellendi: $envf"
   apply_tls_files
+  [[ "$PATH_CHOICE" == native ]] && migrate_native_backup_dir
   write_wizard_conf
   if [[ "$PATH_CHOICE" == native ]]; then write_backup_tool; else install_backup_docker; fi
   if ! restart_and_verify "$PORT"; then
-    warn "Uygulama yeni ayarlarla hazır olmadı; eski ayarlar geri yükleniyor…"
+    warn "Uygulama yeni ayarlarla hazır olmadı; eski ayarlar ve yedek zamanlaması geri yükleniyor…"
     local f
     for f in "$envf" "$conf" ${cad:+"$cad"}; do fexists "$f.bak-$WIZARD_TS" && sh_w cp -p "$f.bak-$WIZARD_TS" "$f"; done
+    restore_backup_units
     CUR[TLS_MODE]="$TLS_MODE"; restart_and_verify "${CUR[PORT]:-$PORT}" || true
     die "Yeniden yapılandırma başarısız; önceki ayarlar geri yazıldı (yedek: $envf.bak-$WIZARD_TS). Günlüğe bakın: $([[ "$PATH_CHOICE" == native ]] && echo 'erpctl logs' || echo 'docker compose … logs app')"
   fi
+  drop_backup_unit_snapshots
   okm "Uygulama yeni ayarlarla çalışıyor"
   local base="http://127.0.0.1:$PORT"
   verify_license_gate "$base"; activate_license "$base"

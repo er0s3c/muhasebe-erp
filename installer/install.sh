@@ -16,12 +16,18 @@
 #
 # Kullanım:  ./install.sh [--check] [--mode=dev|prod] [--path=docker|native] [--access=local|lan|domain]
 #                         [--domain=erp.ornek.com] [--port=3000] [--tls=auto|byo|selfsigned|none] [--demo|--no-demo]
-#                         [--yes] [--answers=DOSYA] [--reconfigure] [--dry-run] [--start] [--uninstall [--purge]]
+#                         [--yes] [--answers=DOSYA] [--reconfigure] [--dry-run] [--start]
+#                         [--uninstall [--purge [--i-understand-purge]]] [--allow-downgrade]
 #                         [--restore-db=yedek.dump]   (güncelleyicinin geri dönüşü: kurmadan önce veritabanını yedekten yükler)
 #   --yes            tüm sorulara varsayılanı verir (sormaz)
-#   --answers=DOSYA  sormaz; KEY=VALUE yanıt dosyasından okur (örnek: installer/answers.example)
+#   --answers=DOSYA  sormaz; KEY=VALUE yanıt dosyasından okur (örnek: installer/answers.example). Yalnızca YENİ kurulumda ya da
+#                    --reconfigure ile; kurulu sistemde yanıt dosyası/farklı ayar bayrağı verilirse sihirbaz durur (yok saymaz)
 #   --reconfigure    kurulu sistemde yalnızca yapılandırmayı (SMTP, HTTPS, yedek, lisans adresi) yeniden sorar ve uygular
-#   --dry-run        sistemi değiştirmeden ne yazılacağını gösterir (parolalar maskeli)
+#   --dry-run        sistemi değiştirmeden ne yazılacağını/silineceğini gösterir (parolalar maskeli; --uninstall ile de)
+#   --uninstall      programı ve hizmetleri kaldırır (yerel ya da Docker); veritabanı, ayarlar ve yedekler korunur
+#   --purge          --uninstall ile: sihirbazın oluşturduğu veritabanını, ayarları ve varsayılan yedek klasörünü de KALICI siler.
+#                    Terminalde 'SIL' yazarak onay ister (--yes bu onayı vermez); betikte yalnızca --i-understand-purge ile
+#   --allow-downgrade kurulu sürümden ESKİ bir kiti kurmaya izin verir (veritabanı yeni şemada kalır; önerilmez)
 # Ayrıntı:   docs/OPERATIONS.md §2 (Kurulum sihirbazı)
 # =====================================================================================================================
 # shellcheck disable=SC2034  # değişkenler yapılandırma kitaplıklarında (source) ve dolaylı atamalarla kullanılır
@@ -44,9 +50,15 @@ VARDIR=/var/lib/muhasebe-erp
 SVC_USER=muhasebe-erp
 SVC_NAME=muhasebe-erp
 DB_NAME=erp
+# Yönetici (root) işlerinin klasörleri: hizmet kullanıcısının yazabildiği $VARDIR altında OLMAZ (sembolik bağ/yer değiştirme
+# saldırısıyla root yetkisi alınmasın). Eski kurulumlardaki $VARDIR/updater ve $VARDIR/backups buraya taşınır.
+UPD_WORK=/var/lib/muhasebe-erp-updater
+NATIVE_BACKUP_DIR=/var/backups/muhasebe-erp
 
 # ---- Seçenekler -----------------------------------------------------------------------------------------------------
-OPT_CHECK=0 OPT_YES=0 OPT_START=0 OPT_UNINSTALL=0 OPT_PURGE=0 OPT_DRYRUN=0 OPT_RECONFIGURE=0 ANSWERS_FILE=""
+OPT_CHECK=0 OPT_YES=0 OPT_START=0 OPT_UNINSTALL=0 OPT_PURGE=0 OPT_PURGE_ACK=0 OPT_DRYRUN=0 OPT_RECONFIGURE=0 OPT_ALLOW_DOWNGRADE=0 ANSWERS_FILE=""
+declare -A FLAG_VAL=()   # komut satırında verilen ayar bayrakları (kurulu sistemde mevcut ayarla çelişirse sihirbaz durur)
+DB_CREATED="" ROLES_CREATED=""
 MODE="" PATH_CHOICE="" ACCESS="" DOMAIN="" PORT="" RESTORE_DB=""
 # Yanıt anahtarları (installer/lib/config.sh ANSWER_KEYS); komut satırı bayrakları yanıt dosyasından önceliklidir
 DEMO="" REGISTRATION="" LICENSE_SERVER_URL="" LICENSE_CODE="" MAIL_ENABLED="" SMTP_HOST="" SMTP_PORT="" SMTP_SECURITY="" SMTP_USER=""
@@ -61,23 +73,25 @@ while (( $# )); do
   case "$arg" in
     --check) OPT_CHECK=1 ;;
     --yes|-y) OPT_YES=1 ;;
-    --demo) DEMO=yes ;;
-    --no-demo) DEMO=no ;;
+    --demo) DEMO=yes; FLAG_VAL[DEMO]=yes ;;
+    --no-demo) DEMO=no; FLAG_VAL[DEMO]=no ;;
     --start) OPT_START=1 ;;
     --uninstall) OPT_UNINSTALL=1 ;;
     --purge) OPT_PURGE=1 ;;
+    --i-understand-purge) OPT_PURGE_ACK=1 ;;
+    --allow-downgrade) OPT_ALLOW_DOWNGRADE=1 ;;
     --dry-run) OPT_DRYRUN=1 ;;
     --reconfigure) OPT_RECONFIGURE=1 ;;
     --answers) (( $# )) || { echo "--answers bir dosya yolu ister" >&2; exit 2; }; ANSWERS_FILE="$1"; shift ;;
     --answers=*) ANSWERS_FILE="${arg#*=}" ;;
     --mode=*) MODE="${arg#*=}" ;;
     --path=*) PATH_CHOICE="${arg#*=}" ;;
-    --access=*) ACCESS="${arg#*=}" ;;
-    --domain=*) DOMAIN="${arg#*=}" ;;
-    --port=*) PORT="${arg#*=}" ;;
-    --tls=*) TLS_MODE="${arg#*=}" ;;
-    --http-port=*) HTTP_PORT="${arg#*=}" ;;
-    --https-port=*) HTTPS_PORT="${arg#*=}" ;;
+    --access=*) ACCESS="${arg#*=}"; FLAG_VAL[ACCESS]="$ACCESS" ;;
+    --domain=*) DOMAIN="${arg#*=}"; FLAG_VAL[DOMAIN]="$DOMAIN" ;;
+    --port=*) PORT="${arg#*=}"; FLAG_VAL[PORT]="$PORT" ;;
+    --tls=*) TLS_MODE="${arg#*=}"; FLAG_VAL[TLS_MODE]="$TLS_MODE" ;;
+    --http-port=*) HTTP_PORT="${arg#*=}"; FLAG_VAL[HTTP_PORT]="$HTTP_PORT" ;;
+    --https-port=*) HTTPS_PORT="${arg#*=}"; FLAG_VAL[HTTPS_PORT]="$HTTPS_PORT" ;;
     --restore-db=*) RESTORE_DB="${arg#*=}" ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Bilinmeyen seçenek: $arg (yardım: --help)" >&2; exit 2 ;;
@@ -140,7 +154,7 @@ as_user() { if [[ $EUID -eq 0 && -n "${SUDO_USER:-}" && "${SUDO_USER}" != root ]
 
 # ---- Ortam algılama -----------------------------------------------------------------------------------------------------
 OS_ID="" OS_VER="" OS_CODENAME="" OS_PRETTY="" IS_WSL=0 ARCH="" HAS_SYSTEMD=0 HAS_APT=0
-KIT=0 KIT_VERSION="" KIT_TARGET="" REPO=0
+KIT=0 KIT_VERSION="" KIT_TARGET="" KIT_LICENSE_URL="" REPO=0
 detect() {
   if [[ -r /etc/os-release ]]; then
     # shellcheck disable=SC1091
@@ -155,6 +169,7 @@ detect() {
     KIT=1
     KIT_VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$ROOT/kit.json" | head -n1)"
     KIT_TARGET="$(sed -n 's/.*"target": *"\([^"]*\)".*/\1/p' "$ROOT/kit.json" | head -n1)"
+    KIT_LICENSE_URL="$(sed -n 's/.*"licenseServerUrl": *"\([^"]*\)".*/\1/p' "$ROOT/kit.json" | head -n1)"
   fi
   [[ -f "$ROOT/package.json" && -d "$ROOT/apps/api" ]] && REPO=1
   [[ -z "$MODE" ]] && { if (( KIT )); then MODE=prod; else MODE=dev; fi; }
@@ -498,7 +513,7 @@ install_prod_docker() {
     info "Demo verisi yükleniyor…"
     seed_demo_docker >/dev/null && { SEEDED_DEMO=1; DEMO_PENDING=no; DEMO_SEEDED=yes; okm "Demo verisi yüklendi"; write_wizard_conf; } || warn "Demo verisi yüklenemedi (docker compose … exec app node dist/demo.js seed; ALLOW_DEMO=true gerekir)"
   elif (( fresh )); then okm "Boş uygulama: demo/örnek veri yüklenmedi"; fi
-  (( fresh )) && install_backup_docker
+  install_backup_docker   # her kurulumda yeniden yazılır (kurulum klasörü değiştiyse birim de yeni yolu gösterir)
   post_install_checks "http://127.0.0.1:$port"
   finish_prod "$port"
 }
@@ -571,45 +586,52 @@ CTL
 }
 
 write_backup_tool() {
-  local dir="${BACKUP_DIR:-$VARDIR/backups}" keep="${BACKUP_KEEP:-14}" at="${BACKUP_TIME:-02:30}"
+  local dir="${BACKUP_DIR:-$NATIVE_BACKUP_DIR}" keep="${BACKUP_KEEP:-14}" at="${BACKUP_TIME:-02:30}"
+  (( 10#$keep >= 1 )) || keep=1
+  case "$dir/" in "$VARDIR"/*) warn "Yedek klasörü ($dir) hizmet kullanıcısının yazabildiği $VARDIR altında: yönetici işleri için güvenli değil; $NATIVE_BACKUP_DIR önerilir." ;; esac
   as_root mkdir -p "$dir"
+  as_root chown root:root "$dir"
   as_root chmod 700 "$dir"
+  # Yollar %q ile tırnaklanır (boşluk/özel karakter); parola komut satırına yazılmaz (PG* ortam değişkenleri, yalnızca root okur)
   as_root tee "$PREFIX/bin/erp-backup" >/dev/null <<BK
 #!/usr/bin/env bash
 # Muhasebe ERP yedeği (pg_dump, sıkıştırılmış özel biçim). Son $keep yedek tutulur. Ayar: sudo erp-setup --reconfigure. Geri yükleme: docs/OPERATIONS.md §6
 set -euo pipefail
-set -a; . $ETC/migrate.env; set +a
+DIR=$(printf '%q' "$dir")
+KEEP=$keep
+set -a; . $(printf '%q' "$ETC/migrate.env"); set +a
 umask 077
-out=$dir/erp-\$(date +%Y%m%d-%H%M%S).dump
-/usr/lib/postgresql/$PG_MAJOR/bin/pg_dump -Fc -d "\$MIGRATION_DATABASE_URL" -f "\$out"
+# postgres://kullanıcı:parola@sunucu:port/veritabanı → libpq ortam değişkenleri (parola komut satırında/ps çıktısında görünmez)
+re='^postgres(ql)?://([^:@/]+):([^@]*)@([^:/]+):([0-9]+)/([^?]+)'
+[[ "\$MIGRATION_DATABASE_URL" =~ \$re ]] || { echo "MIGRATION_DATABASE_URL okunamadı" >&2; exit 1; }
+dec() { printf '%b' "\${1//%/\\\\x}"; }
+PGUSER="\$(dec "\${BASH_REMATCH[2]}")"; PGPASSWORD="\$(dec "\${BASH_REMATCH[3]}")"
+PGHOST="\${BASH_REMATCH[4]}"; PGPORT="\${BASH_REMATCH[5]}"; PGDATABASE="\${BASH_REMATCH[6]}"
+export PGUSER PGPASSWORD PGHOST PGPORT PGDATABASE
+mkdir -p "\$DIR"
+out="\$DIR/erp-\$(date +%Y%m%d-%H%M%S).dump"
+trap 'rm -f "\$out.partial"' EXIT
+/usr/lib/postgresql/$PG_MAJOR/bin/pg_dump -Fc -f "\$out.partial"
+mv -f "\$out.partial" "\$out"
 chmod 600 "\$out"
-ls -1t $dir/erp-*.dump 2>/dev/null | tail -n +$((keep + 1)) | xargs -r rm -f
+# Temizlik: yalnızca bu betiğin adlandırdığı dosyalar (erp-YYYYMMDD-HHMMSS.dump); en az 1 (yeni alınan) kalır
+find "\$DIR" -maxdepth 1 -type f -regextype posix-extended -regex '.*/erp-[0-9]{8}-[0-9]{6}\.dump' -printf '%f\n' | sort -r | tail -n +\$((KEEP + 1)) \\
+  | while IFS= read -r old; do rm -f -- "\$DIR/\$old"; done
 echo "Yedek: \$out"
 BK
   as_root chmod 700 "$PREFIX/bin/erp-backup"
   if (( HAS_SYSTEMD )); then
-    as_root tee "/etc/systemd/system/$SVC_NAME-backup.service" >/dev/null <<EOF
-[Unit]
-Description=Muhasebe ERP günlük yedek
-[Service]
-Type=oneshot
-ExecStart=$PREFIX/bin/erp-backup
-EOF
-    as_root tee "/etc/systemd/system/$SVC_NAME-backup.timer" >/dev/null <<EOF
-[Unit]
-Description=Muhasebe ERP günlük yedek ($at)
-[Timer]
-OnCalendar=$(time_to_oncalendar "$at")
-Persistent=true
-[Install]
-WantedBy=timers.target
-EOF
+    printf '[Unit]\nDescription=Muhasebe ERP günlük yedek\n[Service]\nType=oneshot\nExecStart=%s\n' "$(sd_quote "$PREFIX/bin/erp-backup")" \
+      | as_root tee "/etc/systemd/system/$SVC_NAME-backup.service" >/dev/null
+    printf '[Unit]\nDescription=Muhasebe ERP günlük yedek (%s)\n[Timer]\nOnCalendar=%s\nPersistent=true\n[Install]\nWantedBy=timers.target\n' "$at" "$(time_to_oncalendar "$at")" \
+      | as_root tee "/etc/systemd/system/$SVC_NAME-backup.timer" >/dev/null
     as_root systemctl daemon-reload
     as_root systemctl enable --now "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true
     as_root systemctl restart "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true
     okm "Günlük yedek: systemd zamanlayıcısı $at → $dir (son $keep). Elle: sudo $PREFIX/bin/erp-backup"
   elif can_root && [[ -d /etc/cron.d ]]; then
-    printf '# Muhasebe ERP günlük yedek (kurulum sihirbazı)\n%s * * * root %s/bin/erp-backup >> /var/log/muhasebe-erp-backup.log 2>&1\n' "$(time_to_cron "$at")" "$PREFIX" | as_root tee "/etc/cron.d/$SVC_NAME-backup" >/dev/null
+    printf '# Muhasebe ERP günlük yedek (kurulum sihirbazı)\n%s * * * root %s >> /var/log/muhasebe-erp-backup.log 2>&1\n' "$(time_to_cron "$at")" "$(cron_quote "$PREFIX/bin/erp-backup")" \
+      | as_root tee "/etc/cron.d/$SVC_NAME-backup" >/dev/null
     okm "Günlük yedek: cron $at → $dir (son $keep). Elle: sudo $PREFIX/bin/erp-backup"
   else
     warn "Otomatik yedek yok (systemd/cron yok): sudo $PREFIX/bin/erp-backup komutunu düzenli çalıştırın"
@@ -663,12 +685,19 @@ install_prod_native() {
   else
     fresh=1
     owner_pw="$(rand_hex 24)"; app_pw="$(rand_hex 24)"; jwt="$(rand_b64 48)"
+    ROLES_CREATED=yes; DB_CREATED=yes
     if as_postgres psql -p "$pgp" -tAc "select 1 from pg_roles where rolname='erp'" 2>/dev/null | grep -q 1; then
       warn "PostgreSQL'de 'erp' rolleri zaten var: parolaları yeni üretilenlerle değiştirilecek (aynı sunucudaki eski bir kurulum etkilenir)."
       confirm "Devam edilsin mi?" || die "Kurulum durduruldu"
+      ROLES_CREATED=no
     fi
-    as_postgres psql -p "$pgp" -v ON_ERROR_STOP=1 -q -v owner_pw="$owner_pw" -v app_pw="$app_pw" -v dbname="$DB_NAME" \
-      -f - < "$INSTALLER/sql/bootstrap-prod.sql" >/dev/null
+    if as_postgres psql -p "$pgp" -tAc "select 1 from pg_database where datname='$DB_NAME'" 2>/dev/null | grep -q 1; then
+      warn "PostgreSQL'de '$DB_NAME' veritabanı zaten var: kullanılacak, kaldırmada (--purge) SİLİNMEZ."
+      DB_CREATED=no
+    fi
+    # Parolalar psql'e komut satırıyla değil standart girdiyle (\set) verilir: ps çıktısında görünmez
+    { printf '\\set owner_pw %s\n\\set app_pw %s\n' "$owner_pw" "$app_pw"; cat "$INSTALLER/sql/bootstrap-prod.sql"; } \
+      | as_postgres psql -p "$pgp" -v ON_ERROR_STOP=1 -q -v dbname="$DB_NAME" -f - >/dev/null
     okm "Veritabanı '$DB_NAME' ve roller hazır"
     umask 077
     {
@@ -705,6 +734,7 @@ EOF
   fi
 
   write_erpctl
+  if [[ "$BACKUP_DIR" == "$VARDIR/backups" ]]; then migrate_native_backup_dir; write_wizard_conf; fi
   write_backup_tool
   install_updater native "$ETC/erp.env"
   if (( HAS_SYSTEMD )); then
@@ -745,20 +775,51 @@ post_install_checks() { # post_install_checks ADRES — lisans kapısı, (varsa)
 
 install_backup_docker() { # Docker yolunda günlük yedek: scripts/backup.sh --compose (systemd zamanlayıcısı ya da cron)
   [[ "$PATH_CHOICE" == docker && -n "$BACKUP_DIR" ]] || return 0
-  local cmd="/usr/bin/env bash $ROOT/scripts/backup.sh --compose --dir $BACKUP_DIR --keep-count $BACKUP_KEEP"
+  local keep="${BACKUP_KEEP:-14}" at="${BACKUP_TIME:-02:30}"
+  (( 10#$keep >= 1 )) || keep=1
+  # Kurulum klasörü sabittir (uzaktan güncelleme dosyaları yerinde değiştirir); yollar boşluk/özel karakter içerebilir: tırnaklanır
+  local script="$ROOT/scripts/backup.sh"
   if (( HAS_SYSTEMD )) && can_root; then
-    printf '[Unit]\nDescription=Muhasebe ERP günlük yedek\n[Service]\nType=oneshot\nWorkingDirectory=%s\nExecStart=%s\n' "$ROOT" "$cmd" | as_root tee "/etc/systemd/system/$SVC_NAME-backup.service" >/dev/null
-    printf '[Unit]\nDescription=Muhasebe ERP günlük yedek (%s)\n[Timer]\nOnCalendar=%s\nPersistent=true\n[Install]\nWantedBy=timers.target\n' "$BACKUP_TIME" "$(time_to_oncalendar "$BACKUP_TIME")" | as_root tee "/etc/systemd/system/$SVC_NAME-backup.timer" >/dev/null
+    printf '[Unit]\nDescription=Muhasebe ERP günlük yedek\n[Service]\nType=oneshot\nWorkingDirectory=%s\nExecStart=/usr/bin/env bash %s --compose --dir %s --keep-count %s\n' \
+      "$(sd_path "$ROOT")" "$(sd_quote "$script")" "$(sd_quote "$BACKUP_DIR")" "$keep" | as_root tee "/etc/systemd/system/$SVC_NAME-backup.service" >/dev/null
+    printf '[Unit]\nDescription=Muhasebe ERP günlük yedek (%s)\n[Timer]\nOnCalendar=%s\nPersistent=true\n[Install]\nWantedBy=timers.target\n' "$at" "$(time_to_oncalendar "$at")" \
+      | as_root tee "/etc/systemd/system/$SVC_NAME-backup.timer" >/dev/null
     as_root systemctl daemon-reload
     as_root systemctl enable --now "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true
-    okm "Günlük yedek: systemd zamanlayıcısı $BACKUP_TIME → $BACKUP_DIR (son $BACKUP_KEEP)"
+    as_root systemctl restart "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true
+    okm "Günlük yedek: systemd zamanlayıcısı $at → $BACKUP_DIR (son $keep)"
   elif can_root && [[ -d /etc/cron.d ]]; then
-    printf '# Muhasebe ERP günlük yedek (kurulum sihirbazı)\n%s * * * root %s >> /var/log/muhasebe-erp-backup.log 2>&1\n' "$(time_to_cron "$BACKUP_TIME")" "$cmd" | as_root tee "/etc/cron.d/$SVC_NAME-backup" >/dev/null
-    okm "Günlük yedek: cron $BACKUP_TIME → $BACKUP_DIR (son $BACKUP_KEEP)"
+    printf '# Muhasebe ERP günlük yedek (kurulum sihirbazı)\n%s * * * root cd %s && /usr/bin/env bash %s --compose --dir %s --keep-count %s >> /var/log/muhasebe-erp-backup.log 2>&1\n' \
+      "$(time_to_cron "$at")" "$(cron_quote "$ROOT")" "$(cron_quote "$script")" "$(cron_quote "$BACKUP_DIR")" "$keep" | as_root tee "/etc/cron.d/$SVC_NAME-backup" >/dev/null
+    okm "Günlük yedek: cron $at → $BACKUP_DIR (son $keep)"
   else
-    warn "Otomatik yedek kurulamadı. Elle: $cmd  (cron ile her gün $BACKUP_TIME)"
+    warn "Otomatik yedek kurulamadı. Elle (her gün $at): cd $(printf '%q' "$ROOT") && bash scripts/backup.sh --compose --dir $(printf '%q' "$BACKUP_DIR") --keep-count $keep"
   fi
 }
+
+# ---- Ayar/yedek birimlerinin anlık görüntüsü (yeniden yapılandırma başarısızsa geri alınır) ------------------------------
+BACKUP_UNIT_FILES=()
+snapshot_backup_units() {
+  local f
+  BACKUP_UNIT_FILES=("/etc/systemd/system/$SVC_NAME-backup.service" "/etc/systemd/system/$SVC_NAME-backup.timer" "/etc/cron.d/$SVC_NAME-backup")
+  [[ "$PATH_CHOICE" == native ]] && BACKUP_UNIT_FILES+=("$PREFIX/bin/erp-backup")
+  for f in "${BACKUP_UNIT_FILES[@]}"; do
+    if fexists "$f"; then as_root cp -p "$f" "$f.wizard-$WIZARD_TS"; fi
+  done
+}
+restore_backup_units() {
+  local f
+  for f in "${BACKUP_UNIT_FILES[@]}"; do
+    if fexists "$f.wizard-$WIZARD_TS"; then as_root mv -f "$f.wizard-$WIZARD_TS" "$f"
+    else as_root rm -f "$f"; fi
+  done
+  if (( HAS_SYSTEMD )) && can_root; then
+    as_root systemctl daemon-reload >/dev/null 2>&1 || true
+    if fexists "/etc/systemd/system/$SVC_NAME-backup.timer"; then as_root systemctl restart "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true
+    else as_root systemctl disable --now "$SVC_NAME-backup.timer" >/dev/null 2>&1 || true; fi
+  fi
+}
+drop_backup_unit_snapshots() { local f; for f in "${BACKUP_UNIT_FILES[@]}"; do as_root rm -f "$f.wizard-$WIZARD_TS" 2>/dev/null || true; done; }
 
 # ---- Uzaktan güncelleme: güncelleyici (her dakika; yönetici yetkisiyle) -------------------------------------------------
 ensure_env_secret() { # ensure_env_secret dosya ANAHTAR değer — yoksa ekler (varsa dokunmaz)
@@ -766,38 +827,77 @@ ensure_env_secret() { # ensure_env_secret dosya ANAHTAR değer — yoksa ekler (
   if ! as_root grep -q "^${k}=" "$f" 2>/dev/null; then printf '%s=%s\n' "$k" "$v" | as_root tee -a "$f" >/dev/null; fi
 }
 
+# Eski kurulumlar güncelleyici çalışma klasörünü hizmet kullanıcısının $VARDIR'ı altında tutuyordu (root yetkisi alınabilirdi):
+# yeni yer $UPD_WORK (root 700); güncelleyici artık eski klasöre dokunmaz. Eski klasör temizlenir (rm sembolik bağ izlemez):
+# yerel kurulumda tamamen; Docker kurulumunda yalnızca indirmeler ve kilit (eski güncelleyicinin açtığı kit klasörü canlı kurulum
+# ya da güncelleme öncesi dökümler içerebilir: korunur). Sihirbaz o klasörün içinden çalışıyorsa dokunulmaz.
+migrate_updater_workdir() { # migrate_updater_workdir native|docker
+  local old="$VARDIR/updater"
+  as_root mkdir -p "$UPD_WORK"; as_root chown root:root "$UPD_WORK"; as_root chmod 700 "$UPD_WORK"
+  fexists "$old" || return 0
+  case "$ROOT/" in "$old"/*) info "Eski güncelleyici klasörü ($old) şimdilik korunuyor: sihirbaz oradan çalışıyor; sonraki kurulum/yeniden yapılandırmada temizlenir." ; return 0 ;; esac
+  if as_root test -f "$old/updater.log" && ! as_root test -L "$old" && ! as_root test -L "$old/updater.log"; then
+    as_root cp "$old/updater.log" "$UPD_WORK/updater-eski.log" 2>/dev/null || true
+  fi
+  if [[ "$1" == native ]]; then as_root rm -rf -- "$old"
+  else as_root rm -rf -- "$old/downloads" "$old/updater.lock" "$old/updater.log" "$old/updater.log.1"; fi
+  info "Güncelleyici çalışma klasörü taşındı: $old → $UPD_WORK"
+}
+
 install_updater() { # install_updater mod ortam-dosyası
   local mode="$1" envf="$2" node_src="$ROOT/app/runtime/node"
   [[ -x "$node_src" && -f "$ROOT/app/dist/updater.js" ]] || { warn "Kitte güncelleyici yok; uzaktan güncelleme kapalı"; return 0; }
   ensure_env_secret "$envf" ERP_UPDATER_TOKEN "$(rand_hex 32)"
   ensure_env_secret "$envf" ERP_KIT_TARGET linux-x64
-  as_root mkdir -p "$UPD_DIR" "$ETC" "$VARDIR/updater"
-  as_root chmod 700 "$VARDIR/updater"
+  as_root mkdir -p "$UPD_DIR" "$ETC"
+  migrate_updater_workdir "$mode"
   # Çalışan güncelleyicinin dosyaları yeniden adlandırmayla değiştirilir (çalışan ikilinin üzerine yazılamaz)
   as_root cp "$node_src" "$UPD_DIR/node.new" && as_root mv -f "$UPD_DIR/node.new" "$UPD_DIR/node"
   as_root cp "$ROOT/app/dist/updater.js" "$UPD_DIR/updater.js.new" && as_root mv -f "$UPD_DIR/updater.js.new" "$UPD_DIR/updater.js"
-  local args="\"--port=$PORT\", \"--access=$ACCESS\""
-  [[ -n "$DOMAIN" ]] && args="$args, \"--domain=$DOMAIN\""
-  local extra
-  if [[ "$mode" == docker ]]; then extra="\"dockerDir\": \"$ROOT\", \"dbName\": \"$DB_NAME\""
-  else extra="\"nativePrefix\": \"$PREFIX\", \"backupCommand\": [\"$PREFIX/bin/erp-backup\"]"; fi
-  printf '{\n  "mode": "%s",\n  "platform": "linux-x64",\n  "appUrl": "http://127.0.0.1:%s",\n  "envFile": "%s",\n  "workDir": "%s",\n  "installArgs": [%s],\n  %s\n}\n' \
-    "$mode" "$PORT" "$envf" "$VARDIR/updater" "$args" "$extra" | as_root tee "$ETC/updater.json" >/dev/null
+  # JSON, kitteki Node ile üretilir (yollardaki tırnak/ters bölü/boşluk JSON'u bozmasın)
+  local https_port="" https_host=""
+  if [[ "$mode" == docker && "${TLS_MODE:-none}" != none && -n "$DOMAIN" ]]; then https_port="${HTTPS_PORT:-443}"; https_host="$DOMAIN"; fi
+  U_MODE="$mode" U_PORT="$PORT" U_ACCESS="$ACCESS" U_DOMAIN="$DOMAIN" U_ENVF="$envf" U_WORK="$UPD_WORK" U_ROOT="$ROOT" U_DB="$DB_NAME" \
+    U_PREFIX="$PREFIX" U_HTTPS_PORT="$https_port" U_HTTPS_HOST="$https_host" "$node_src" -e '
+      const e = process.env;
+      const c = { mode: e.U_MODE, platform: "linux-x64", appUrl: `http://127.0.0.1:${e.U_PORT}`, envFile: e.U_ENVF, workDir: e.U_WORK,
+        installArgs: [`--port=${e.U_PORT}`, `--access=${e.U_ACCESS}`, ...(e.U_DOMAIN ? [`--domain=${e.U_DOMAIN}`] : [])] };
+      if (e.U_MODE === "docker") Object.assign(c, { dockerDir: e.U_ROOT, dbName: e.U_DB });
+      else Object.assign(c, { nativePrefix: e.U_PREFIX, backupCommand: [`${e.U_PREFIX}/bin/erp-backup`] });
+      if (e.U_HTTPS_PORT) c.httpsCheck = { port: Number(e.U_HTTPS_PORT), host: e.U_HTTPS_HOST };
+      process.stdout.write(JSON.stringify(c, null, 2) + "\n");' | as_root tee "$ETC/updater.json" >/dev/null
   as_root chmod 600 "$ETC/updater.json"
-  printf '#!/usr/bin/env bash\n# Muhasebe ERP güncelleyicisini şimdi çalıştırır (sahibin onayladığı güncelleme varsa uygular). Günlük: %s/updater/updater.log\nexec "%s/node" "%s/updater.js" --config="%s/updater.json"\n' \
-    "$VARDIR" "$UPD_DIR" "$UPD_DIR" "$ETC" | as_root tee /usr/local/bin/erp-update >/dev/null
+  printf '#!/usr/bin/env bash\n# Muhasebe ERP güncelleyicisini şimdi çalıştırır (sahibin onayladığı güncelleme varsa uygular). Günlük: %s/updater.log\nexec "%s/node" "%s/updater.js" --config="%s/updater.json"\n' \
+    "$UPD_WORK" "$UPD_DIR" "$UPD_DIR" "$ETC" | as_root tee /usr/local/bin/erp-update >/dev/null
   as_root chmod 755 /usr/local/bin/erp-update
   if (( HAS_SYSTEMD )); then
-    printf '[Unit]\nDescription=Muhasebe ERP uzaktan güncelleme denetimi\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart=%s/node %s/updater.js --config=%s/updater.json\nTimeoutStartSec=2h\n' \
+    printf '[Unit]\nDescription=Muhasebe ERP uzaktan güncelleme denetimi\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart=%s/node %s/updater.js --config=%s/updater.json\nTimeoutStartSec=6h\n' \
       "$UPD_DIR" "$UPD_DIR" "$ETC" | as_root tee "/etc/systemd/system/$SVC_NAME-updater.service" >/dev/null
     printf '[Unit]\nDescription=Muhasebe ERP uzaktan güncelleme denetimi (dakikada bir)\n\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=60s\nAccuracySec=10s\n\n[Install]\nWantedBy=timers.target\n' \
       | as_root tee "/etc/systemd/system/$SVC_NAME-updater.timer" >/dev/null
     as_root systemctl daemon-reload
     as_root systemctl enable --now "$SVC_NAME-updater.timer" >/dev/null 2>&1 || true
-    okm "Uzaktan güncelleme hazır: sahip onaylayınca uygulanır (günlük: $VARDIR/updater/updater.log)"
+    okm "Uzaktan güncelleme hazır: sahip onaylayınca uygulanır (günlük: $UPD_WORK/updater.log)"
   else
     warn "systemd yok: onaylanan uzaktan güncellemeler kendiliğinden uygulanmaz; 'sudo erp-update' ile çalıştırın (ya da cron'a dakikalık ekleyin)"
   fi
+}
+
+# Parola komut satırına (ps) yazılmadan libpq bağlantısı: root'a ait geçici .pgpass dosyası + PG* değişkenleri
+# with_pg_url URL komut… — komut as_root ile, PGPASSFILE/PGHOST/PGPORT/PGUSER/PGDATABASE ortamıyla çalışır
+with_pg_url() {
+  local url="$1" pass rc=0 f; shift
+  local re='^postgres(ql)?://([^:@/]+):([^@]*)@([^:/]+):([0-9]+)/([^?]+)'
+  [[ "$url" =~ $re ]] || die "Veritabanı adresi okunamadı"
+  local u h p d
+  u="$(urldec "${BASH_REMATCH[2]}")"; pass="$(urldec "${BASH_REMATCH[3]}")"; h="${BASH_REMATCH[4]}"; p="${BASH_REMATCH[5]}"; d="${BASH_REMATCH[6]}"
+  f="$(as_root mktemp)"
+  # .pgpass alanlarında : ve \ kaçışlanır
+  printf '%s:%s:%s:%s:%s\n' "$h" "$p" "$d" "$u" "$(printf '%s' "$pass" | sed 's/[\\:]/\\&/g')" | as_root tee "$f" >/dev/null
+  as_root chmod 600 "$f"
+  as_root env PGPASSFILE="$f" PGHOST="$h" PGPORT="$p" PGUSER="$u" PGDATABASE="$d" "$@" || rc=$?
+  as_root rm -f "$f"
+  return "$rc"
 }
 
 restore_db_native() { # yedekten geri yükleme (güncelleyicinin geri dönüşü): veritabanı silinip yeniden oluşturulur
@@ -809,7 +909,8 @@ restore_db_native() { # yedekten geri yükleme (güncelleyicinin geri dönüşü
   info "Veritabanı yedekten geri yükleniyor: $file"
   as_postgres psql -p "$pgp" -v ON_ERROR_STOP=1 -q -c "drop database if exists $DB_NAME with (force)" -c "create database $DB_NAME owner erp" \
     -c "revoke all on database $DB_NAME from public" -c "grant connect on database $DB_NAME to erp_app" >/dev/null
-  as_root "/usr/lib/postgresql/$PG_MAJOR/bin/pg_restore" --exit-on-error --single-transaction --no-owner --role=erp -d "$url" "$file"
+  with_pg_url "$url" "/usr/lib/postgresql/$PG_MAJOR/bin/pg_restore" --exit-on-error --single-transaction --no-owner --role=erp -d "$DB_NAME" "$file" \
+    || die "Geri yükleme başarısız ($file)"
   okm "Veritabanı geri yüklendi"
 }
 
@@ -826,6 +927,84 @@ restore_db_docker() {
   okm "Veritabanı geri yüklendi"
 }
 
+# ---- Yerel yolda yedek klasörünün taşınması (eski varsayılan $VARDIR/backups → root'a ait $NATIVE_BACKUP_DIR) ---------------
+migrate_native_backup_dir() {
+  [[ "$PATH_CHOICE" == native && "$BACKUP_DIR" == "$VARDIR/backups" ]] || return 0
+  BACKUP_DIR="$NATIVE_BACKUP_DIR"
+  if (( OPT_DRYRUN )); then info "(kuru çalıştırma) yedek klasörü $VARDIR/backups → $NATIVE_BACKUP_DIR taşınır"; return 0; fi
+  as_root mkdir -p "$NATIVE_BACKUP_DIR"; as_root chown root:root "$NATIVE_BACKUP_DIR"; as_root chmod 700 "$NATIVE_BACKUP_DIR"
+  # Eski klasör hizmet kullanıcısınındır: sembolik bağ izlenmez, yalnızca düz dosyalar taşınır
+  if as_root test -d "$VARDIR/backups" && ! as_root test -L "$VARDIR/backups"; then
+    as_root find "$VARDIR/backups" -maxdepth 1 -type f -name 'erp-*.dump' -exec mv -n -t "$NATIVE_BACKUP_DIR" -- {} + 2>/dev/null || true
+    as_root rmdir "$VARDIR/backups" 2>/dev/null || true
+  fi
+  okm "Yedek klasörü yönetici (root) klasörüne taşındı: $NATIVE_BACKUP_DIR"
+}
+
+# ---- Docker kurulumunun klasörü --------------------------------------------------------------------------------------------
+# Çalışan Docker projesinin (muhasebe-erp) kurulum klasörü: compose etiketinden (…/deploy) bulunur; yoksa boş.
+docker_live_root() {
+  docker_ok || return 0
+  local wd
+  wd="$(docker ps -a --filter label=com.docker.compose.project=muhasebe-erp --filter label=com.docker.compose.service=app \
+    --format '{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null | head -n1)"
+  [[ -n "$wd" ]] && printf '%s' "${wd%/deploy}"
+  return 0
+}
+
+# Kurulum klasörü sabittir (uzaktan güncelleme dosyaları yerinde değiştirir). Eski bir kopyadan çalıştırmak sürüm düşürür ya da
+# ayarları kaybettirir: taşınmış klasörde (.erp-tasindi) ve canlı proje başka klasördeyken sihirbaz durur. Bu klasörde ayar yoksa
+# (yeni kit klasörü) canlı kurulumun ayarları (deploy/.env, Caddyfile.local, certs/, wizard.conf) buraya TAŞINIR ve eski klasöre
+# yönlendirme dosyası bırakılır. Eski sürüm güncelleyicisinin açtığı kit klasöründe (ERP_UPDATER_RUN) eksik ayarlar tamamlanır.
+LIVE_MOVED_FROM=""
+check_install_location() {
+  local guard="$ROOT/.erp-tasindi" live
+  if [[ -f "$guard" ]]; then
+    die "Bu klasör artık kullanılmıyor: kurulum $(head -n1 "$guard") klasörüne taşındı. Sihirbazı oradan çalıştırın: cd $(head -n1 "$guard") && ./install.sh …"
+  fi
+  [[ "$MODE" == prod ]] || return 0
+  live="$(docker_live_root)"
+  [[ -n "$live" && -d "$live" && -f "$live/deploy/.env" ]] || return 0
+  [[ "$live" -ef "$ROOT" ]] && return 0
+  # Yerel kurulum varsa ve Docker yolu istenmediyse Docker projesine dokunulmaz
+  if [[ "$PATH_CHOICE" != docker && ! -f "$ROOT/deploy/.env" ]] && fexists "$ETC/erp.env"; then return 0; fi
+  [[ "$PATH_CHOICE" == native ]] && return 0
+  if [[ -f "$ROOT/deploy/.env" && -z "${ERP_UPDATER_RUN:-}" ]]; then
+    die "Çalışan Docker kurulumu başka klasörde: $live. Bu klasör ($ROOT) eski bir kopya; sihirbazı canlı klasörden çalıştırın: cd $(printf '%q' "$live") && ./install.sh …"
+  fi
+  if (( OPT_UNINSTALL || OPT_RECONFIGURE )); then
+    die "Çalışan Docker kurulumu $live klasöründe; kaldırma/yeniden yapılandırma oradan yapılır: cd $(printf '%q' "$live") && ./install.sh …"
+  fi
+  if (( OPT_DRYRUN )); then
+    info "(kuru çalıştırma) Docker kurulumu $live klasöründen bu klasöre ($ROOT) taşınır: deploy/.env, Caddyfile.local, certs/, wizard.conf"
+    return 0
+  fi
+  if [[ -z "${ERP_UPDATER_RUN:-}" ]]; then
+    warn "Çalışan Docker kurulumu başka klasörde: $live"
+    info "Bu kit klasörü ($ROOT) yeni kurulum klasörü olacak: ayarlar, parolalar ve sertifikalar buraya taşınır; eski klasöre yönlendirme notu bırakılır."
+    confirm "Kurulum bu klasöre taşınsın mı?" || die "Vazgeçildi (hiçbir şey değiştirilmedi)"
+  fi
+  migrate_docker_state "$live"
+}
+migrate_docker_state() {
+  local from="$1" f
+  mkdir -p "$ROOT/deploy"
+  for f in .env Caddyfile.local wizard.conf; do
+    if [[ -f "$from/deploy/$f" && ! -f "$ROOT/deploy/$f" ]]; then cp -p "$from/deploy/$f" "$ROOT/deploy/$f"; fi
+  done
+  [[ -f "$ROOT/deploy/.env" ]] && chmod 600 "$ROOT/deploy/.env"
+  if [[ -d "$from/deploy/certs" && ! -d "$ROOT/deploy/certs" ]]; then cp -a "$from/deploy/certs" "$ROOT/deploy/certs"; fi
+  # Varsayılan yedek klasörü eski kurulum klasörünün içindeyse yeni klasördeki karşılığına geçilir (eski yedekler yerinde kalır)
+  if [[ -f "$ROOT/deploy/wizard.conf" ]] && grep -qxF "BACKUP_DIR=$from/backups" "$ROOT/deploy/wizard.conf"; then
+    sed -i "s|^BACKUP_DIR=.*|BACKUP_DIR=$ROOT/backups|" "$ROOT/deploy/wizard.conf"
+    warn "Eski yedekler $from/backups klasöründe kaldı; yeni yedekler $ROOT/backups klasörüne yazılır."
+  fi
+  printf '%s\n# Muhasebe ERP kurulumu bu klasöre taşındı (%s). Bu klasördeki sihirbaz çalışmaz.\n' "$ROOT" "$(date -Iseconds)" > "$from/.erp-tasindi" 2>/dev/null \
+    || as_root tee "$from/.erp-tasindi" >/dev/null <<< "$ROOT"
+  LIVE_MOVED_FROM="$from"
+  okm "Docker kurulumunun ayarları taşındı: $from → $ROOT (eski klasörde .erp-tasindi notu)"
+}
+
 finish_prod() {
   local port="$1" url
   if [[ "$TLS_MODE" != none && -n "${DOMAIN:-}" ]]; then url="${BASE_URL_VALUE:-$(derive_base_url)}"
@@ -834,28 +1013,115 @@ finish_prod() {
   print_summary "$url"
 }
 
-# ---- Kaldırma (yerel kurulum) -----------------------------------------------------------------------------------------
+# ---- Kaldırma (yerel ya da Docker kurulumu) ------------------------------------------------------------------------------
+# act "açıklama" komut… — kuru çalıştırmada yalnızca yazar
+act() { local d="$1"; shift; if (( OPT_DRYRUN )); then info "(kuru) $d"; else "$@"; fi; }
+quiet() { "$@" >/dev/null 2>&1; }
+
+# Kalıcı silme onayı: --yes/yanıt dosyası bu onayı VERMEZ. Terminalde 'SIL' yazılır ya da betikte --i-understand-purge verilir.
+confirm_purge() { # confirm_purge "silinecekler"
+  say ""
+  warn "KALICI SİLME: $1"
+  (( OPT_DRYRUN )) && { info "(kuru çalıştırma: onay istenmez, hiçbir şey silinmez)"; return 0; }
+  (( OPT_PURGE_ACK )) && { warn "--i-understand-purge verildi: onay sorulmadan siliniyor."; return 0; }
+  local src="/dev/tty" ans=""
+  [[ -n "${ERP_WIZARD_INPUT:-}" ]] && src="$ERP_WIZARD_INPUT"
+  if ! { : < "$src"; } 2>/dev/null; then
+    die "Kalıcı silme onayı alınamadı (terminal yok). Betikte bilerek silmek için --i-understand-purge ekleyin."
+  fi
+  printf "  Geri alınamaz. Onaylamak için büyük harflerle SIL yazın: " >&2
+  IFS= read -r ans < "$src" || true
+  ans="${ans%$'\r'}"
+  [[ "$ans" == SIL || "$ans" == SİL ]] || die "Onay verilmedi; hiçbir şey silinmedi."
+}
+
+uninstall_main() {
+  local native=0 docker=0 kind
+  if fexists "$ETC/erp.env" || [[ -L "$PREFIX/current" ]]; then native=1; fi
+  [[ -f "$ROOT/deploy/.env" ]] && docker=1
+  case "$PATH_CHOICE" in native) docker=0 ;; docker) native=0 ;; esac
+  if (( native && docker )); then die "Hem yerel hem Docker kurulumu bulundu: hangisinin kaldırılacağını --path=native ya da --path=docker ile belirtin"; fi
+  if (( native )); then kind=native; elif (( docker )); then kind=docker; else die "Kaldırılacak kurulum bulunamadı (aranan: $ETC/erp.env, $PREFIX/current, $ROOT/deploy/.env)"; fi
+  PATH_CHOICE="$kind"
+  load_existing_settings "$kind"
+  (( OPT_DRYRUN )) && warn "KURU ÇALIŞTIRMA: hiçbir şey kaldırılmayacak/silinmeyecek; yalnızca yapılacaklar listelenir."
+  if [[ "$kind" == native ]]; then uninstall_native; else uninstall_docker; fi
+}
+
+# Sihirbazın oluşturduğu veritabanı: wizard.conf (DB_NAME/DB_CREATED), yoksa migrate.env adresindeki ad
+install_db_name() {
+  local n="${CUR[DB_NAME]:-}" url
+  if [[ -z "$n" ]]; then
+    url="$(rd "$ETC/migrate.env" | sed -n 's/^MIGRATION_DATABASE_URL=//p')"
+    [[ "$url" =~ /([^/?]+)(\?.*)?$ ]] && n="${BASH_REMATCH[1]}"
+  fi
+  printf '%s' "${n:-$DB_NAME}"
+}
+
 uninstall_native() {
   stage "Muhasebe ERP kaldırılıyor (yerel kurulum)"
-  if (( HAS_SYSTEMD )); then
-    as_root systemctl disable --now "$SVC_NAME" "$SVC_NAME-backup.timer" "$SVC_NAME-updater.timer" >/dev/null 2>&1 || true
-    as_root rm -f "/etc/systemd/system/$SVC_NAME.service" "/etc/systemd/system/$SVC_NAME-backup.service" "/etc/systemd/system/$SVC_NAME-backup.timer" \
-      "/etc/systemd/system/$SVC_NAME-updater.service" "/etc/systemd/system/$SVC_NAME-updater.timer"
-    as_root systemctl daemon-reload
-  elif [[ -x "$PREFIX/bin/erpctl" ]]; then as_root "$PREFIX/bin/erpctl" stop >/dev/null 2>&1 || true; fi
-  as_root rm -rf "$PREFIX" /usr/local/bin/erpctl /usr/local/bin/erp-update /usr/local/bin/erp-setup "/etc/cron.d/$SVC_NAME-backup"
-  okm "Program dosyaları ve hizmet kaldırıldı"
+  local db bdir="${CUR[BACKUP_DIR]:-}" what
+  db="$(install_db_name)"
   if (( OPT_PURGE )); then
-    confirm "VERİTABANI '$DB_NAME', ayarlar ve yedekler KALICI olarak silinsin mi?" || die "Vazgeçildi"
-    as_postgres psql -p "$(pg_port)" -q -c "drop database if exists $DB_NAME" >/dev/null
+    if [[ "${CUR[DB_CREATED]:-}" == no ]]; then what="ayarlar ($ETC), uygulama verisi ($VARDIR), varsayılan yedek klasörü ($NATIVE_BACKUP_DIR). Veritabanı '$db' kurulumdan önce vardı: SİLİNMEZ"
+    else what="VERİTABANI '$db' (tüm şirket verisi), ayarlar ($ETC), uygulama verisi ($VARDIR), varsayılan yedek klasörü ($NATIVE_BACKUP_DIR)"; fi
+    if [[ -n "$bdir" && "$bdir" != "$NATIVE_BACKUP_DIR" && "$bdir" != "$VARDIR/backups" ]]; then what="$what. Özel yedek klasörü ($bdir) KORUNUR"; fi
+    confirm_purge "$what"
+  fi
+  if (( HAS_SYSTEMD )); then
+    act "hizmet ve zamanlayıcılar durdurulur: $SVC_NAME, $SVC_NAME-backup.timer, $SVC_NAME-updater.timer" \
+      quiet as_root systemctl disable --now "$SVC_NAME" "$SVC_NAME-backup.timer" "$SVC_NAME-updater.timer" || true
+    act "systemd birimleri silinir (/etc/systemd/system/$SVC_NAME*.service|timer)" \
+      as_root rm -f "/etc/systemd/system/$SVC_NAME.service" "/etc/systemd/system/$SVC_NAME-backup.service" "/etc/systemd/system/$SVC_NAME-backup.timer" \
+      "/etc/systemd/system/$SVC_NAME-updater.service" "/etc/systemd/system/$SVC_NAME-updater.timer"
+    act "systemctl daemon-reload" as_root systemctl daemon-reload
+  elif [[ -x "$PREFIX/bin/erpctl" ]]; then act "uygulama durdurulur (erpctl stop)" quiet as_root "$PREFIX/bin/erpctl" stop || true; fi
+  act "program dosyaları silinir: $PREFIX, /usr/local/bin/{erpctl,erp-update,erp-setup}, /etc/cron.d/$SVC_NAME-backup, $UPD_WORK" \
+    as_root rm -rf "$PREFIX" /usr/local/bin/erpctl /usr/local/bin/erp-update /usr/local/bin/erp-setup "/etc/cron.d/$SVC_NAME-backup" "$UPD_WORK"
+  (( OPT_DRYRUN )) || okm "Program dosyaları ve hizmet kaldırıldı"
+  if (( OPT_PURGE )); then
+    if [[ "${CUR[DB_CREATED]:-}" == no ]]; then info "Veritabanı '$db' kurulumdan önce vardı: korunuyor"
+    else act "veritabanı silinir: $db" as_postgres psql -p "$(pg_port)" -q -c "drop database if exists \"$db\" with (force)"; fi
+    if [[ "${CUR[ROLES_CREATED]:-}" == no ]]; then info "erp/erp_app rolleri kurulumdan önce vardı: korunuyor"
+    elif (( OPT_DRYRUN )); then info "(kuru) erp/erp_app rolleri silinir (başka veritabanında kullanılıyorsa korunur)"
     # Roller aynı sunucudaki başka veritabanlarında (ör. geliştirme) kullanılıyorsa silinemez; o durumda korunur
-    if as_postgres psql -p "$(pg_port)" -q -c "drop role if exists erp_app" -c "drop role if exists erp" >/dev/null 2>&1; then okm "Roller silindi"
+    elif as_postgres psql -p "$(pg_port)" -q -c "drop role if exists erp_app" -c "drop role if exists erp" >/dev/null 2>&1; then okm "Roller silindi"
     else info "erp/erp_app rolleri başka veritabanlarında kullanıldığı için korundu"; fi
-    as_root rm -rf "$ETC" "$VARDIR"
-    id -u "$SVC_USER" >/dev/null 2>&1 && as_root userdel "$SVC_USER" || true
-    okm "Veritabanı, ayarlar ve yedekler silindi"
+    act "ayarlar ve uygulama verisi silinir: $ETC $VARDIR $NATIVE_BACKUP_DIR" as_root rm -rf "$ETC" "$VARDIR" "$NATIVE_BACKUP_DIR"
+    if id -u "$SVC_USER" >/dev/null 2>&1; then act "hizmet kullanıcısı silinir: $SVC_USER" as_root userdel "$SVC_USER" || true; fi
+    (( OPT_DRYRUN )) || okm "Veritabanı, ayarlar ve varsayılan yedekler silindi"
   else
-    info "Veritabanı ($DB_NAME), ayarlar ($ETC) ve yedekler ($VARDIR/backups) korundu (özel yedek klasörü her zaman korunur); tamamen silmek için --uninstall --purge"
+    info "Korunanlar: veritabanı ($db), ayarlar ($ETC), yedekler (${bdir:-$NATIVE_BACKUP_DIR}). Tamamen silmek için: --uninstall --purge"
+  fi
+}
+
+uninstall_docker() {
+  stage "Muhasebe ERP kaldırılıyor (Docker kurulumu: $ROOT)"
+  local dc=(docker compose -f "$ROOT/deploy/docker-compose.prod.yml" --env-file "$ROOT/deploy/.env" --profile tls) bdir="${CUR[BACKUP_DIR]:-$ROOT/backups}" what
+  if (( OPT_PURGE )); then
+    what="Docker birimleri (VERİTABANI pgdata — tüm şirket verisi — ve Caddy sertifikaları), $ROOT/deploy içindeki ayarlar (.env, Caddyfile.local, certs/, wizard.conf)"
+    if [[ "$bdir" == "$ROOT/backups" ]]; then what="$what, yedek klasörü ($bdir)"; else what="$what. Özel yedek klasörü ($bdir) KORUNUR"; fi
+    confirm_purge "$what"
+  fi
+  if docker_ok; then
+    if (( OPT_PURGE )); then act "kaplar ve birimler (veritabanı dahil) silinir: docker compose down -v" "${dc[@]}" down -v --remove-orphans
+    else act "kaplar durdurulup silinir (birimler/veritabanı korunur): docker compose down" "${dc[@]}" down --remove-orphans; fi
+  else warn "Docker çalışmıyor: kaplar durdurulamadı (Docker'ı başlatıp yeniden çalıştırın)"; fi
+  if can_root; then
+    if (( HAS_SYSTEMD )); then
+      act "yedek ve güncelleyici zamanlayıcıları durdurulur" quiet as_root systemctl disable --now "$SVC_NAME-backup.timer" "$SVC_NAME-updater.timer" || true
+    fi
+    act "zamanlayıcı birimleri ve güncelleyici dosyaları silinir" as_root rm -rf "/etc/systemd/system/$SVC_NAME-backup.service" "/etc/systemd/system/$SVC_NAME-backup.timer" \
+      "/etc/systemd/system/$SVC_NAME-updater.service" "/etc/systemd/system/$SVC_NAME-updater.timer" "/etc/cron.d/$SVC_NAME-backup" \
+      /usr/local/bin/erp-update "$UPD_DIR" "$ETC/updater.json" "$UPD_WORK"
+    (( HAS_SYSTEMD )) && act "systemctl daemon-reload" as_root systemctl daemon-reload
+  fi
+  if (( OPT_PURGE )); then
+    act "ayarlar silinir: $ROOT/deploy/{.env,Caddyfile.local,certs,wizard.conf}" rm -rf "$ROOT/deploy/.env" "$ROOT/deploy/Caddyfile.local" "$ROOT/deploy/certs" "$ROOT/deploy/wizard.conf"
+    [[ "$bdir" == "$ROOT/backups" ]] && act "yedekler silinir: $bdir" rm -rf "$bdir"
+    (( OPT_DRYRUN )) || okm "Veritabanı birimi, ayarlar ve varsayılan yedekler silindi"
+  else
+    info "Korunanlar: veritabanı (Docker birimi muhasebe-erp_pgdata), ayarlar ($ROOT/deploy/.env…), yedekler ($bdir). Tamamen silmek için: --uninstall --purge"
   fi
 }
 
@@ -869,8 +1135,12 @@ validate_flags() {
   case "$ACCESS" in ''|local|lan|domain) ;; *) die "--access local, lan ya da domain olmalı" ;; esac
   case "$PATH_CHOICE" in ''|docker|native) ;; *) die "--path docker ya da native olmalı" ;; esac
   if [[ -n "$DOMAIN" ]]; then m="$(v_host "$DOMAIN")" || die "--domain: $m"; fi
+  (( OPT_PURGE && ! OPT_UNINSTALL )) && die "--purge yalnızca --uninstall ile kullanılır"
   return 0
 }
+
+# Testler bu dosyayı ERP_INSTALL_SOURCE_ONLY=1 ile kaynak alıp işlevleri tek tek sınar
+[[ -n "${ERP_INSTALL_SOURCE_ONLY:-}" ]] && return 0
 
 say "${C_B}Muhasebe ERP kurulum sihirbazı${C_0} ${C_DIM}(Linux/WSL)${C_0}"
 [[ -n "$ANSWERS_FILE" ]] && load_answers "$ANSWERS_FILE"
@@ -878,10 +1148,12 @@ say "${C_B}Muhasebe ERP kurulum sihirbazı${C_0} ${C_DIM}(Linux/WSL)${C_0}"
 validate_flags
 init_input
 detect
-if (( OPT_UNINSTALL )); then uninstall_native; exit 0; fi
+check_install_location
+if (( OPT_UNINSTALL )); then uninstall_main; exit 0; fi
 if (( OPT_RECONFIGURE )); then reconfigure_main; exit 0; fi
 (( OPT_DRYRUN )) && warn "KURU ÇALIŞTIRMA: sistemde hiçbir şey değiştirilmeyecek."
 detect_existing
+check_downgrade
 compat_check
 if (( OPT_CHECK )); then
   if (( FAILS )); then say ""; die "Engelleyici sorun var (✗)."; fi

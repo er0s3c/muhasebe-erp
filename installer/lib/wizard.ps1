@@ -30,6 +30,8 @@ function Write-SecureFile([string]$file, [string[]]$lines, [bool]$serviceRead) {
   Set-SecureAcl $new $serviceRead
   Move-Item -Force -LiteralPath $new -Destination $file
 }
+# Her dosyanın en yeni $script:BakKeep yedeği kalır (yedekler parola içerir; sınırsız birikmesin)
+$script:BakKeep = 5
 function Backup-Config([string[]]$files) {
   foreach ($f in $files) {
     if (-not (Test-Path -LiteralPath $f)) { continue }
@@ -37,6 +39,10 @@ function Backup-Config([string[]]$files) {
     Copy-Item -LiteralPath $f -Destination $b -Force
     Set-SecureAcl $b $false
     Info "Eski ayar yedeklendi: $b"
+    $leaf = Split-Path -Leaf $f
+    $re = '^' + [regex]::Escape($leaf) + '\.bak-[0-9]{8}-[0-9]{6}$'
+    Get-ChildItem -LiteralPath (Split-Path -Parent $f) -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $re } |
+      Sort-Object Name -Descending | Select-Object -Skip $script:BakKeep | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
   }
 }
 
@@ -84,6 +90,8 @@ function Import-ExistingSettings([string]$p) {
   $script:Cur['LICENSE_SERVER_URL'] = Get-EnvValue $envf 'LICENSE_SERVER_URL'
   $script:Cur['APP_BASE_URL'] = Get-EnvValue $envf 'APP_BASE_URL'
   if ((Get-EnvValue $envf 'REGISTRATION_ENABLED') -eq 'false') { $script:Cur['REGISTRATION'] = 'no' } else { $script:Cur['REGISTRATION'] = 'yes' }
+  $script:Cur['APP_VERSION'] = Get-EnvValue $envf 'APP_VERSION'
+  $script:DbCreated = Get-Cur 'DB_CREATED'; $script:RolesCreated = Get-Cur 'ROLES_CREATED'
   if (-not $Reconfigure) {
     if (-not $script:Access -and (Get-Cur 'ACCESS')) { $script:Access = Get-Cur 'ACCESS' }
     if (-not $script:Domain -and (Get-Cur 'DOMAIN')) { $script:Domain = Get-Cur 'DOMAIN' }
@@ -307,10 +315,38 @@ function Configure-Mail {
   }
 }
 
+# Kurulu sistemde yanıt dosyası ya da mevcut ayardan FARKLI bayrak sessizce yok sayılmaz: sihirbaz durur, -Reconfigure önerir.
+# Güncelleyicinin çalıştırmasında (ERP_UPDATER_RUN) bayraklar kurulumdaki değerlerdir; uyuşmazlık yalnızca uyarılır.
+function Assert-NoSettingsOnExisting {
+  $diffs = @()
+  foreach ($k in $script:FlagVal.Keys) {
+    $cur = Get-Cur $k
+    if ($k -eq 'PORT' -and -not $cur) { $cur = '3000' }; if ($k -eq 'TLS_MODE' -and -not $cur) { $cur = 'none' }; if ($k -eq 'DEMO' -and -not $cur) { $cur = 'no' }
+    if ([string]$script:FlagVal[$k] -ne $cur) { $diffs += "${k}: kurulu=$cur, verilen=$($script:FlagVal[$k])" }
+  }
+  if ($env:ERP_UPDATER_RUN) { if ($diffs.Count -gt 0) { Warn "Güncelleyici bayrakları mevcut ayarlardan farklı; mevcut ayarlar korunuyor ($($diffs -join '; '))" }; return }
+  if ($AnswersFile) { Die "Kurulu sistem bulundu ($($script:ExistingPath)): yanıt dosyası yalnızca YENİ kurulumda okunur, burada yok sayılmaz. Ayarları değiştirmek için: install.ps1 -Reconfigure -AnswersFile `"$AnswersFile`" (önce -DryRun ile bakabilirsiniz)" }
+  if ($diffs.Count -gt 0) { Die "Kurulu sistemin ayarlarından farklı bayrak verildi: $($diffs -join '; '). Yükseltme/onarım mevcut ayarlarla yapılır; değiştirmek için: install.ps1 -Reconfigure" }
+}
+
+# Kurulu sürümden ESKİ kit kurulmaz (veritabanı yeni şemada olabilir). İstisna: -RestoreDb (güncelleyicinin geri dönüşü) ya da -AllowDowngrade.
+function Assert-NoDowngrade {
+  if (-not $script:Existing -or -not $Kit) { return }
+  $cur = Get-Cur 'APP_VERSION'
+  if (-not (Test-Semver $cur) -or -not (Test-Semver $Kit.version)) { return }
+  if ((Compare-SemVer $Kit.version $cur) -ge 0) { return }
+  if ($RestoreDb) { Warn "Sürüm $cur → $($Kit.version) geri dönülüyor (yedekten geri yüklemeyle)"; return }
+  if ($AllowDowngrade) { Warn "Sürüm DÜŞÜRÜLÜYOR: $cur → $($Kit.version) (-AllowDowngrade). Veritabanı şeması yeni sürümde kalır."; return }
+  Die "Kurulu sürüm $cur, bu kit $($Kit.version) (daha eski). Sürüm düşürme yapılmaz: yeni sürümün kitini kullanın."
+}
+
 function Configure-License {
   Write-Section 'Lisans'
   if ($Mode -eq 'dev') { Info 'Geliştirme kurulumunda lisans denetimi kapalıdır (yalnızca NODE_ENV≠production). Müşteri/üretim kurulumunda denetim derlemeye gömülüdür ve kapatılamaz.'; return }
   Info 'Uygulama lisans etkinleştirilmeden çalışmaz: yalnızca etkinleştirme ekranı açılır. Etkinleştirme için satıcıdan aldığınız kod gerekir.'
+  $kitUrl = ''; if ($Kit -and $Kit.PSObject.Properties['licenseServerUrl'] -and $Kit.licenseServerUrl) { $kitUrl = [string]$Kit.licenseServerUrl }
+  if ($kitUrl) { Info "Bu kitte lisans sunucusu adresi gömülü: $kitUrl (boş bırakırsanız bu kullanılır)." }
+  elseif ($Kit) { Warn 'Bu kitte lisans sunucusu adresi YOK: adres girmezseniz yalnızca çevrimdışı etkinleştirme yapılabilir (OPERATIONS §4). Satıcıdan adresi isteyin.' }
   $u = Ask-Val 'LICENSE_SERVER_URL' 'Lisans sunucusu adresi (boş = kitteki varsayılan)' 'Boş bırakın: satıcının uygulamaya gömdüğü adres kullanılır. Yalnızca satıcı farklı bir adres verdiyse yazın (https://…).' (Get-Cur 'LICENSE_SERVER_URL') 'V-LicenseUrl'
   if ($u) {
     if ($DryRun) { Info '(kuru çalıştırma: lisans sunucusuna bağlanılmaz)' }
@@ -320,7 +356,8 @@ function Configure-License {
       if ($okHealth) { Ok "Lisans sunucusuna erişildi: $u" }
       else { Warn "Lisans sunucusuna (HTTPS) ulaşılamadı: $u. Bu sunucudan lisans sunucusuna 443 çıkışı açık olmalı; yoksa etkinleştirme yapılamaz (çevrimdışı etkinleştirme mümkündür: OPERATIONS §4)." }
     }
-  } else { Info 'Varsayılan lisans sunucusu kullanılacak; erişimi etkinleştirme sırasında sınanır.' }
+  } elseif ($kitUrl -or -not $Kit) { Info 'Varsayılan lisans sunucusu kullanılacak; erişimi etkinleştirme sırasında sınanır.' }
+  else { Warn 'Lisans sunucusu yok: çevrimiçi etkinleştirme yapılamaz (yalnızca çevrimdışı etkinleştirme).' }
   [void](Ask-Val 'LICENSE_CODE' 'Lisans etkinleştirme kodu (boş = tarayıcıda girerim)' 'Satıcıdan aldığınız 25 karakterlik kod (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX). Yazarken görünmez. Kurulum bitince burada etkinleştirilir.' '' 'V-LicenseCode' $true)
 }
 
@@ -331,7 +368,7 @@ function Configure-Backup {
   [void](Ask-Val 'BACKUP_DIR' 'Yedek klasörü' 'Günlük veritabanı yedeklerinin yazılacağı klasör (yalnızca yöneticiler okur). Ofis dışına kopyalama (UNC/robocopy) elle kurulur: OPERATIONS §6.' (Get-Cur 'BACKUP_DIR' $defDir) 'V-AbsPath')
   [void](Ask-Val 'BACKUP_KEEP' 'Kaç yedek saklansın?' 'En yeni bu kadar yedek tutulur, eskiler silinir.' (Get-Cur 'BACKUP_KEEP' '14') 'V-Keep')
   [void](Ask-Val 'BACKUP_TIME' 'Günlük yedek saati (SS:DD)' 'Her gün bu saatte otomatik yedek alınır.' (Get-Cur 'BACKUP_TIME' '02:30') 'V-Time')
-  if ($script:Path -eq 'docker') { Warn 'Windows + Docker yolunda otomatik yedek görevi kurulmaz; yedek için docs/OPERATIONS.md §6 (scripts/backup.sh WSL/Git Bash ile) kullanılır.' }
+  if ($script:Path -eq 'docker') { Info 'Docker yolunda günlük yedek zamanlanmış görevle alınır (docker exec pg_dump); o saatte Docker Desktop çalışıyor olmalıdır.' }
 }
 
 function Configure-Registration {
@@ -348,7 +385,11 @@ function Show-Settings {
   if ($script:A['DEMO'] -eq 'yes') { Say '  Veri:             DEMO verisi yüklenecek' } else { Say '  Veri:             BOŞ uygulama (demo/örnek veri yok)' }
   if ($Mode -eq 'prod') {
     if ($script:A['MAIL_ENABLED'] -eq 'yes') { Say "  E-posta:          açık — $($script:A['SMTP_HOST']):$($script:A['SMTP_PORT']) ($($script:A['SMTP_SECURITY'])), gönderen $($script:MailFrom)" } else { Say '  E-posta:          kapalı (parola sıfırlama/doğrulama yok)' }
-    $lu = $script:A['LICENSE_SERVER_URL']; if (-not $lu) { $lu = 'kitteki varsayılan' }
+    $lu = $script:A['LICENSE_SERVER_URL']
+    if (-not $lu) {
+      if ($Kit -and $Kit.PSObject.Properties['licenseServerUrl'] -and $Kit.licenseServerUrl) { $lu = "kitteki varsayılan ($($Kit.licenseServerUrl))" }
+      elseif ($Kit) { $lu = 'YOK (kitte de yok: yalnızca çevrimdışı etkinleştirme)' } else { $lu = 'derlemedeki varsayılan' }
+    }
     $lc = 'girilmedi (tarayıcıda girilecek)'; if ($script:A['LICENSE_CODE']) { $lc = 'girildi (kurulumda etkinleştirilecek)' }
     Say "  Lisans sunucusu:  $lu   kod: $lc"
     Say "  Yedek:            her gün $($script:A['BACKUP_TIME']) → $($script:A['BACKUP_DIR']) (son $($script:A['BACKUP_KEEP']))"
@@ -361,11 +402,12 @@ function Show-Settings {
 function Invoke-Configure {
   Stage '3/5 Yapılandırma'
   if ($script:Existing) {
+    Assert-NoSettingsOnExisting
     Info 'Mevcut kurulum bulundu: ayarlar korunuyor (değiştirmek için: install.ps1 -Reconfigure).'
     if (-not $script:Port) { $script:Port = [int](Get-Cur 'PORT' '3000') }
     if (-not $script:A['TLS_MODE']) { $script:A['TLS_MODE'] = 'none' }
     $script:A['DEMO'] = Get-Cur 'DEMO' 'no'
-    foreach ($k in @('BACKUP_DIR', 'BACKUP_KEEP', 'BACKUP_TIME')) { if (-not $script:A[$k]) { $script:A[$k] = Get-Cur $k } }
+    foreach ($k in @('BACKUP_DIR', 'BACKUP_KEEP', 'BACKUP_TIME', 'LICENSE_SERVER_URL')) { $script:A[$k] = Get-Cur $k }
     if (-not $script:A['BACKUP_DIR']) { if ($script:Path -eq 'native') { $script:A['BACKUP_DIR'] = (Join-Path $DataDir 'backups') } else { $script:A['BACKUP_DIR'] = (Join-Path $Root 'backups') } }
     if (-not $script:A['BACKUP_KEEP']) { $script:A['BACKUP_KEEP'] = '14' }
     if (-not $script:A['BACKUP_TIME']) { $script:A['BACKUP_TIME'] = '02:30' }
@@ -441,10 +483,13 @@ function Write-WizardConf {
   $l += "ACCESS=$($script:Access)"; $l += "DOMAIN=$($script:Domain)"; $l += "PORT=$Port"
   foreach ($k in @('TLS_MODE', 'ACME_EMAIL', 'HTTP_PORT', 'HTTPS_PORT', 'MAIL_ENABLED', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURITY', 'SMTP_USER', 'MAIL_FROM_ADDRESS', 'MAIL_FROM_NAME', 'BACKUP_DIR', 'BACKUP_KEEP', 'BACKUP_TIME', 'REGISTRATION', 'LICENSE_SERVER_URL', 'APP_BASE_URL', 'DEMO')) { $l += "$k=$($script:A[$k])" }
   $l += "DEMO_PENDING=$($script:DemoPending)"; $l += "DEMO_SEEDED=$($script:DemoSeeded)"
+  $l += "DB_NAME=$DbName"; $l += "DB_CREATED=$($script:DbCreated)"; $l += "ROLES_CREATED=$($script:RolesCreated)"
   Write-SecureFile (Get-ConfPath) $l $false
 }
 $script:DemoPending = ''
 $script:DemoSeeded = ''
+$script:DbCreated = ''
+$script:RolesCreated = ''
 
 # ---- Lisans: durum, kapı doğrulaması, etkinleştirme -----------------------------------------------------------------------------------
 function Invoke-Http([string]$method, [string]$url, [string]$body = '') {
@@ -624,14 +669,17 @@ function Invoke-Reconfigure {
   Write-TlsFiles
   $script:DemoPending = 'no'; $script:DemoSeeded = Get-Cur 'DEMO_SEEDED' 'no'; $script:A['DEMO'] = Get-Cur 'DEMO' 'no'
   Write-WizardConf
-  if ($script:Path -eq 'native') { Write-BackupTask }
+  $taskSnap = Save-BackupTaskSnapshot
+  Write-BackupTask
   if (-not (Restart-AndVerify $Port)) {
-    Warn 'Uygulama yeni ayarlarla hazır olmadı; eski ayarlar geri yükleniyor…'
+    Warn 'Uygulama yeni ayarlarla hazır olmadı; eski ayarlar ve yedek görevi geri yükleniyor…'
     foreach ($f in $bak) { $b = "$f.bak-$($script:Stamp)"; if (Test-Path -LiteralPath $b) { Copy-Item -Force -LiteralPath $b -Destination $f } }
+    Restore-BackupTaskSnapshot $taskSnap
     $script:A['TLS_MODE'] = Get-Cur 'TLS_MODE' 'none'
     [void](Restart-AndVerify ([int](Get-Cur 'PORT' "$Port")))
     Die "Yeniden yapılandırma başarısız; önceki ayarlar geri yazıldı (yedek: $envf.bak-$($script:Stamp)). Günlüğe bakın: $DataDir\logs"
   }
+  Remove-BackupTaskSnapshot $taskSnap
   Ok 'Uygulama yeni ayarlarla çalışıyor'
   $base = "http://127.0.0.1:$Port"
   Test-LicenseGate $base; Invoke-LicenseActivation $base

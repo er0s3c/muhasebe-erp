@@ -526,6 +526,9 @@ describe('irsaliye', async () => {
     const receiving = await sm.post('/api/delivery-notes', { type: 'purchase', partyId: sup.id, externalNo: 'SM-1', noteDate: day(3, 6), warehouseId: main.id, lines: [dline(item.id, '4', { unitCost: '9' })], post: true });
     expect(receiving.statusCode).toBe(201);
     expect((await sm.get('/api/invoices')).statusCode).toBe(403);
+    // Cari seçicileri için salt-okuma (ekleyemez)
+    expect((await sm.get('/api/parties')).statusCode).toBe(200);
+    expect((await sm.post('/api/parties', { name: 'Yeni', type: 'supplier' })).statusCode).toBe(403);
     expect((await sm.post('/api/invoices', {})).statusCode).toBe(403);
 
     expect((await viewer.get('/api/delivery-notes')).statusCode).toBe(200);

@@ -6,20 +6,41 @@
  *   2) Satıcı imzalı manifestoyu gömülü anahtarla doğrular, kiti lisans sunucusundan indirir, SHA-256 ve boyutu denetler.
  *   3) Yedek alır (yerel: erp-backup; Docker: pg_dump kap içinde). Yedek alınamazsa güncelleme yapılmaz.
  *   4) Kiti açar ve YENİ kitin kurulum sihirbazını etkileşimsiz çalıştırır (durdurma, kopyalama, migration, başlatma, sağlık).
- *   5) Uygulamanın yeni sürümle yanıt verdiğini doğrular → "bitti".
+ *      Docker yolunda kurulum klasörü SABİTTİR: yeni kitin program dosyaları kurulum klasörüne yerinde konur (eskileri geri dönüş
+ *      için saklanır); deploy/.env, Caddyfile.local, certs/, wizard.conf ve backups/ hiç taşınmaz.
+ *   5) Uygulamanın yeni sürümle yanıt verdiğini (HTTPS yapılandırılmışsa HTTPS üzerinden de) doğrular → "bitti".
  *   6) Başarısızlıkta: eski sürüm hâlâ yanıt veriyorsa (migration geri alındı) → "başarısız"; yanıt yoksa ya da yeni sürüm bozuksa
  *      ESKİ kitin sihirbazı yedekten veritabanını geri yükleyerek yeniden kurar → "geri alındı".
+ *
+ * Korumalar: sürüm düşürme reddedilir; aynı güncelleme en çok `maxAttempts` kez (artan beklemeyle) denenir; kilit, onu tutan
+ * süreç yaşıyorsa (ve 6 saatten yeni ise) geçerlidir; güncelleme öncesi Docker dökümlerinden yalnızca son `keepBackups` tanesi kalır.
  *
  * Dış bağımlılık yoktur (paket tek dosyadır; node_modules gerekmez). Günlük: <workDir>/updater.log.
  */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, createWriteStream, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  cpSync,
+  createWriteStream,
+  existsSync,
+  lchownSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { appendFile } from 'node:fs/promises';
+import { request as httpsRequest } from 'node:https';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { parseReleaseManifest, type PublicKeyring, type ReleaseManifest } from '@erp/license-core';
+import { compareVersions, parseReleaseManifest, type PublicKeyring, type ReleaseManifest } from '@erp/license-core';
 
 export interface UpdaterConfig {
   mode: 'native' | 'docker';
@@ -38,6 +59,12 @@ export interface UpdaterConfig {
   /** Yerel kurulum yedek komutu (çıktısında "Yedek: <yol>" satırı). */
   backupCommand?: string[];
   dbName?: string;
+  /** HTTPS (Caddy) yapılandırılmışsa: güncellemeden sonra https://127.0.0.1:<port> (SNI: host) üzerinden sağlık denetimi. */
+  httpsCheck?: { port: number; host: string };
+  /** Aynı güncellemenin en çok kaç kez deneneceği (varsayılan 3). */
+  maxAttempts?: number;
+  /** Docker yolunda güncelleme öncesi dökümlerden kaç tanesi saklanır (varsayılan 3). */
+  keepBackups?: number;
 }
 
 export interface PendingUpdate {
@@ -60,10 +87,61 @@ export interface UpdaterIO {
   run: (cmd: string, args: string[], opts?: { cwd?: string; timeoutMs?: number; stdoutFile?: string }) => Promise<{ code: number; output: string }>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
+  /** HTTPS sağlık denetimi: durum kodu (bağlantı hatası 0). Sertifika güveni denetlenmez (kendi imzalı olabilir); el sıkışma ve vekil denetlenir. */
+  httpsStatus?: (port: number, host: string, path: string) => Promise<number>;
+  /** Sürecin yaşayıp yaşamadığı (kilit bayatlığı). */
+  pidAlive?: (pid: number) => boolean;
 }
 
 const LOG_MAX = 5 * 1024 * 1024;
 const REPORT_LOG_MAX = 60_000;
+const LOCK_MAX_MS = 6 * 60 * 60 * 1000;
+/** n. yeniden denemeden önce beklenecek süre (ilk deneme hemen). */
+const RETRY_BACKOFF_MS = [0, 15 * 60_000, 60 * 60_000, 4 * 60 * 60_000];
+/** Kitle gelen (kurulum klasöründe değiştirilecek) üst düzey girdiler; deploy/ ve backups/ ayrıca ele alınır. */
+const KIT_ENTRIES = ['app', 'installer', 'scripts', 'infra', 'docs', 'image', 'docker', 'winsw', 'kit.json', 'install.sh', 'Kur.cmd', 'README.md', 'THIRD-PARTY-NOTICES.md'];
+
+export function pidAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+function httpsStatus(port: number, host: string, path: string): Promise<number> {
+  return new Promise((resolve) => {
+    const req = httpsRequest(
+      { host: '127.0.0.1', port, path, method: 'GET', servername: /^[\d.]+$/.test(host) ? undefined : host, headers: { host }, rejectUnauthorized: false, timeout: 5000 },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      },
+    );
+    req.on('timeout', () => req.destroy());
+    req.on('error', () => resolve(0));
+    req.end();
+  });
+}
+
+/** Yeniden adlandırma; farklı dosya sistemindeyse kopyala + sil. */
+function moveSync(from: string, to: string) {
+  try {
+    renameSync(from, to);
+  } catch (err) {
+    if (!['EXDEV', 'EPERM', 'EACCES', 'EBUSY'].includes((err as NodeJS.ErrnoException).code ?? '')) throw err;
+    cpSync(from, to, { recursive: true, verbatimSymlinks: true, preserveTimestamps: true });
+    rmSync(from, { recursive: true, force: true });
+  }
+}
+
+function chownTree(path: string, uid: number, gid: number) {
+  const st = lstatSync(path);
+  lchownSync(path, uid, gid);
+  if (st.isDirectory()) for (const n of readdirSync(path)) chownTree(join(path, n), uid, gid);
+}
 
 export function readEnvValue(file: string, key: string): string | null {
   if (!existsSync(file)) return null;
@@ -74,6 +152,8 @@ export function readEnvValue(file: string, key: string): string | null {
 }
 
 export const defaultIO: UpdaterIO = {
+  httpsStatus,
+  pidAlive,
   fetch: (...a) => fetch(...a),
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   now: () => Date.now(),
@@ -166,11 +246,19 @@ export class Updater {
     return false;
   }
 
-  /** Aynı anda tek güncelleyici (zamanlayıcı her dakika tetikler). 3 saatten eski kilit bayat sayılır. */
+  /**
+   * Aynı anda tek güncelleyici (zamanlayıcı her dakika tetikler). Kilit dosyası sahibinin PID'ini taşır: süreç ölmüşse (çökme,
+   * yeniden başlatma) kilit hemen bayat sayılır; süreç yaşıyorsa (uzun süren güncelleme) kilit 6 saate kadar geçerlidir.
+   */
   private lock(): (() => void) | null {
-    mkdirSync(this.cfg.workDir, { recursive: true });
+    mkdirSync(this.cfg.workDir, { recursive: true, mode: 0o700 });
     const file = join(this.cfg.workDir, 'updater.lock');
-    if (existsSync(file) && this.io.now() - statSync(file).mtimeMs > 3 * 60 * 60 * 1000) rmSync(file, { force: true });
+    if (existsSync(file)) {
+      const pid = Number.parseInt(readFileSync(file, 'utf8').trim(), 10);
+      const age = this.io.now() - statSync(file).mtimeMs;
+      const alive = (this.io.pidAlive ?? pidAlive)(pid);
+      if (!alive || age > LOCK_MAX_MS) rmSync(file, { force: true });
+    }
     try {
       closeSync(openSync(file, 'wx'));
     } catch {
@@ -178,6 +266,25 @@ export class Updater {
     }
     writeFileSync(file, String(process.pid));
     return () => rmSync(file, { force: true });
+  }
+
+  // ---- Deneme sayacı (bildirim gidemese bile aynı güncelleme her dakika baştan denenmesin) --------------------------------
+  private attemptsFile() {
+    return join(this.cfg.workDir, 'attempts.json');
+  }
+  private readAttempts(): Record<string, { count: number; last: number }> {
+    try {
+      return JSON.parse(readFileSync(this.attemptsFile(), 'utf8')) as Record<string, { count: number; last: number }>;
+    } catch {
+      return {};
+    }
+  }
+  private writeAttempts(a: Record<string, { count: number; last: number }>) {
+    try {
+      writeFileSync(this.attemptsFile(), JSON.stringify(a), { mode: 0o600 });
+    } catch {
+      // sayaç yazılamazsa deneme yine yapılır
+    }
   }
 
   private async download(p: PendingUpdate, m: ReleaseManifest): Promise<string> {
@@ -214,7 +321,11 @@ export class Updater {
         stdoutFile: out,
         timeoutMs: 60 * 60_000,
       });
-      if (r.code !== 0 || !existsSync(out) || statSync(out).size === 0) throw new Error(`Yedek alınamadı: ${r.output.slice(-500)}`);
+      if (r.code !== 0 || !existsSync(out) || statSync(out).size === 0) {
+        rmSync(out, { force: true });
+        throw new Error(`Yedek alınamadı: ${r.output.slice(-500)}`);
+      }
+      this.pruneBackups(dir);
       return out;
     }
     const [cmd, ...args] = this.cfg.backupCommand ?? [];
@@ -223,6 +334,16 @@ export class Updater {
     const path = /Yedek: (.+)$/m.exec(r.output)?.[1]?.trim();
     if (r.code !== 0 || !path) throw new Error(`Yedek alınamadı: ${r.output.slice(-500)}`);
     return path;
+  }
+
+  /** Güncelleme öncesi dökümlerden (erp-oncesi-*.dump) en yeni `keepBackups` tanesi kalır. */
+  private pruneBackups(dir: string) {
+    const keep = Math.max(1, this.cfg.keepBackups ?? 3);
+    const dumps = readdirSync(dir)
+      .filter((n) => /^erp-oncesi-[0-9TZ-]+\.dump$/.test(n))
+      .sort()
+      .reverse();
+    for (const n of dumps.slice(keep)) rmSync(join(dir, n), { force: true });
   }
 
   private composeArgs(dir: string) {
@@ -243,6 +364,54 @@ export class Updater {
     const meta = JSON.parse(readFileSync(join(dest, kit, 'kit.json'), 'utf8')) as { version?: string; target?: string };
     if (meta.version !== version || meta.target !== this.cfg.platform) throw new Error(`Kit sürümü/hedefi beklenenden farklı (${meta.version} ${meta.target})`);
     return join(dest, kit);
+  }
+
+  /**
+   * Docker yolu: yeni kitin program dosyalarını SABİT kurulum klasörüne koyar; eski dosyalar `stash` klasörüne alınır (geri
+   * dönüş için). Kurulumun durumu (deploy/.env, Caddyfile.local, certs/, wizard.conf, *.bak-*, backups/) yerinde kalır.
+   */
+  private swapKit(live: string, next: string, stash: string) {
+    rmSync(stash, { recursive: true, force: true });
+    mkdirSync(join(stash, 'deploy'), { recursive: true });
+    const names = [...new Set([...readdirSync(next), ...KIT_ENTRIES])].filter((n) => n !== 'deploy' && n !== 'backups');
+    const deploy = existsSync(join(next, 'deploy')) ? readdirSync(join(next, 'deploy')) : [];
+    // Yarıda kalırsa geri alınabilsin diye önce liste yazılır
+    writeFileSync(join(stash, 'swap.json'), JSON.stringify({ names, deploy }));
+    if (existsSync(join(live, 'deploy', '.env'))) cpSync(join(live, 'deploy', '.env'), join(stash, 'env.before'));
+    const owner = statSync(live);
+    for (const [rel, dst] of [...names.map((n) => [n, n] as const), ...deploy.map((f) => [join('deploy', f), join('deploy', f)] as const)]) {
+      if (existsSync(join(live, rel))) moveSync(join(live, rel), join(stash, dst));
+      if (existsSync(join(next, rel))) {
+        moveSync(join(next, rel), join(live, rel));
+        // Kit klasörü kurulumu yapan kullanıcınındır: yeni dosyalar da onun olsun (güncelleyici root/SYSTEM çalışır)
+        if (process.platform !== 'win32' && process.getuid?.() === 0) chownTree(join(live, rel), owner.uid, owner.gid);
+      }
+    }
+  }
+
+  /** swapKit'i geri alır: yeni dosyalar silinir, eskiler (ve güncelleme öncesi deploy/.env) yerine konur. */
+  private unswapKit(live: string, stash: string) {
+    const listFile = join(stash, 'swap.json');
+    if (!existsSync(listFile)) return;
+    const { names, deploy } = JSON.parse(readFileSync(listFile, 'utf8')) as { names: string[]; deploy: string[] };
+    for (const rel of [...names, ...deploy.map((f) => join('deploy', f))]) {
+      rmSync(join(live, rel), { recursive: true, force: true });
+      if (existsSync(join(stash, rel))) moveSync(join(stash, rel), join(live, rel));
+    }
+    if (existsSync(join(stash, 'env.before'))) writeFileSync(join(live, 'deploy', '.env'), readFileSync(join(stash, 'env.before')), { mode: 0o600 });
+    rmSync(listFile, { force: true });
+  }
+
+  /** HTTPS yapılandırılmışsa Caddy'nin yeni sürümü sunduğunu doğrular. */
+  private async verifyHttps(): Promise<boolean> {
+    const h = this.cfg.httpsCheck;
+    if (!h) return true;
+    const probe = this.io.httpsStatus ?? httpsStatus;
+    for (let i = 0; i < 45; i++) {
+      if ((await probe(h.port, h.host, '/api/health/ready')) === 200) return true;
+      await this.io.sleep(2000);
+    }
+    return false;
   }
 
   /** Kitin kurulum sihirbazını etkileşimsiz çalıştırır (isteğe bağlı yedekten veritabanı geri yükleme ile). */
@@ -283,9 +452,30 @@ export class Updater {
       // Önceki deneme yarıda kaldıysa ve yeni sürüm zaten çalışıyorsa yalnızca bildir
       if (fromVersion === p.version) {
         await this.report(p.id, 'done', 'Yeni sürüm çalışıyor');
+        this.forget(p.id);
         return { outcome: 'done' };
       }
-      await this.log(`güncelleme başlıyor: ${fromVersion} → ${p.version}`);
+      // Sürüm düşürme yapılmaz (veritabanı yeni şemaya taşınmış olabilir; geri dönüş yalnızca başarısız güncellemenin parçasıdır)
+      if (/^\d+\.\d+\.\d+/.test(fromVersion) && compareVersions(p.version, fromVersion) < 0) {
+        const msg = `Sürüm düşürme reddedildi: çalışan ${fromVersion}, istenen ${p.version}`;
+        await this.log(msg);
+        await this.report(p.id, 'failed', msg);
+        return { outcome: 'failed', message: msg };
+      }
+      // Deneme sınırı ve artan bekleme: durum bildirilemese de (uygulama kapalı/kısıtlı) her dakika baştan kesinti yaşanmaz
+      const attempts = this.readAttempts();
+      const prev = attempts[p.id] ?? { count: 0, last: 0 };
+      const max = Math.max(1, this.cfg.maxAttempts ?? 3);
+      if (prev.count >= max) {
+        const msg = `Güncelleme ${prev.count} kez denendi ve başarılamadı; yeniden denenmeyecek (günlük: ${join(this.cfg.workDir, 'updater.log')}). Yeniden onaylayın ya da yerelde kurun.`;
+        await this.report(p.id, 'failed', msg);
+        return { outcome: 'failed', message: msg };
+      }
+      const wait = RETRY_BACKOFF_MS[Math.min(prev.count, RETRY_BACKOFF_MS.length - 1)]!;
+      if (prev.count > 0 && this.io.now() - prev.last < wait) return { outcome: 'idle', message: 'yeniden deneme zamanı gelmedi' };
+      attempts[p.id] = { count: prev.count + 1, last: this.io.now() };
+      this.writeAttempts(attempts);
+      await this.log(`güncelleme başlıyor: ${fromVersion} → ${p.version} (deneme ${prev.count + 1}/${max})`);
       await this.report(p.id, 'downloading');
 
       let manifest: ReleaseManifest;
@@ -302,16 +492,20 @@ export class Updater {
 
       let backup: string;
       let kitDir: string;
+      const docker = this.cfg.mode === 'docker';
+      const stash = join(this.cfg.workDir, 'kits', `${fromVersion || 'onceki'}-onceki`);
       try {
         backup = await this.backup();
         await this.log(`yedek alındı: ${backup}`);
         kitDir = await this.extract(archive, p.version);
-        if (this.cfg.mode === 'docker') {
-          // Docker kurulumunun parolaları ve ayarları yeni kit klasörüne taşınır (aynı compose projesi, aynı birimler)
-          mkdirSync(join(kitDir, 'deploy'), { recursive: true });
-          writeFileSync(join(kitDir, 'deploy', '.env'), readFileSync(join(this.cfg.dockerDir!, 'deploy', '.env')), { mode: 0o600 });
+        if (docker) {
+          // Kurulum klasörü sabit kalır: yeni program dosyaları yerinde değiştirilir (ayarlar, sertifikalar, yedekler taşınmaz)
+          this.swapKit(this.cfg.dockerDir!, kitDir, stash);
+          await this.log(`kit dosyaları kurulum klasörüne kondu: ${this.cfg.dockerDir} (eskiler: ${stash})`);
+          kitDir = this.cfg.dockerDir!;
         }
       } catch (err) {
+        if (docker) this.unswapKit(this.cfg.dockerDir!, stash);
         await this.log(`hazırlık hatası: ${(err as Error).message}`);
         await this.report(p.id, 'failed', (err as Error).message);
         return { outcome: 'failed', message: (err as Error).message };
@@ -322,8 +516,17 @@ export class Updater {
       const r = await this.installer(kitDir);
       await this.log(`sihirbaz çıkış kodu ${r.code}\n${r.output.slice(-20_000)}`);
       if (r.code === 0 && (await this.waitVersion(p.version, 180))) {
+        if (!(await this.verifyHttps())) {
+          const h = this.cfg.httpsCheck!;
+          const msg = `Uygulama ${p.version} sürümünde çalışıyor ama HTTPS (Caddy, ${h.host}:${h.port}) yanıt vermiyor. Elle denetleyin: docker compose … --profile tls logs caddy`;
+          await this.log(msg);
+          await this.report(p.id, 'failed', msg);
+          this.forget(p.id);
+          return { outcome: 'failed', message: msg };
+        }
         await this.log('güncelleme tamamlandı');
         await this.report(p.id, 'done');
+        this.forget(p.id);
         this.prune(p.version, fromVersion);
         return { outcome: 'done' };
       }
@@ -331,21 +534,24 @@ export class Updater {
       // Başarısız: eski sürüm hâlâ yanıt veriyorsa (migration tek işlemde geri alındı) yalnızca bildir
       const running = await this.runningVersion();
       if (running === fromVersion) {
+        // Kurulum klasörü çalışan sürümle uyumlu kalsın
+        if (docker) this.unswapKit(this.cfg.dockerDir!, stash);
         const msg = 'Güncelleme uygulanamadı; önceki sürüm çalışmaya devam ediyor (veritabanı değişmedi). Ayrıntı günlükte.';
         await this.log(msg);
         await this.report(p.id, 'failed', msg);
         return { outcome: 'failed', message: msg };
       }
       // Yeni sürüm bozuk ya da uygulama kapalı: eski kitle yedekten geri dön
-      const prev = this.previousKit(fromVersion);
-      if (!prev) {
+      if (docker) this.unswapKit(this.cfg.dockerDir!, stash);
+      const prevKit = this.previousKit(fromVersion);
+      if (!prevKit) {
         const msg = `Güncelleme başarısız ve önceki sürüm (${fromVersion}) bulunamadı; yedek: ${backup}. Elle geri yükleme gerekir (docs/OPERATIONS.md §6).`;
         await this.log(msg);
         await this.report(p.id, 'failed', msg);
         return { outcome: 'failed', message: msg };
       }
-      await this.log(`geri dönülüyor: ${prev} (yedek ${backup})`);
-      const rb = await this.installer(prev, backup);
+      await this.log(`geri dönülüyor: ${prevKit} (yedek ${backup})`);
+      const rb = await this.installer(prevKit, backup);
       await this.log(`geri dönüş çıkış kodu ${rb.code}\n${rb.output.slice(-20_000)}`);
       if (rb.code === 0 && (await this.waitVersion(fromVersion, 180))) {
         const msg = `Güncelleme başarısız; ${fromVersion} sürümüne ve güncelleme öncesi yedeğe geri dönüldü.`;
@@ -361,14 +567,28 @@ export class Updater {
     }
   }
 
-  /** Eski indirmeleri ve kitleri temizler: yeni ve bir önceki sürüm kalır (Docker kit klasörü kullanımdadır). */
+  private forget(id: string) {
+    const a = this.readAttempts();
+    if (a[id]) {
+      delete a[id];
+      this.writeAttempts(a);
+    }
+  }
+
+  /**
+   * Eski indirmeleri ve açılmış kitleri temizler: yeni ve bir önceki sürüm kalır. Docker yolunda açılan kit klasörü boşalmıştır
+   * (dosyalar kurulum klasörüne taşındı); eski kurulumlardan kalan, hâlâ kullanımdaki bir kit klasörü (dockerDir) asla silinmez.
+   */
   private prune(keep: string, previous: string) {
+    const live = this.cfg.dockerDir ? join(this.cfg.dockerDir) : null;
     for (const sub of ['downloads', 'kits']) {
       const dir = join(this.cfg.workDir, sub);
       if (!existsSync(dir)) continue;
       for (const n of readdirSync(dir)) {
-        if (n.includes(keep) || n.includes(previous)) continue;
-        rmSync(join(dir, n), { recursive: true, force: true });
+        if (n === keep || n === previous || n.includes(`-${keep}-`) || n.startsWith(`${previous}-`) || n.includes(`-${previous}-`)) continue;
+        const full = join(dir, n);
+        if (live && (live === full || live.startsWith(`${full}/`) || live.startsWith(`${full}\\`))) continue;
+        rmSync(full, { recursive: true, force: true });
       }
     }
   }

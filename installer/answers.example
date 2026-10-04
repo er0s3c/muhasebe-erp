@@ -1,9 +1,16 @@
 # Muhasebe ERP kurulum sihirbazı — yanıt dosyası örneği (etkileşimsiz kurulum)
 #
-#   Linux/WSL : ./install.sh --answers=installer/answers.example     (kopyalayıp düzenleyin)
-#   Windows   : installer\install.ps1 -AnswersFile installer\answers.example
+# Sürüm kitinin klasöründe kullanılır (müşteri kurulumu). Kopyalayıp düzenleyin:
+#   Linux/WSL : cp installer/answers.example ../musteri.answers && chmod 600 ../musteri.answers
+#               ./install.sh --answers=../musteri.answers --dry-run      (sonra --dry-run olmadan)
+#   Windows   : installer\install.ps1 -AnswersFile C:\yol\musteri.answers -DryRun
+# Bu örnek olduğu gibi de geçerlidir: yerel (Docker'sız) yol, boş uygulama, e-postasız. Yalnızca YENİ kurulumda ya da
+# --reconfigure ile okunur; kurulu sistemde düz kurulum yanıt dosyasını reddeder (yok saymaz).
 #
 # Biçim: ANAHTAR=değer (satır başına bir tane). # ile başlayan satırlar yorumdur. Değer boş bırakılırsa varsayılan kullanılır.
+# Tırnaksız değerde baş/son boşluk atılır ve "boşluk + #" sonrası yorumdur; # ile başlayan değer yorumdur (boş = varsayılan).
+# Değer #, " #" ya da baş/son boşluk içeriyorsa tırnak kullanın: SMTP_PASSWORD="a #b" ya da 'a #b' (içerik olduğu gibi alınır;
+# kaçış dizisi yoktur, aynı tırnak karakteri değerde kullanılamaz). Dosya UTF-8'dir; BOM ve CRLF sorun değildir.
 # Komut satırı bayrakları bu dosyadan önceliklidir. Dosya ÇALIŞTIRILMAZ (yalnızca okunur) ve hiçbir yere kopyalanmaz.
 # DİKKAT: SMTP_PASSWORD ve LICENSE_CODE gizlidir; dosyayı chmod 600 yapın ve kurulum bitince SİLİN.
 # Her anahtarın açıklaması: docs/OPERATIONS.md §2 (Kurulum soruları).
@@ -42,6 +49,6 @@ HTTP_PORT=                 # varsayılan 80 (auto için sabit)
 HTTPS_PORT=                # varsayılan 443 (auto için sabit)
 
 # --- Yedekleme -----------------------------------------------------------------------------------------------------------
-BACKUP_DIR=                # boş = /var/lib/muhasebe-erp/backups (yerel) ya da <kurulum>/backups (Docker)
-BACKUP_KEEP=14             # saklanacak en yeni yedek sayısı
+BACKUP_DIR=                # boş = /var/backups/muhasebe-erp (Linux yerel), ProgramData\MuhasebeERP\backups (Windows yerel), <kurulum>/backups (Docker)
+BACKUP_KEEP=14             # saklanacak en yeni yedek sayısı (en az 1)
 BACKUP_TIME=02:30          # günlük yedek saati (SS:DD)

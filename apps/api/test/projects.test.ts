@@ -318,6 +318,10 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
       [1, 'superseded', false],
     ]);
     expect(list[0]!.total).toBe('5500.50');
+    // Ham SQL'den gelen zaman damgaları da ISO 8601 (toISOString) biçiminde
+    const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+    expect((list[0] as unknown as { approvedAt: string }).approvedAt).toMatch(iso);
+    expect((list[0] as unknown as { createdAt: string }).createdAt).toMatch(iso);
     expect(list[1]!.id).toBe(b1);
     expect(b2).not.toBe(b1);
 

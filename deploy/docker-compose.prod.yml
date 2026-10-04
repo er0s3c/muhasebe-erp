@@ -5,8 +5,16 @@
 # Ayrıntı: docs/OPERATIONS.md
 name: muhasebe-erp
 
+# Kap günlükleri döndürülür (json-file): her kap en çok 5 × 10 MB; disk dolmasın
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
 services:
   db:
+    logging: *default-logging
     image: postgres:16 # Debian tabanlı: Türkçe sıralama için ICU (tr-TR-x-icu) gerekir
     restart: unless-stopped
     environment:
@@ -25,6 +33,7 @@ services:
     # Veritabanı portu YAYINLANMAZ; yalnızca uygulama kabı ağ içinden bağlanır.
 
   migrate:
+    logging: *default-logging
     image: ${ERP_IMAGE:-muhasebe-erp:local}
     build:
       context: ..
@@ -43,6 +52,7 @@ services:
     restart: 'no'
 
   app:
+    logging: *default-logging
     image: ${ERP_IMAGE:-muhasebe-erp:local}
     restart: unless-stopped
     init: true
@@ -93,6 +103,7 @@ services:
       - '${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000'
 
   caddy:
+    logging: *default-logging
     profiles: ['tls']
     image: caddy:2
     restart: unless-stopped

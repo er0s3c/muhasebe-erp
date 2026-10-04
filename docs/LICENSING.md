@@ -190,7 +190,7 @@ docker build -t registry.ornek.com/muhasebe-erp:1.0.0 --build-arg APP_VERSION=1.
 
 ### 5.1 Sürüm kiti ve uzaktan güncelleme (tek tıkla gönderme)
 
-Sihirbazla kurulan müşteriler (Docker'lı ya da Docker'sız) **sürüm kiti** kullanır: `npm run release -- --version=1.2.0` (aynı `LICENSE_PUBLIC_KEYS_JSON` / `LICENSE_SERVER_URL` ortamıyla derleyin; kit bu anahtarı gömer). Yeni sürümü müşterilere göndermek:
+Sihirbazla kurulan müşteriler (Docker'lı ya da Docker'sız) **sürüm kiti** kullanır: `LICENSE_SERVER_URL=https://lisans.ornek.com npm run release -- --version=1.2.0` (aynı `LICENSE_PUBLIC_KEYS_JSON` ortamıyla; kit anahtarı ve adresi gömer). **`LICENSE_SERVER_URL` zorunludur:** verilmezse `release` kit üretmeyi reddeder, çünkü adressiz kit lisansı çevrimiçi etkinleştiremez (`409 LICENSE_SERVER_NOT_CONFIGURED`); yalnızca çevrimdışı etkinleştirmeyle teslim edilecek bir kit için bilerek `--allow-no-license-server` verin. `--skip-build` ile önceden derlenmiş paketin aynı adresle derlendiği denetlenir. Adres `kit.json`'a (`licenseServerUrl`, yoksa `null`) yazılır; kurulum sihirbazı müşteriye kitte adres olup olmadığını açıkça söyler. Yeni sürümü müşterilere göndermek:
 
 1. Panel **Sürümler** → **Yeni sürüm** (sürüm numarası = kitin sürümü; notu müşteri görür) → **Kit arşivi seç** (`muhasebe-erp-1.2.0-linux-x64.tar.gz`, `…-win-x64.zip`; 8 MB'lık parçalarla yüklenir, kopan yükleme kaldığı yerden sürer) → **Yayımla (imzala)**: dosya özetleriyle manifesto satıcı anahtarınızla imzalanır; yayımlanan sürümün dosyaları ve özetleri artık değişmez (veritabanı tetikleyicisi, `LIC03`).
 2. Aynı ekranda müşteri lisanslarını seçip **Seçilenlere gönder** ya da **Tüm etkin lisanslara gönder**. Kurulumlar bir sonraki kalp atışında teklifi alır (müşteri "Güncellemeleri denetle" ile hemen). Kurulumun sürümü ve platformu tabloda görünür; platformu olmayanlar elle kurulumdur, onlara teklif gitmez.
@@ -266,7 +266,7 @@ Kırmızı bant "Salt-okunur mod" ise verilerinizi görüntüleyip dışa aktara
 
 **Yeni şirket.** Yeni şirketi mevcut bir şirketin sahibi ya da yöneticisi açar; sektör, lisansınızdaki sektörlerle sınırlıdır; şirket sınırına ulaşınca oluşturma kapanır.
 
-**Sunucu taşıma.** §6'daki adımlar. **Yedek:** lisans durumu veritabanı yedeğine dahildir; yeni sunucuya geri yüklemek parmak izi nedeniyle salt-okunura düşürür, yeniden etkinleştirme açar.
+**Sunucu taşıma.** §6'daki adımlar. **Yedek:** lisans durumu veritabanı yedeğine dahildir; aynı PostgreSQL kümesine geri yüklemek lisansı etkilemez, **başka bir kümeye** (yeni sunucu, yeniden kurulan PostgreSQL, silinip yeniden yaratılan Docker veritabanı birimi) geri yüklemek parmak izi değiştiği için salt-okunura düşürür; **Ayarlar › Lisans**'tan aynı kodla yeniden etkinleştirme açar (adımlar: `docs/OPERATIONS.md` §6 "Lisans ve başka sunucuya geri yükleme").
 
 **Sorun giderme.**
 

@@ -125,6 +125,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Proje: şantiye şefi proje/iş kalemi/ilerleme girer; bütçeyi (projects.budget) muhasebe/yönetim onaylar.
   site_manager: [
     'settings.read',
+    // Yalnızca okuma: irsaliye, satın alma siparişi ve taşeron sözleşmesindeki cari seçicileri için (cari ekleyemez/değiştiremez)
+    'parties.read',
     'inventory.read',
     'inventory.move',
     'deliveries.read',

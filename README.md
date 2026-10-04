@@ -41,11 +41,11 @@ KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef 
 ./install.sh                 # Linux / WSL (Ubuntu 22.04+, Debian 12+)
 ./install.sh --check         # yalnızca uyumluluk raporu
 ./install.sh --dry-run       # sistemi değiştirmeden ne yazılacağını gösterir
-./install.sh --answers=installer/answers.example   # sormadan, yanıt dosyasından (parola/kod varsa sonra silin)
+./install.sh --answers=../musteri.answers   # sürüm kitinin içinden, sormadan (installer/answers.example'dan kopyalayın; parola/kod varsa sonra silin)
 ./install.sh --reconfigure   # kurulu sistemde yalnızca ayarları (e-posta, HTTPS, yedek, lisans adresi) yeniden sorar
 ```
 
-Müşteri (kit) kurulumunda varsayılan **boş uygulamadır** (demo verisi yok) ve uygulama **lisans etkinleştirilmeden çalışmaz**; demo yalnızca sorulduğunda ve ilk kurulumda yüklenir. Windows'ta aynı bayraklar `-DryRun`, `-AnswersFile`, `-Reconfigure` adlarıyladır.
+Yanıt dosyası müşteri kurulumu içindir: sürüm kitini açıp kitin klasöründe çalıştırın (depoda `INSTALL_PATH=native` kit olmadan çalışmaz); kurulu sistemde yalnızca `--reconfigure` ile okunur. Kaldırma: `./install.sh --uninstall` (veri korunur; `--purge` kalıcı siler ve `SIL` onayı ister), önce `--dry-run` ile bakın. Müşteri (kit) kurulumunda varsayılan **boş uygulamadır** (demo verisi yok) ve uygulama **lisans etkinleştirilmeden çalışmaz**; demo yalnızca sorulduğunda ve ilk kurulumda yüklenir. Windows'ta aynı bayraklar `-DryRun`, `-AnswersFile`, `-Reconfigure` adlarıyladır.
 
 Windows'ta depo klasöründeki **`Kur.cmd`** dosyasına çift tıklayın (Windows PowerShell 5.1 yeterlidir; Docker gerekmez). Depodan çalıştırınca geliştirme/test kurulumu yapılır: Node 22 ve PostgreSQL 16 yoksa kurulur (ya da veritabanı Docker'da çalışır), `.env`, şema ve demo verisi hazırlanır; sonra `npm run dev`. Seçenekler: `./install.sh --help`, ayrıntı [docs/OPERATIONS.md §2](docs/OPERATIONS.md).
 

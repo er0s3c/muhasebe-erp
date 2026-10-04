@@ -2,9 +2,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { compareVersions } from '@erp/license-core';
 import type { Tx } from '../../db/client';
 import { appUpdates } from '../../db/schema';
+import { isNewerThanCurrent } from './update-store';
 import { authedRoute, type AuthUser } from '../../http/context';
 import { AppError, conflict, forbidden, notFound, unprocessable } from '../../http/errors';
 import { licenseServerUrl } from '../../licensing';
@@ -51,7 +51,7 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
   async function overview(tx: Tx) {
     const rows = await tx.select().from(appUpdates).orderBy(desc(appUpdates.offeredAt)).limit(20);
     // Teklif: çalışan sürümden yeni, iptal/bitmiş olmayan en yeni kayıt
-    const candidates = rows.filter((r) => !/^\d+\.\d+\.\d+/.test(current) || compareVersions(r.version, current) > 0);
+    const candidates = rows.filter((r) => isNewerThanCurrent(r.version, current));
     const offer = candidates.find((r) => r.status !== 'done' && r.status !== 'cancelled') ?? null;
     return {
       currentVersion: current,
@@ -96,6 +96,11 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
       const [row] = await tx.select().from(appUpdates).where(eq(appUpdates.id, id)).for('update');
       if (!row) throw notFound('Güncelleme');
       if (!['offered', 'failed', 'rolled_back', 'cancelled'].includes(row.status)) throw conflict('Bu güncelleme zaten onaylanmış ya da tamamlanmış', 'UPDATE_NOT_PENDING');
+      // Sürüm düşürme/aynı sürümü yeniden kurma uzaktan yapılmaz (veritabanı yeni şemaya taşınmış olabilir); onarım için kurulum
+      // sihirbazı yerelde yeniden çalıştırılır.
+      if (!isNewerThanCurrent(row.version, current)) {
+        throw conflict(`Çalışan sürüm ${current}; ${row.version} daha yeni değil (sürüm düşürme ve aynı sürümü yeniden kurma uzaktan yapılmaz)`, 'UPDATE_NOT_NEWER');
+      }
       if (!row.files.some((f) => f.target === platform)) throw unprocessable('Bu sürümde kurulumunuzun platformu için paket yok', 'UPDATE_NO_PACKAGE');
       const now = new Date();
       const scheduledFor = when === 'now' ? now : nextNightWindow(now);
@@ -142,6 +147,9 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
       .orderBy(asc(appUpdates.scheduledFor))
       .limit(1);
     if (!row || !platform || !serverUrl) return { update: null };
+    // Eski kayıt (ör. sürüm elle yükseltildikten sonra kalan onay) güncelleyiciye verilmez; çalışan sürüm zaten aynıysa
+    // güncelleyici yalnızca "bitti" bildirir (önceki denemenin yarıda kalan bildirimi).
+    if (row.version !== current && !isNewerThanCurrent(row.version, current)) return { update: null, currentVersion: current };
     const file = row.files.find((f) => f.target === platform);
     if (!file) return { update: null };
     const base = serverUrl.replace(/\/+$/, '');
