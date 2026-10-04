@@ -384,6 +384,17 @@
   input[type='radio'] {
     appearance: auto;
   }
+  /* Özel Select: görünür kutu (düğme) gizlenir, değeri tutan gizli yerel select düz metin olarak basılır */
+  select.native-select {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    clip: auto !important;
+    clip-path: none !important;
+    white-space: normal !important;
+  }
   label {
     color: #55534f;
     font-size: 8pt;
