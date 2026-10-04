@@ -190,7 +190,9 @@ export async function updateSalesDoc(tx: Tx, ctx: SalesCtx, id: string, input: U
 export async function deleteSalesDoc(tx: Tx, id: string) {
   const row = await lockDoc(tx, id);
   if (row.status !== 'draft' || row.docNo) throw unprocessable('Yalnızca numarasız taslak silinebilir; diğerleri iptal edilir', 'SO_NOT_DRAFT');
-  await tx.delete(salesOrders).where(eq(salesOrders.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(salesOrders).where(eq(salesOrders.id, id)).returning({ id: salesOrders.id });
+  if (deleted.length === 0) throw notFound('Satış belgesi');
 }
 
 /**

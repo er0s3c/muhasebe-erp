@@ -2,6 +2,7 @@ import { ArrowLeft, Copy, Percent, Plus, Power, Star, Trash2, Upload } from 'luc
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { parseTR } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
@@ -81,15 +82,16 @@ export function PriceListDetailPage() {
     setFormError(null);
   };
 
-  /** "STOK KODU; en az miktar; fiyat" satırları (miktar boş olabilir). Ondalık virgül kabul edilir. */
+  /** "STOK KODU; en az miktar; fiyat" satırları (miktar boş olabilir). Sayılar Türkçe yazılabilir ("1.250,50"); ayrıştırılamayan hücre olduğu gibi gider ve sunucu satır hatası döner. */
   const parsePaste = () =>
     paste
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean)
       .map((l) => {
-        const parts = l.split(/[;\t]/).map((p) => p.trim().replace(',', '.'));
-        const [code, a, b] = parts;
+        const parts = l.split(/[;\t]/).map((p) => p.trim());
+        const n = (v: string | undefined) => (v === undefined || v === '' ? v : (parseTR(v) ?? v));
+        const [code, a, b] = [parts[0], n(parts[1]), n(parts[2])];
         return b === undefined ? { itemCode: code!, price: a ?? '' } : { itemCode: code!, minQty: a || '0', price: b };
       });
 
@@ -258,7 +260,7 @@ export function PriceListDetailPage() {
           <Field label={t('pricing.lists.code')} required>{(fid) => <Input id={fid} value={copy.code} maxLength={20} onChange={(e) => setCopy({ ...copy, code: e.target.value })} />}</Field>
           <Field label={t('pricing.lists.name')} required>{(fid) => <Input id={fid} value={copy.name} maxLength={120} onChange={(e) => setCopy({ ...copy, name: e.target.value })} />}</Field>
           <Field label={t('pricing.detail.adjustPct')} hint={t('pricing.detail.adjustHint')}>
-            {(fid) => <Input id={fid} inputMode="decimal" value={copy.adjustPct} placeholder="10" onChange={(e) => setCopy({ ...copy, adjustPct: e.target.value.replace(',', '.') })} />}
+            {(fid) => <MoneyInput id={fid} value={copy.adjustPct} placeholder="10" onChange={(v) => setCopy({ ...copy, adjustPct: v })} decimals={0} maxDecimals={4} />}
           </Field>
         </div>
       </Modal>
@@ -285,7 +287,7 @@ export function PriceListDetailPage() {
         <div className="flex flex-col gap-4">
           {formError && <Callout tone="danger">{formError}</Callout>}
           <Field label={t('pricing.detail.adjustPct')}>
-            {(fid) => <Input id={fid} inputMode="decimal" value={adjustPct} placeholder="-5" onChange={(e) => setAdjustPct(e.target.value.replace(',', '.'))} />}
+            {(fid) => <MoneyInput id={fid} value={adjustPct} placeholder="-5" onChange={(v) => setAdjustPct(v)} decimals={0} maxDecimals={4} />}
           </Field>
         </div>
       </Modal>

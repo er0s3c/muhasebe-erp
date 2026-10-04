@@ -61,7 +61,10 @@ const envSchema = z
     REGISTRATION_ENABLED: flag(true),
     /** Aynı anda çalışabilecek dışa aktarma sayısı (bellek içi üretilir; aşılırsa 429 EXPORT_BUSY). */
     EXPORT_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(2),
-    DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
+    /** Bağlantı havuzu üst sınırı. Havuz dolu ve `DB_CONNECT_TIMEOUT_MS` içinde bağlantı boşalmazsa istek 503 BUSY (Retry-After) alır. */
+    DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(20),
+    /** Havuzdan bağlantı bekleme üst süresi (ms). */
+    DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(5_000),
     /** Tek bir SQL ifadesi için üst süre (ms); 0 = kapalı. Yavaş bir sorgunun bağlantı havuzunu tıkamasını önler (yük ölçümünde en ağır istek ~2 sn). */
     DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(60_000),
     SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(20_000),

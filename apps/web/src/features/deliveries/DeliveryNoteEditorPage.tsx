@@ -20,6 +20,7 @@ import type { DeliveryNoteDetail, DeliveryNoteType } from '../../lib/types';
 import { qtyText, useUnitLabel } from '../inventory/common';
 import { DELIVERY_INVALIDATE, DeliveryInvoicingBadge, DeliveryStatusBadge } from './common';
 import { DeliveryNoteForm, NOTE_LIST } from './DeliveryNoteForm';
+import { fmtDate } from '../../lib/license';
 
 /**
  * /delivery-notes/new ve /delivery-notes/:id: taslaksa düzenlenebilir form,
@@ -125,7 +126,7 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
 
       <div className="flex flex-col gap-4">
         {note.status === 'cancelled' && (
-          <Callout tone="danger" title={t('deliveries.view.cancelledTitle', { date: note.cancelledAt ? formatDateTR(note.cancelledAt.slice(0, 10)) : '' })}>
+          <Callout tone="danger" title={t('deliveries.view.cancelledTitle', { date: note.cancelledAt ? fmtDate(note.cancelledAt) : '' })}>
             {note.cancelReason}
             {note.cancelStockDocumentId && (
               <>

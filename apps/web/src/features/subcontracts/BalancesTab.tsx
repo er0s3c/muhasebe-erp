@@ -18,6 +18,7 @@ import type { MaterialIssueRow, SubcontractBalances, SubcontractDetail } from '.
 import { STOCK_INVALIDATE, qtyText, useItemOptions, useWarehouses } from '../inventory/common';
 import { useProjectOptions } from '../projects/common';
 import { SUBCONTRACT_INVALIDATE } from './common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 interface TreasuryAccountRow {
   id: string;
@@ -63,11 +64,11 @@ export function BalancesTab({ detail }: { detail: SubcontractDetail }) {
     (_: void, call) =>
       call(`/api/subcontracts/${sc.id}/material-issues`, {
         method: 'POST',
-        body: { date, warehouseId, ...(note.trim() ? { note: note.trim() } : {}), lines: lines.map((l) => ({ itemId: l.itemId, quantity: l.quantity.replace(',', '.'), wbsId: l.wbsId })) },
+        body: { date, warehouseId, ...(note.trim() ? { note: note.trim() } : {}), lines: lines.map((l) => ({ itemId: l.itemId, quantity: l.quantity, wbsId: l.wbsId })) },
       }),
     [...SUBCONTRACT_INVALIDATE, ...STOCK_INVALIDATE, ['journal']],
   );
-  const materialValid = !!warehouseId && !!date && lines.length > 0 && lines.every((l) => l.itemId && l.wbsId && Number(l.quantity.replace(',', '.')) > 0);
+  const materialValid = !!warehouseId && !!date && lines.length > 0 && lines.every((l) => l.itemId && l.wbsId && Number(l.quantity) > 0);
 
   const { data: accountsData } = useCQuery<{ accounts: TreasuryAccountRow[] }>(['treasury', 'accounts', 'picker'], '/api/treasury/accounts', { enabled: treasuryOn && mode === 'advance' });
   const accounts = (accountsData?.accounts ?? []).filter((a) => (a.currencyCode ?? a.currency) === cur);
@@ -76,7 +77,7 @@ export function BalancesTab({ detail }: { detail: SubcontractDetail }) {
     (_: void, call) =>
       call(mode === 'advance' ? `/api/subcontracts/${sc.id}/advances` : `/api/subcontracts/${sc.id}/retention-releases`, {
         method: 'POST',
-        body: { date, amount: amount.replace(',', '.'), ...(note.trim() ? { note: note.trim() } : {}), ...(mode === 'advance' ? { accountId } : {}) },
+        body: { date, amount: amount, ...(note.trim() ? { note: note.trim() } : {}), ...(mode === 'advance' ? { accountId } : {}) },
       }),
     [...SUBCONTRACT_INVALIDATE, ['treasury']],
   );
@@ -91,7 +92,7 @@ export function BalancesTab({ detail }: { detail: SubcontractDetail }) {
     setDate(todayIso());
     setError(null);
   };
-  const canSubmit = Number(amount.replace(',', '.')) > 0 && !!date && (mode !== 'advance' || !!accountId);
+  const canSubmit = Number(amount) > 0 && !!date && (mode !== 'advance' || !!accountId);
 
   return (
     <div className="flex flex-col gap-5">
@@ -176,7 +177,7 @@ export function BalancesTab({ detail }: { detail: SubcontractDetail }) {
             {lines.map((l, i) => (
               <div key={l.key} className="grid grid-cols-[1fr_6rem_1fr_auto] items-center gap-2">
                 <Combobox aria-label={`${t('subcontracts.balances.item')} ${i + 1}`} options={itemOptions} value={l.itemId || null} onChange={(v) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, itemId: v } : x)))} placeholder={t('subcontracts.balances.pickItem')} />
-                <Input aria-label={`${t('subcontracts.balances.qty')} ${i + 1}`} inputMode="decimal" className="num text-right" value={l.quantity} onChange={(e) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, quantity: e.target.value } : x)))} placeholder={qtyText('0') || '0'} />
+                <MoneyInput aria-label={`${t('subcontracts.balances.qty')} ${i + 1}`} className="text-right" value={l.quantity} onChange={(v) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, quantity: v } : x)))} placeholder={qtyText('0') || '0'} decimals={0} maxDecimals={4} />
                 <Combobox aria-label={`${t('subcontracts.boq.cols.wbs')} ${i + 1}`} options={wbsOptions} value={l.wbsId || null} onChange={(v) => setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, wbsId: v } : x)))} placeholder={t('subcontracts.boq.pickWbs')} />
                 <button type="button" className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger disabled:opacity-40" disabled={lines.length === 1} aria-label={`${t('common.delete')} ${i + 1}`} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}>
                   <Trash2 className="size-4" aria-hidden />
@@ -232,7 +233,7 @@ export function BalancesTab({ detail }: { detail: SubcontractDetail }) {
           )}
           <div className="grid grid-cols-2 gap-4">
             <Field label={t('common.date')} required>{(id) => <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} />}</Field>
-            <Field label={t('subcontracts.balances.amount')} required>{(id) => <Input id={id} inputMode="decimal" className="num text-right" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
+            <Field label={t('subcontracts.balances.amount')} required>{(id) => <MoneyInput id={id} className="text-right" value={amount} onChange={(v) => setAmount(v)} />}</Field>
           </div>
           <Field label={t('subcontracts.balances.note')}>{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />}</Field>
         </div>

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { currencyCode, isoDate, moneyString, rateString, uuid } from './common';
+import { boolQuery, currencyCode, isoDate, moneyString, pageParams, rateString, uuid } from './common';
 
 export const ACCOUNT_TYPES = ['asset', 'liability', 'equity', 'income', 'expense', 'cost', 'memo'] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
@@ -93,6 +93,8 @@ export const trialBalanceQuerySchema = z.object({
   from: isoDate,
   to: isoDate,
   currency: z.enum(['base', 'reporting']).default('base'),
+  /** Yıl sonu kapanış/devir fişlerini hariç tutar (varsayılan: dahil; kapanış sonrası mizan). */
+  excludeClosing: boolQuery,
 });
 export type TrialBalanceQuery = z.infer<typeof trialBalanceQuerySchema>;
 
@@ -100,5 +102,9 @@ export const accountLedgerQuerySchema = z.object({
   accountId: uuid,
   from: isoDate,
   to: isoDate,
+  excludeClosing: boolQuery,
 });
 export type AccountLedgerQuery = z.infer<typeof accountLedgerQuerySchema>;
+
+/** Hesap planı listesi: seçicilerde bütün olarak kullanılır; geniş ama sınırlı (API-7). */
+export const accountListQuerySchema = z.object(pageParams(5000, 10000));

@@ -113,6 +113,30 @@ describe('uzaktan güncelleme: teklif → sahip onayı → güncelleyici', () =>
     expect((await oc.post(`/api/system/update/${offer.id}/cancel`)).json().update.status).toBe('cancelled');
   });
 
+  it('sürüm düşürme: eski/aynı sürüm teklifi saklanmaz, onaylanamaz ve güncelleyiciye verilmez', async () => {
+    const c = t.ctx;
+    for (const v of ['1.0.0', '0.9.0', '1.0.0-rc.9']) {
+      c.vendor.update = { manifest: manifest(c, v), downloadToken: 'old-'.repeat(10) };
+      await beat(c);
+    }
+    expect((await licenseOwnerSql(`select count(*)::int as n from app_updates where version in ('1.0.0','0.9.0','1.0.0-rc.9')`)).rows[0].n).toBe(0);
+    // Eski bir kayıt (ör. elle yükseltmeden önce gelmiş teklif) onaylanamaz
+    await licenseOwnerSql(
+      `insert into app_updates (id, version, manifest, files, download_token) values (gen_random_uuid(), '0.9.0', 'x', '[{"target":"linux-x64","name":"muhasebe-erp-0.9.0-linux-x64.tar.gz","sha256":"${'b'.repeat(64)}","size":1}]'::jsonb, 'tok')`,
+    );
+    const owner = (await licenseOwnerSql(`select u.email from users u join memberships m on m.user_id = u.id where m.role = 'owner' limit 1`)).rows[0].email as string;
+    const login = await c.app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: owner, password: 'Sifre-12345-xyz' } });
+    const oc = client(c.app, login.json().accessToken);
+    const old = (await licenseOwnerSql(`select id from app_updates where version = '0.9.0'`)).rows[0].id as string;
+    const res = await oc.post(`/api/system/update/${old}/request`, { when: 'now' });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('UPDATE_NOT_NEWER');
+    // Doğrudan "requested" yapılmış olsa bile güncelleyiciye verilmez
+    await licenseOwnerSql(`update app_updates set status = 'requested', scheduled_for = now() - interval '1 minute' where version = '0.9.0'`);
+    expect((await updater(c, 'GET', '/api/system/updater/pending')).json().update).toBeNull();
+    await licenseOwnerSql(`update app_updates set status = 'cancelled' where version = '0.9.0'`);
+  });
+
   it('gece penceresi: 02:00 geçtiyse ertesi gün', () => {
     const at = (h: number) => {
       const d = new Date(2026, 9, 1, h, 0, 0);

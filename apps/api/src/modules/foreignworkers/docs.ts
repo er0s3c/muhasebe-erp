@@ -1,10 +1,12 @@
-import { and, asc, desc, eq, ilike, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { foreignDocStatus, todayIso, type CreateForeignDocInput, type ForeignDocListQuery, type ForeignDocStatus } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { employees, foreignDocRenewals, foreignDocTypes, foreignWorkerDocs, personalDataAccessLog } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { decryptField, encryptField, lastFour, maskTail } from '../hr/crypto';
 import { warningAt, type ForeignCtx } from './params';
+import { trContains } from '../../db/search';
+import { slicePage, type PageQuery } from '../../http/paging';
 
 const GENERIC_TYPES = [
   { code: 'WORK_PERMIT', name: 'Çalışma izni' },
@@ -81,11 +83,9 @@ function view(r: DocRow, extra: { employeeCode: string; employeeName: string; na
   };
 }
 
-export async function listDocs(tx: Tx, q: ForeignDocListQuery) {
+export async function listDocs(tx: Tx, q: Omit<ForeignDocListQuery, 'limit' | 'offset'>, page?: PageQuery) {
   const today = q.asOf ?? todayIso();
   const warn = await warningAt(tx, today);
-  const term = q.q ? `%${q.q.replace(/[%_]/g, (m) => `\\${m}`)}%` : null;
-  const nat = q.nationality ? `%${q.nationality.replace(/[%_]/g, (m) => `\\${m}`)}%` : null;
   const rows = await tx
     .select({ d: foreignWorkerDocs, code: employees.code, name: employees.fullName, nationality: employees.nationality, typeName: foreignDocTypes.name, typeCode: foreignDocTypes.code })
     .from(foreignWorkerDocs)
@@ -95,19 +95,20 @@ export async function listDocs(tx: Tx, q: ForeignDocListQuery) {
       and(
         q.employeeId ? eq(foreignWorkerDocs.employeeId, q.employeeId) : undefined,
         q.typeId ? eq(foreignWorkerDocs.typeId, q.typeId) : undefined,
-        nat ? ilike(employees.nationality, nat) : undefined,
-        term ? sql`(${employees.fullName} ilike ${term} or ${employees.code} ilike ${term})` : undefined,
+        q.nationality ? trContains(['employees.nationality'], q.nationality) : undefined,
+        q.q ? trContains(['employees.full_name', 'employees.code'], q.q) : undefined,
       ),
     )
     .orderBy(sql`${foreignWorkerDocs.expiryDate} asc nulls last`, asc(employees.code));
   const all = rows.map((r) => view(r.d, { employeeCode: r.code, employeeName: r.name, nationality: r.nationality, typeName: r.typeName, typeCode: r.typeCode }, today, warn.days));
   const summary = { valid: 0, expiring: 0, expired: 0, revoked: 0 };
   for (const d of all) summary[d.status]++;
-  const docs = all.filter(
+  const filtered = all.filter(
     (d) => (!q.status || d.status === q.status) && (q.withinDays === undefined || (d.status !== 'revoked' && d.daysToExpiry !== null && d.daysToExpiry <= q.withinDays)),
   );
+  const { rows: docs, truncated } = slicePage(filtered, page);
   await logForeignAccess(tx, docs.map((d) => d.employeeId), 'Yabancı işçi belge kaydı görüntüleme');
-  return { asOf: today, warning: { days: warn.days, configured: warn.configured, verified: warn.verified }, summary, docs };
+  return { asOf: today, warning: { days: warn.days, configured: warn.configured, verified: warn.verified }, summary, docs, truncated };
 }
 
 export async function getDoc(tx: Tx, id: string) {
@@ -194,7 +195,9 @@ export async function renewDoc(tx: Tx, ctx: ForeignCtx, id: string, input: { iss
   const newIssue = input.issueDate === undefined ? cur.issueDate : input.issueDate;
   const newNoEnc = no ? encryptField(no, ctx.secret) : cur.numberEnc;
   const newLast4 = no ? lastFour(no) : cur.numberLast4;
-  if (newIssue === cur.issueDate && input.expiryDate === cur.expiryDate && newLast4 === cur.numberLast4 && !no) throw unprocessable('Yenilemede bilgi değişmedi', 'RENEWAL_NO_CHANGE');
+  // Aynı bilgilerle (aynı numara dahil) tekrarlanan yenileme geçmişe ikinci kez yazılmaz (API-11)
+  const sameNo = !no || (cur.numberEnc !== null && decryptField(cur.numberEnc, ctx.secret) === no);
+  if (newIssue === cur.issueDate && input.expiryDate === cur.expiryDate && sameNo) throw conflict('Yenilemede bilgi değişmedi (aynı tarih ve numara)', 'RENEWAL_NO_CHANGE');
   if (newIssue && input.expiryDate < newIssue) throw unprocessable('Son kullanma tarihi veriliş tarihinden önce olamaz', 'FOREIGN_DOC_DATES');
   await tx.insert(foreignDocRenewals).values({
     companyId: ctx.companyId,

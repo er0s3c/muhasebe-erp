@@ -23,6 +23,7 @@ import type { ImportCostKind, ImportFileDetail, ImportMethod, ImportReport, Impo
 import { usePartyOptions } from '../invoices/common';
 import { qtyText } from '../inventory/common';
 import { IMPORT_COST_KINDS, IMPORT_INVALIDATE, IMPORT_METHODS, ImportStatusBadge } from './common';
+import { fmtDateTime } from '../../lib/license';
 
 interface FormLine {
   sourceKind: 'invoice' | 'delivery';
@@ -621,7 +622,7 @@ function Editor({ detail }: { detail?: ImportFileDetail }) {
           <ul className="divide-y divide-border text-sm">
             {detail.events.map((e, i) => (
               <li key={i} className="flex flex-wrap gap-x-4 px-5 py-2">
-                <span className="w-44 text-muted">{new Date(e.createdAt).toLocaleString('tr-TR')}</span>
+                <span className="w-44 text-muted">{fmtDateTime(e.createdAt)}</span>
                 <span>{t(`landed.history.${e.action as 'created'}` as never, { defaultValue: e.action })}</span>
                 <span className="text-muted">{e.userName}</span>
                 {e.note && <span className="text-muted">— {e.note}</span>}

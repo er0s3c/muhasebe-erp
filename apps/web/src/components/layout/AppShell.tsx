@@ -1,12 +1,13 @@
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronsUpDown, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, ShieldCheck, Sun, X } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { api } from '../../lib/api';
 import { fmtDate, useLicense } from '../../lib/license';
+import { clearForbidden, useForbiddenOn } from '../../lib/forbidden';
 import { useNavigation, usePublicConfig } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { Button } from '../ui/Button';
@@ -30,6 +31,15 @@ const readCollapsed = () => {
   }
 };
 
+/** lg kırılımı (Tailwind 1024px): üstünde menü sabit kenar çubuğu, altında açılır çekmece. */
+const DESKTOP_QUERY = '(min-width: 1024px)';
+const subscribeDesktop = (cb: () => void) => {
+  const mq = window.matchMedia(DESKTOP_QUERY);
+  mq.addEventListener('change', cb);
+  return () => mq.removeEventListener('change', cb);
+};
+const useIsDesktop = () => useSyncExternalStore(subscribeDesktop, () => window.matchMedia(DESKTOP_QUERY).matches);
+
 const menuContent =
   'z-50 min-w-56 rounded-xl border border-border bg-surface p-1.5 [animation:pop-in_0.12s_ease-out]';
 const menuItem =
@@ -45,7 +55,30 @@ export function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
 
+  const isDesktop = useIsDesktop();
+  const drawerOpen = mobileOpen && !isDesktop;
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
+
   useEffect(() => setMobileOpen(false), [location.pathname]);
+  // Dar ekran çekmecesi (UI-13): Escape kapatır, açılınca odak çekmeceye girer, kapanınca menü düğmesine döner;
+  // açıkken arka plan, kapalıyken ekran dışındaki çekmece `inert` olur (Tab ile görünmeyen bağlantılara gidilmez).
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (drawerOpen) {
+      wasOpen.current = true;
+      asideRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])')?.focus();
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setMobileOpen(false);
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }
+    if (wasOpen.current) {
+      wasOpen.current = false;
+      if (!isDesktop) menuButtonRef.current?.focus();
+    }
+  }, [drawerOpen, isDesktop]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -78,6 +111,11 @@ export function AppShell() {
         <div className="fixed inset-0 z-30 bg-inverted/50 backdrop-blur-[8px] lg:hidden" onClick={() => setMobileOpen(false)} aria-hidden />
       )}
       <aside
+        ref={asideRef}
+        inert={!isDesktop && !mobileOpen}
+        role={drawerOpen ? 'dialog' : undefined}
+        aria-modal={drawerOpen ? true : undefined}
+        aria-label={drawerOpen ? t('common.mainMenu') : undefined}
         className={cn(
           'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-surface transition-[transform,width] duration-200 print:hidden lg:static lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
@@ -87,9 +125,9 @@ export function AppShell() {
         <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} onClose={() => setMobileOpen(false)} />
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col" inert={drawerOpen}>
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur [box-shadow:var(--shadow-subtle)] print:hidden sm:px-6">
-          <button className="rounded-md p-2 text-muted hover:bg-surface-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label={t('shell.openMenu')}>
+          <button ref={menuButtonRef} className="rounded-md p-2 text-muted hover:bg-surface-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label={t('shell.openMenu')} aria-expanded={mobileOpen}>
             <Menu className="size-5" />
           </button>
           <button
@@ -113,6 +151,7 @@ export function AppShell() {
             <PrintLetterhead />
             <LicenseBanner />
             <VerifyEmailBanner />
+            <ForbiddenNotice />
             <Outlet />
           </div>
         </main>
@@ -145,7 +184,7 @@ function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggl
         <CompanySwitcher collapsed={collapsed} />
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-3" aria-label="Ana menü">
+      <nav className="flex-1 overflow-y-auto px-3 py-3" aria-label={t('common.mainMenu')}>
         {nav?.groups.map((group) => (
           <div key={group.key} className="mb-4">
             <p className={cn('micro px-3 pb-1.5', collapsed && 'lg:hidden')}>
@@ -237,11 +276,15 @@ function CompanySwitcher({ collapsed }: { collapsed: boolean }) {
               {c.id === activeCompany.id && <Check className="size-4" aria-hidden />}
             </Dropdown.Item>
           ))}
-          <Dropdown.Separator className="my-1 h-px bg-border" />
-          <Dropdown.Item className={menuItem} onSelect={() => navigate('/company/new')}>
-            <Plus className="size-4 text-muted" aria-hidden />
-            {t('shell.newCompany')}
-          </Dropdown.Item>
+          {companies.some((c) => c.role === 'owner' || c.role === 'admin') && (
+            <>
+              <Dropdown.Separator className="my-1 h-px bg-border" />
+              <Dropdown.Item className={menuItem} onSelect={() => navigate('/company/new')}>
+                <Plus className="size-4 text-muted" aria-hidden />
+                {t('shell.newCompany')}
+              </Dropdown.Item>
+            </>
+          )}
         </Dropdown.Content>
       </Dropdown.Portal>
     </Dropdown.Root>
@@ -361,6 +404,20 @@ function ChangePasswordModal({ open, onOpenChange }: { open: boolean; onOpenChan
         </Field>
       </form>
     </Modal>
+  );
+}
+
+/** Bu sayfadaki bir sorgu 403 döndüyse: eksik görünen alanların nedeni yetkidir, "kayıt yok" değil (UI-7). */
+function ForbiddenNotice() {
+  const { t } = useTranslation();
+  const { pathname } = useLocation();
+  const forbidden = useForbiddenOn(pathname);
+  useEffect(() => clearForbidden(pathname), [pathname]);
+  if (!forbidden) return null;
+  return (
+    <div className="mb-6 print:hidden" data-testid="forbidden-notice">
+      <Callout tone="warning">{t('common.forbiddenPartial')}</Callout>
+    </div>
   );
 }
 

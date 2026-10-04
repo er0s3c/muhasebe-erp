@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, lte, sql } from 'drizzle-orm';
 import { isoYear } from '@erp/shared';
-import { unprocessable, notFound } from '../../http/errors';
+import { conflict, unprocessable, notFound } from '../../http/errors';
 import type { Tx } from '../../db/client';
 import { fiscalPeriods, journalEntries } from '../../db/schema';
 
@@ -60,8 +60,12 @@ export async function listPeriods(tx: Tx, year: number) {
 }
 
 export async function closePeriod(tx: Tx, periodId: string, userId: string) {
-  const [period] = await tx.select().from(fiscalPeriods).where(eq(fiscalPeriods.id, periodId));
+  // Dönem satırı kilitlenir: bu döneme kayıt atan (koruyucuda FOR SHARE alan) işlemler bitene dek beklenir, sonra
+  // taslak sayımı ve kapanış onların sonucunu görür; kapanıştan sonra gelen kayıt kapalı dönemi görüp reddedilir.
+  const [period] = await tx.select().from(fiscalPeriods).where(eq(fiscalPeriods.id, periodId)).for('update');
   if (!period) throw notFound('Dönem');
+  // Tekrarlanan istek kapanış bilgisini (tarih/kullanıcı) ezmesin (API-11)
+  if (period.status === 'closed') throw conflict('Dönem zaten kapalı', 'PERIOD_ALREADY_CLOSED');
   const [drafts] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(journalEntries)
@@ -81,6 +85,9 @@ export async function closePeriod(tx: Tx, periodId: string, userId: string) {
 }
 
 export async function reopenPeriod(tx: Tx, periodId: string) {
+  const [period] = await tx.select().from(fiscalPeriods).where(eq(fiscalPeriods.id, periodId)).for('update');
+  if (!period) throw notFound('Dönem');
+  if (period.status === 'open') throw conflict('Dönem zaten açık', 'PERIOD_ALREADY_OPEN');
   const [updated] = await tx
     .update(fiscalPeriods)
     .set({ status: 'open', closedAt: null, closedBy: null })

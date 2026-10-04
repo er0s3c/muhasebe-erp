@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDate, moneyString, uuid } from './common';
+import { isoDate, moneyString, uuid, pageParams } from './common';
 import { yearMonth } from './attendance';
 
 /**
@@ -121,7 +121,7 @@ export const updatePayrollItemSchema = z
   .partial();
 
 export const createPayrollRunSchema = z.object({ month: yearMonth, description: text(300).nullable().optional() });
-export const payrollRunListQuerySchema = z.object({ status: z.enum(['draft', 'approved', 'paid', 'cancelled']).optional(), year: z.coerce.number().int().min(2000).max(2100).optional() });
+export const payrollRunListQuerySchema = z.object({ ...pageParams(), status: z.enum(['draft', 'approved', 'paid', 'cancelled']).optional(), year: z.coerce.number().int().min(2000).max(2100).optional() });
 
 export const payrollAdjustmentSchema = z.object({ employeeId: uuid, itemId: uuid, amount: moneyString, note: text(200).nullable().optional() });
 export type PayrollAdjustmentInput = z.infer<typeof payrollAdjustmentSchema>;

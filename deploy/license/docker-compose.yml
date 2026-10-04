@@ -5,8 +5,16 @@
 # Ayrıntı: docs/LICENSING.md
 name: muhasebe-lisans
 
+# Kap günlükleri döndürülür (json-file): her kap en çok 5 × 10 MB; disk dolmasın
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
 services:
   db:
+    logging: *default-logging
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -25,6 +33,7 @@ services:
     # Veritabanı portu YAYINLANMAZ.
 
   migrate:
+    logging: *default-logging
     image: ${LICENSE_IMAGE:-muhasebe-lisans:local}
     build:
       context: ../..
@@ -40,6 +49,7 @@ services:
     restart: 'no'
 
   license:
+    logging: *default-logging
     image: ${LICENSE_IMAGE:-muhasebe-lisans:local}
     restart: unless-stopped
     init: true
@@ -68,6 +78,7 @@ services:
     # Yayınlanan port yok: yalnızca Caddy ağ içinden bağlanır.
 
   caddy:
+    logging: *default-logging
     image: caddy:2
     restart: unless-stopped
     environment:

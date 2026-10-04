@@ -27,6 +27,23 @@ describe('ithalat maliyet dağıtımı', () => {
     expect(allocateAmount('100', 'quantity', three).map((x) => x.toFixed(2))).toEqual(['33.33', '33.33', '33.34']);
   });
 
+  it('ACC-9: en büyük kalan — küçük tabanlı satır eksi pay almaz; toplam her zaman tam tutar', () => {
+    const tiny = [5, 5, 5, 5, 5, 5, 0.001].map((v, i) => L(String(i), '1', String(v)));
+    const r = allocateAmount('0.05', 'value', tiny);
+    expect(r.every((x) => !x.isNegative())).toBe(true);
+    expect(total(r)).toBe('0.05');
+    expect(r[6]!.toFixed(2)).toBe('0.00');
+    const q = allocateAmount('0.03', 'quantity', [L('a', '1', '1'), L('b', '1', '1'), L('c', '0.0001', '1')]);
+    expect(q.every((x) => !x.isNegative())).toBe(true);
+    expect(total(q)).toBe('0.03');
+  });
+
+  it('ACC-9: elle dağıtım 2 ondalıktan fazlasını reddeder (yuvarlanınca toplam sapardı)', () => {
+    const three = [L('a', '1', '1'), L('b', '1', '1'), L('c', '1', '1')];
+    expect(() => allocateAmount('1.00', 'manual', three, { a: '0.333', b: '0.333', c: '0.334' })).toThrow(AllocationError);
+    expect(allocateAmount('1.00', 'manual', three, { a: '0.33', b: '0.33', c: '0.34' }).map((x) => x.toFixed(2))).toEqual(['0.33', '0.33', '0.34']);
+  });
+
   it('tabanı sıfır olan satır pay almaz; kalan son paylı satıra gider', () => {
     const z = [L('a', '2', '10'), L('b', '1', '0'), L('c', '1', '20'), L('d', '1', '0')];
     const r = allocateAmount('0.10', 'value', z);

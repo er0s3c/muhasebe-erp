@@ -73,7 +73,7 @@ export function PartyPricesPage() {
         title={t('pricing.party.title')}
         description={t('pricing.party.subtitle')}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link to="/price-lists" className="link text-sm">
               {t('nav.priceLists')}
             </Link>

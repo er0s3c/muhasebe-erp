@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { hash } from '@node-rs/argon2';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
@@ -8,7 +9,7 @@ import {
   resetPasswordSchema,
   verifyEmailSchema,
 } from '@erp/shared';
-import { refreshTokens, users } from '../../db/schema';
+import { refreshTokens, userTokens, users } from '../../db/schema';
 import { authedRoute } from '../../http/context';
 import { AppError, unprocessable } from '../../http/errors';
 import { assertSameOrigin } from '../../http/origin';
@@ -39,6 +40,14 @@ export const accountRoutes: FastifyPluginAsync = async (app) => {
         const token = await issueUserToken(app.db, user.id, 'reset_password', req.ip);
         queueMail(app, resetPasswordMail(user.email, user.fullName, linkTo('/reset-password', token)));
         await recordSecurityEvent(app.db, app.log, req, { event: 'password_reset_requested', organizationId: user.organizationId, userId: user.id, email: user.email });
+      } else {
+        // Zamanlama eşitleme: kayıtlı adres yolundaki veritabanı gidiş-dönüşlerine benzer iş yapılır; yanıt süresi
+        // adresin kayıtlı olup olmadığını belli etmesin (mail kuyruğa alınır, beklenmez).
+        await app.db.transaction(async (tx) => {
+          await tx.update(userTokens).set({ usedAt: new Date() }).where(and(eq(userTokens.userId, randomUUID()), isNull(userTokens.usedAt)));
+          await tx.execute(sql`select 1 from user_tokens where token_hash = ${randomUUID()}`);
+          await tx.execute(sql`select 1 from security_events where user_id = ${randomUUID()}::uuid limit 1`);
+        });
       }
     }
     void reply.code(202);

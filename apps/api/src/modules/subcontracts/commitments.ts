@@ -20,7 +20,7 @@ export interface CommittedResult {
  * Türetilir, depolanmaz: gerçekleşen maliyet gibi tek kaynaktan beslenir.
  */
 export async function loadCommitted(tx: Tx, projectId: string, asOf: string): Promise<CommittedResult> {
-  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies);
+  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies).where(sql`${companies.id} = app_company_id()`);
   const base = company!.base;
   const rows = await tx.execute<{ wbsId: string; currency: string; remaining: string; subcontractId: string }>(sql`
     with cur as (
@@ -73,7 +73,7 @@ export interface PendingVariations {
 
 /** Bekleyen (gönderilmiş / işveren kabulü bekleyen) değişiklik emirleri: bilgi amaçlı ayrı sütun, tahmine girmez. */
 export async function loadPendingVariations(tx: Tx, projectId: string, asOf: string): Promise<PendingVariations> {
-  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies);
+  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies).where(sql`${companies.id} = app_company_id()`);
   const base = company!.base;
   const rows = await tx.execute<{ direction: string; currency: string; delta: string; n: number }>(sql`
     select v.direction, s.currency_code as currency, coalesce(sum(v.amount_delta), 0)::text as delta, count(*)::int as n

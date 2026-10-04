@@ -17,6 +17,7 @@ import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 interface Bucket { week: number; start: string; end: string; receivables: string; manualIn: string; payables: string; manualOut: string; inflow: string; outflow: string; net: string; closing: string }
 interface Item { date: string; week: number; source: 'receivable' | 'payable' | 'manual'; direction: 'in' | 'out'; description: string; partyName: string | null; currencyCode: string; amount: string; amountBase: string; overdue: boolean; itemId?: string }
@@ -188,7 +189,7 @@ function ItemSheet({ item, onClose, base }: { item: Item | 'new' | null; onClose
   }, [open, edit, base]);
   const save = useCMutation(
     (_: void, call) => {
-      const body = { itemDate: date, direction, description: description.trim(), amount: amount.replace(',', '.'), currencyCode: currency };
+      const body = { itemDate: date, direction, description: description.trim(), amount: amount, currencyCode: currency };
       return edit ? call(`/api/cash-forecast/items/${edit.itemId}`, { method: 'PUT', body }) : call('/api/cash-forecast/items', { method: 'POST', body });
     },
     INVALIDATE,
@@ -201,7 +202,7 @@ function ItemSheet({ item, onClose, base }: { item: Item | 'new' | null; onClose
       footer={
         <>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <Button variant="primary" loading={save.isPending} disabled={description.trim().length < 2 || !(Number(amount.replace(',', '.')) > 0)} onClick={() => { setError(null); save.mutate(undefined, { onSuccess: () => { toast.success(t('cashForecast.saved')); onClose(); }, onError: setError }); }}>
+          <Button variant="primary" loading={save.isPending} disabled={description.trim().length < 2 || !(Number(amount) > 0)} onClick={() => { setError(null); save.mutate(undefined, { onSuccess: () => { toast.success(t('cashForecast.saved')); onClose(); }, onError: setError }); }}>
             {t('common.save')}
           </Button>
         </>
@@ -220,7 +221,7 @@ function ItemSheet({ item, onClose, base }: { item: Item | 'new' | null; onClose
         </Field>
         <Field label={t('cashForecast.form.description')} required>{(id) => <Input id={id} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={200} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('cashForecast.form.amount')} required>{(id) => <Input id={id} inputMode="decimal" className="num text-right" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
+          <Field label={t('cashForecast.form.amount')} required>{(id) => <MoneyInput id={id} className="text-right" value={amount} onChange={(v) => setAmount(v)} />}</Field>
           <Field label={t('cashForecast.form.currency')}>{(id) => <Select id={id} value={currency} onChange={(e) => setCurrency(e.target.value)}><CurrencyOptions wide /></Select>}</Field>
         </div>
       </div>

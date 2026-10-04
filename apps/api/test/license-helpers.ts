@@ -317,7 +317,9 @@ async function createLicensedApp(opts: LicensedAppOptions): Promise<LicensedApp>
     heartbeatIntervalMs: opts.heartbeatIntervalMs,
     fingerprint: async () => ({ fingerprint: fingerprint.value, strength: fingerprint.strength }),
     platform: config.ERP_KIT_TARGET,
-    onUpdateOffer: (offer) => storeUpdateOffer(handle.db, vendor.keyring, offer),
+    onUpdateOffer: async (offer) => {
+      await storeUpdateOffer(handle.db, vendor.keyring, offer, config.APP_VERSION);
+    },
   });
   const app = await buildApp({ db: handle.db, config, logger: false, mailer: opts.mailer, license: { service } });
   await app.ready();

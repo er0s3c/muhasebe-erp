@@ -15,6 +15,7 @@ import { errorMessage } from '../../lib/errors';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { FeeSchedule } from '../../lib/types';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 const INV = [['fee-schedules'], ['sales-summary'], ['fee-estimate']];
 
@@ -31,7 +32,7 @@ export function FeeSchedulesCard() {
   const set = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }));
   const pct = f.basis === 'pct_of_price';
   const add = useCMutation(
-    (_: void, call) => call('/api/fee-schedules', { method: 'POST', body: { code: f.code.trim(), name: f.name.trim(), side: f.side, basis: f.basis, amount: f.amount.replace(',', '.'), currencyCode: pct ? null : f.currencyCode, validFrom: f.validFrom, sourceNote: f.sourceNote.trim() || null } }),
+    (_: void, call) => call('/api/fee-schedules', { method: 'POST', body: { code: f.code.trim(), name: f.name.trim(), side: f.side, basis: f.basis, amount: f.amount, currencyCode: pct ? null : f.currencyCode, validFrom: f.validFrom, sourceNote: f.sourceNote.trim() || null } }),
     INV,
   );
   const verify = useCMutation((_: void, call) => call(`/api/fee-schedules/${verifying!.id}/verify`, { method: 'POST', body: { verifiedBy: verifiedBy.trim() } }), INV);
@@ -104,7 +105,7 @@ export function FeeSchedulesCard() {
             <Field label={t('feeSchedules.basis')}>
               {(id) => <Select id={id} value={f.basis} onChange={(e) => set('basis', e.target.value)}>{FEE_BASES.map((b) => <option key={b} value={b}>{t(`feeSchedules.bases.${b}`)}</option>)}</Select>}
             </Field>
-            <Field label={pct ? t('feeSchedules.percent') : t('feeSchedules.amount')}>{(id) => <Input id={id} inputMode="decimal" className="num text-right" value={f.amount} onChange={(e) => set('amount', e.target.value)} />}</Field>
+            <Field label={pct ? t('feeSchedules.percent') : t('feeSchedules.amount')}>{(id) => <MoneyInput id={id} className="text-right" value={f.amount} onChange={(v) => set('amount', v)} decimals={pct ? 0 : 2} maxDecimals={4} />}</Field>
             <Field label={t('feeSchedules.currency')}>
               {(id) => <Select id={id} value={f.currencyCode} disabled={pct} onChange={(e) => set('currencyCode', e.target.value)}><CurrencyOptions wide /></Select>}
             </Field>

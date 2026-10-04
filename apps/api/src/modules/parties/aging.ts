@@ -71,6 +71,20 @@ export interface OpenItemsResult {
   items: OpenItem[];
   /** Hiçbir borca uygulanamayan fazla ödeme/avans (defter para biriminde, pozitif) */
   unapplied: string;
+  /**
+   * Uygulanamayan tutarın para birimi kırılımı (FIFO: en eski ödemeler önce uygulanır, kalan en yeni ödemelerdendir).
+   * Döviz pozisyonu raporu yabancı para avansını buradan alır (ACC-10).
+   */
+  unappliedByCurrency: { currencyCode: string; amount: string; amountBase: string }[];
+}
+
+interface PoolPart {
+  date: string;
+  entryNo: string;
+  lineNo: number;
+  currencyCode: string;
+  doc: MoneyValue;
+  base: MoneyValue;
 }
 
 /**
@@ -78,6 +92,8 @@ export interface OpenItemsResult {
  * (tedarikçi) alacak satırları "kalem"dir; karşı taraftaki satırlar (tahsilat/ödeme) toplamı
  * en eski vadeden başlayarak kalemlere uygulanır. Tahsilat/ödeme belirli kalemleri seçerek
  * kapatmışsa (`allocations`) önce bu eşleştirmeler düşülür; eşleştirilmiş kapatan satırlar havuza girmez.
+ * Savunma (ACC-3): kalemini aşan eşleştirme fazlası ve kalemi artık görünmeyen (ters çevrilmiş) eşleştirme havuza döner;
+ * böylece açık kalem/avans toplamı her durumda defter bakiyesine eşittir (fazla ödeme kaybolmaz).
  */
 export function computeOpenItems(
   lines: PartyLine[],
@@ -88,6 +104,7 @@ export function computeOpenItems(
   const chargeSide = type === 'receivable' ? 'debit' : 'credit';
   const settleSide = type === 'receivable' ? 'credit' : 'debit';
   const base = (l: PartyLine, side: 'debit' | 'credit') => dec(side === 'debit' ? l.debitBase : l.creditBase);
+  const doc = (l: PartyLine, side: 'debit' | 'credit') => dec(side === 'debit' ? l.debit : l.credit);
 
   const charges = lines
     .filter((l) => base(l, chargeSide).gt(0))
@@ -99,22 +116,44 @@ export function computeOpenItems(
         a.line.entryNo.localeCompare(b.line.entryNo) ||
         a.line.lineNo - b.line.lineNo,
     );
+  const chargeIds = new Set(charges.map((c) => c.line.lineId));
+  const byId = new Map(lines.map((l) => [l.lineId, l]));
+
+  const parts: PoolPart[] = [];
+  const part = (l: PartyLine, currencyCode: string, d: MoneyValue, b: MoneyValue) =>
+    parts.push({ date: l.entryDate, entryNo: l.entryNo, lineNo: l.lineNo, currencyCode, doc: d, base: b });
 
   const explicitSettle = new Set(allocations.map((a) => a.settleLineId));
   const explicit = new Map<string, { amount: MoneyValue; base: MoneyValue }>();
   for (const a of allocations) {
+    if (!chargeIds.has(a.chargeLineId)) {
+      // Kalemi görünmeyen eşleştirme (kalem ters çevrilmiş): kapatan satır havuza döner
+      const st = byId.get(a.settleLineId);
+      if (st) part(st, st.currencyCode, dec(a.amount), dec(a.amountBase));
+      continue;
+    }
     const cur = explicit.get(a.chargeLineId) ?? { amount: dec(0), base: dec(0) };
     explicit.set(a.chargeLineId, { amount: cur.amount.plus(a.amount), base: cur.base.plus(a.amountBase) });
   }
+  for (const l of lines) {
+    if (base(l, settleSide).gt(0) && !explicitSettle.has(l.lineId)) part(l, l.currencyCode, doc(l, settleSide), base(l, settleSide));
+  }
+  for (const { line } of charges) {
+    const closed = explicit.get(line.lineId);
+    const amountBase = base(line, chargeSide);
+    if (closed && closed.base.gt(amountBase)) {
+      // Kalemini aşan eşleştirme fazlası havuza döner
+      const over = closed.amount.minus(doc(line, chargeSide));
+      part(line, line.currencyCode, over.gt(0) ? over : dec(0), closed.base.minus(amountBase));
+    }
+  }
 
-  let pool: MoneyValue = sum(
-    lines.filter((l) => base(l, settleSide).gt(0) && !explicitSettle.has(l.lineId)).map((l) => base(l, settleSide)),
-  );
+  let pool: MoneyValue = sum(parts.map((p) => p.base));
 
   const items: OpenItem[] = [];
   for (const { line, dueOn } of charges) {
     const amountBase = base(line, chargeSide);
-    const original = dec(chargeSide === 'debit' ? line.debit : line.credit);
+    const original = doc(line, chargeSide);
     const closed = explicit.get(line.lineId);
     // Eşleştirmelerden sonra kalem (defter ve kalem para biriminde)
     const availBase = closed ? amountBase.minus(closed.base) : amountBase;
@@ -147,7 +186,26 @@ export function computeOpenItems(
       bucket: bucketOf(daysOverdue),
     });
   }
-  return { items, unapplied: pool.toFixed(2) };
+
+  // Kalan havuz en yeni ödemelerden oluşur (FIFO): para birimi kırılımı
+  const byCur = new Map<string, { amount: MoneyValue; base: MoneyValue }>();
+  let left = pool;
+  for (const p of [...parts].sort((a, b) => b.date.localeCompare(a.date) || b.entryNo.localeCompare(a.entryNo) || b.lineNo - a.lineNo)) {
+    if (left.lte(0)) break;
+    if (p.base.lte(0)) continue;
+    const take = left.gte(p.base) ? p.base : left;
+    left = left.minus(take);
+    const d = take.equals(p.base) ? p.doc : roundMoney(p.doc.times(take).div(p.base));
+    const cur = byCur.get(p.currencyCode) ?? { amount: dec(0), base: dec(0) };
+    byCur.set(p.currencyCode, { amount: cur.amount.plus(d), base: cur.base.plus(take) });
+  }
+  return {
+    items,
+    unapplied: pool.toFixed(2),
+    unappliedByCurrency: [...byCur]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([currencyCode, v]) => ({ currencyCode, amount: v.amount.toFixed(2), amountBase: v.base.toFixed(2) })),
+  };
 }
 
 export interface AgingRow {

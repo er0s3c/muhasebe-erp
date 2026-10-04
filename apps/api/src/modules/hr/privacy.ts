@@ -3,6 +3,7 @@ import type { Tx } from '../../db/client';
 import { dataSubjectRequests, personalDataInventory, users } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { assertRefs } from '../directory/service';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 interface Seed {
   key: string;
@@ -102,15 +103,16 @@ export async function createRequest(tx: Tx, ctx: { companyId: string; userId: st
   return row!;
 }
 
-export async function listRequests(tx: Tx, q: { status?: string }) {
+export async function listRequests(tx: Tx, q: { status?: string }, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select r.id, r.kind, r.status, r.requester_name as "requesterName", r.description, r.resolution_note as "resolutionNote",
            r.opened_at as "openedAt", r.resolved_at as "resolvedAt", r.employee_id as "employeeId", e.code as "employeeCode", e.full_name as "employeeName",
            r.contact_id as "contactId", c.full_name as "contactName"
       from data_subject_requests r left join employees e on e.id = r.employee_id left join directory_contacts c on c.id = r.contact_id
      where (${q.status ?? null}::text is null or r.status = ${q.status ?? null}::text)
-     order by r.opened_at desc`);
-  return { requests: rows.rows };
+     order by r.opened_at desc ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { requests: pg.rows, truncated: pg.truncated };
 }
 
 export async function resolveRequest(tx: Tx, ctx: { userId: string }, id: string, input: { outcome: 'completed' | 'rejected'; resolutionNote: string }) {

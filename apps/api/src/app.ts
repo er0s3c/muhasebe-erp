@@ -9,8 +9,10 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions, type RouteOpt
 import type { Config } from './config';
 import type { Db } from './db/client';
 import { existsSync } from 'node:fs';
-import { errorHandler } from './http/errors';
+import { badRequest, errorHandler } from './http/errors';
+import { installZodTurkish } from '@erp/shared';
 import { MemoryLimiter, Semaphore } from './http/limits';
+import { isoTimestamps } from './http/timestamps';
 import { createMailer, type Mailer } from './modules/mail/mailer';
 import { assertLicensed, createLicenseService, type LicenseSetup } from './licensing';
 import { licenseRoutes } from './licensing/routes';
@@ -47,6 +49,7 @@ import { employeeLedgerRoutes } from './modules/employee-ledger/routes';
 import { directoryRoutes } from './modules/directory/routes';
 import { consolidationRoutes } from './modules/consolidation/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
+import { yearEndRoutes } from './modules/yearend/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
 import { settingsRoutes } from './modules/settings/routes';
@@ -65,6 +68,15 @@ export interface BuildAppOptions {
   mailer?: Mailer;
   /** Lisanslama. Verilmezse yapılandırmadan kurulur: üretim paketinde denetim her zaman açık, geliştirmede LICENSE_ENFORCEMENT_DEV ile. Testler hizmeti/taşımayı enjekte eder. */
   license?: LicenseSetup;
+}
+
+/** Gövde/sorgu içinde (anahtar ya da değer olarak) NUL karakteri var mı. */
+export function containsNul(v: unknown, depth = 0): boolean {
+  if (typeof v === 'string') return v.includes('\u0000');
+  if (depth > 32 || v === null || typeof v !== 'object' || Buffer.isBuffer(v)) return false;
+  if (Array.isArray(v)) return v.some((x) => containsNul(x, depth + 1));
+  for (const [k, x] of Object.entries(v)) if (k.includes('\u0000') || containsNul(x, depth + 1)) return true;
+  return false;
 }
 
 export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> {
@@ -109,6 +121,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.addHook('onRequest', async (req) => {
     await assertLicensed(app.license, req);
   });
+  // Ham SQL'den gelen PostgreSQL zaman damgası metinleri ISO 8601 olarak gönderilir (select() ile gelen Date'lerle aynı biçim)
+  app.addHook('preSerialization', async (_req, _reply, payload) => isoTimestamps(payload));
   // API yanıtları (oturum, mali veri) tarayıcı ve ara önbelleklerde saklanmasın; dışa aktarmalar kendi başlığını koyar.
   app.addHook('onSend', async (req, reply) => {
     if (req.url.startsWith('/api/') && !reply.hasHeader('cache-control')) {
@@ -141,6 +155,32 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   }
 
   app.setErrorHandler(errorHandler);
+  installZodTurkish();
+
+  // JSON gövdesi: Fastify'ın güvenli ayrıştırıcısı (__proto__ / constructor.prototype reddedilir) korunur; yalnızca
+  // sözdizimi geçerli ama yasak anahtar içeren gövdede yanıltıcı "geçerli JSON değil" yerine doğru ileti verilir (API-9).
+  const defaultJson = app.getDefaultJsonParser('error', 'error');
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    defaultJson(req, body as string, (err: Error | null, value?: unknown) => {
+      if (err && (err as { code?: string }).code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+        try {
+          JSON.parse(body as string);
+          done(Object.assign(new Error('forbidden key'), { statusCode: 400, code: 'FORBIDDEN_JSON_KEY' }), undefined);
+          return;
+        } catch {
+          // gerçek sözdizimi hatası: Fastify'ın hatası (Türkçe iletiyle eşlenir)
+        }
+      }
+      done(err, value);
+    });
+  });
+  // NUL karakteri (\u0000) PostgreSQL metin sütunlarına yazılamaz (500 yerine anlaşılır 400; API-4).
+  app.addHook('preValidation', async (req) => {
+    if (containsNul(req.body) || containsNul(req.query) || containsNul(req.params)) {
+      throw badRequest('Metinde geçersiz karakter (NUL) var', 'INVALID_TEXT');
+    }
+  });
   app.setNotFoundHandler(
     config.WEB_DIST_DIR
       ? webNotFoundHandler
@@ -183,6 +223,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(memberRoutes);
   await app.register(settingsRoutes);
   await app.register(ledgerRoutes);
+  await app.register(yearEndRoutes);
   await app.register(partyRoutes);
   await app.register(inventoryRoutes);
   await app.register(invoiceRoutes);

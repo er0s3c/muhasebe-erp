@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { PageLoading } from '../components/ui/Feedback';
@@ -6,6 +6,7 @@ import { ToastProvider } from '../components/ui/Toast';
 import { ActivationPage } from '../features/license/ActivationPage';
 import { usePublicConfig } from '../lib/queries';
 import { ApiError } from '../lib/api';
+import { reportForbidden } from '../lib/forbidden';
 import { SessionProvider } from '../lib/session';
 import { router } from './router';
 
@@ -31,6 +32,12 @@ export function App() {
   const [queryClient] = useState(
     () =>
       new QueryClient({
+        // Yetkisiz (403) yan sorgu: sayfa boş liste göstermesin, kabuk uyarı versin (UI-7)
+        queryCache: new QueryCache({
+          onError: (err, query) => {
+            if (err instanceof ApiError && err.status === 403 && !query.meta?.allowForbidden) reportForbidden();
+          },
+        }),
         defaultOptions: {
           queries: {
             staleTime: 15_000,

@@ -11,6 +11,8 @@
 # PostgreSQL ana sürümü yedeği alan sunucuyla aynı ya da daha yeni olmalıdır. Tek işlemde çalışır: hata olursa
 # hedefte yarım veri kalmaz. Migration geçmişi dökümde olduğundan geri yüklenen sürüm kendi şemasını bilir;
 # uygulamayı aynı sürümün imajıyla başlatın, sonra yükseltin.
+# Parola komut satırına yazılmaz (compose: kap içi yerel soket; doğrudan: PG* ortam değişkenleri).
+# Yerel (Docker'sız) müşteri kurulumunda bu betik yerine kurulum sihirbazının --restore-db seçeneği kullanılır (OPERATIONS §6).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 trap 'echo "$(basename "$0"): $LINENO. satırda beklenmedik hata" >&2' ERR
@@ -49,16 +51,30 @@ fi
 
 # Anahtar dosyada yoksa boş değer döner (hata değil): `set -e` + `pipefail` altında eşleşmeyen grep betiği sessizce sonlandırırdı.
 envval() { { grep -E "^$1=" "$ENV_FILE" || true; } | tail -n1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+urldec() { printf '%b' "${1//%/\\x}"; }
+# postgres://[kullanıcı[:parola]@]sunucu[:port]/veritabanı[?sslmode=…] → PG* ortam değişkenleri (parola ps çıktısında görünmez)
+pg_env_from_url() {
+  local re='^postgres(ql)?://(([^:@/]*)(:([^@]*))?@)?([^:/?]*)(:([0-9]+))?/([^?]+)(\?(.*))?$'
+  [[ "$1" =~ $re ]] || { echo "Veritabanı adresi okunamadı (postgres://kullanıcı:parola@sunucu:port/veritabanı)" >&2; exit 1; }
+  local user="${BASH_REMATCH[3]}" pass="${BASH_REMATCH[5]}" host="${BASH_REMATCH[6]}" port="${BASH_REMATCH[8]}" db="${BASH_REMATCH[9]}" q="${BASH_REMATCH[11]}"
+  if [ -n "$user" ]; then PGUSER="$(urldec "$user")"; export PGUSER; fi
+  if [ -n "$pass" ]; then PGPASSWORD="$(urldec "$pass")"; export PGPASSWORD; fi
+  if [ -n "$host" ]; then export PGHOST="$host"; fi
+  if [ -n "$port" ]; then export PGPORT="$port"; fi
+  PGDATABASE="$(urldec "$db")"; export PGDATABASE
+  if [[ "$q" =~ (^|&)sslmode=([a-z-]+) ]]; then export PGSSLMODE="${BASH_REMATCH[2]}"; fi
+  return 0
+}
+
 EMPTY_SQL="select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('public','drizzle') and c.relkind in ('r','v','m','S','f','p')"
 
 if [ "$MODE" = compose ]; then
   [ -f "$ENV_FILE" ] || { echo "$ENV_FILE yok" >&2; exit 1; }
   # Lisans sunucusu compose'u için: ENV_FILE=deploy/license/.env COMPOSE_FILE=deploy/license/docker-compose.yml ERP_DB_NAME=erp_license (DB_OWNER_PASSWORD de kabul edilir)
   DB="${TARGET:-${ERP_DB_NAME:-$(envval ERP_DB_NAME)}}"; DB="${DB:-erp}"
-  OWNER_PW="$(envval ERP_OWNER_PASSWORD)"; OWNER_PW="${OWNER_PW:-$(envval DB_OWNER_PASSWORD)}"
-  [ -n "$OWNER_PW" ] || { echo "ERP_OWNER_PASSWORD (ya da DB_OWNER_PASSWORD) $ENV_FILE içinde yok" >&2; exit 1; }
   DC=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
-  owner_psql() { "${DC[@]}" exec -T -e PGPASSWORD="$OWNER_PW" db psql -h 127.0.0.1 -U erp -d "$DB" -Atq -v ON_ERROR_STOP=1 "$@"; }
+  # Kap içi yerel soket (postgres imajında yerel bağlantı güvenilir): sahip rolüyle, parolasız
+  owner_psql() { "${DC[@]}" exec -T db psql -U erp -d "$DB" -Atq -v ON_ERROR_STOP=1 "$@"; }
   if [ "$RECREATE" = yes ]; then
     echo "Uygulama durduruluyor ve \"$DB\" veritabanı yeniden yaratılıyor…"
     "${DC[@]}" stop app > /dev/null
@@ -71,12 +87,12 @@ if [ "$MODE" = compose ]; then
   fi
   [ "$(owner_psql -c "$EMPTY_SQL")" = 0 ] || { echo "Hedef veritabanı \"$DB\" boş değil. Boş bir veritabanı kullanın ya da --recreate --yes verin." >&2; exit 1; }
   echo "Geri yükleniyor: $DUMP → $DB"
-  "${DC[@]}" exec -T -e PGPASSWORD="$OWNER_PW" db pg_restore --exit-on-error --single-transaction --no-owner --role=erp \
-    -h 127.0.0.1 -U erp -d "$DB" < "$DUMP"
+  "${DC[@]}" exec -T db pg_restore --exit-on-error --single-transaction --no-owner --role=erp -U erp -d "$DB" < "$DUMP"
 else
   : "${RESTORE_DATABASE_URL:?RESTORE_DATABASE_URL (sahip rolün, BOŞ hedef veritabanına bağlantı adresi) gerekli}"
-  [ "$(psql "$RESTORE_DATABASE_URL" -Atq -v ON_ERROR_STOP=1 -c "$EMPTY_SQL")" = 0 ] || { echo "Hedef veritabanı boş değil; boş bir veritabanı kullanın." >&2; exit 1; }
+  pg_env_from_url "$RESTORE_DATABASE_URL"
+  [ "$(psql -Atq -v ON_ERROR_STOP=1 -c "$EMPTY_SQL")" = 0 ] || { echo "Hedef veritabanı boş değil; boş bir veritabanı kullanın." >&2; exit 1; }
   echo "Geri yükleniyor: $DUMP"
-  pg_restore --exit-on-error --single-transaction --no-owner --role=erp --dbname="$RESTORE_DATABASE_URL" "$DUMP"
+  pg_restore --exit-on-error --single-transaction --no-owner --role=erp --dbname="$PGDATABASE" "$DUMP"
 fi
 echo "Geri yükleme tamamlandı. Uygulamayı başlatmadan önce /api/health/ready ve bir oturum açma denemesiyle doğrulayın."

@@ -3,6 +3,7 @@ import { dec, generateUnitNumbers, toDbAmount, type BulkUnitsInput, type CreateU
 import type { Tx } from '../../db/client';
 import { projects, realEstateUnits } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 export interface RealEstateCtx {
   companyId: string;
@@ -62,7 +63,9 @@ export async function updateUnit(tx: Tx, id: string, input: UpdateUnitInput) {
 export async function deleteUnit(tx: Tx, id: string) {
   const [cur] = await tx.select({ id: realEstateUnits.id }).from(realEstateUnits).where(eq(realEstateUnits.id, id)).for('update');
   if (!cur) throw notFound('Birim');
-  await tx.delete(realEstateUnits).where(eq(realEstateUnits.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(realEstateUnits).where(eq(realEstateUnits.id, id)).returning({ id: realEstateUnits.id });
+  if (deleted.length === 0) throw notFound('Birim');
 }
 
 const UNIT_SELECT = sql`
@@ -81,11 +84,12 @@ export async function getUnit(tx: Tx, id: string) {
   return { unit: r.rows[0] };
 }
 
-export async function listUnits(tx: Tx, q: { projectId?: string; status?: string; block?: string }) {
+export async function listUnits(tx: Tx, q: { projectId?: string; status?: string; block?: string }, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`${UNIT_SELECT}
     where (${q.projectId ?? null}::uuid is null or u.project_id = ${q.projectId ?? null}::uuid)
       and (${q.status ?? null}::text is null or u.status = ${q.status ?? null}::text)
       and (${q.block ?? null}::text is null or u.block = ${q.block ?? null}::text)
-    order by p.code, u.block, u.floor nulls first, u.unit_no`);
-  return { units: rows.rows };
+    order by p.code, u.block, u.floor nulls first, u.unit_no ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { units: pg.rows, truncated: pg.truncated };
 }

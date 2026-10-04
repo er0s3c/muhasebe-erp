@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import {
   type CreateEmployeeInput,
   type SensitiveField,
@@ -14,6 +14,8 @@ import { employeeLedgerRows } from '../employee-ledger/reports';
 import { employeeSocialRows } from '../socialsecurity/export-subject';
 import { employeeForeignRows } from '../foreignworkers/export-subject';
 import { decryptField, encryptField, hashId, lastFour, maskTail } from './crypto';
+import { trContains } from '../../db/search';
+import { paged, type PageQuery } from '../../http/paging';
 
 export interface HrCtx {
   companyId: string;
@@ -166,15 +168,16 @@ export async function getEmployee(tx: Tx, id: string) {
   return { employee: toView(r.e, r.projectCode) };
 }
 
-export async function listEmployees(tx: Tx, q: { status?: string; q?: string }) {
-  const term = q.q ? `%${q.q.replace(/[%_]/g, (m) => `\\${m}`)}%` : null;
-  const rows = await tx
+export async function listEmployees(tx: Tx, q: { status?: string; q?: string }, page?: PageQuery) {
+  const query = tx
     .select({ e: employees, projectCode: projects.code })
     .from(employees)
     .leftJoin(projects, eq(projects.id, employees.projectId))
-    .where(and(q.status ? eq(employees.status, q.status) : undefined, term ? or(ilike(employees.fullName, term), ilike(employees.code, term), ilike(employees.department, term)) : undefined))
-    .orderBy(asc(employees.code));
-  return { employees: rows.map((r) => toView(r.e, r.projectCode)) };
+    .where(and(q.status ? eq(employees.status, q.status) : undefined, q.q ? trContains(['employees.full_name', 'employees.code', 'employees.department'], q.q) : undefined))
+    .orderBy(asc(employees.code))
+    .$dynamic();
+  const pg = paged(page ? await query.limit(page.limit + 1).offset(page.offset) : await query, page);
+  return { employees: pg.rows.map((r) => toView(r.e, r.projectCode)), truncated: pg.truncated };
 }
 
 const FIELD_COLUMN: Record<SensitiveField, 'idEnc' | 'birthDateEnc' | 'ibanEnc'> = { id_number: 'idEnc', birth_date: 'birthDateEnc', iban: 'ibanEnc' };

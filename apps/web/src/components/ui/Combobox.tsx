@@ -1,5 +1,6 @@
 import { ChevronsUpDown } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 
 export interface ComboOption {
@@ -25,6 +26,7 @@ const norm = (s: string) => s.toLocaleLowerCase('tr-TR');
 
 /** Arama yapılabilen, klavyeyle gezilebilen seçim kutusu (hesap seçici vb.). */
 export function Combobox({ options, value, onChange, placeholder, disabled, className, ...rest }: ComboboxProps) {
+  const { t } = useTranslation();
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -63,6 +65,7 @@ export function Combobox({ options, value, onChange, placeholder, disabled, clas
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
+        aria-activedescendant={open && filtered[active] ? `${listId}-${active}` : undefined}
         disabled={disabled}
         className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3.5 pr-8 text-sm placeholder:text-muted/70 transition-colors focus:border-text focus:outline-none disabled:opacity-60"
         placeholder={selected ? selected.label : placeholder}
@@ -95,10 +98,11 @@ export function Combobox({ options, value, onChange, placeholder, disabled, clas
       <ChevronsUpDown className="pointer-events-none absolute right-2.5 top-3 size-4 text-muted" aria-hidden />
       {open && (
         <ul id={listId} role="listbox" className="absolute z-30 mt-1 max-h-64 w-full min-w-64 overflow-auto rounded-xl border border-border bg-surface py-1">
-          {filtered.length === 0 && <li className="px-3 py-2 text-sm text-muted">Sonuç yok</li>}
+          {filtered.length === 0 && <li className="px-3 py-2 text-sm text-muted">{t('common.noResults')}</li>}
           {filtered.map((o, i) => (
             <li
               key={o.value}
+              id={`${listId}-${i}`}
               role="option"
               aria-selected={o.value === value}
               onMouseDown={(e) => {

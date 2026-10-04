@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { computeFxPosition, dec, parseRateList, roundMoney, toDbAmount, type FxPositionItem, type FxPositionQuery, type FxPositionRow } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import type { AuthCtx } from '../../http/context';
-import { allOpenItems } from '../parties/service';
+import { allOpenItemsAndAdvances } from '../parties/service';
 import { findRate } from '../settings/rates';
 import { fxDifferences } from '../treasury/fx-report';
 import { forEachScope, resolveGroupAccess, type ExcludedMember } from './access';
@@ -63,9 +63,16 @@ export async function companyFxPosition(tx: Tx, scope: FxScope, q: FxPositionQue
   }
 
   for (const [type, kind] of [['receivable', 'receivable'], ['payable', 'payable']] as const) {
-    for (const it of await allOpenItems(tx, type, q.asOf)) {
+    const open = await allOpenItemsAndAdvances(tx, type, q.asOf);
+    for (const it of open.items) {
       if (it.currencyCode === base) continue;
       items.push({ currency: it.currencyCode, kind, amount: it.remaining, book: it.remainingBase });
+    }
+    // Uygulanamayan döviz tahsilat/ödemesi (alınan/verilen avans, fazla ödeme) ters yönlü pozisyondur:
+    // müşteriden alınan USD avans USD borçtur (alacağı azaltır), tedarikçiye verilen USD avans USD alacaktır (borcu azaltır).
+    for (const a of open.advances) {
+      if (a.currencyCode === base) continue;
+      items.push({ currency: a.currencyCode, kind, amount: dec(a.amount).neg().toFixed(2), book: dec(a.amountBase).neg().toFixed(2) });
     }
   }
 

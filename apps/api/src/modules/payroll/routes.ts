@@ -18,6 +18,7 @@ import {
   verifyPayrollParamSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import { createItem, createParam, createTerm, deleteParam, deleteTerm, listItems, listParams, listTerms, logPayrollAccess, updateItem, updateParam, verifyParam, type PayrollCtx } from './config';
 import { payrollCostByProject } from './reports';
 import { approveRun, calculateRun, cancelRun, createRun, deleteRun, getRun, getSlip, listRuns, payRun, removeAdjustment, setAdjustment, unpayRun } from './runs';
@@ -91,7 +92,10 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // --- Bordro çalıştırmaları ------------------------------------------------------------------------------
-  app.get('/api/payroll/runs', tenantRoute(app, read, async ({ tx, req }) => listRuns(tx, payrollRunListQuerySchema.parse(req.query))));
+  app.get('/api/payroll/runs', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = payrollRunListQuerySchema.parse(req.query);
+    return listRuns(tx, q, pageOf(q));
+  }));
   app.post(
     '/api/payroll/runs',
     tenantRoute(app, manage, async (c) => {

@@ -23,6 +23,7 @@ import type { ApprovalRequestRow, SubcontractRevisionDetail, VariationDetail, Va
 import { BoqEditor, type BoqBody } from './BoqEditor';
 import { ApprovalStatusBadge, SUBCONTRACT_INVALIDATE, VARIATION_REASONS, VariationStatusBadge } from './common';
 import { DeltaText } from './VariationsTab';
+import { fmtDate } from '../../lib/license';
 
 const qty = (v: string | null) => (v === null ? '—' : money(v, 4).replace(/,?0+$/, ''));
 const CHANGE_TONE = { added: 'success', removed: 'danger', changed: 'warning', same: 'neutral' } as const;
@@ -247,7 +248,7 @@ export function VariationPage() {
               <div key={a.id} className="flex flex-col gap-2">
                 <div className="flex items-center gap-2 text-sm">
                   <ApprovalStatusBadge status={a.status} />
-                  <span className="text-muted">{formatDateTR(a.requestedAt.slice(0, 10))}</span>
+                  <span className="text-muted">{fmtDate(a.requestedAt)}</span>
                 </div>
                 <ol className="flex flex-col gap-1 text-sm">
                   {a.steps.map((s) => (

@@ -15,6 +15,8 @@ import { errorMessage } from '../../lib/errors';
 import { currencySymbol, isZero, money, splitBalance } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
+import { Switch } from '../../components/ui/Switch';
+import { ClosedYearBanner } from './ClosedYearBanner';
 import type { TrialBalanceData } from '../../lib/types';
 
 const levelOf = (code: string) => (code.includes('.') ? 2 + code.split('.').length - 1 : code.length - 1);
@@ -42,10 +44,11 @@ export function TrialBalancePage() {
   const [to, setTo] = useState(todayIso());
   const [currency, setCurrency] = useState<'base' | 'reporting'>('base');
   const [withGroups, setWithGroups] = useState(true);
+  const [excludeClosing, setExcludeClosing] = useState(false);
 
   const { data, isPending, error } = useCQuery<TrialBalanceData>(
-    ['trial-balance', from, to, currency],
-    `/api/reports/trial-balance?${new URLSearchParams({ from, to, currency })}`,
+    ['trial-balance', from, to, currency, excludeClosing],
+    `/api/reports/trial-balance?${new URLSearchParams({ from, to, currency, ...(excludeClosing ? { excludeClosing: 'true' } : {}) })}`,
     { enabled: Boolean(from && to) },
   );
   const backfill = useCMutation((_: void, call) => call<{ updated: number; stillMissing: number }>('/api/ledger/backfill-reporting', { method: 'POST' }), [['trial-balance']]);
@@ -58,7 +61,7 @@ export function TrialBalancePage() {
       <PageHeader
         title={t('ledger.trialBalance.title')}
         description={t('ledger.trialBalance.subtitle')}
-        actions={<ExportMenu exportKey="trial-balance" params={{ from, to, currency, view: withGroups ? 'groups' : 'accounts' }} disabled={!data || rows.length === 0} />}
+        actions={<ExportMenu exportKey="trial-balance" params={{ from, to, currency, view: withGroups ? 'groups' : 'accounts', excludeClosing: excludeClosing ? 'true' : undefined }} disabled={!data || rows.length === 0} />}
       />
       <PrintHeader subtitle={`${from.split('-').reverse().join('.')} – ${to.split('-').reverse().join('.')}`} />
 
@@ -81,7 +84,12 @@ export function TrialBalancePage() {
             </Select>
           )}
         </Field>
+        <label className="flex items-center gap-2 pb-2 text-sm">
+          <Switch checked={excludeClosing} onChange={setExcludeClosing} label={t('ledger.trialBalance.excludeClosing')} />
+          {t('ledger.trialBalance.excludeClosing')}
+        </label>
       </div>
+      <ClosedYearBanner from={from} to={to} />
 
       {error ? (
         <Callout tone="danger">{errorMessage(error)}</Callout>

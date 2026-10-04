@@ -13,6 +13,8 @@ import {
 import type { Tx } from '../../db/client';
 import { bankGuarantees, currencies, parties, portfolioSettings, projects, subcontracts } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
+import { trContains } from '../../db/search';
+import { slicePage, type PageQuery } from '../../http/paging';
 
 /**
  * Banka teminat mektubu portföyü (Faz X1): NAZIM takip. Yevmiye yazmaz (nazım hesap/komisyon gideri kaydı yok: belgelenmiş sınır);
@@ -87,7 +89,7 @@ function addDays(iso: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
-export async function listGuarantees(tx: Tx, q: BankGuaranteeListQuery) {
+export async function listGuarantees(tx: Tx, q: Omit<BankGuaranteeListQuery, 'limit' | 'offset'>, page?: PageQuery) {
   const today = todayIso();
   const settings = await getSettings(tx);
   const res = await tx.execute<GuaranteeView>(sql`
@@ -98,7 +100,7 @@ export async function listGuarantees(tx: Tx, q: BankGuaranteeListQuery) {
        ${q.projectId ? sql`and g.project_id = ${q.projectId}` : sql``}
        ${q.partyId ? sql`and g.party_id = ${q.partyId}` : sql``}
        ${q.withinDays !== undefined ? sql`and g.status = 'active' and g.expiry_date is not null and g.expiry_date <= ${addDays(today, q.withinDays)}::date` : sql``}
-       ${q.q ? sql`and (g.letter_no ilike ${`%${q.q}%`} or g.bank_name ilike ${`%${q.q}%`} or g.counterparty_name ilike ${`%${q.q}%`})` : sql``}
+       ${q.q ? sql`and ${trContains(['g.letter_no', 'g.bank_name', 'g.counterparty_name'], q.q)}` : sql``}
      order by g.expiry_date nulls last, g.letter_no`);
   const rows = withState(res.rows, today, settings.guaranteeWarningDays);
   const totals = await tx.execute<{ direction: string; currency: string; count: number; amount: string }>(sql`
@@ -106,7 +108,8 @@ export async function listGuarantees(tx: Tx, q: BankGuaranteeListQuery) {
       from bank_guarantees g where g.status = 'active' group by g.direction, g.currency_code order by g.direction, g.currency_code`);
   const expiring = rows.filter((r) => r.expiryState === 'expiring').length;
   const lapsed = rows.filter((r) => r.expiryState === 'lapsed').length;
-  return { guarantees: rows, asOf: today, warningDays: settings.guaranteeWarningDays, activeTotals: totals.rows, expiring, lapsed };
+  const pg = slicePage(rows, page);
+  return { guarantees: pg.rows, truncated: pg.truncated, asOf: today, warningDays: settings.guaranteeWarningDays, activeTotals: totals.rows, expiring, lapsed };
 }
 
 export async function getGuarantee(tx: Tx, id: string): Promise<GuaranteeRowOut> {
@@ -207,7 +210,9 @@ export async function deleteGuarantee(tx: Tx, id: string) {
   const [cur] = await tx.select({ status: bankGuarantees.status }).from(bankGuarantees).where(eq(bankGuarantees.id, id));
   if (!cur) throw notFound('Teminat mektubu');
   if (cur.status !== 'active') throw unprocessable('Sonuçlanmış mektup silinemez', 'GUARANTEE_ALREADY_RESOLVED');
-  await tx.delete(bankGuarantees).where(eq(bankGuarantees.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(bankGuarantees).where(eq(bankGuarantees.id, id)).returning({ id: bankGuarantees.id });
+  if (deleted.length === 0) throw notFound('Teminat mektubu');
 }
 
 /**

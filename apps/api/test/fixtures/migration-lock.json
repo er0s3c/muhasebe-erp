@@ -1,0 +1,330 @@
+{
+  "0000_core_schema": {
+    "sha256": "a04c5e7d0aecb7fc14a812b2e0ee8377da4bdb961b63f170088d4c55ef283b5f",
+    "when": 1790690106597
+  },
+  "0001_rls_triggers_reference": {
+    "sha256": "ba8d6b87505d702c884137ffc7636c442403e1aae497503ec7826bfe3eeef8eb",
+    "when": 1790690119795
+  },
+  "0002_parties": {
+    "sha256": "50467e364aa7c72cd42ab5c449c549a9d4362f4d1dd0674e876c5013d1ca5310",
+    "when": 1790695609374
+  },
+  "0003_parties_rls_rules": {
+    "sha256": "90745cb130b8922de8598fa4694618c372e52edf28f8565457286f3b7cb0f936",
+    "when": 1790695610200
+  },
+  "0004_inventory": {
+    "sha256": "5499595bdfb5ba4f463a5edefa6f5c49fab9d86bdd75d861bcea570c8af19ef4",
+    "when": 1790700259753
+  },
+  "0005_inventory_rls_rules": {
+    "sha256": "153b63f0132b8c57b8bbe348c6051c71de1fbcb8d15526a632ab8e846105b80c",
+    "when": 1790700272383
+  },
+  "0006_invoices": {
+    "sha256": "471adbae5f5898e8531588663323ab560f9a1e5edcd40961fec4b40af3ef648b",
+    "when": 1790709946928
+  },
+  "0007_invoices_rls_rules": {
+    "sha256": "26ab393225407a2100c8dfad90a1c81d7bab048be056b7c8fa62ee8c03b38060",
+    "when": 1790709954511
+  },
+  "0008_deliveries": {
+    "sha256": "d4d7daa4547beec3ed0f2aab6265d809a4586cc957af0e2a441435c390d829da",
+    "when": 1790712615556
+  },
+  "0009_deliveries_rls_rules": {
+    "sha256": "3a351f9e929415a62c95af0b077fa70a6c4dc02b61cf93a5256adbea0383fdfc",
+    "when": 1790712622671
+  },
+  "0010_treasury": {
+    "sha256": "96e5e3cee18bbb198ea851d2215c7ab49fa4ba9f99a6f5e0a0483520745613bf",
+    "when": 1790717123594
+  },
+  "0011_treasury_rls_rules": {
+    "sha256": "1c3466dba8fa8296c9bae68022f917b06c5e478015cb3267b7f68e424c0ade42",
+    "when": 1790717124390
+  },
+  "0012_bank_statements": {
+    "sha256": "f1137ae9f45e80c5e349b25314716ba7de16e7f63dfe334cd9cf6d82c9312504",
+    "when": 1790725167768
+  },
+  "0013_bank_rls_rules": {
+    "sha256": "a3dd3e656fd94cf914f487b829b55a3b421ad104d3b01569934bfc0402edae44",
+    "when": 1790725210072
+  },
+  "0014_refresh_families": {
+    "sha256": "af1da0ddb7bb2092b2c1085cece4f08414f2b93a93f5ea1bb60448fdf7bb0cd4",
+    "when": 1790745883107
+  },
+  "0015_security_rules": {
+    "sha256": "9a6410fada190e5daff2e2657c141cbb51d8a8c7f1e0e5644d77a1cfff604b4a",
+    "when": 1790745887691
+  },
+  "0016_account_security": {
+    "sha256": "a39790afb402ebf19cd7f532a8e44cee1196b72de6df446d591fd2b35035652f",
+    "when": 1790747569536
+  },
+  "0017_account_security_rules": {
+    "sha256": "510aeb4693af9f9ac716d1fa97c7f82b750c5c8fb73e71a0c6a3b3ab0d583cac",
+    "when": 1790747570491
+  },
+  "0018_perf_indexes": {
+    "sha256": "2fdc68e7a811c9cb948ec9d893e4d11b670ea0365b15e75d67faa00856b2e6f8",
+    "when": 1790749129212
+  },
+  "0019_licensing": {
+    "sha256": "5e9c371370769f683b92bab955b608949743034e512709df5efe0cc9859920ef",
+    "when": 1790763431537
+  },
+  "0020_licensing_rules": {
+    "sha256": "a113b6e055b65dee21821ee008a46e06c10eb1de586076e05f74eabc11b0eee1",
+    "when": 1790763443785
+  },
+  "0021_devices": {
+    "sha256": "cae9789bea7acaee63aee3c9cb0bec0be6e008e43bae61cc0ecee5fa0320ed4a",
+    "when": 1790765093617
+  },
+  "0022_devices_rules": {
+    "sha256": "cc012d44142150e09925ce492f3fc704bacc5974c722b6a6fe1b52b97dd13366",
+    "when": 1790765105528
+  },
+  "0023_projects": {
+    "sha256": "c870e86adf9a36e3c0c4435ad7a6c00bd9337b9ec6b4254817b41e18a7e7090a",
+    "when": 1790784232177
+  },
+  "0024_projects_rls_rules": {
+    "sha256": "28f415b9a3136c4ecd1e7d0006b2465374ffa5d2bbccbc56bb8a5bb4a8ac97a0",
+    "when": 1790784233211
+  },
+  "0025_cost_codes": {
+    "sha256": "d06eb7fd4332b5d644a8c147e237375b3c6e3cca312274fa1f047f4b768548b3",
+    "when": 1790825403722
+  },
+  "0026_cost_codes_rules": {
+    "sha256": "9e3b1fdaa9d69afdfba6e93124d16bcf5c73be5ca2526b39a9fbcf492723dfb4",
+    "when": 1790825415350
+  },
+  "0027_approvals_params": {
+    "sha256": "54609830e93b1aaf93785d4fd89792ba04a62f5f601fb5585aeef16418a28b1b",
+    "when": 1790825632004
+  },
+  "0028_approvals_params_rules": {
+    "sha256": "c4268712268d7961547204141b026f250d4c11de36449cf4177c529f1ef0a084",
+    "when": 1790825633071
+  },
+  "0029_subcontracts": {
+    "sha256": "083b6afaea1dc93fdae608de438a0eb0774ed94e12a3e7c5c1d1de45e870f409",
+    "when": 1790826139725
+  },
+  "0030_subcontracts_rules": {
+    "sha256": "42a4d19ed2d04f83c8e304afbb01795726770d9e8a0e70d131e724934b5f94b6",
+    "when": 1790826140887
+  },
+  "0031_progress_payments": {
+    "sha256": "81decd2fb6e17ae21ee01e8e9e29ca1beb2eba7ee0f09e1ceaffcc47ffcad12f",
+    "when": 1790826508698
+  },
+  "0032_progress_payments_rules": {
+    "sha256": "49312e8d5305beb180b26f1624e33709d9728f141d78766b80af5cbd3383e73e",
+    "when": 1790826509823
+  },
+  "0033_employer_claims": {
+    "sha256": "94fea07c31ad7669a451acd843710d47df2be015a2c84d1575ecd1725c17ccf6",
+    "when": 1790833227668
+  },
+  "0034_employer_claims_rules": {
+    "sha256": "017b18f4c2fb355b81100bbdd4022ef70803d84f05b3ee812efd6343e8dcd602",
+    "when": 1790833229031
+  },
+  "0035_procurement": {
+    "sha256": "c5c211515fe8b0ce302159fe389a06627014676bae361005e0b4a6a4ca77d077",
+    "when": 1790834830140
+  },
+  "0036_procurement_rules": {
+    "sha256": "d7d2ad44973d50c8ab1b4a4962e74ef6dbe01c1381340fac051abf9aead03f19",
+    "when": 1790834831308
+  },
+  "0037_real_estate": {
+    "sha256": "89dfc4fe03edcb109fd6b0fb90582b12a7b4b114e0e748ac20389098a0f0afb4",
+    "when": 1790840875748
+  },
+  "0038_real_estate_rules": {
+    "sha256": "be665079dea7269eadbaaf6e3bbb18abe0a0f4264b14815a4cb09eb733879017",
+    "when": 1790840877080
+  },
+  "0039_cash_forecast": {
+    "sha256": "6bd61cb51d159f6ae7ce7815070a8c012f975ec97f41516acb157d898011f901",
+    "when": 1790843364569
+  },
+  "0040_cash_forecast_rules": {
+    "sha256": "5f0e8b9358f550b5ff01a93822f986fddfdf1ef30b80d83b7744524d471af7fd",
+    "when": 1790843365818
+  },
+  "0041_fee_schedules": {
+    "sha256": "032e946a9b05dd0e8cf1b7bb2d6ff85c2df7edfda0288c5ba9910801b038abb6",
+    "when": 1790843643181
+  },
+  "0042_fee_schedules_rules": {
+    "sha256": "1cb09b9fe22727315dc709d9e3235efdf28ad2e7bdb1766708b9b6bfd5b3c2bd",
+    "when": 1790843644598
+  },
+  "0043_user_mfa": {
+    "sha256": "1adf2ac345a2318ca19b23ab6133c7f78795cc7cfd152eaf0eb367cdc9112620",
+    "when": 1790845071537
+  },
+  "0044_user_mfa_rules": {
+    "sha256": "eb794a24ca633f13ab9dbf44f9cfb2e6f9907445a3ed9cceb339bad52a489d83",
+    "when": 1790845073019
+  },
+  "0045_three_way_match": {
+    "sha256": "1b7b4acf54409824b8f601616c28c7f849b96091213d6bb3de16c0c2c61ab5e5",
+    "when": 1790845668331
+  },
+  "0046_three_way_match_rules": {
+    "sha256": "0e34880cdb3c7ef7a320726ea466b0a53722bbf818f21e0af3aef2d72e9883ae",
+    "when": 1790845669929
+  },
+  "0047_app_updates": {
+    "sha256": "ab30a4e82f38edf0e73e2c14d09394c83b2a477401e4796a0202814446f7227d",
+    "when": 1790850437985
+  },
+  "0048_app_updates_rules": {
+    "sha256": "63be7dbb84ac0212524aeb473134021c763edec53f64af03fc8b8810533b55f4",
+    "when": 1790850439324
+  },
+  "0049_variation_orders": {
+    "sha256": "7df083f879d151136a8ba9c19517d7f3217fb42b30be9bfe3fcd4e008f0d226f",
+    "when": 1790852794730
+  },
+  "0050_variation_orders_rules": {
+    "sha256": "66d4a4d6bad9b45d14403e081beeb55ce473416ad0cb558021a6f14c9f76117c",
+    "when": 1790852796817
+  },
+  "0051_vat_withholding_material": {
+    "sha256": "9d3754c12a890fbe7dc40a21dd58fa0d9cb6afaa662b2dd829f4f5279f2342b5",
+    "when": 1790876182793
+  },
+  "0052_vat_withholding_material_rules": {
+    "sha256": "9fb05816f2abb1df0cb93cd411fa232709cfadf2ce5395bb1b834e04234c3f00",
+    "when": 1790876222876
+  },
+  "0053_hr_core": {
+    "sha256": "9ad85b5201c13b1ddc5ff0642e23d19c9d93775d79d40a94e00d2b2100abfc93",
+    "when": 1790885064127
+  },
+  "0054_hr_core_rules": {
+    "sha256": "410394bb2d97379edd5490f869fa6ac77ede94cf3ffbee9184182ea1d708c5ca",
+    "when": 1790885093177
+  },
+  "0055_attendance": {
+    "sha256": "1b4183fef98c1bfd5964ef62d848cc6633abc104d14c848fa6fc5ddada9db71d",
+    "when": 1790889309091
+  },
+  "0056_attendance_rules": {
+    "sha256": "40b22d071aff9b26a21751750a749f8f6a4e914081ceb5f7645e510cb43de09d",
+    "when": 1790889318630
+  },
+  "0057_payroll": {
+    "sha256": "21d7ebd6f3b0c3ab978a50795933137881a1c96ca89fe9591dd02b13216c4e42",
+    "when": 1790895406875
+  },
+  "0058_payroll_rules": {
+    "sha256": "dcb77ddbf5a5552649b7b372019b42729e77838f162a68d8fac1b00c96758f45",
+    "when": 1790895411336
+  },
+  "0059_social_security": {
+    "sha256": "b8fef9208c125662d42cf0be04d3c10b5db8e6fddcc18c068e7ffcaeb0261168",
+    "when": 1790897648689
+  },
+  "0060_social_security_rules": {
+    "sha256": "21bb136cb51ef82c52a7ee40dc5f76eec01c495f3ac76a415268d611e1a4ab22",
+    "when": 1790897652971
+  },
+  "0061_foreign_workers": {
+    "sha256": "64d910cf732e71030d87a6947d7f6d76e9add425023a2f8506d7c8d54b385dad",
+    "when": 1790899321838
+  },
+  "0062_foreign_workers_rules": {
+    "sha256": "5b152cd30ab27631cfc20157313ef55f6f0df5aa43776003885c80aad32e4cc7",
+    "when": 1790899327032
+  },
+  "0063_cheques_guarantees": {
+    "sha256": "893bc7a00c5bac5a54639f21b52826b53618a27112daae5f669ddf1e13bf13f0",
+    "when": 1790917800289
+  },
+  "0064_cheques_guarantees_rules": {
+    "sha256": "b880b5905a4966d2b3c05359bad6d2e8beeeaa0e4c0d60a250e8d507db3ae165",
+    "when": 1790917804667
+  },
+  "0065_orders_returns_batches": {
+    "sha256": "6e96d7ac4a9750e27f97a0b1060c756b3695294e182ef0e1792eb6384ae77ba5",
+    "when": 1790920302964
+  },
+  "0066_orders_returns_rules": {
+    "sha256": "bca2b0dca511ac558d1102384e6b75ea6a417f7406aeb9840c71eec63ee21d14",
+    "when": 1790920304352
+  },
+  "0067_pricing_serials": {
+    "sha256": "11d2a8257b16895dfffa5c355815d9c97653b344d7750e322a37e3f4499b18bd",
+    "when": 1790923945471
+  },
+  "0068_pricing_serials_rules": {
+    "sha256": "4ca2153169fd3d5ae414bc3881fdb003ef7753a194d699eef0fdf3a9fc5d87bf",
+    "when": 1790923950237
+  },
+  "0069_imports_expenses": {
+    "sha256": "2120a242722be695a04ea94d730da114d4ff62ab19afee1ff5c128bdb9a13967",
+    "when": 1790937713141
+  },
+  "0070_imports_expenses_rules": {
+    "sha256": "68422e7ded3e63e191eba0c93fe601dd532b8e38f38a87e6a2d95950c582516c",
+    "when": 1790937715120
+  },
+  "0071_employee_ledger": {
+    "sha256": "778e1ce0a77c5ea912e39ba576ca1458f77d0b1eecd5853d5bb55bc7c3faf1bd",
+    "when": 1790940888350
+  },
+  "0072_employee_ledger_rules": {
+    "sha256": "d5f1d63899aa148aff9dcb04766d81c82ff663f3c1bb465845890b897c495e7d",
+    "when": 1790940893214
+  },
+  "0073_directory": {
+    "sha256": "28f26c9c5916afd37c84332818ec04f0c010ea81177ca442a5abdb606611c2d6",
+    "when": 1790943659960
+  },
+  "0074_directory_rules": {
+    "sha256": "f63e60dbdd37659fed0fbabc8458ebe981887ff9a10cf334d826d6756d1426bc",
+    "when": 1790943665110
+  },
+  "0075_consolidation": {
+    "sha256": "1aaf862044baf7b79f831021d1aaccc164466d6948cec1a35118ccd07bcd2557",
+    "when": 1790955784771
+  },
+  "0076_consolidation_rules": {
+    "sha256": "3d7b77407ae4b1b97e3996611ce21f63c1c5e29777cb788e7bfa971f375b7909",
+    "when": 1790955789464
+  },
+  "0077_year_end": {
+    "sha256": "22dd033579f4ffd0f02bd7c2a8b8346ca03ad2e5d21b7b86f324f84d7d56aa47",
+    "when": 1790962258318
+  },
+  "0078_year_end_rules": {
+    "sha256": "4c6753336071b846e8db7fe41856e35a17d17c76396e4b894c70b58faad84b3b",
+    "when": 1790962264355
+  },
+  "0079_audit_integrity": {
+    "sha256": "daf9ebef506fafe76a851520fd53cda1556cdcc8f6ee2f81d40597ed51c5b815",
+    "when": 1791036097822
+  },
+  "0080_audit_security_rules": {
+    "sha256": "33b52e3c05c7f58ded2bff46405749630eb2bca1742e6e6d378a74d353543ae3",
+    "when": 1791036120732
+  },
+  "0081_audit_accounting": {
+    "sha256": "b37204bb2aa1be296f21fe2aa5974a6aedeaaec1730155452f9ca6982e4d045d",
+    "when": 1791039726643
+  }
+}

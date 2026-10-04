@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import type { z } from 'zod';
-import { createTaxRateSchema, todayIso, type CreateTaxRateInput } from '@erp/shared';
+import { createTaxRateSchema, parseTR, todayIso, type CreateTaxRateInput } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { PageHeader } from '../../components/ui/Card';
@@ -184,7 +184,7 @@ export function TaxRatesPage() {
               {(id) => <Input id={id} placeholder="KDV-16" {...register('code')} />}
             </Field>
             <Field label={t('settings.taxRates.rate')} error={errors.rate?.message} required>
-              {(id) => <Input id={id} inputMode="decimal" placeholder="16" {...register('rate')} />}
+              {(id) => <Input id={id} inputMode="decimal" placeholder="16" {...register('rate', { setValueAs: (v: string) => (typeof v === 'string' ? (parseTR(v) ?? v) : v) })} />}
             </Field>
           </div>
           <Field label={t('common.name')} error={errors.name?.message} required>

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readXlsx } from '../src/files/xlsx-read';
-import { addMember, asDb, asOwner, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear } from './helpers';
+import { addMember, asDb, asOwner, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear, TODAY_LOCAL } from './helpers';
 
 /**
  * Bordro motoru (Faz D3). Bu dosyadaki oranlar/çarpanlar YALNIZCA TEST DEĞERİDİR; kodda ve veritabanında varsayılan oran yoktur.
  * Tarihler içinde bulunulan aydadır (cari yıl dönemleri vardır; ay kapatılabilir; gelecek ay değildir).
  */
-const MONTH = new Date().toISOString().slice(0, 7);
+const MONTH = TODAY_LOCAL.slice(0, 7);
 const d = (n: number) => `${MONTH}-${String(n).padStart(2, '0')}`;
 const monthEnd = () => {
   const y = Number(MONTH.slice(0, 4));
@@ -329,7 +329,7 @@ describe('bordro motoru (Faz D3)', async () => {
     expect((await w.c.post(`/api/payroll/runs/${r.run.id}/pay`, { paidAt: d(1) })).json().error.code).toBe('PAYROLL_NOT_APPROVED');
     const ap = await ok(w.c.post(`/api/payroll/runs/${r.run.id}/approve`));
     expect((await w.c.post(`/api/payroll/runs/${r.run.id}/pay`, { paidAt: `${thisYear + 1}-01-01` })).json().error.code).toBe('PAYROLL_PAID_FUTURE');
-    const today = new Date().toISOString().slice(0, 10);
+    const today = TODAY_LOCAL;
     const paid = await ok(w.c.post(`/api/payroll/runs/${r.run.id}/pay`, { paidAt: today, note: 'Banka havalesi' }));
     expect(paid.run).toMatchObject({ status: 'paid', paidAt: today, paidNote: 'Banka havalesi' });
     expect((await w.c.post(`/api/payroll/runs/${r.run.id}/cancel`, { reason: 'Yanlış ay' })).json().error.code).toBe('PAYROLL_PAID');
@@ -398,7 +398,7 @@ describe('bordro motoru (Faz D3)', async () => {
     });
     // Yeni anahtarlar veritabanı kısıtını geçer: ham ekleme (kısıt) ve geri doldurma INSERT'ü eşleme sayısını tutar
     const n = (await execAsOwner(`select count(*)::int as n from account_mappings where company_id = $1`, [w.company.id])).rows[0].n;
-    expect(n).toBe(42);
+    expect(n).toBe(46);
   });
 
   it('yetki ve modül: muhasebeci okur ve yönetir; şantiye şefi ve izleyici erişemez; hr.payroll modülü hr.core ve muhasebeye bağlı', async () => {
@@ -607,5 +607,20 @@ describe('bordro motoru (Faz D3)', async () => {
       expect((await expectDbError(q, `update payroll_runs set month = '${thisYear}-01' where id = '${r.run.id}'`)).code).toBe('ERP13');
     });
     expect(done.lines[0]).toMatchObject({ gross: '3000.0000' });
+  });
+
+  it('DB-7: onaylanmış bordroda ay sonunda yürürlükte olan ücret şartı silinemez; kullanılmamış (sonraki) şart silinir', async () => {
+    const w = await world('PrbSartSil');
+    const e = await w.mkEmp();
+    const used = (await w.term(e.id, '3000')).term as { id: string };
+    const later = (await w.term(e.id, '3500', 'monthly', `${thisYear + 1}-01-01`)).term as { id: string };
+    await w.att([w.worked(e.id, 2)]);
+    await w.closeAtt();
+    const r = await w.mkRun();
+    await ok(w.c.post(`/api/payroll/runs/${r.run.id}/approve`));
+    const del = await w.c.delete(`/api/payroll/pay-terms/${used.id}`);
+    expect(del.statusCode).toBe(422);
+    expect(del.json().error.code).toBe('HR_RULE_VIOLATION');
+    expect([200, 204]).toContain((await w.c.delete(`/api/payroll/pay-terms/${later.id}`)).statusCode);
   });
 });

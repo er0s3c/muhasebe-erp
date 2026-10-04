@@ -17,7 +17,7 @@ import { companies, companyModules, memberships, users } from '../../db/schema';
 import { authedRoute, tenantRoute } from '../../http/context';
 import { notFound, unauthorized, unprocessable } from '../../http/errors';
 import { publicUser } from '../auth/routes';
-import { createCompany } from './service';
+import { assertCanCreateCompany, createCompany } from './service';
 
 export const tenancyRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -58,6 +58,7 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     authedRoute(app, async ({ tx, user, req, reply }) => {
       const input = createCompanySchema.parse(req.body);
+      await assertCanCreateCompany(tx, user.id);
       const company = await createCompany(tx, user, input, req.ip, await app.license.companyRules());
       void reply.code(201);
       return { company };
@@ -100,14 +101,20 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
     '/api/company',
     tenantRoute(app, { permission: 'company.manage' }, async ({ tx, company, req }) => {
       const input = updateCompanySchema.parse(req.body);
+      const values = {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.taxNumber !== undefined ? { taxNumber: input.taxNumber } : {}),
+        ...(input.taxOffice !== undefined ? { taxOffice: input.taxOffice } : {}),
+        ...(input.allowNegativeStock !== undefined ? { allowNegativeStock: input.allowNegativeStock } : {}),
+      };
+      // Değiştirilecek alan yoksa güncel kayıt döner (API-6)
+      if (Object.keys(values).length === 0) {
+        const [cur] = await tx.select().from(companies).where(eq(companies.id, company.id));
+        return { company: cur };
+      }
       const [row] = await tx
         .update(companies)
-        .set({
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.taxNumber !== undefined ? { taxNumber: input.taxNumber } : {}),
-          ...(input.taxOffice !== undefined ? { taxOffice: input.taxOffice } : {}),
-          ...(input.allowNegativeStock !== undefined ? { allowNegativeStock: input.allowNegativeStock } : {}),
-        })
+        .set(values)
         .where(and(eq(companies.id, company.id)))
         .returning();
       return { company: row };

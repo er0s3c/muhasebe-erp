@@ -1,9 +1,11 @@
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   allocateProportional,
+  applyRate,
   computeProgress,
   dec,
   isoYear,
+  proportionalBase,
   roundMoney,
   todayIso,
   toDbAmount,
@@ -32,6 +34,7 @@ import {
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { requireMappings } from '../ledger/mappings';
 import { createJournalEntry, reverseJournalEntry, type LedgerCtx } from '../ledger/journal';
+import { describeSettlements, entrySettlements } from '../parties/service';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
@@ -39,6 +42,7 @@ import { postTreasuryTransaction } from '../treasury/posting';
 import { cancelRequest, registerApprovalHandler, requestApproval, requestsForDoc, type ApprovalCtx, type ApprovalRequestWithSteps } from '../approvals/service';
 import { buildProgressJournal } from './journal';
 import { currentRevision, type SubcontractCtx } from './service';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 export interface ProgressCtx extends SubcontractCtx {
   baseCurrency: string;
@@ -251,7 +255,9 @@ export async function updateProgress(tx: Tx, ctx: ProgressCtx, id: string, input
 export async function deleteProgress(tx: Tx, id: string) {
   const p = await lockPayment(tx, id);
   if (p.status !== 'draft') throw unprocessable('Yalnızca taslak hakediş silinir', 'PROGRESS_NOT_DRAFT');
-  await tx.delete(progressPayments).where(eq(progressPayments.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(progressPayments).where(eq(progressPayments.id, id)).returning({ id: progressPayments.id });
+  if (deleted.length === 0) throw notFound('Hakediş');
 }
 
 // --- Gönderme, onay, kayıt -----------------------------------------------------------------------------
@@ -348,7 +354,23 @@ export async function postProgress(tx: Tx, ctx: ProgressCtx, id: string) {
   const number = formatDocumentNumber(receivable ? 'AHK' : 'HKD', year, seq);
   const text = `${receivable ? 'İşveren hakedişi' : 'Taşeron hakedişi'} ${number} — ${party?.name ?? ''} (${sc.code}, hakediş ${p.paymentNo})`.slice(0, 300);
 
+  // Dövizli sözleşmede avans mahsubu tarihsel defter tutarıyla kapanır; kur farkı kambiyo kâr/zararına (ACC-5)
+  let advanceBase: ReturnType<typeof dec> | undefined;
+  let fxAccounts: { gain?: string; loss?: string } | undefined;
+  if (p.currencyCode !== ctx.baseCurrency && dec(p.advance).gt(0)) {
+    advanceBase = await historicShare(tx, sc.id, receivable, 'advance', acc[keys.advance]!, dec(p.advance), fx);
+    const atRate = applyRate(p.advance, fx);
+    if (!advanceBase.eq(atRate)) {
+      // Gövde tarafındaki fark zarar, karşı taraftaki kâr: yön sözleşme türüne göre değişir
+      const lossSide = receivable ? advanceBase.lt(atRate) : advanceBase.gt(atRate);
+      const m = (await requireMappings(tx, [lossSide ? 'fx_loss' : 'fx_gain'])) as Record<string, string>;
+      fxAccounts = { gain: m.fx_gain, loss: m.fx_loss };
+    }
+  }
+
   const built = buildProgressJournal({
+    advanceBase,
+    fxAccounts,
     direction: p.direction as 'payable' | 'receivable',
     baseCurrency: ctx.baseCurrency,
     currency: p.currencyCode,
@@ -415,12 +437,9 @@ export async function cancelProgress(tx: Tx, ctx: ProgressCtx, id: string, input
   const [later] = await tx.select({ no: progressPayments.paymentNo }).from(progressPayments).where(and(eq(progressPayments.subcontractId, p.subcontractId), eq(progressPayments.status, 'posted'), sql`${progressPayments.paymentNo} > ${p.paymentNo}`));
   if (later) throw unprocessable(`Daha sonraki hakediş (${later.no}) kaydedilmiş; önce onu iptal edin`, 'PROGRESS_LATER_EXISTS');
 
-  const paid = await tx.execute(sql`
-    select 1 from party_allocations pa
-      join journal_lines jl on jl.id = pa.charge_line_id
-      join treasury_transactions t on t.id = pa.transaction_id and t.status = 'posted'
-     where jl.entry_id = ${p.entryId} limit 1`);
-  if (paid.rows.length > 0) throw unprocessable('Bu hakedişe ödeme eşleştirilmiş; önce ödemeyi iptal edin', 'PROGRESS_HAS_PAYMENTS');
+  // Kasa/banka ödemesi ya da çek/senet eşleştirilmiş hakediş iptal edilmez
+  const paid = await entrySettlements(tx, p.entryId!);
+  if (paid.length > 0) throw unprocessable(`Bu hakedişe ödeme eşleştirilmiş (${describeSettlements(paid)}); önce ödemeyi iptal edin`, 'PROGRESS_HAS_PAYMENTS');
 
   const bal = await getBalances(tx, p.subcontractId);
   if (dec(bal.retentionReleased).gt(dec(bal.retentionHeld).minus(p.retention))) {
@@ -460,6 +479,34 @@ export async function giveAdvance(tx: Tx, ctx: ProgressCtx, subcontractId: strin
   return getBalances(tx, subcontractId);
 }
 
+/**
+ * Dövizli sözleşmede avans/teminat bakiyesinin defterdeki (tarihsel) karşılığından `amount`ın payı: kalan döviz bakiyesiyle
+ * orantılı; bakiyenin tamamı kapanıyorsa kalan defter tutarının tamamı (TL artığı kalmaz). Bakiye bulunamazsa günün kuru.
+ * Avans: verildiği (alındığı) kasa/banka hareketi ile kaydedilmiş hakedişlerin mahsupları; teminat: kaydedilmiş hakedişlerin
+ * tuttuğu teminat ile önceki iadeler. Taşeronda bakiye borç (avans) / alacak (teminat) yönündedir, işverende tersi.
+ */
+async function historicShare(tx: Tx, subcontractId: string, receivable: boolean, kind: 'advance' | 'retention', accountId: string, amount: ReturnType<typeof dec>, fx: ReturnType<typeof dec>) {
+  const bal = await getBalances(tx, subcontractId);
+  const docBal = dec(kind === 'advance' ? bal.advanceBalance : bal.retentionBalance);
+  // Bakiyenin işareti: taşeron avansı (159) borç, taşeron teminatı (326) alacak; işverende tersi
+  const debitNormal = (kind === 'advance') !== receivable;
+  const sign = debitNormal ? sql`l.debit_base - l.credit_base` : sql`l.credit_base - l.debit_base`;
+  const r = await tx.execute<{ base: string }>(sql`
+    select coalesce(sum(${sign}), 0)::text as base
+      from journal_lines l
+     where l.account_id = ${accountId}
+       and l.entry_id in (
+         select p.entry_id from progress_payments p where p.subcontract_id = ${subcontractId} and p.status = 'posted' and p.entry_id is not null
+         union all
+         select t.journal_entry_id from subcontract_advances a join treasury_transactions t on t.id = a.transaction_id where a.subcontract_id = ${subcontractId}
+         union all
+         select r.entry_id from retention_releases r where r.subcontract_id = ${subcontractId}
+       )`);
+  const baseBal = dec(r.rows[0]?.base ?? 0);
+  if (docBal.lte(0) || baseBal.lte(0) || amount.gt(docBal)) return applyRate(amount, fx);
+  return proportionalBase(amount, docBal, baseBal);
+}
+
 export async function releaseRetention(tx: Tx, ctx: ProgressCtx, subcontractId: string, input: ReleaseRetentionInput) {
   const sc = await lockSubcontractRow(tx, subcontractId);
   const bal = await getBalances(tx, subcontractId);
@@ -472,6 +519,19 @@ export async function releaseRetention(tx: Tx, ctx: ProgressCtx, subcontractId: 
   const foreign = sc.currencyCode !== ctx.baseCurrency;
   const base = foreign ? roundMoney(amount.times(fx)) : amount;
   const common = { currency: sc.currencyCode, ...(foreign ? { fxRate: toDbRate(fx) } : {}) };
+  // Teminat hesabı tutulduğu (hakediş) kurlarındaki defter tutarıyla kapanır, cari iade günü kurundadır; fark kambiyo (ACC-5)
+  const retAccount = receivable ? acc.retention_receivable! : acc.retention_payable!;
+  const held = foreign ? await historicShare(tx, subcontractId, receivable, 'retention', retAccount, amount, fx) : base;
+  const heldCommon = { currency: sc.currencyCode, ...(foreign ? { fxRate: toDbRate(held.div(amount)) } : {}) };
+  const diff = base.minus(held);
+  // Taşeron: B teminat (tarihsel) / A cari (bugün) → fark > 0 zarar (borç), < 0 kâr. İşveren: B cari / A teminat → fark > 0 kâr.
+  const fxLines: Record<string, unknown>[] = [];
+  if (!diff.isZero()) {
+    const debitSide = receivable ? diff.isNegative() : diff.gt(0);
+    const m = (await requireMappings(tx, [debitSide ? 'fx_loss' : 'fx_gain'])) as Record<string, string>;
+    const a = toDbAmount(diff.abs());
+    fxLines.push({ accountId: debitSide ? m.fx_loss! : m.fx_gain!, currency: ctx.baseCurrency, debit: debitSide ? a : '0', credit: debitSide ? '0' : a, debitBase: debitSide ? a : '0', creditBase: debitSide ? '0' : a, description: 'Teminat iadesi kur farkı' });
+  }
   const releaseId = randomUUID();
   const entry = await createJournalEntry(
     tx,
@@ -484,10 +544,11 @@ export async function releaseRetention(tx: Tx, ctx: ProgressCtx, subcontractId: 
         // Taşeron: B teminat borcu / A 320 cari. İşveren: B 120 cari / A teminat alacağı (işveren teminatı geri öder)
         receivable
           ? { ...common, accountId: acc.receivable!, debit: toDbAmount(amount), credit: '0', debitBase: toDbAmount(base), creditBase: '0', partyId: sc.partyId, dueDate: input.date, description: 'Teminat iadesi' }
-          : { ...common, accountId: acc.retention_payable!, debit: toDbAmount(amount), credit: '0', debitBase: toDbAmount(base), creditBase: '0', description: 'Teminat iadesi' },
+          : { ...heldCommon, accountId: acc.retention_payable!, debit: toDbAmount(amount), credit: '0', debitBase: toDbAmount(held), creditBase: '0', description: 'Teminat iadesi' },
         receivable
-          ? { ...common, accountId: acc.retention_receivable!, debit: '0', credit: toDbAmount(amount), debitBase: '0', creditBase: toDbAmount(base), description: 'Teminat iadesi' }
+          ? { ...heldCommon, accountId: acc.retention_receivable!, debit: '0', credit: toDbAmount(amount), debitBase: '0', creditBase: toDbAmount(held), description: 'Teminat iadesi' }
           : { ...common, accountId: acc.payable!, debit: '0', credit: toDbAmount(amount), debitBase: '0', creditBase: toDbAmount(base), partyId: sc.partyId, dueDate: input.date, description: 'Teminat iadesi' },
+        ...fxLines,
       ] as never,
     },
     { source: { type: 'retention_release', id: releaseId } },
@@ -530,7 +591,7 @@ export async function getProgress(tx: Tx, id: string) {
   return { payment, lines: lines.rows, deductions, approvals };
 }
 
-export async function listProgress(tx: Tx, q: { subcontractId?: string; projectId?: string; status?: string; direction?: string }) {
+export async function listProgress(tx: Tx, q: { subcontractId?: string; projectId?: string; status?: string; direction?: string }, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select p.id, p.number, p.payment_no as "paymentNo", p.status, p.direction, p.period_end::text as "periodEnd",
            p.subcontract_id as "subcontractId", s.code as "subcontractCode", pa.name as "partyName",
@@ -545,8 +606,9 @@ export async function listProgress(tx: Tx, q: { subcontractId?: string; projectI
        and (${q.projectId ?? null}::uuid is null or p.project_id = ${q.projectId ?? null}::uuid)
        and (${q.status ?? null}::text is null or p.status = ${q.status ?? null}::text)
        and (${q.direction ?? null}::text is null or p.direction = ${q.direction ?? null}::text)
-     order by p.created_at desc`);
-  return { payments: rows.rows };
+     order by p.created_at desc ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { payments: pg.rows, truncated: pg.truncated };
 }
 
 /**

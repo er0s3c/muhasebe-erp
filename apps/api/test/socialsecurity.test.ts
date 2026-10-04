@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readXlsx } from '../src/files/xlsx-read';
-import { addMember, asDb, asOwner, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear } from './helpers';
+import { addMember, asDb, asOwner, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear, TODAY_LOCAL } from './helpers';
 
 /**
  * Sosyal güvenlik çıktıları (Faz D4). Bu dosyadaki oranlar/değerler/kodlar YALNIZCA TEST DEĞERİDİR; kodda ve veritabanında
  * varsayılan oran, bordro tipi kodu, destek kuralı ya da resmî biçim yoktur.
  */
-const MONTH = new Date().toISOString().slice(0, 7);
+const MONTH = TODAY_LOCAL.slice(0, 7);
 const d = (n: number) => `${MONTH}-${String(n).padStart(2, '0')}`;
 const FROM = `${thisYear}-01-01`;
 const SSN = '12345678901';
@@ -280,7 +280,7 @@ describe('sosyal güvenlik çıktıları (Faz D4)', async () => {
     expect(b.lines[0].supportEmployee).toBe('1.0000');
     // Taslakta kural A kapatılırsa kesinleştirme güncel durumu kullanır (A'nın desteği kalkar, B kalır)
     await ok(w.c.patch(`/api/social-security/support-rules/${ruleA.id}`, { enabled: false }));
-    await ok(w.c.post(`/api/payroll/runs/${runId}/pay`, { paidAt: new Date().toISOString().slice(0, 10) }));
+    await ok(w.c.post(`/api/payroll/runs/${runId}/pay`, { paidAt: TODAY_LOCAL }));
     const fin = await ok(w.c.post(`/api/social-security/declarations/${b.declaration.id}/finalize`, {}));
     expect(fin.lines[0]).toMatchObject({ supportEmployer: '0.0000', supportEmployee: '1.0000', supportCodes: 'TST2' });
     expect(fin.declaration.payrollRunStatus).toBe('paid');
@@ -474,5 +474,18 @@ describe('sosyal güvenlik çıktıları (Faz D4)', async () => {
       expect((await expectDbError(q, `insert into social_support_rules (id, company_id, code, name, effective_from, target, mode, value) values (gen_random_uuid(), '${w.company.id}', 'T', 'T', '${FROM}', 'kurum', 'fixed_amount', 1)`)).code).toBe('23514');
       expect((await expectDbError(q, `insert into employee_social_profiles (id, company_id, employee_id, effective_from, insurance_start, insurance_end) values (gen_random_uuid(), '${w.company.id}', '${e.id}', '${d(9)}', '${d(9)}', '${d(3)}')`)).code).toBe('23514');
     });
+  });
+
+  it('DB-7: kesinleşmiş bildirimde kullanılan sosyal güvenlik profili silinemez; kullanılmamış profil silinir', async () => {
+    const w = await world('SgProfilSil');
+    const { emps } = await w.approvedPayroll();
+    const used = (await w.profile(emps[0]!.id)).profile as { id: string };
+    const later = (await w.profile(emps[0]!.id, { effectiveFrom: `${thisYear + 1}-01-01`, insuranceStart: `${thisYear + 1}-01-01` })).profile as { id: string };
+    const decl = await w.build();
+    await ok(w.c.post(`/api/social-security/declarations/${decl.declaration.id}/finalize`, {}));
+    const del = await w.c.delete(`/api/social-security/profiles/${used.id}`);
+    expect(del.statusCode).toBe(422);
+    expect(del.json().error.code).toBe('HR_RULE_VIOLATION');
+    expect([200, 204]).toContain((await w.c.delete(`/api/social-security/profiles/${later.id}`)).statusCode);
   });
 });

@@ -24,4 +24,24 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   if (!code) throw new Error('E2E_LICENSE_CODE tanımlı değil (scripts/ci-license-host.sh ile gerçek lisans sunucusu kurun)');
   const res = await fetch(`${base}/api/license/activate`, { method: 'POST', headers: json, body: JSON.stringify({ code }) });
   if (!res.ok) throw new Error(`Lisans etkinleştirilemedi (${res.status}): ${await res.text()}`);
+
+  // Kurulum sahibi: ilk şirketi açan kuruluş kurulumun sahibi olur (lisans, güncelleme ve cihaz yönetimi ona aittir).
+  // Diğer senaryolar şirket açmadan önce burada oluşturulur; lisans senaryoları bu hesapla girer (E2E_OWNER_*).
+  const email = `e2e-kurulum-sahibi-${Date.now()}@example.com`;
+  const password = 'Sifre-12345-xyz';
+  const reg = await fetch(`${base}/api/auth/register`, {
+    method: 'POST',
+    headers: json,
+    body: JSON.stringify({ email, password, fullName: 'Kurulum Sahibi', organizationName: 'Kurulum Sahibi Ltd.' }),
+  });
+  if (reg.status !== 201) throw new Error(`Kurulum sahibi kaydı başarısız (${reg.status}): ${await reg.text()}`);
+  const token = ((await reg.json()) as { accessToken: string }).accessToken;
+  const company = await fetch(`${base}/api/companies`, {
+    method: 'POST',
+    headers: { ...json, authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name: 'Kurulum Sahibi İnşaat', sector: 'CONSTRUCTION' }),
+  });
+  if (company.status !== 201) throw new Error(`Kurulum sahibinin şirketi açılamadı (${company.status}): ${await company.text()}`);
+  process.env.E2E_OWNER_EMAIL = email;
+  process.env.E2E_OWNER_PASSWORD = password;
 }

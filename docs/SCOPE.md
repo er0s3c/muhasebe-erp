@@ -26,7 +26,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Hesap ekstresi (yürüyen bakiye, alt hesaplar dahil) | ✅ |
 | Mali dönemler, dönem kapatma/açma | ✅ |
 | Kebir ve yevmiye defteri (ekran, Excel/CSV, baskı) | ✅ ⚠️ iç belge, yasal onaylı defter yerine geçmez |
-| Yıl sonu kapanış ve devir | ⏳ ⚠️ mali müşavir teyidine bağlı (M9 kapsamında değil) |
+| Yıl sonu kapanış ve devir | ✅ ⚠️ hesap seçimleri ve yöntem doğrulanmadı (mali müşavir onayı gerekir); dönem sonu kur değerlemesi yok |
 | Gerçekleşen kur farkı kâr/zarar kayıtları (tahsilat, ödeme, döviz satışı) | ✅ |
 | Dönem sonu kur değerlemesi (gerçekleşmemiş kur farkı) | 🔜 M7b ⚠️ |
 
@@ -41,7 +41,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Sonradan avans mahsubu (avansı sonraki faturaya elle bağlama) | 🔜 M7b |
 | Fazla ödeme/avans yaşlandırmada ayrı gösterilir | ✅ |
 | Borç/alacak dekontu (mahsup) elle yevmiye ile | ✅ |
-| Devir işlemleri (yıl sonu ile birlikte) | ⏳ ⚠️ |
+| Devir işlemleri (yıl sonu ile birlikte) | ✅ ⚠️ dönem sonucu geçmiş yıllara devri; bilanço hesapları devam eder (doğrulanmadı) |
 | Cari özel fiyat/iskonto | ✅ (X3) |
 | Personel cari ve avans takibi (personel carisi, avans ver/geri ödeme, bordrodan avans kesintisi, maaş ödemesi, kim kime borçlu listesi, avans sicili ve yaşlandırma, ekstre; ücret verisi gibi izinli + erişim günlüğü) | ✅ (X5) ⚠️ hesap eşlemesi (196) ve avans kesintisinin hukuki uygunluğu/üst sınırı doğrulanmadı (üst sınır kullanıcı parametresi); gider fişiyle avans mahsubu, personele masraf iadesi, döviz avans ❌ |
 

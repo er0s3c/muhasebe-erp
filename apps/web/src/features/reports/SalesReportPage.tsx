@@ -101,7 +101,12 @@ function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
                       {groupBy === 'party' && r.code && <span className="mr-2 font-mono text-xs text-muted">{r.code}</span>}
                       {r.label}
                     </Td>
-                    {groupBy === 'invoice' && <Td className="text-muted">{r.type && (INVOICE_TYPES as readonly string[]).includes(r.type) ? t(`invoices.types.${r.type as (typeof INVOICE_TYPES)[number]}`) : r.type}</Td>}
+                    {groupBy === 'invoice' && (
+                      <Td className="text-muted">
+                        {r.type && (INVOICE_TYPES as readonly string[]).includes(r.type) ? t(`invoices.types.${r.type as (typeof INVOICE_TYPES)[number]}`) : r.type}
+                        {r.cancellation && <span className="ml-1 text-danger">({t('reports.sales.cancellation')})</span>}
+                      </Td>
+                    )}
                     {(groupBy === 'party' || groupBy === 'month') && <Td num className="text-muted">{r.docCount}</Td>}
                     {groupBy === 'item' && <Td num className="text-muted">{r.qty ? qtyText(r.qty) : ''}</Td>}
                     <Td num>{money(r.net)}</Td>

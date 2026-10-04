@@ -70,13 +70,12 @@ export async function checkMfaCode(db: Queryable, jwtSecret: string, userId: str
   if (!/^[0-9a-f]{10}$/.test(norm)) return null;
   const h = sha256(norm);
   if (!row.recoveryHashes.includes(h)) return null;
-  const left = row.recoveryHashes.filter((x) => x !== h);
-  const upd = await db
-    .update(userMfa)
-    .set({ recoveryHashes: left })
-    .where(eq(userMfa.userId, userId))
-    .returning({ userId: userMfa.userId });
-  return upd.length > 0 ? 'recovery' : null;
+  // Tek atomik güncelleme: kod hâlâ listedeyse çıkarılır. Aynı kodla eşzamanlı denemelerden yalnızca biri satır günceller
+  // (oku-süz-yaz yarışında üç istek de geçiyordu).
+  const upd = await db.execute(
+    sql`update user_mfa set recovery_hashes = recovery_hashes - ${h}::text where user_id = ${userId} and recovery_hashes @> jsonb_build_array(${h}::text) returning user_id`,
+  );
+  return upd.rows.length > 0 ? 'recovery' : null;
 }
 
 const sqlUpdateCounter = (userId: string, counter: number) =>

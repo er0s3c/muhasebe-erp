@@ -16,6 +16,7 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { BatchHistoryRow, BatchPreview, BatchResult } from '../../lib/types';
 import { qtyText, useUnitLabel } from '../inventory/common';
 import { INVOICE_INVALIDATE, usePartyOptions } from './common';
+import { fmtDate } from '../../lib/license';
 
 /**
  * Toplu faturalama: faturalanmamış satış irsaliyelerini dönem ve cariye göre listeler, seçilenleri cari başına (ya da irsaliye başına)
@@ -303,7 +304,7 @@ export function BatchInvoicingPage() {
               <tbody>
                 {history.data.batches.map((b) => (
                   <tr key={b.id}>
-                    <Td className="text-muted">{formatDateTR(b.createdAt.slice(0, 10))}</Td>
+                    <Td className="text-muted">{fmtDate(b.createdAt)}</Td>
                     <Td>{formatDateTR(b.invoiceDate)}</Td>
                     <Td className="text-muted">
                       {b.grouping === 'party' ? t('batch.groupParty') : t('batch.groupNote')} · {b.post ? t('batch.posted') : t('batch.draft')}

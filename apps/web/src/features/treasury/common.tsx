@@ -18,6 +18,12 @@ export const TREASURY_INVALIDATE = [
   ['trial-balance'],
   ['account-ledger'],
   ['dashboard'],
+  // Raporlar (kebir, döviz pozisyonu, yönetici özeti, satış/alış), nakit tahmini ve proje kârlılığı da defterden türer (UI-18)
+  ['reports'],
+  ['cash-forecast'],
+  ['projects'],
+  ['project'],
+  ['sales-summary'],
 ];
 
 export const TXN_TYPES: readonly TreasuryTxnType[] = ['receipt', 'payment', 'transfer', 'exchange', 'other_receipt', 'other_payment'];

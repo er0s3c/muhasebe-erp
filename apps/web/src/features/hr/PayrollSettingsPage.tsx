@@ -16,6 +16,7 @@ import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { EmployeeRow, PayrollItemRow, PayrollParamRow, PayTermRow } from '../../lib/types';
 import { formatParamValue, PAYROLL_INVALIDATE, UnverifiedBadge } from './payroll-common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 /** Bordro ayarları: tarihli parametreler (varsayılan kapalı, doğrulanmamış), ücret şartları ve ek ödeme/kesinti kalemleri. */
 export function PayrollSettingsPage() {
@@ -46,7 +47,7 @@ function ParamsCard() {
   const [note, setNote] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const add = useCMutation(
-    (_: void, call) => call('/api/payroll/params', { method: 'POST', body: { key, value: value.replace(',', '.'), effectiveFrom: from, enabled, ...(source.trim() ? { sourceNote: source.trim() } : {}) } }),
+    (_: void, call) => call('/api/payroll/params', { method: 'POST', body: { key, value: value, effectiveFrom: from, enabled, ...(source.trim() ? { sourceNote: source.trim() } : {}) } }),
     PAYROLL_INVALIDATE,
   );
   const toggle = useCMutation((v: { id: string; enabled: boolean }, call) => call(`/api/payroll/params/${v.id}`, { method: 'PATCH', body: { enabled: v.enabled } }), PAYROLL_INVALIDATE);
@@ -122,7 +123,7 @@ function ParamsCard() {
                 </Select>
               )}
             </Field>
-            <Field label={`${t('payroll.params.value')} (${t(`payroll.params.units.${unit}`)})`}>{(id) => <Input id={id} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />}</Field>
+            <Field label={`${t('payroll.params.value')} (${t(`payroll.params.units.${unit}`)})`}>{(id) => <MoneyInput id={id} value={value} onChange={(v) => setValue(v)} decimals={0} maxDecimals={6} />}</Field>
             <Field label={t('payroll.params.from')}>{(id) => <Input id={id} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />}</Field>
             <Field label={t('payroll.params.source')}>{(id) => <Input id={id} maxLength={500} value={source} onChange={(e) => setSource(e.target.value)} />}</Field>
             <Field label={t('payroll.params.enabled')}>
@@ -166,7 +167,7 @@ function TermsCard() {
   const [amount, setAmount] = useState('');
   const [from, setFrom] = useState(todayIso());
   const [error, setError] = useState<Error | null>(null);
-  const add = useCMutation((_: void, call) => call('/api/payroll/pay-terms', { method: 'POST', body: { employeeId, payBasis: basis, amount: amount.replace(',', '.'), effectiveFrom: from } }), PAYROLL_INVALIDATE);
+  const add = useCMutation((_: void, call) => call('/api/payroll/pay-terms', { method: 'POST', body: { employeeId, payBasis: basis, amount: amount, effectiveFrom: from } }), PAYROLL_INVALIDATE);
   const remove = useCMutation((id: string, call) => call(`/api/payroll/pay-terms/${id}`, { method: 'DELETE' }), PAYROLL_INVALIDATE);
   const rows = data?.terms ?? [];
 
@@ -238,7 +239,7 @@ function TermsCard() {
                 </Select>
               )}
             </Field>
-            <Field label={t('payroll.terms.amount')}>{(id) => <Input id={id} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}</Field>
+            <Field label={t('payroll.terms.amount')}>{(id) => <MoneyInput id={id} value={amount} onChange={(v) => setAmount(v)} />}</Field>
             <Field label={t('payroll.params.from')}>{(id) => <Input id={id} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />}</Field>
             <Button type="submit" variant="primary" loading={add.isPending} disabled={!employeeId || !/^\d{1,15}([.,]\d{1,4})?$/.test(amount.trim()) || !from}>
               <Plus className="size-4" aria-hidden />

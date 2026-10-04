@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dec } from '../money';
+import { decCheck, tryDec } from '../money';
 import { currencyCode, isoDate, moneyString, rateString, uuid } from './common';
 
 // --- Kasa/banka hesabı -------------------------------------------------------
@@ -78,7 +78,7 @@ export const TREASURY_TXN_PREFIX: Record<TreasuryTxnType, string> = {
 /** Cari ile çalışan türler. */
 export const isSettlementType = (t: TreasuryTxnType) => t === 'receipt' || t === 'payment';
 
-export const positiveMoney = moneyString.refine((v) => dec(v).gt(0), 'Tutar sıfırdan büyük olmalı');
+export const positiveMoney = moneyString.refine(decCheck((d) => d.gt(0)), 'Tutar sıfırdan büyük olmalı');
 
 /** Tahsilat/ödemenin kapattığı açık kalem (cari kontrol hesabı satırı). */
 export const treasuryItemSchema = z.object({
@@ -127,8 +127,9 @@ export const createTreasuryTransactionSchema = z
       if (!t.partyId) issue('partyId', 'Cari seçilmeli');
       const lineIds = t.items.map((i) => i.lineId);
       if (new Set(lineIds).size !== lineIds.length) issue('items', 'Aynı kalem iki kez seçilemez');
-      const used = t.items.reduce((s, i) => s.plus(i.settleAmount), dec(0));
-      if (used.gt(t.amount)) issue('items', 'Kalemlere ayrılan tutar hareket tutarını aşıyor');
+      const amounts = [t.amount, ...t.items.map((i) => i.settleAmount)].map(tryDec);
+      const used = amounts.slice(1).reduce((s, d) => (s && d ? s.plus(d) : null), tryDec(0));
+      if (used && amounts[0] && used.gt(amounts[0])) issue('items', 'Kalemlere ayrılan tutar hareket tutarını aşıyor');
     } else {
       if (t.partyId) issue('partyId', 'Cari yalnızca tahsilat ve ödemede kullanılır');
       if (t.items.length > 0) issue('items', 'Kalem eşleştirme yalnızca tahsilat ve ödemede kullanılır');

@@ -540,6 +540,41 @@
       "when": 1790955789464,
       "tag": "0076_consolidation_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1790962258318,
+      "tag": "0077_year_end",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1790962264355,
+      "tag": "0078_year_end_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1791036097822,
+      "tag": "0079_audit_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1791036120732,
+      "tag": "0080_audit_security_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1791039726643,
+      "tag": "0081_audit_accounting",
+      "breakpoints": true
     }
   ]
 }

@@ -13,10 +13,12 @@ import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money, moneyIn } from '../../lib/format';
+import { money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { ApprovalRequestRow, ProgressDetail, SubcontractBalances } from '../../lib/types';
 import { ApprovalStatusBadge, ProgressStatusBadge, SUBCONTRACT_INVALIDATE } from './common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
+import { fmtDate } from '../../lib/license';
 
 interface Basis {
   subcontract: { id: string; code: string; title: string; status: string; direction: 'payable' | 'receivable'; currencyCode: string; paymentDays: number; retentionPct: string; advanceRecoupPct: string; withholdingPct: string; vatWithholdingPct: string };
@@ -113,25 +115,25 @@ export function ProgressEditorPage() {
             advancePct: detail?.payment.advancePct ?? basis.subcontract.advanceRecoupPct,
             withholdingPct: detail?.payment.withholdingPct ?? basis.subcontract.withholdingPct,
             advanceBalance: basis.balances.advanceBalance,
-            deductions: deductions.map((d) => d.amount.replace(',', '.') || '0'),
+            deductions: deductions.map((d) => d.amount || '0'),
             vatWithholdingPct: detail?.payment.vatWithholdingPct ?? basis.subcontract.vatWithholdingPct,
-            material: material.replace(',', '.') || '0',
+            material: material || '0',
           })
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [basis, detail, vatCode, vatOptions, deductions, material, JSON.stringify(active.map((r) => [r.lineKey, r.thisQty]))],
   );
-  const materialNum = Number(material.replace(',', '.') || 0);
+  const materialNum = Number(material || 0);
   const materialOver = !!basis && materialNum > Number(basis.balances.materialBalance);
-  const invalid = materialOver || rows.some((r) => r.over || r.below) || active.length === 0 || deductions.some((d) => !d.description.trim() || !(Number(d.amount.replace(',', '.')) > 0)) || (calc ? calc.net.isNegative() : true);
+  const invalid = materialOver || rows.some((r) => r.over || r.below) || active.length === 0 || deductions.some((d) => !d.description.trim() || !(Number(d.amount) > 0)) || (calc ? calc.net.isNegative() : true);
 
   const body = () => ({
     periodEnd,
     vatCode: vatCode || null,
     note: note.trim() || null,
     lines: rows.map((r) => ({ lineKey: r.lineKey, cumulativeQty: r.cum })),
-    deductions: deductions.map((d) => ({ description: d.description.trim(), amount: d.amount.replace(',', '.') })),
-    materialRecoup: material.replace(',', '.') || '0',
+    deductions: deductions.map((d) => ({ description: d.description.trim(), amount: d.amount })),
+    materialRecoup: material || '0',
   });
 
   const save = useCMutation(async (_: void, call) => {
@@ -243,7 +245,7 @@ export function ProgressEditorPage() {
                   <Td num className="text-muted">{qtyText(r.prevQty)}</Td>
                   <Td num>
                     {editable ? (
-                      <Input aria-label={`${t('subcontracts.progress.cols.cumQty')} ${i + 1}`} inputMode="decimal" className="num text-right" value={cum[r.lineKey] ?? ''} onChange={(e) => setCum((c) => ({ ...c, [r.lineKey]: e.target.value.replace(',', '.') }))} />
+                      <MoneyInput aria-label={`${t('subcontracts.progress.cols.cumQty')} ${i + 1}`} className="text-right" value={cum[r.lineKey] ?? ''} onChange={(v) => setCum((c) => ({ ...c, [r.lineKey]: v }))} decimals={0} maxDecimals={4} />
                     ) : (
                       qtyText(r.cum)
                     )}
@@ -277,14 +279,14 @@ export function ProgressEditorPage() {
                 hint={t('subcontracts.progress.materialHint', { balance: money2(basis.balances.materialBalance) })}
                 error={materialOver ? t('subcontracts.progress.materialOver', { balance: money2(basis.balances.materialBalance) }) : undefined}
               >
-                {(fid) => <Input id={fid} inputMode="decimal" className="num w-48 text-right" disabled={!editable} value={material} onChange={(e) => setMaterial(e.target.value.replace(',', '.'))} placeholder="0" />}
+                {(fid) => <MoneyInput id={fid} className="w-48 text-right" disabled={!editable} value={material} onChange={(v) => setMaterial(v)} placeholder="0" />}
               </Field>
             )}
             {deductions.length === 0 && <p className="text-sm text-muted">{t('subcontracts.progress.noDeductions')}</p>}
             {deductions.map((d, i) => (
               <div key={d.key} className="flex items-center gap-2">
                 <Input aria-label={`${t('subcontracts.progress.deductionDesc')} ${i + 1}`} value={d.description} disabled={!editable} onChange={(e) => setDeductions((ds) => ds.map((x) => (x.key === d.key ? { ...x, description: e.target.value } : x)))} placeholder={t('subcontracts.progress.deductionDesc')} />
-                <Input aria-label={`${t('subcontracts.progress.deductionAmount')} ${i + 1}`} inputMode="decimal" className="num w-36 text-right" disabled={!editable} value={d.amount} onChange={(e) => setDeductions((ds) => ds.map((x) => (x.key === d.key ? { ...x, amount: e.target.value } : x)))} />
+                <MoneyInput aria-label={`${t('subcontracts.progress.deductionAmount')} ${i + 1}`} className="w-36 text-right" disabled={!editable} value={d.amount} onChange={(v) => setDeductions((ds) => ds.map((x) => (x.key === d.key ? { ...x, amount: v } : x)))} />
                 {editable && (
                   <button type="button" className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" aria-label={`${t('common.delete')} ${i + 1}`} onClick={() => setDeductions((ds) => ds.filter((x) => x.key !== d.key))}>
                     <Trash2 className="size-4" aria-hidden />
@@ -330,7 +332,7 @@ export function ProgressEditorPage() {
               <div key={a.id} className="flex flex-col gap-2">
                 <div className="flex items-center gap-2 text-sm">
                   <ApprovalStatusBadge status={a.status} />
-                  <span className="text-muted">{formatDateTR(a.requestedAt.slice(0, 10))}</span>
+                  <span className="text-muted">{fmtDate(a.requestedAt)}</span>
                 </div>
                 <ol className="flex flex-col gap-1 text-sm">
                   {a.steps.map((s) => (

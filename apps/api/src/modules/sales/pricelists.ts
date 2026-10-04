@@ -15,7 +15,7 @@ import {
   type UpdatePriceListItemInput,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { TR } from '../../db/search';
+import { TR, trContains } from '../../db/search';
 import { items, parties, partyPrices, priceListItems, priceLists } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { resolvePrice } from './pricing';
@@ -103,7 +103,9 @@ export async function deletePriceList(tx: Tx, id: string) {
     select count(*)::int as n from parties where sales_price_list_id = ${id} or purchase_price_list_id = ${id}`);
   if ((used.rows[0]?.n ?? 0) > 0) throw unprocessable('Cariye atanmış liste silinemez; pasifleştirin', 'PRICE_LIST_IN_USE');
   await tx.delete(priceListItems).where(eq(priceListItems.priceListId, id));
-  await tx.delete(priceLists).where(eq(priceLists.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(priceLists).where(eq(priceLists.id, id)).returning({ id: priceLists.id });
+  if (deleted.length === 0) throw notFound('Fiyat listesi');
 }
 
 // --- Liste satırları -------------------------------------------------------------
@@ -113,8 +115,7 @@ export async function listPriceListItems(tx: Tx, listId: string, q: ListPriceLis
   const conds = [sql`x.price_list_id = ${listId}`];
   if (q.itemId) conds.push(sql`x.item_id = ${q.itemId}`);
   if (q.query) {
-    const like = `%${q.query.replace(/[%_\\]/g, '\\$&')}%`;
-    conds.push(sql`(i.code ilike ${like} or i.name ilike ${like})`);
+    conds.push(trContains(['i.code', 'i.name'], q.query));
   }
   const where = sql`where ${sql.join(conds, sql` and `)}`;
   const rows = await tx.execute<Record<string, unknown>>(sql`

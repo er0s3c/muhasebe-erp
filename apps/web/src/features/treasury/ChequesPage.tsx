@@ -1,6 +1,7 @@
 import { CHEQUE_STATUSES, MATURITY_BUCKETS, allowedChequeActions, todayIso, type ChequeAction, type ChequeDirection, type ChequeDocType } from '@erp/shared';
 import { History, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -68,7 +69,8 @@ function PortfolioTab() {
   const [dueTo, setDueTo] = useState('');
   const params = { direction, docType, status, q, dueFrom, dueTo };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
-  const { data, isPending } = useCQuery<ChequeList>(['cheques', 'list', qs], `/api/cheques${qs ? `?${qs}` : ''}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<ChequeList & { truncated?: boolean }>(['cheques', 'list', qs, lim.limit], `/api/cheques?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const [creating, setCreating] = useState<ChequeDirection | null>(null);
   const [acting, setActing] = useState<{ action: ChequeAction; cheque: ChequeRow } | null>(null);
   const [detail, setDetail] = useState<ChequeRow | null>(null);
@@ -110,7 +112,7 @@ function PortfolioTab() {
           <Field label={t('cheques.filters.dueFrom')} className="w-40">{(id) => <Input id={id} type="date" value={dueFrom} onChange={(e) => setDueFrom(e.target.value)} />}</Field>
           <Field label={t('cheques.filters.dueTo')} className="w-40">{(id) => <Input id={id} type="date" value={dueTo} onChange={(e) => setDueTo(e.target.value)} />}</Field>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExportMenu exportKey="cheques" params={params} disabled={!data || rows.length === 0} />
           {post && (
             <>
@@ -133,7 +135,8 @@ function PortfolioTab() {
           <EmptyState title={t('cheques.empty')} description={t('cheques.emptyDesc')} />
         </Card>
       ) : (
-        <TableWrap>
+        <>
+          <TableWrap>
           <Table aria-label={t('cheques.tabs.portfolio')}>
             <thead>
               <tr>
@@ -183,6 +186,8 @@ function PortfolioTab() {
             </tbody>
           </Table>
         </TableWrap>
+          <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+        </>
       )}
       <ChequeSheet direction={creating} onClose={() => setCreating(null)} />
       <ActionModal target={acting} onClose={() => setActing(null)} />
@@ -681,7 +686,7 @@ function ReportsTab() {
       <Card>
         <CardHeader title={t('cheques.reports.due')} description={t('cheques.reports.dueDesc')} action={<ExportMenu exportKey="cheques-due" params={{ days }} />} />
         <div className="flex flex-col gap-3 px-5 pb-5">
-          <Field label={t('cheques.reports.days')} className="w-32">{(id) => <Input id={id} type="number" min={0} max={365} value={days} onChange={(e) => setDays(e.target.value)} />}</Field>
+          <Field label={t('cheques.reports.days')} className="w-32">{(id) => <Input id={id} inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ''))} />}</Field>
           {!due.data ? (
             <PageLoading />
           ) : due.data.rows.length === 0 ? (

@@ -46,7 +46,9 @@ export async function deleteCategory(tx: Tx, id: string) {
   if (used && used.n > 0) {
     throw unprocessable('Kartı olan kategori silinemez; pasifleştirin', 'CATEGORY_IN_USE');
   }
-  await tx.delete(itemCategories).where(eq(itemCategories.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(itemCategories).where(eq(itemCategories.id, id)).returning({ id: itemCategories.id });
+  if (deleted.length === 0) throw notFound('Kategori');
 }
 
 export async function requireCategory(tx: Tx, id: string) {

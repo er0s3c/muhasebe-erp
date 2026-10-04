@@ -133,7 +133,7 @@ export interface VCardContact {
   tags?: readonly string[];
 }
 
-const esc = (v: string) => v.replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/;/g, '\\;').replace(/,/g, '\\,');
+const esc = (v: string) => v.replace(/\\/g, '\\\\').replace(/\r\n|\r|\n/g, '\\n').replace(/;/g, '\\;').replace(/,/g, '\\,');
 
 /** RFC 6350/2425: 75 sütundan uzun satırlar bir boşlukla devam eder. */
 function fold(line: string): string {

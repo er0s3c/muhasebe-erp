@@ -1,5 +1,6 @@
 import { PackageCheck, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -27,7 +28,8 @@ export function PurchaseOrdersPage() {
     if (status) q.set('status', status);
     return q.toString();
   }, [projectId, status]);
-  const { data, isPending } = useCQuery<{ orders: PurchaseOrderRow[] }>(['purchase-orders', 'list', qs], `/api/purchase-orders?${qs}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<{ orders: PurchaseOrderRow[] } & { truncated?: boolean }>(['purchase-orders', 'list', qs, lim.limit], `/api/purchase-orders?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.orders ?? [];
   const filtered = !!(projectId || status);
   const add = canManage && (
@@ -62,7 +64,8 @@ export function PurchaseOrdersPage() {
           {rows.length === 0 ? (
             <Card><EmptyState title={t('common.noResults')} /></Card>
           ) : (
-            <TableWrap>
+            <>
+              <TableWrap>
               <Table>
                 <thead>
                   <tr>
@@ -88,6 +91,8 @@ export function PurchaseOrdersPage() {
                 </tbody>
               </Table>
             </TableWrap>
+              <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+            </>
           )}
         </div>
       )}

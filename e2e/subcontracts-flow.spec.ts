@@ -113,7 +113,13 @@ test('taşeron: sözleşme → BOQ onayı → hakediş (kümülatif) → onay �
 
   // 6) Dışa aktarma: sözleşme listesi Excel olarak iner
   await nav.getByRole('link', { name: 'Taşeron sözleşmeleri' }).click();
-  await page.getByRole('button', { name: /Dışa aktar/ }).click();
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'Excel (.xlsx)' }).click()]);
+  // Önceki sayfanın (proje) kendi "Dışa aktar" düğmesine tıklanmasın: liste sayfası ve verisi yüklenmiş olmalı
+  await expect(page.getByRole('heading', { name: 'Taşeron sözleşmeleri', level: 1 })).toBeVisible();
+  const exportButton = page.getByRole('button', { name: /Dışa aktar/ });
+  await expect(exportButton).toBeEnabled();
+  await exportButton.click();
+  const xlsxItem = page.getByRole('menuitem', { name: 'Excel (.xlsx)' });
+  await expect(xlsxItem).toBeVisible();
+  const [download] = await Promise.all([page.waitForEvent('download', { timeout: 20_000 }), xlsxItem.click()]);
   expect(download.suggestedFilename()).toMatch(/tasaron-sozlesmeleri-.*\.xlsx$/);
 });

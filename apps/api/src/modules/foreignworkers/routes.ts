@@ -17,6 +17,7 @@ import {
   verifyForeignParamSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import { createDoc, createType, deleteDoc, getDoc, listDocs, listTypes, renewDoc, revealDocNo, revokeDoc, updateDoc, updateType } from './docs';
 import { createGuarantee, deleteGuarantee, guaranteeReport, listGuarantees, resolveGuarantee } from './guarantees';
 import { createParam, deleteParam, listParams, updateParam, verifyParam, warningAt, type ForeignCtx } from './params';
@@ -63,7 +64,10 @@ export const foreignWorkerRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // --- Belgeler -----------------------------------------------------------------------------------------------
-  app.get('/api/foreign-workers/documents', tenantRoute(app, read, async ({ tx, req }) => listDocs(tx, foreignDocListQuerySchema.parse(req.query))));
+  app.get('/api/foreign-workers/documents', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = foreignDocListQuerySchema.parse(req.query);
+    return listDocs(tx, q, pageOf(q));
+  }));
   app.post(
     '/api/foreign-workers/documents',
     tenantRoute(app, manage, async (c) => {
@@ -87,7 +91,10 @@ export const foreignWorkerRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // --- Teminat ----------------------------------------------------------------------------------------------
-  app.get('/api/foreign-workers/guarantees', tenantRoute(app, read, async ({ tx, req }) => listGuarantees(tx, guaranteeListQuerySchema.parse(req.query))));
+  app.get('/api/foreign-workers/guarantees', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = guaranteeListQuerySchema.parse(req.query);
+    return listGuarantees(tx, q, pageOf(q));
+  }));
   app.post(
     '/api/foreign-workers/guarantees',
     tenantRoute(app, manage, async (c) => {

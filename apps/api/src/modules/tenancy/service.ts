@@ -1,7 +1,8 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { uuidv7 } from 'uuidv7';
 import { isoYear, todayIso, type CreateCompanyInput } from '@erp/shared';
 import { setContext, type Tx } from '../../db/client';
-import { companies, memberships, warehouses } from '../../db/schema';
+import { companies, memberships, organizations, warehouses } from '../../db/schema';
 import { seedChartOfAccounts } from '../ledger/accounts';
 import { seedCostCodes } from '../projects/cost-codes';
 import { seedMappings } from '../ledger/mappings';
@@ -9,6 +10,38 @@ import { seedTaxRates } from '../settings/defaults';
 import { generatePeriods } from '../settings/periods';
 import type { AuthUser } from '../../http/context';
 import { forbidden } from '../../http/errors';
+import { pinInstallationOwner } from '../../licensing/installation';
+
+/**
+ * Yeni kuruluş (kayıt). `organizations` RLS ile yalıtıldığından kimlik önce üretilir ve işlem bağlamına (app.org_id)
+ * yazılır; satır ancak bundan sonra eklenebilir/okunabilir. İşlem içinde çağrılmalıdır.
+ */
+export async function insertOrganization(tx: Tx, name: string): Promise<string> {
+  const id = uuidv7();
+  await tx.execute(sql`select set_config('app.org_id', ${id}, true)`);
+  await tx.insert(organizations).values({ id, name });
+  return id;
+}
+
+/**
+ * Yeni şirketi yalnızca kuruluşunda zaten sahip/yönetici olan kullanıcı açabilir; kuruluşun hiç şirketi yoksa (yeni kayıt)
+ * ilk şirketi kaydolan kullanıcı açar. Aksi halde görüntüleyici bile kendi şirketini açıp "sahip" olabilirdi.
+ * Kuruluş kilitlenir: aynı kuruluşta eşzamanlı iki "ilk şirket" isteği sırayla değerlendirilir.
+ */
+export async function assertCanCreateCompany(tx: Tx, userId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('erp-company-create:' || app_org_id()::text))`);
+  const [privileged] = await tx
+    .select({ id: memberships.id })
+    .from(memberships)
+    .innerJoin(companies, eq(companies.id, memberships.companyId))
+    .where(and(eq(memberships.userId, userId), inArray(memberships.role, ['owner', 'admin'])))
+    .limit(1);
+  if (privileged) return;
+  const [any] = await tx.select({ id: companies.id }).from(companies).where(sql`${companies.organizationId} = app_org_id()`).limit(1);
+  if (any) {
+    throw forbidden('Yeni şirketi yalnızca mevcut bir şirketin sahibi ya da yöneticisi açabilir', 'COMPANY_CREATE_FORBIDDEN');
+  }
+}
 
 /**
  * Şirketi ve varsayılanlarını (sahip üyeliği, cari yıl dönemleri, hesap planı,
@@ -50,6 +83,8 @@ export async function createCompany(
   const companyId = company!.id;
 
   await tx.insert(memberships).values({ companyId, userId: user.id, role: 'owner' });
+  // Kurulumun sahibi kuruluş henüz sabitlenmemişse (ilk şirket) şimdi sabitlenir; sonraki kuruluşlar kurulum yöneticisi olamaz.
+  await pinInstallationOwner(tx);
 
   // Bundan sonraki eklemeler şirket bağlamında (RLS) yapılır.
   await setContext(tx, { userId: user.id, orgId: user.orgId, companyId, ip });

@@ -30,6 +30,8 @@ export function CreateCompanyPage() {
   const limitReached = locked !== null && (license?.usage.companies ?? 0) >= locked.companyLimit;
   // Salt-okunur modda şirket açılamaz (sunucu 402 verir); baştan söyle
   const restricted = license?.enforced === true && license.state === 'restricted';
+  // Yeni şirketi yalnızca bir şirkette sahip/yönetici olan açar (ilk şirket hariç; sunucu da denetler)
+  const notAllowed = companies.length > 0 && !companies.some((c) => c.role === 'owner' || c.role === 'admin');
   const {
     register,
     handleSubmit,
@@ -78,6 +80,7 @@ export function CreateCompanyPage() {
             <form onSubmit={onSubmit} className="mt-7 flex flex-col gap-5" noValidate>
               {error && <Callout tone="danger">{error}</Callout>}
               {restricted && <Callout tone="danger" title={t('license.banner.restrictedTitle')}>{license?.message}</Callout>}
+              {notAllowed && <Callout tone="warning">{t('onboarding.notAllowed')}</Callout>}
               {limitReached && locked && <Callout tone="warning">{t('license.sectorLock.limit', { limit: locked.companyLimit })}</Callout>}
               <Field label={t('onboarding.companyName')} error={errors.name?.message} required>
                 {(id) => <Input id={id} autoFocus autoComplete="organization" {...register('name')} />}
@@ -132,7 +135,7 @@ export function CreateCompanyPage() {
                 </Field>
               </div>
               <div className="mt-2 flex items-center gap-3">
-                <Button type="submit" variant="primary" loading={isSubmitting} disabled={limitReached || restricted}>
+                <Button type="submit" variant="primary" loading={isSubmitting} disabled={limitReached || restricted || notAllowed}>
                   {t('onboarding.create')}
                 </Button>
                 {companies.length > 0 && (

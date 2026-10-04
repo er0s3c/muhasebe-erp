@@ -25,6 +25,7 @@ import { usePartyOptions } from '../invoices/common';
 import { TransactionSheet } from '../treasury/TransactionSheet';
 import { accountLabel, useTreasuryAccounts } from '../treasury/common';
 import { ContractStatusBadge, REAL_ESTATE_INVALIDATE, unitLabel } from './common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 interface Row {
   key: string;
@@ -34,7 +35,7 @@ interface Row {
   feeScheduleId?: string | null;
   label?: string | null;
 }
-const num = (v: string) => v.trim().replace(',', '.');
+const num = (v: string) => v.trim();
 
 export function SalesContractPage() {
   const { t } = useTranslation();
@@ -176,8 +177,8 @@ export function SalesContractPage() {
           <Field label={t('realEstate.cols.date')} required>{(fid) => <Input id={fid} type="date" value={contractDate} disabled={!editable} onChange={(e) => setContractDate(e.target.value)} />}</Field>
           <Field label={t('realEstate.contracts.plannedHandover')}>{(fid) => <Input id={fid} type="date" value={plannedHandover} disabled={!editable} onChange={(e) => setPlannedHandover(e.target.value)} />}</Field>
           <div />
-          <Field label={t('realEstate.cols.price')} required>{(fid) => <Input id={fid} inputMode="decimal" className="num text-right" value={price} disabled={!editable} onChange={(e) => setPrice(e.target.value)} />}</Field>
-          <Field label={t('realEstate.contracts.downPayment')}>{(fid) => <Input id={fid} inputMode="decimal" className="num text-right" value={down} disabled={!editable} onChange={(e) => setDown(e.target.value)} />}</Field>
+          <Field label={t('realEstate.cols.price')} required>{(fid) => <MoneyInput id={fid} className="text-right" value={price} disabled={!editable} onChange={(v) => setPrice(v)} />}</Field>
+          <Field label={t('realEstate.contracts.downPayment')}>{(fid) => <MoneyInput id={fid} className="text-right" value={down} disabled={!editable} onChange={(v) => setDown(v)} />}</Field>
           <div className="sm:col-span-3">
             <Field label={t('realEstate.contracts.penaltyNote')}>{(fid) => <Textarea id={fid} rows={2} value={penaltyNote} disabled={!editable && status !== 'active'} onChange={(e) => setPenaltyNote(e.target.value)} maxLength={1000} />}</Field>
           </div>
@@ -243,7 +244,7 @@ export function SalesContractPage() {
                         ) : r.kind === 'fee' ? `${t('realEstate.kinds.fee')}: ${r.label ?? ''}` : t(`realEstate.kinds.${r.kind}`)}
                       </Td>
                       <Td>{editable ? <Input aria-label={`${t('realEstate.cols.due')} ${i + 1}`} type="date" value={r.dueDate} onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, dueDate: e.target.value } : y)))} /> : formatDateTR(r.dueDate)}</Td>
-                      <Td num>{editable ? <Input aria-label={`${t('realEstate.cols.amount')} ${i + 1}`} inputMode="decimal" className="num text-right" value={r.amount} onChange={(e) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, amount: e.target.value } : y)))} /> : moneyIn(r.amount, cur)}</Td>
+                      <Td num>{editable ? <MoneyInput aria-label={`${t('realEstate.cols.amount')} ${i + 1}`} className="text-right" value={r.amount} onChange={(v) => setRows((x) => x.map((y) => (y.key === r.key ? { ...y, amount: v } : y)))} /> : moneyIn(r.amount, cur)}</Td>
                       {!editable && <Td num>{d ? moneyIn(d.paid, cur) : ''}</Td>}
                       {!editable && <Td num>{d ? moneyIn(d.remaining, cur) : ''}</Td>}
                       {!editable && (
@@ -362,7 +363,7 @@ export function SalesContractPage() {
             <>
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <div><div className="text-muted">{t('realEstate.contracts.collected')}</div><div className="num">{moneyIn(paid.toFixed(2), cur)}</div></div>
-                <Field label={t('realEstate.contracts.retained')}>{(fid) => <Input id={fid} inputMode="decimal" className="num text-right" value={retained} onChange={(e) => setRetained(e.target.value)} />}</Field>
+                <Field label={t('realEstate.contracts.retained')}>{(fid) => <MoneyInput id={fid} className="text-right" value={retained} onChange={(v) => setRetained(v)} />}</Field>
                 <div><div className="text-muted">{t('realEstate.contracts.refund')}</div><div className="num">{moneyIn(paid.minus(num(retained) || 0).toFixed(2), cur)}</div></div>
               </div>
               {paid.minus(num(retained) || 0).gt(0) && (

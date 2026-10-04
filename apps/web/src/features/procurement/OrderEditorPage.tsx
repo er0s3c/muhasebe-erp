@@ -23,6 +23,7 @@ import { usePartyOptions, useTaxRates } from '../invoices/common';
 import { qtyText, useWarehouses } from '../inventory/common';
 import { useProjectOptions } from '../projects/common';
 import { emptyLine, LinesEditor, lineValid, num, OrderStatusBadge, PROCUREMENT_INVALIDATE, type LineDraft } from './common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 export function PurchaseOrderEditorPage() {
   const { t } = useTranslation();
@@ -385,7 +386,7 @@ function ReceiptModal({ detail, open, onOpenChange }: { detail: PurchaseOrderDet
           {detail.lines.map((l) => (
             <div key={l.id} className="flex items-center gap-2">
               <span className="flex-1 text-sm">{l.lineNo}. {l.description} <span className="text-xs text-muted">({t('procurement.orders.remaining')}: {qtyText(l.remainingQty) || '0'} {l.unit})</span></span>
-              <Input aria-label={`${t('procurement.orders.receiveQty')} ${l.lineNo}`} inputMode="decimal" className="num w-28 text-right" value={qty[l.id] ?? ''} onChange={(e) => setQty((q) => ({ ...q, [l.id]: e.target.value }))} />
+              <MoneyInput aria-label={`${t('procurement.orders.receiveQty')} ${l.lineNo}`} className="w-28 text-right" value={qty[l.id] ?? ''} onChange={(v) => setQty((q) => ({ ...q, [l.id]: v }))} decimals={0} maxDecimals={4} />
             </div>
           ))}
         </fieldset>

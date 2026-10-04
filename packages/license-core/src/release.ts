@@ -55,20 +55,45 @@ export function parseReleaseManifest(token: string, ring: PublicKeyring): Releas
   return parsed.data;
 }
 
-/** Sürüm karşılaştırması (X.Y.Z; ön sürüm eki aynı X.Y.Z'nin kararlısından küçüktür). */
+/**
+ * Sürüm karşılaştırması (SemVer 2.0 önceliği): X.Y.Z sayısal; ön sürüm eki (`-rc.1`) aynı X.Y.Z'nin kararlısından küçüktür;
+ * ön sürüm alanları noktayla ayrılır, sayısal alanlar sayı olarak, diğerleri ASCII olarak karşılaştırılır, sayısal alan sayısal
+ * olmayandan küçüktür, alanları önek olan daha kısa ek küçüktür. Derleme üst verisi (`+...`) yok sayılır.
+ */
 export function compareVersions(a: string, b: string): number {
-  const split = (v: string) => {
-    const [core, pre] = v.split('-', 2) as [string, string | undefined];
-    return { nums: core.split('.').map((n) => Number.parseInt(n, 10) || 0), pre };
+  const parse = (v: string) => {
+    const noBuild = v.trim().replace(/^v/, '').split('+', 1)[0]!;
+    const dash = noBuild.indexOf('-');
+    const core = dash < 0 ? noBuild : noBuild.slice(0, dash);
+    const pre = dash < 0 ? undefined : noBuild.slice(dash + 1);
+    return { nums: core.split('.').map((n) => Number.parseInt(n, 10) || 0), pre: pre === undefined || pre === '' ? undefined : pre.split('.') };
   };
-  const x = split(a);
-  const y = split(b);
+  const sign = (d: number) => (d < 0 ? -1 : d > 0 ? 1 : 0);
+  const x = parse(a);
+  const y = parse(b);
   for (let i = 0; i < 3; i++) {
     const d = (x.nums[i] ?? 0) - (y.nums[i] ?? 0);
-    if (d !== 0) return d < 0 ? -1 : 1;
+    if (d !== 0) return sign(d);
   }
-  if (x.pre === y.pre) return 0;
-  if (x.pre === undefined) return 1;
-  if (y.pre === undefined) return -1;
-  return x.pre < y.pre ? -1 : 1;
+  if (!x.pre && !y.pre) return 0;
+  if (!x.pre) return 1;
+  if (!y.pre) return -1;
+  const n = Math.max(x.pre.length, y.pre.length);
+  for (let i = 0; i < n; i++) {
+    const p = x.pre[i];
+    const q = y.pre[i];
+    if (p === undefined) return -1;
+    if (q === undefined) return 1;
+    const pn = /^\d+$/.test(p);
+    const qn = /^\d+$/.test(q);
+    if (pn && qn) {
+      const d = Number(p) - Number(q);
+      if (d !== 0) return sign(d);
+    } else if (pn !== qn) {
+      return pn ? -1 : 1;
+    } else if (p !== q) {
+      return p < q ? -1 : 1;
+    }
+  }
+  return 0;
 }

@@ -4,6 +4,7 @@ import type { Tx } from '../../db/client';
 import { TR } from '../../db/search';
 import { findRate } from '../settings/rates';
 import { projectCostReport } from './reports';
+import { notClosingEntry } from '../ledger/closing';
 
 const REVENUE_RE = `^(${PROJECT_REVENUE_PREFIXES.join('|')})`;
 
@@ -82,7 +83,7 @@ export async function projectProfitability(tx: Tx, asOf: string, base: string, r
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id
         join accounts a on a.id = jl.account_id
-       where jl.project_id = ${id} and je.status = 'posted' and je.entry_date <= ${asOf}::date`);
+       where jl.project_id = ${id} and je.status = 'posted' and ${notClosingEntry('je')} and je.entry_date <= ${asOf}::date`);
 
     const revenue = dec(r.totals.revenue);
     const actual = dec(r.totals.actual);

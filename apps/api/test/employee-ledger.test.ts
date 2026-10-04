@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { readXlsx } from '../src/files/xlsx-read';
-import { addMember, asOwner, client, createCompany, expectDbError, makeApp, orgOf, registerUser, thisYear } from './helpers';
+import { addMember, asOwner, client, createCompany, expectDbError, makeApp, orgOf, registerUser, thisYear, TODAY_LOCAL } from './helpers';
 
 /**
  * Personel cari ve avans takibi (Faz X5). Tutarlar test değeridir; hesap eşlemeleri (196 personel avansları, 335 ödenecek net ücret)
  * varsayılan ve DOĞRULANMAMIŞTIR: testler davranışı (yevmiye dengesi, korumalar, bakiye) sınar, muhasebe doğruluğunu değil.
  * Avans kesintisi üst sınırı yalnızca kullanıcı parametresidir.
  */
-const MONTH = new Date().toISOString().slice(0, 7);
-const TODAY = new Date().toISOString().slice(0, 10);
+const MONTH = TODAY_LOCAL.slice(0, 7);
+const TODAY = TODAY_LOCAL;
 const d = (n: number) => `${MONTH}-${String(n).padStart(2, '0')}`;
 const FROM = `${thisYear}-01-01`;
 

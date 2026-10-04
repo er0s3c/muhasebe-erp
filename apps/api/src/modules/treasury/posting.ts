@@ -25,7 +25,7 @@ import { notFound, unprocessable } from '../../http/errors';
 import { uuidList } from '../inventory/balances';
 import { createJournalEntry, reverseJournalEntry, type AutoJournalLine, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
-import { openItemsFor } from '../parties/service';
+import { assertAllocatable, openItemsFor } from '../parties/service';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
@@ -146,9 +146,11 @@ export async function postTreasuryTransaction(tx: Tx, ctx: LedgerCtx, input: Cre
       };
     });
 
+    await assertAllocatable(tx, control, input.items);
+
     const rate = await rateOf(tx, ctx, from.currencyCode, date, input.fxRate);
     effectiveRate = rate;
-    plan = planSettlement({ kind: type === 'receipt' ? 'receipt' : 'payment', amount, rate, items: settleItems });
+    plan = planSettlement({ kind: type === 'receipt' ? 'receipt' : 'payment', amount, rate, currency: from.currencyCode, items: settleItems });
     const map = await requireMappings(tx, [control, ...mapKeys(plan.fxGain, plan.fxLoss)] as AccountMappingKey[]);
     if (type === 'payment') await assertCashOk(tx, from, date, amount);
 

@@ -57,16 +57,17 @@ export interface AllocLine {
 export class AllocationError extends Error {
   constructor(
     message: string,
-    readonly code: 'ALLOC_NO_LINES' | 'ALLOC_BASIS_ZERO' | 'ALLOC_WEIGHT_MISSING' | 'ALLOC_MANUAL_MISMATCH' | 'ALLOC_NEGATIVE',
+    readonly code: 'ALLOC_NO_LINES' | 'ALLOC_BASIS_ZERO' | 'ALLOC_WEIGHT_MISSING' | 'ALLOC_MANUAL_MISMATCH' | 'ALLOC_MANUAL_PRECISION' | 'ALLOC_NEGATIVE',
   ) {
     super(message);
   }
 }
 
 /**
- * Bir maliyet kaleminin (şirket para birimi tutarı) satırlara dağıtımı. Son pay değil, "payı olan son satır" kalanı alır:
- * diğer satırlar `round2(tutar × baz / Σbaz)`, kalan satır `tutar − Σdiğerleri`; toplam her zaman tutara eşittir ve
- * sonuç satır sırasına göre belirlidir. Elle yöntemde tutarlar toplamı tutara eşit olmalıdır.
+ * Bir maliyet kaleminin (şirket para birimi tutarı) satırlara dağıtımı: en büyük kalan yöntemi (ACC-9). Her satır önce
+ * `tutar × baz / Σbaz` değerinin aşağı yuvarlanmış kuruşunu alır; kalan kuruşlar en büyük küsurlu satırlara birer birer
+ * dağıtılır. Hiçbir pay eksi olamaz, tabanı sıfır satır pay almaz, toplam her zaman tutara eşittir ve sonuç satır sırasına
+ * göre belirlidir. Elle yöntemde tutarlar en çok 2 ondalık olmalı ve toplamı tam tutara eşit olmalıdır.
  */
 export function allocateAmount(
   total: string,
@@ -81,11 +82,15 @@ export function allocateAmount(
   if (method === 'manual') {
     const out = lines.map((l) => dec(manual?.[l.key] ?? 0));
     if (out.some((a) => a.isNegative())) throw new AllocationError('Elle dağıtım tutarı eksi olamaz', 'ALLOC_NEGATIVE');
+    // Yuvarlanmış paylar toplamı tutardan sapmasın: kuruştan küçük basamak kabul edilmez
+    if (out.some((a) => a.decimalPlaces() > 2)) {
+      throw new AllocationError('Elle dağıtım tutarları en çok 2 ondalık basamak olabilir', 'ALLOC_MANUAL_PRECISION');
+    }
     const diff = out.reduce((s, a) => s.plus(a), dec(0)).minus(amount);
     if (!diff.isZero()) {
       throw new AllocationError(`Elle dağıtılan tutarlar toplamı ${amount.toFixed(2)} olmalı (fark ${diff.toFixed(2)})`, 'ALLOC_MANUAL_MISMATCH');
     }
-    return out.map((a) => roundMoney(a));
+    return out;
   }
 
   const basis = lines.map((l) => {
@@ -99,13 +104,32 @@ export function allocateAmount(
   const basisTotal = basis.reduce((s, b) => s.plus(b), dec(0));
   if (basisTotal.lte(0)) throw new AllocationError('Dağıtım tabanı (değer/miktar) sıfır; başka bir yöntem seçin', 'ALLOC_BASIS_ZERO');
 
-  let last = -1;
-  basis.forEach((b, i) => {
-    if (b.gt(0)) last = i;
-  });
-  const out = basis.map((b) => (b.gt(0) ? roundMoney(amount.times(b).div(basisTotal)) : dec(0)));
-  const others = out.reduce((s, a, i) => (i === last ? s : s.plus(a)), dec(0));
-  out[last] = amount.minus(others);
+  // En büyük kalan: aşağı yuvarlanmış kuruşlar + kalan kuruşlar en büyük küsura (eşitlikte SONRAKİ satıra; önceki "son satır
+  // kalanı alır" davranışıyla aynı sonucu verir). Tabanı sıfır/eksi satır pay almaz.
+  const t = roundMoney(amount);
+  const w = basis.map((b) => (b.gt(0) ? b : dec(0)));
+  const wTotal = w.reduce((a, b) => a.plus(b), dec(0));
+  const exact = w.map((b) => t.times(b).div(wTotal));
+  const out = exact.map((e) => e.toDecimalPlaces(2, 1)); // 1 = ROUND_DOWN
+  let cents = t.minus(out.reduce((a, b) => a.plus(b), dec(0)));
+  const order = exact
+    .map((e, idx) => ({ idx, frac: e.minus(out[idx]!) }))
+    .filter((x) => x.frac.gt(0))
+    .sort((a, b) => b.frac.comparedTo(a.frac) || b.idx - a.idx);
+  for (const { idx } of order) {
+    if (cents.lte(0)) break;
+    out[idx] = out[idx]!.plus('0.01');
+    cents = cents.minus('0.01');
+  }
+  // Tutar kuruştan küçük basamak taşıyorsa (defter tutarı 4 basamak) artık en büyük paya eklenir: toplam tam tutardır
+  const rest = amount.minus(roundMoney(amount));
+  if (!rest.isZero()) {
+    let max = 0;
+    out.forEach((a, i) => {
+      if (a.gt(out[max]!)) max = i;
+    });
+    out[max] = out[max]!.plus(rest);
+  }
   return out;
 }
 

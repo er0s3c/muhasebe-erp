@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDate, uuid } from './common';
+import { isoDate, uuid, pageParams } from './common';
 import { yearMonth } from './attendance';
 
 /**
@@ -71,5 +71,5 @@ export type CreateEligibilityInput = z.infer<typeof createEligibilitySchema>;
 export const buildDeclarationSchema = z.object({ month: yearMonth });
 export const finalizeDeclarationSchema = z.object({ note: text(300).nullable().optional() });
 export const reopenDeclarationSchema = z.object({ reason: text(300).min(3, 'Gerekçe gerekli (en az 3 karakter)') });
-export const declarationListQuerySchema = z.object({ year: z.coerce.number().int().min(2000).max(2100).optional(), status: z.enum(SOCIAL_DECLARATION_STATUSES).optional() });
+export const declarationListQuerySchema = z.object({ ...pageParams(), year: z.coerce.number().int().min(2000).max(2100).optional(), status: z.enum(SOCIAL_DECLARATION_STATUSES).optional() });
 export const premiumSummaryQuerySchema = z.object({ from: yearMonth, to: yearMonth }).refine((v) => v.from <= v.to, { message: 'Başlangıç ayı bitişten sonra olamaz', path: ['to'] });

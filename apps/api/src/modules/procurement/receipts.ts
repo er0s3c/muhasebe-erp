@@ -11,7 +11,7 @@ import { getOrder, lockOrder } from './orders';
 import type { ProcurementCtx } from './requests';
 
 async function deliveryCtx(tx: Tx, ctx: ProcurementCtx): Promise<DeliveryCtx> {
-  const [c] = await tx.select({ base: companies.baseCurrency, rep: companies.reportingCurrency, neg: companies.allowNegativeStock }).from(companies);
+  const [c] = await tx.select({ base: companies.baseCurrency, rep: companies.reportingCurrency, neg: companies.allowNegativeStock }).from(companies).where(sql`${companies.id} = app_company_id()`);
   return { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: c!.base, reportingCurrency: c!.rep, allowNegativeStock: c!.neg };
 }
 

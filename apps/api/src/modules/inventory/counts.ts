@@ -188,7 +188,9 @@ export async function updateStockCount(tx: Tx, ctx: StockCtx, id: string, input:
 
 export async function deleteStockCount(tx: Tx, id: string) {
   await getDraftRow(tx, id);
-  await tx.delete(stockCounts).where(eq(stockCounts.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(stockCounts).where(eq(stockCounts.id, id)).returning({ id: stockCounts.id });
+  if (deleted.length === 0) throw notFound('Sayım');
 }
 
 /**

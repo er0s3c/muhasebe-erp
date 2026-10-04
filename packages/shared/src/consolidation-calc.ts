@@ -82,6 +82,12 @@ export interface ConsolidatedRow {
   perCompany: Record<string, string>;
   elimination: string;
   consolidated: string;
+  /**
+   * Sonuç hesapları (6–9) için net bakiyenin DÖNEM ÖNCESİ kısmı (dönem başı × kapanış kuru); bilanço hesaplarında 0.
+   * Gelir tablosu yalnızca dönem hareketini (net − prior) gösterir (ACC-6).
+   */
+  perCompanyPrior: Record<string, string>;
+  consolidatedPrior: string;
   /** Kod, üye şirketlerin bir kısmının hesap planında yok. */
   unmapped: boolean;
   /** Kodun hesap planında bulunduğu şirketler. */
@@ -99,9 +105,15 @@ export interface ConsolidationResult {
 
 /** Bir şirket satırının grup para birimindeki net bakiyesi: bilanço = kapanış × kapanış kuru; sonuç hesabı = dönem başı × kapanış + hareket × dönem kuru. */
 export function convertRowNet(row: CompanyBalanceRow, rates: { closing: string; pl: string }): MoneyValue {
+  return convertRowParts(row, rates).net;
+}
+
+/** Net bakiye ve sonuç hesaplarında dönem öncesi kısmı (`prior`): net = prior + dönem hareketi × dönem kuru. */
+export function convertRowParts(row: CompanyBalanceRow, rates: { closing: string; pl: string }): { net: MoneyValue; prior: MoneyValue } {
   const movement = dec(row.debit).minus(row.credit);
-  if (isBalanceSheetCode(row.code)) return roundMoney(dec(row.opening).plus(movement).times(rates.closing));
-  return roundMoney(dec(row.opening).times(rates.closing)).plus(roundMoney(movement.times(rates.pl)));
+  if (isBalanceSheetCode(row.code)) return { net: roundMoney(dec(row.opening).plus(movement).times(rates.closing)), prior: dec(0) };
+  const prior = roundMoney(dec(row.opening).times(rates.closing));
+  return { net: prior.plus(roundMoney(movement.times(rates.pl))), prior };
 }
 
 export function aggregateConsolidation(
@@ -117,12 +129,12 @@ export function aggregateConsolidation(
     for (const a of c.chart) if (a.code === mapCode(a.code, level) && !keyNames.has(a.code)) keyNames.set(a.code, a.name);
   }
 
-  type Acc = { name: string; per: Map<string, MoneyValue>; elim: MoneyValue };
+  type Acc = { name: string; per: Map<string, MoneyValue>; prior: Map<string, MoneyValue>; elim: MoneyValue };
   const acc = new Map<string, Acc>();
   const get = (key: string, name: string): Acc => {
     let a = acc.get(key);
     if (!a) {
-      a = { name, per: new Map(), elim: dec(0) };
+      a = { name, per: new Map(), prior: new Map(), elim: dec(0) };
       acc.set(key, a);
     }
     if (!a.name && name) a.name = name;
@@ -133,9 +145,10 @@ export function aggregateConsolidation(
   for (const c of companies) {
     for (const r of c.rows) {
       const key = mapCode(r.code, level);
-      const net = convertRowNet(r, c.rates);
+      const { net, prior } = convertRowParts(r, c.rates);
       const a = get(key, keyNames.get(key) ?? (key === r.code ? r.name : ''));
       a.per.set(c.companyId, (a.per.get(c.companyId) ?? dec(0)).plus(net));
+      a.prior.set(c.companyId, (a.prior.get(c.companyId) ?? dec(0)).plus(prior));
       rawSum.set(c.companyId, rawSum.get(c.companyId)!.plus(net));
     }
   }
@@ -151,11 +164,16 @@ export function aggregateConsolidation(
   for (const [code, a] of [...acc].sort((x, y) => x[0].localeCompare(y[0]))) {
     const present = companies.filter((c) => chart.get(c.companyId)!.has(code)).map((c) => c.companyId);
     const perCompany: Record<string, string> = {};
+    const perCompanyPrior: Record<string, string> = {};
     let total = a.elim;
+    let totalPrior = dec(0);
     for (const c of companies) {
       const v = a.per.get(c.companyId) ?? dec(0);
+      const pv = a.prior.get(c.companyId) ?? dec(0);
       perCompany[c.companyId] = toDbAmount(v);
+      perCompanyPrior[c.companyId] = toDbAmount(pv);
       total = total.plus(v);
+      totalPrior = totalPrior.plus(pv);
     }
     rows.push({
       code,
@@ -163,6 +181,8 @@ export function aggregateConsolidation(
       perCompany,
       elimination: toDbAmount(a.elim),
       consolidated: toDbAmount(total),
+      perCompanyPrior,
+      consolidatedPrior: toDbAmount(totalPrior),
       unmapped: present.length < companies.length,
       presentIn: present,
     });
@@ -199,8 +219,11 @@ export function aggregateConsolidation(
 
 export interface StatementColumnInput {
   id: string;
-  /** Kod -> {ad, net (borç − alacak)}; çevrim farkı ayrı verilir. */
-  rows: readonly { code: string; name: string; net: string }[];
+  /**
+   * Kod -> {ad, net (borç − alacak)}; çevrim farkı ayrı verilir. `prior`: sonuç hesaplarında (6–9) net bakiyenin dönem
+   * öncesi kısmı (verilmezse 0). Gelir tablosu net − prior (yalnızca dönem hareketi) gösterir; bilanço kümülatiftir.
+   */
+  rows: readonly { code: string; name: string; net: string; prior?: string }[];
   translationDiff: string;
 }
 
@@ -248,14 +271,22 @@ export function buildStatements(columns: readonly StatementColumnInput[], consol
   const ids = columns.map((c) => c.id);
   const sumBy = (col: StatementColumnInput, pred: (code: string) => boolean): MoneyValue =>
     sum(col.rows.filter((r) => pred(r.code)).map((r) => r.net));
+  /** Yalnızca dönem hareketi (sonuç hesaplarında net − dönem öncesi kısım). */
+  const sumPeriod = (col: StatementColumnInput, pred: (code: string) => boolean): MoneyValue =>
+    sum(col.rows.filter((r) => pred(r.code)).map((r) => dec(r.net).minus(r.prior ?? 0)));
+  const isPl = (code: string) => /^[6-9]/.test(code);
   const startsWith = (p: string) => (code: string) => code.startsWith(p);
 
   const balanceSheet: StatementLine[] = [];
   const incomeStatement: StatementLine[] = [];
   const diff: Record<string, string> = {};
 
-  const result = new Map<string, MoneyValue>(); // dönem sonucu (kâr +)
-  for (const c of columns) result.set(c.id, sumBy(c, (code) => /^[6-9]/.test(code)).neg());
+  const result = new Map<string, MoneyValue>(); // dönem sonucu (kâr +): yalnızca from..to hareketi
+  const priorResult = new Map<string, MoneyValue>(); // önceki dönemlerin devredilmemiş sonucu (kapanış fişi yoksa)
+  for (const c of columns) {
+    result.set(c.id, sumPeriod(c, isPl).neg());
+    priorResult.set(c.id, sumBy(c, isPl).neg().minus(result.get(c.id)!));
+  }
 
   const totalAssets = new Map<string, MoneyValue>();
   const totalLE = new Map<string, MoneyValue>();
@@ -287,19 +318,23 @@ export function buildStatements(columns: readonly StatementColumnInput[], consol
     }
   }
   const resultVals: Record<string, string> = {};
+  const priorVals: Record<string, string> = {};
   const tdVals: Record<string, string> = {};
   for (const c of columns) {
     resultVals[c.id] = toDbAmount(result.get(c.id)!);
+    priorVals[c.id] = toDbAmount(priorResult.get(c.id)!);
     tdVals[c.id] = toDbAmount(dec(c.translationDiff).neg());
-    totalLE.set(c.id, totalLE.get(c.id)!.plus(result.get(c.id)!).plus(dec(c.translationDiff).neg()));
+    totalLE.set(c.id, totalLE.get(c.id)!.plus(result.get(c.id)!).plus(priorResult.get(c.id)!).plus(dec(c.translationDiff).neg()));
   }
-  balanceSheet.push({ key: 'period_result', label: 'Dönem kârı / zararı (6–9 sınıfı hesaplardan)', values: resultVals, kind: 'group' });
+  balanceSheet.push({ key: 'prior_result', label: 'Önceki dönemler sonucu (devredilmemiş; 6–9 sınıfı dönem başı)', values: priorVals, kind: 'group' });
+  balanceSheet.push({ key: 'period_result', label: 'Dönem kârı / zararı (6–9 sınıfı, yalnızca dönem hareketi)', values: resultVals, kind: 'group' });
   balanceSheet.push({ key: 'translation_diff', label: 'Çevrim farkı (kur ayrımından; doğrulanmadı)', values: tdVals, kind: 'group' });
   balanceSheet.push({ key: 'liab_equity_total', label: 'Toplam kaynaklar', values: Object.fromEntries(ids.map((i) => [i, toDbAmount(totalLE.get(i)!)])), kind: 'total' });
   for (const id of ids) diff[id] = toDbAmount(totalAssets.get(id)!.minus(totalLE.get(id)!));
 
   // Gelir tablosu
-  const contrib = (c: StatementColumnInput, prefix: string) => sumBy(c, startsWith(prefix)).neg();
+  // Gelir tablosu yalnızca from..to hareketidir (dönem başı bakiyeler hariç)
+  const contrib = (c: StatementColumnInput, prefix: string) => sumPeriod(c, startsWith(prefix)).neg();
   const line = (key: string, label: string, f: (c: StatementColumnInput) => MoneyValue, kind: StatementLine['kind'] = 'group'): MoneyValue[] => {
     const values: Record<string, string> = {};
     const out: MoneyValue[] = [];
@@ -324,6 +359,8 @@ export function buildStatements(columns: readonly StatementColumnInput[], consol
   line('ordinary_profit', 'Olağan kâr', (c) => ['60', '61', '62', '63', '64', '65', '66'].reduce((a, p) => a.plus(contrib(c, p)), dec(0)), 'subtotal');
   for (const p of ['67', '68']) line(`is${p}`, label(p), g(p));
   line('is7', label('7'), g('7'));
+  // Gruplara girmeyen sonuç hesapları (69, 8, 9): satırların toplamı dönem sonucuna eşit olsun
+  line('is_other', 'Diğer sonuç hesapları (69, 8, 9)', (c) => sumPeriod(c, (code) => /^(69|8|9)/.test(code)).neg());
   line('net_profit', 'Dönem net kârı / zararı', (c) => result.get(c.id)!, 'total');
   void consolidatedId;
   return { columns: ids, balanceSheet, incomeStatement, difference: diff };
@@ -457,7 +494,7 @@ export function computeKpis(i: KpiInput): Kpis {
 export interface FxPositionItem {
   currency: string;
   kind: 'cash' | 'receivable' | 'payable';
-  /** Kalemin kendi para biriminde TUTAR (büyüklük, pozitif; borçlanma/alacak yönü `kind`dan gelir). Kasa/banka eksi bakiye negatif olabilir. */
+  /** Kalemin kendi para biriminde TUTAR (borçlanma/alacak yönü `kind`dan gelir). Kasa/banka eksi bakiye ve cari avans (uygulanamayan tahsilat/ödeme) negatif olabilir. */
   amount: string;
   /** Defter para biriminde kayıtlı (tarihsel) karşılık; kasa için bakiye, cari için kalan defter tutarı. */
   book: string;

@@ -19,8 +19,10 @@ import {
   updateInventorySchema,
   upsertAttendanceSchema,
   verifyInventorySchema,
+  pageParams,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import { forbidden } from '../../http/errors';
 import {
   createEmployee,
@@ -43,11 +45,14 @@ export const hrRoutes: FastifyPluginAsync = async (app) => {
   const sensitive = { module: MODULE, permission: 'hr.sensitive' } as const;
   const privacy = { module: MODULE, permission: 'privacy.manage' } as const;
   const hrCtx = ({ company, user }: TenantCtx): HrCtx => ({ companyId: company.id, userId: user.id, secret: app.config.JWT_SECRET });
-  const listQuery = z.object({ status: z.enum(['open', 'completed', 'rejected']).optional() });
+  const listQuery = z.object({ status: z.enum(['open', 'completed', 'rejected']).optional(), ...pageParams() });
   const logQuery = z.object({ employeeId: z.string().uuid().optional(), contactId: z.string().uuid().optional() });
 
   // --- Personel -------------------------------------------------------------------------------------
-  app.get('/api/employees', tenantRoute(app, read, async ({ tx, req }) => listEmployees(tx, employeeListQuerySchema.parse(req.query))));
+  app.get('/api/employees', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = employeeListQuerySchema.parse(req.query);
+    return listEmployees(tx, q, pageOf(q));
+  }));
   app.get('/api/employees/:id', tenantRoute(app, read, async ({ tx, req }) => getEmployee(tx, idParam.parse(req.params).id)));
   app.post(
     '/api/employees',
@@ -98,7 +103,10 @@ export const hrRoutes: FastifyPluginAsync = async (app) => {
     '/api/privacy/inventory/:id/verify',
     tenantRoute(app, privacy, async (c) => ({ item: await verifyInventory(c.tx, idParam.parse(c.req.params).id, c.user.id, verifyInventorySchema.parse(c.req.body ?? {}).note) })),
   );
-  app.get('/api/privacy/requests', tenantRoute(app, privacy, async ({ tx, req }) => listRequests(tx, listQuery.parse(req.query))));
+  app.get('/api/privacy/requests', tenantRoute(app, privacy, async ({ tx, req }) => {
+    const q = listQuery.parse(req.query);
+    return listRequests(tx, q, pageOf(q));
+  }));
   app.post(
     '/api/privacy/requests',
     tenantRoute(app, privacy, async (c) => {

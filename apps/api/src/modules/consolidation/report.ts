@@ -48,6 +48,8 @@ export async function consolidatedReport(app: FastifyInstance, ctx: AuthCtx, gro
       currency: 'base',
       baseCurrency: scope.baseCurrency,
       reportingCurrency: scope.reportingCurrency,
+      // Yıl sonu kapanış/devir fişleri varsayılan olarak hariç: gelir tablosu kapanışla sıfırlanmaz (includeClosing ile dahil edilir)
+      excludeClosing: !q.includeClosing,
     });
     const chart = await ctx.tx.select({ code: accounts.code, name: accounts.name }).from(accounts).orderBy(asc(accounts.code));
     const closing = await closingRate(ctx.tx, scope, group, closingDate, q.closingRates);
@@ -75,13 +77,13 @@ export async function consolidatedReport(app: FastifyInstance, ctx: AuthCtx, gro
   const columns = [
     ...companies.map((c) => ({
       id: c.companyId,
-      rows: agg.rows.map((r) => ({ code: r.code, name: names.get(r.code)!, net: r.perCompany[c.companyId]! })),
+      rows: agg.rows.map((r) => ({ code: r.code, name: names.get(r.code)!, net: r.perCompany[c.companyId]!, prior: r.perCompanyPrior[c.companyId]! })),
       translationDiff: agg.translationDiff[c.companyId]!,
     })),
     {
       id: CONSOLIDATED_COLUMN,
       // Konsolide sütun: şirket toplamları + eliminasyon (satır başına), çevrim farkı ayrı
-      rows: agg.rows.map((r) => ({ code: r.code, name: names.get(r.code)!, net: r.consolidated })),
+      rows: agg.rows.map((r) => ({ code: r.code, name: names.get(r.code)!, net: r.consolidated, prior: r.consolidatedPrior })),
       translationDiff: agg.totals.translationDiff,
     },
   ];

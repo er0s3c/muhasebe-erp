@@ -29,6 +29,7 @@ import { useCompanyApi, useCQuery } from '../../lib/queries';
 import type { Account, ItemListRow } from '../../lib/types';
 import { Combobox } from '../../components/ui/Combobox';
 import { usePartyOptions } from '../invoices/common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 type Step = 'file' | 'map' | 'preview' | 'done';
 const STEPS = ['file', 'map', 'preview', 'done'] as const;
@@ -483,7 +484,7 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
               )}
               {NEEDS_CLOSING.includes(kind) && (
                 <Field label={t('imports.map.closingBalance')} hint={t('imports.map.closingBalanceHint')}>
-                  {(id) => <Input id={id} inputMode="decimal" value={closingBalance} onChange={(e) => setClosingBalance(e.target.value)} placeholder="0,00" />}
+                  {(id) => <MoneyInput id={id} value={closingBalance} onChange={(v) => setClosingBalance(v)} placeholder="0,00" />}
                 </Field>
               )}
               {NEEDS_INVOICE.includes(kind) && (

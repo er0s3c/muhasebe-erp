@@ -59,7 +59,9 @@ export function createLicenseService(opts: { db: Db; config: Config; log?: Licen
     reloadMs: setup?.reloadMs,
     log: opts.log,
     platform: config.ERP_KIT_TARGET,
-    onUpdateOffer: (offer) => storeUpdateOffer(db, keyring, offer),
+    onUpdateOffer: async (offer) => {
+      await storeUpdateOffer(db, keyring, offer, config.APP_VERSION);
+    },
   });
 }
 

@@ -2,7 +2,7 @@
 
 KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef sektör inşaat ve taahhüt; market ve ticaret modülleri aynı çekirdeğin üstüne eklenecek şekilde tasarlandı.
 
-**Durum:** Çekirdek ERP hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe, cari, stok, fatura, irsaliye, kasa ve banka, raporlar ve dışa aktarma, içe aktarma, banka mutabakatı), **inşaat modülünün ilk aşaması hazır** (şantiye projesi, iş kırılımı, bütçe, gerçekleşen maliyet ve tamamlanma tahmini; taşeron hakedişi, gayrimenkul/taksit ve fonlar sırada) ve **dağıtıma hazırlandı** (Docker imajı, güvenlik sağlamlaştırması, yedekleme/geri yükleme tatbikatı, modül yönetimi) ve **lisanslanabilir** (imzalı kiralı lisans: sektör, cihaz kotası, şirket sınırı, abonelik bitişi; satıcı lisans sunucusu ve yönetim paneli). Yıl sonu kapanış/devir ve kur değerlemesi mali müşavir teyidini bekliyor. Sıradaki adımlar: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
+**Durum:** Çekirdek ERP hazır (kiracılık, kimlik doğrulama, ayarlar, genel muhasebe, cari, stok, fatura, irsaliye, kasa ve banka, raporlar ve dışa aktarma, içe aktarma, banka mutabakatı), **inşaat modülünün ilk aşaması hazır** (şantiye projesi, iş kırılımı, bütçe, gerçekleşen maliyet ve tamamlanma tahmini; taşeron hakedişi, gayrimenkul/taksit ve fonlar sırada) ve **dağıtıma hazırlandı** (Docker imajı, güvenlik sağlamlaştırması, yedekleme/geri yükleme tatbikatı, modül yönetimi) ve **lisanslanabilir** (imzalı kiralı lisans: sektör, cihaz kotası, şirket sınırı, abonelik bitişi; satıcı lisans sunucusu ve yönetim paneli). Yıl sonu kapanış ve devir hazır (hesap seçimleri mali müşavir onayı gerektirir); dönem sonu kur değerlemesi mali müşavir teyidini bekliyor. Sıradaki adımlar: bkz. [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Neler var?
 
@@ -35,12 +35,17 @@ KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef 
 
 ## Hızlı başlangıç
 
-**Tek komutla (önerilen):** kurulum sihirbazı önce sistemi denetler (işletim sistemi, bellek, disk, portlar, Docker, Node, PostgreSQL), sonra uygun yolu önerir, eksik paketleri kurar ve sistemi ayağa kaldırır.
+**Tek komutla (önerilen):** kurulum sihirbazı önce sistemi denetler (işletim sistemi, bellek, disk, portlar, Docker, Node, PostgreSQL), uygun yolu önerir, **düz Türkçe sorularla tüm yapılandırmayı alır** (demo mu boş mu, lisans, e-posta/SMTP + test e-postası, alan adı ve HTTPS sertifikası, yedekleme, portlar), eksik paketleri kurar ve sistemi ayağa kaldırır. Hiçbir ayar dosyasını elle düzenlemeniz gerekmez.
 
 ```bash
 ./install.sh                 # Linux / WSL (Ubuntu 22.04+, Debian 12+)
 ./install.sh --check         # yalnızca uyumluluk raporu
+./install.sh --dry-run       # sistemi değiştirmeden ne yazılacağını gösterir
+./install.sh --answers=../musteri.answers   # sürüm kitinin içinden, sormadan (installer/answers.example'dan kopyalayın; parola/kod varsa sonra silin)
+./install.sh --reconfigure   # kurulu sistemde yalnızca ayarları (e-posta, HTTPS, yedek, lisans adresi) yeniden sorar
 ```
+
+Yanıt dosyası müşteri kurulumu içindir: sürüm kitini açıp kitin klasöründe çalıştırın (depoda `INSTALL_PATH=native` kit olmadan çalışmaz); kurulu sistemde yalnızca `--reconfigure` ile okunur. Kaldırma: `./install.sh --uninstall` (veri korunur; `--purge` kalıcı siler ve `SIL` onayı ister), önce `--dry-run` ile bakın. Müşteri (kit) kurulumunda varsayılan **boş uygulamadır** (demo verisi yok) ve uygulama **lisans etkinleştirilmeden çalışmaz**; demo yalnızca sorulduğunda ve ilk kurulumda yüklenir. Windows'ta aynı bayraklar `-DryRun`, `-AnswersFile`, `-Reconfigure` adlarıyladır.
 
 Windows'ta depo klasöründeki **`Kur.cmd`** dosyasına çift tıklayın (Windows PowerShell 5.1 yeterlidir; Docker gerekmez). Depodan çalıştırınca geliştirme/test kurulumu yapılır: Node 22 ve PostgreSQL 16 yoksa kurulur (ya da veritabanı Docker'da çalışır), `.env`, şema ve demo verisi hazırlanır; sonra `npm run dev`. Seçenekler: `./install.sh --help`, ayrıntı [docs/OPERATIONS.md §2](docs/OPERATIONS.md).
 

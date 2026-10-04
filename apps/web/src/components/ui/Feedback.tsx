@@ -1,9 +1,11 @@
 import { AlertTriangle, Info, Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/cn';
 
 export function Spinner({ className }: { className?: string }) {
-  return <Loader2 className={cn('size-5 animate-spin text-muted', className)} aria-label="Yükleniyor" />;
+  const { t } = useTranslation();
+  return <Loader2 className={cn('size-5 animate-spin text-muted', className)} role="img" aria-label={t('common.loadingLabel')} />;
 }
 
 export function PageLoading() {

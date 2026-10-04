@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readXlsx } from '../src/files/xlsx-read';
-import { accountIds, asDb, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser } from './helpers';
+import { accountIds, asDb, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser, TODAY_LOCAL } from './helpers';
 
 describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat → teslim', async () => {
   const { app, handle } = await makeApp();
@@ -133,7 +133,7 @@ describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat �
     // Tahsilatı olan etkin sözleşme iptal edilemez
     const cancel = await w.c.post(`/api/sales-contracts/${d.contract.id}/cancel`, { reason: 'Vazgeçti' });
     expect(cancel.statusCode).toBe(422);
-    expect(cancel.json().error.code).toBe('REAL_ESTATE_RULE_VIOLATION');
+    expect(cancel.json().error.code).toBe('CONTRACT_HAS_PAYMENTS');
   });
 
   it('teslim: 380 gelire (600) aktarılır, proje etiketli; proje maliyeti etkilenmez; iptal yalnızca tahsilatsız', async () => {
@@ -277,7 +277,7 @@ describe('gayrimenkul satışı: birim → sözleşme → taksit → tahsilat �
     const project = (await c.post('/api/projects', { name: 'Güneş Sitesi', kind: 'own' })).json().project as { id: string };
     const buyer = (await c.post('/api/parties', { name: 'Alıcı', kind: 'customer' })).json().party as { id: string };
     await c.put('/api/exchange-rates', { rateDate: day(3, 1), currencyCode: 'GBP', quoteCode: 'TRY', buy: '50' });
-    const todayRate = new Date().toISOString().slice(0, 10);
+    const todayRate = TODAY_LOCAL;
     await c.put('/api/exchange-rates', { rateDate: todayRate, currencyCode: 'GBP', quoteCode: 'TRY', buy: '50' });
     const mk = async (unitNo: string, listPrice?: string) => (await c.post('/api/real-estate/units', { projectId: project.id, unitNo, ...(listPrice ? { listPrice, listCurrency: 'GBP' } : {}) })).json().unit.id as string;
     const u1 = await mk('1');

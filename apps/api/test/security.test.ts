@@ -416,7 +416,13 @@ describe('sözleşme testleri', async () => {
       );
       // directory_*: rehber (X6) tek amaçlı işlevleri (özel not görünürlüğünü yalnızca ilgili kişi dışa aktarma/birleştirme/anonimleştirme için aşar; şirket app_company_id ile doğrulanır);
       // audit_row_change: denetim izi; license_company_count: RLS'i aşan, yalnızca sayı döndüren şirket sayımı (lisans sınırı)
-      expect(definers.rows.map((r) => r.proname)).toEqual(['audit_row_change', 'directory_anonymize_contact', 'directory_repoint_notes', 'directory_subject_notes', 'license_company_count']);
+      // can_manage_user / company_has_members: üyelik kurallarının diğer şirketlerdeki üyelikleri görmesi gereken evet/hayır yanıtları;
+      // installation_owner_org / claim_installation_owner: kurulumun sahibi kuruluşun kimliği (lisans/güncelleme/cihaz yönetimi);
+      // directory_mark_merged: birleştirme bayrağını yalnızca işlev içinden geçerli kılar
+      expect(definers.rows.map((r) => r.proname)).toEqual([
+        'audit_row_change', 'can_manage_user', 'claim_installation_owner', 'company_has_members', 'directory_anonymize_contact', 'directory_mark_merged',
+        'directory_repoint_notes', 'directory_subject_notes', 'installation_owner_org', 'license_company_count',
+      ]);
       const role = await q(`select rolsuper, rolbypassrls from pg_roles where rolname = 'erp_app'`);
       expect(role.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
       const owned = await q(

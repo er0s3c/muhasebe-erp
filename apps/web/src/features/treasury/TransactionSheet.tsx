@@ -153,7 +153,8 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
     if (!ri || !txnRate || txnRate.lte(0)) return null;
     return roundMoney(amt.times(ri).div(txnRate)).toFixed(2);
   };
-  const effSettle = (it: OpenItem, st: ItemState) => st.settle ?? suggestSettle(it, num(st.amount)) ?? '';
+  // Aynı para biriminde karşılık her zaman kapatılan tutardır (sunucu eşitsizliği reddeder: kur farkı değil kısmi kapatma)
+  const effSettle = (it: OpenItem, st: ItemState) => (it.currencyCode === fromCur ? st.amount : (st.settle ?? suggestSettle(it, num(st.amount)) ?? ''));
 
   const selected = openItems.filter((it) => items[it.lineId]);
   const settleTotal = selected.reduce((s, it) => s.plus(num(effSettle(it, items[it.lineId]!))), dec(0));

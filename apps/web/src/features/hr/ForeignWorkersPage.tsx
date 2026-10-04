@@ -1,6 +1,7 @@
 import { todayIso } from '@erp/shared';
 import { Eye, EyeOff, History, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -17,6 +18,7 @@ import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { EmployeeRow, ForeignDocList, ForeignDocRenewalRow, ForeignDocRow, ForeignDocStatus, ForeignDocTypeRow, GuaranteeReport, GuaranteeRow } from '../../lib/types';
 import { FOREIGN_INVALIDATE, ForeignStatusBadge, ForeignUnverifiedBadge, GuaranteeStatusBadge } from './foreign-common';
+import { fmtDate } from '../../lib/license';
 
 type Tab = 'documents' | 'guarantees';
 const STATUSES: readonly ForeignDocStatus[] = ['valid', 'expiring', 'expired', 'revoked'];
@@ -62,7 +64,8 @@ function DocumentsTab() {
   const [q, setQ] = useState('');
   const params = { status, withinDays: within, nationality, typeId, q };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
-  const { data, isPending } = useCQuery<ForeignDocList>(['foreign', 'docs', qs], `/api/foreign-workers/documents${qs ? `?${qs}` : ''}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<ForeignDocList & { truncated?: boolean }>(['foreign', 'docs', qs, lim.limit], `/api/foreign-workers/documents?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const { data: types } = useCQuery<{ types: ForeignDocTypeRow[] }>(['foreign', 'types'], '/api/foreign-workers/doc-types');
   const { data: emps } = useEmployees();
   const [error, setError] = useState<Error | null>(null);
@@ -155,10 +158,10 @@ function DocumentsTab() {
             )}
           </Field>
           <Field label={t('foreign.filters.within')} className="w-36">
-            {(id) => <Input id={id} type="number" min={0} max={3650} value={within} onChange={(e) => setWithin(e.target.value)} />}
+            {(id) => <Input id={id} inputMode="numeric" value={within} onChange={(e) => setWithin(e.target.value.replace(/\D/g, ''))} />}
           </Field>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExportMenu exportKey="foreign-documents" params={params} disabled={!data || docs.length === 0} />
           {addButton}
         </div>
@@ -171,7 +174,8 @@ function DocumentsTab() {
           <EmptyState title={qs ? t('foreign.emptyFiltered') : t('foreign.empty')} description={qs ? undefined : t('foreign.emptyDesc')} action={qs ? undefined : addButton || undefined} />
         </Card>
       ) : (
-        <TableWrap>
+        <>
+          <TableWrap>
           <Table aria-label={t('foreign.tabs.documents')}>
             <thead>
               <tr>
@@ -245,6 +249,8 @@ function DocumentsTab() {
             </tbody>
           </Table>
         </TableWrap>
+          <TruncatedNote truncated={data?.truncated} shown={docs.length} onMore={lim.more} atMax={lim.atMax} />
+        </>
       )}
 
       <Modal
@@ -376,7 +382,7 @@ function HistoryModal({ doc, onClose }: { doc: ForeignDocRow | null; onClose: ()
         <ul className="flex flex-col gap-2 text-sm">
           {rows.map((x) => (
             <li key={x.id} className="rounded-lg border border-border p-3">
-              <div className="text-muted">{t('foreign.history.at')}: {formatDateTR(x.renewedAt.slice(0, 10))}</div>
+              <div className="text-muted">{t('foreign.history.at')}: {fmtDate(x.renewedAt)}</div>
               <div>{t('foreign.history.prev')}: {d(x.prevIssueDate)} → {d(x.prevExpiryDate)} {x.prevNumberMasked ?? ''}</div>
               <div>{t('foreign.history.next')}: {d(x.newIssueDate)} → {d(x.newExpiryDate)} {x.newNumberMasked ?? ''}</div>
               {x.note && <div className="text-muted">{x.note}</div>}

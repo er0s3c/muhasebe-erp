@@ -1,5 +1,6 @@
 import { Plus, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -27,7 +28,8 @@ export function EmployeesPage() {
     if (q.trim()) p.set('q', q.trim());
     return p.toString();
   }, [status, q]);
-  const { data, isPending } = useCQuery<{ employees: EmployeeRow[] }>(['employees', 'list', qs], `/api/employees?${qs}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<{ employees: EmployeeRow[] } & { truncated?: boolean }>(['employees', 'list', qs, lim.limit], `/api/employees?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.employees ?? [];
   const filtered = !!(status || q.trim());
   const addButton = can('hr.manage') && (
@@ -73,7 +75,8 @@ export function EmployeesPage() {
               <EmptyState title={t('common.noResults')} />
             </Card>
           ) : (
-            <TableWrap>
+            <>
+              <TableWrap>
               <Table>
                 <thead>
                   <tr>
@@ -101,6 +104,8 @@ export function EmployeesPage() {
                 </tbody>
               </Table>
             </TableWrap>
+              <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+            </>
           )}
         </div>
       )}

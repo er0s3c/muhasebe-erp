@@ -18,6 +18,7 @@ import { useCan, useCMutation } from '../../lib/queries';
 import type { SalesDocDetail } from '../../lib/types';
 import { qtyText, useUnitLabel } from '../inventory/common';
 import { FulfilmentBadges, SALES_INVALIDATE, SalesStatusBadge } from './common';
+import { fmtDate } from '../../lib/license';
 
 type Action = 'send' | 'accept' | 'reject' | 'reopen' | 'cancel' | 'confirm' | 'close';
 
@@ -308,7 +309,7 @@ export function SalesDocView({ data }: { data: SalesDocDetail }) {
             <ol className="flex flex-col gap-1.5 text-sm">
               {events.map((e, i) => (
                 <li key={i} className="flex flex-wrap gap-x-3 text-muted">
-                  <span className="num">{formatDateTR(e.createdAt.slice(0, 10))}</span>
+                  <span className="num">{fmtDate(e.createdAt)}</span>
                   <span className="text-text">{t(`sales.status.${doc.kind}.${e.toStatus}` as never)}</span>
                   {e.userName && <span>{e.userName}</span>}
                   {e.reason && <span>— {e.reason}</span>}

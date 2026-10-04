@@ -26,6 +26,7 @@ import {
   type VCardContact,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import { forbidden } from '../../http/errors';
 import { agendaSummary, createAgendaItem, createFollowUp, getAgendaItem, listAgenda, setAgendaStatus, updateAgendaItem, type AgendaCtx } from './agenda';
 import {
@@ -60,7 +61,10 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
   const actx = (c: TenantCtx): AgendaCtx => ({ companyId: c.company.id, userId: c.user.id, canManage: hasPermission(c.role, 'directory.manage') });
 
   // --- Kurumlar -------------------------------------------------------------------------------------
-  app.get('/api/directory/organizations', tenantRoute(app, read, async ({ tx, req }) => listOrganizations(tx, organizationListQuerySchema.parse(req.query))));
+  app.get('/api/directory/organizations', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = organizationListQuerySchema.parse(req.query);
+    return listOrganizations(tx, q, pageOf(q));
+  }));
   app.get('/api/directory/organizations/:id', tenantRoute(app, read, async ({ tx, req }) => getOrganization(tx, idParam.parse(req.params).id)));
   app.post(
     '/api/directory/organizations',
@@ -165,7 +169,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
       return out;
     }),
   );
-  app.get('/api/agenda/:id', tenantRoute(app, read, async (c) => getAgendaItem(c.tx, idParam.parse(c.req.params).id)));
+  app.get('/api/agenda/:id', tenantRoute(app, read, async (c) => getAgendaItem(c.tx, idParam.parse(c.req.params).id, actx(c))));
   app.patch('/api/agenda/:id', tenantRoute(app, read, async (c) => updateAgendaItem(c.tx, actx(c), idParam.parse(c.req.params).id, updateAgendaSchema.parse(c.req.body))));
   for (const [path, status] of [['complete', 'done'], ['cancel', 'cancelled'], ['reopen', 'open']] as const) {
     app.post(`/api/agenda/:id/${path}`, tenantRoute(app, read, async (c) => setAgendaStatus(c.tx, actx(c), idParam.parse(c.req.params).id, status)));

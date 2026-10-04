@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDate, uuid } from './common';
+import { isoDate, uuid, pageParams } from './common';
 
 const text = (max: number) => z.string().trim().max(max);
 const optText = (max: number) => text(max).nullable().optional();
@@ -27,6 +27,7 @@ export const updateOrganizationSchema = z.object(orgBody).partial();
 
 export const ARCHIVE_FILTERS = ['active', 'archived', 'all'] as const;
 export const organizationListQuerySchema = z.object({
+  ...pageParams(),
   q: z.string().trim().max(100).optional(),
   category: z.string().trim().max(60).optional(),
   archived: z.enum(ARCHIVE_FILTERS).default('active'),

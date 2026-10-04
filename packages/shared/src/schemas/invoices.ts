@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { dec } from '../money';
+import { dec, decCheck, tryDec } from '../money';
 import type { Sector } from '../module-registry';
-import { currencyCode, isoDate, rateString, uuid } from './common';
+import { currencyCode, DB_AMOUNT_LIMIT, isoDate, rateString, uuid } from './common';
 import { ITEM_UNITS, positiveQuantity, unitCostString } from './inventory';
 
 // --- Fatura türleri ----------------------------------------------------------
@@ -98,6 +98,11 @@ export const ACCOUNT_MAPPING_KEYS = [
   'import_cost_clearing',
   // Personel avansları (Faz X5); varsayılan doğrulanmamıştır
   'employee_advance',
+  // Yıl sonu kapanışı (Faz Y1); varsayılanlar doğrulanmamıştır
+  'year_end_profit',
+  'year_end_loss',
+  'year_end_retained_profit',
+  'year_end_retained_loss',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -158,6 +163,11 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     import_cost_clearing: '632',
     // Personele verilen avanslar (alacak): genel Tekdüzen yapıda 195 iş avansları / 196 personel avansları; 196 seçildi. Doğrulanmamıştır.
     employee_advance: '196',
+    // Yıl sonu: dönem net kârı (590) / zararı (591) ve geçmiş yıllar kârları (570) / zararları (580). Doğrulanmamıştır.
+    year_end_profit: '590',
+    year_end_loss: '591',
+    year_end_retained_profit: '570',
+    year_end_retained_loss: '580',
   };
 }
 
@@ -181,7 +191,7 @@ const optionalText = (max: number) =>
 export const percentString = z
   .string()
   .regex(/^\d{1,3}(\.\d{1,4})?$/, 'Geçersiz oran')
-  .refine((v) => dec(v).lte(100), 'Oran 100\'ü aşamaz');
+  .refine(decCheck((d) => d.lte(100)), 'Oran 100\'ü aşamaz');
 
 export const invoiceLineSchema = z.object({
   /** Boşsa serbest satır (hizmet, gider…): açıklama ve hesap ile girilir. */
@@ -249,6 +259,23 @@ type InvoiceBase = z.infer<typeof invoiceBase>;
 function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx) {
   if (doc.dueDate && doc.dueDate < doc.invoiceDate) {
     ctx.addIssue({ code: 'custom', path: ['dueDate'], message: 'Vade tarihi fatura tarihinden önce olamaz' });
+  }
+  // Hesaplanan tutar sınırı: satır ve fatura tutarı (KDV en çok %100 varsayımıyla iki katı) × kur, veritabanı sütununa sığmalı
+  // Geçersiz sayı alanları zaten kendi hatasını verdi; tutar sınırı yalnızca geçerli sayılarla hesaplanır (API-2).
+  const fx = (doc.fxRate ? tryDec(doc.fxRate) : dec(1)) ?? dec(1);
+  let net = dec(0);
+  doc.lines.forEach((l, i) => {
+    const q = tryDec(l.quantity);
+    const p = tryDec(l.unitPrice);
+    if (!q || !p) return;
+    const lineNet = q.times(p);
+    net = net.plus(lineNet);
+    if (lineNet.times(2).times(fx).gte(DB_AMOUNT_LIMIT)) {
+      ctx.addIssue({ code: 'custom', path: ['lines', i, 'unitPrice'], message: 'Satır tutarı çok büyük (miktar × fiyat × kur en çok 15 tam basamak olabilir)' });
+    }
+  });
+  if (net.times(2).times(fx).gte(DB_AMOUNT_LIMIT)) {
+    ctx.addIssue({ code: 'custom', path: ['lines'], message: 'Fatura tutarı çok büyük (toplam × kur en çok 15 tam basamak olabilir)' });
   }
   doc.lines.forEach((l, i) => {
     if (l.wbsId && !l.projectId) {

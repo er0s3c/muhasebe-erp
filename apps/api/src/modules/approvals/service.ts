@@ -37,7 +37,38 @@ export async function listRules(tx: Tx) {
   return rules.map((r) => ({ ...r, steps: steps.filter((s) => s.ruleId === r.id) }));
 }
 
+/** Belge türünün onay izni (karar ucu ayrıca `subcontracts.read` ister). */
+const approvePermission = (docType: string) => (docType === 'purchase_request' ? 'procurement.approve' : 'subcontracts.approve');
+
+/**
+ * Adımların onaylayıcıları karar verebilmeli: rol adımında rol, kullanıcı adımında kullanıcının bu şirketteki rolü okuma ve
+ * belge türünün onay (ya da yönetim) iznine sahip olmalı; kullanıcı bu şirketin etkin üyesi olmalı. Bulunmayan ve başka şirketin/kuruluşun
+ * kullanıcısı aynı yanıtı alır (kullanıcı varlığı sızdırılmaz).
+ */
+async function assertApprovers(tx: Tx, companyId: string, input: CreateApprovalRuleInput) {
+  const perm = approvePermission(input.docType);
+  const manage = input.docType === 'purchase_request' ? 'procurement.manage' : 'subcontracts.manage';
+  // Karar ucuna erişim (okuma) ve belge türünde onay ya da yönetim yetkisi (ör. şantiye şefi ilk adımı onaylayabilir; salt-okuyucu onaylayamaz)
+  const canDecide = (role: string) =>
+    hasPermission(role as Role, 'subcontracts.read') && (hasPermission(role as Role, perm) || hasPermission(role as Role, manage));
+  for (const [i, s] of input.steps.entries()) {
+    if (s.role && !canDecide(s.role)) {
+      throw unprocessable(`${i + 1}. adımın rolü bu belge türünü onaylama iznine sahip değil`, 'APPROVER_INVALID', { step: i + 1 });
+    }
+    if (s.userId) {
+      const rows = await tx.execute<{ role: string }>(sql`
+        select m.role from memberships m join users u on u.id = m.user_id
+         where m.company_id = ${companyId}::uuid and m.user_id = ${s.userId}::uuid and u.is_active`);
+      const role = rows.rows[0]?.role;
+      if (!role || !canDecide(role)) {
+        throw unprocessable(`${i + 1}. adımın kullanıcısı bu şirkette bu belge türünü onaylayabilen etkin bir üye değil`, 'APPROVER_INVALID', { step: i + 1 });
+      }
+    }
+  }
+}
+
 export async function createRule(tx: Tx, companyId: string, input: CreateApprovalRuleInput) {
+  await assertApprovers(tx, companyId, input);
   const [rule] = await tx
     .insert(approvalRules)
     .values({
@@ -151,7 +182,7 @@ function stepMatches(step: StepSpec, ctx: ApprovalCtx, docType: string): boolean
   if (step.approverUserId) return step.approverUserId === ctx.userId;
   if (step.approverRole) return step.approverRole === ctx.role;
   // Varsayılan adım: belge türüne göre onaylayıcı izni
-  return hasPermission(ctx.role, docType === 'purchase_request' ? 'procurement.approve' : 'subcontracts.approve');
+  return hasPermission(ctx.role, approvePermission(docType));
 }
 
 /** Bekleyen taleplerden sıradaki adımı bu kullanıcı için olanlar. */

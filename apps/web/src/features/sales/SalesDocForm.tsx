@@ -1,5 +1,5 @@
 import { ArrowLeft, Plus, Trash2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { calcInvoice, dec, todayIso, type SalesDocKind } from '@erp/shared';
@@ -93,12 +93,25 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
   const effectiveCurrency = currency || partyById.get(partyId)?.currencyCode || base;
   const patch = (key: number, p: Partial<LineState>) => setLines((cur) => cur.map((l) => (l.key === key ? { ...l, ...p } : l)));
   const priceOf = (it: ItemListRow) => (it.salePrice && it.saleCurrency === effectiveCurrency ? trim(it.salePrice) : '');
+  /**
+   * Satır başına istek sırası: aynı satır için birden çok öneri yoldayken (kart değişti, miktar değişti, "yenile")
+   * yalnızca EN SON isteğin yanıtı uygulanır; elle girilen fiyat da yoldaki öneriyi geçersiz kılar. Eskiden geç gelen
+   * eski yanıt yenisini eziyordu.
+   */
+  const suggestSeq = useRef(new Map<number, number>());
+  const bumpSuggest = (key: number) => {
+    const n = (suggestSeq.current.get(key) ?? 0) + 1;
+    suggestSeq.current.set(key, n);
+    return n;
+  };
   /** Fiyat çözümleyici: cariye özel fiyat > cari listesi > varsayılan liste > kart; iskonto fiyattan sonra. Kullanıcı her zaman değiştirebilir. */
   const suggest = async (key: number, itemId: string, qty: string) => {
     if (!partyId || !itemId || !qty || dec(qty).lte(0)) return;
     const qs = new URLSearchParams({ partyId, itemId, kind: 'sales', date: docDate, currency: effectiveCurrency, quantity: qty });
+    const seq = bumpSuggest(key);
     try {
       const r = await call<PriceResolution>(`/api/price-resolution?${qs}`);
+      if (suggestSeq.current.get(key) !== seq) return;
       if (r.unitPrice === null && dec(r.discountPct).isZero()) return;
       setLines((cur) =>
         cur.map((l) =>
@@ -267,7 +280,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
                       />
                       <Input className="col-span-2 lg:col-span-1" value={l.description} maxLength={300} aria-label={`${t('common.description')} ${i + 1}`} placeholder={l.itemId ? undefined : t('sales.form.freeText')} onChange={(e) => patch(l.key, { description: e.target.value })} />
                       <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('sales.form.quantity')} ${i + 1}`} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
-                      <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('sales.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => patch(l.key, { unitPrice: v, priceNote: '' })} />
+                      <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('sales.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => { bumpSuggest(l.key); patch(l.key, { unitPrice: v, priceNote: '' }); }} />
                       <MoneyInput value={l.discountPct} decimals={0} maxDecimals={4} aria-label={`${t('sales.form.discount')} ${i + 1}`} placeholder="0" className="text-right" onChange={(v) => patch(l.key, { discountPct: v })} />
                       <Select className="px-2 pr-6" value={l.vatCode} aria-label={`${t('sales.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
                         <option value="">{t('sales.form.noVat')}</option>

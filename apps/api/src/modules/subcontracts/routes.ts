@@ -24,9 +24,11 @@ import {
   updateVariationSchema,
   variationListQuerySchema,
   verifyConstructionParamSchema,
+  pageQuerySchema,
 } from '@erp/shared';
 import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import { forbidden } from '../../http/errors';
 import {
   cancelRequest,
@@ -260,7 +262,7 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
       return out;
     }),
   );
-  app.get('/api/subcontracts/:id/material-issues', tenantRoute(app, read, async ({ tx, req }) => listMaterialIssues(tx, idParam.parse(req.params).id)));
+  app.get('/api/subcontracts/:id/material-issues', tenantRoute(app, read, async ({ tx, req }) => listMaterialIssues(tx, idParam.parse(req.params).id, pageOf(pageQuerySchema.parse(req.query)))));
 
   // --- Değişiklik emri ------------------------------------------------------------------------------
   app.post(
@@ -273,9 +275,12 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
   );
   app.get(
     '/api/subcontracts/:id/variations',
-    tenantRoute(app, read, async ({ tx, req }) => listVariations(tx, { subcontractId: idParam.parse(req.params).id })),
+    tenantRoute(app, read, async ({ tx, req }) => listVariations(tx, { subcontractId: idParam.parse(req.params).id }, pageOf(pageQuerySchema.parse(req.query)))),
   );
-  app.get('/api/variation-orders', tenantRoute(app, read, async ({ tx, req }) => listVariations(tx, variationListQuerySchema.parse(req.query))));
+  app.get('/api/variation-orders', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = variationListQuerySchema.parse(req.query);
+    return listVariations(tx, q, pageOf(q));
+  }));
   app.get('/api/variation-orders/:id', tenantRoute(app, read, async ({ tx, req }) => getVariation(tx, idParam.parse(req.params).id)));
   app.put(
     '/api/variation-orders/:id',
@@ -300,7 +305,10 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // --- Hakediş (verilen) -----------------------------------------------------------------------------
-  app.get('/api/progress-payments', tenantRoute(app, read, async ({ tx, req }) => listProgress(tx, progressPaymentListQuerySchema.parse(req.query))));
+  app.get('/api/progress-payments', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = progressPaymentListQuerySchema.parse(req.query);
+    return listProgress(tx, q, pageOf(q));
+  }));
 
   app.post(
     '/api/progress-payments',

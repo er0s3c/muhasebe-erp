@@ -85,6 +85,11 @@ test('kayıt → şirket kurulumu → kur girişi → dövizli yevmiye → mizan
 test('sektör yalıtımı: başka şirketin verisi görünmez, koyu tema ve komut paleti çalışır', async ({ page }) => {
   const email = `e2e-theme-${Date.now()}@example.com`;
   await page.goto('/register');
+  // Form doğrulama iletileri Türkçe (paylaşılan şema + zod Türkçe iletileri; UI-11)
+  await page.getByLabel('Ad soyad').fill('M');
+  await page.getByRole('button', { name: 'Hesap oluştur' }).click();
+  await expect(page.getByText('En az 2 karakter olmalı').first()).toBeVisible();
+  await expect(page.getByText(/Too small|expected string/)).toHaveCount(0);
   await page.getByLabel('Ad soyad').fill('Mehmet Demir');
   await page.getByLabel('Firma / kuruluş adı').fill('Demir Grup');
   await page.getByLabel('E-posta').fill(email);

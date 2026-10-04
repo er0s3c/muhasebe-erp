@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { currencyCode, isoDate, uuid } from './common';
+import { currencyCode, isoDate, uuid, pageParams } from './common';
 
 // --- Satın alma talebi ---------------------------------------------------------------------------
 
@@ -34,6 +34,7 @@ export const updatePurchaseRequestSchema = z.object(requestBody);
 export type UpdatePurchaseRequestInput = z.infer<typeof updatePurchaseRequestSchema>;
 
 export const purchaseRequestListQuerySchema = z.object({
+  ...pageParams(),
   projectId: uuid.optional(),
   status: z.enum(PURCHASE_REQUEST_STATUSES).optional(),
 });
@@ -101,6 +102,7 @@ export const updatePurchaseOrderSchema = z.object(orderBody);
 export type UpdatePurchaseOrderInput = z.infer<typeof updatePurchaseOrderSchema>;
 
 export const purchaseOrderListQuerySchema = z.object({
+  ...pageParams(),
   projectId: uuid.optional(),
   partyId: uuid.optional(),
   status: z.enum(PURCHASE_ORDER_STATUSES).optional(),

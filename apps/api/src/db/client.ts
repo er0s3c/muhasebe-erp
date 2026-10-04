@@ -17,6 +17,8 @@ export interface DbHandle {
 export interface CreateDbOptions {
   /** Havuzdaki en çok bağlantı. */
   max?: number;
+  /** Havuzdan bağlantı bekleme üst süresi (ms; varsayılan 5000). Aşılınca hata → 503 BUSY. */
+  connectTimeoutMs?: number;
   /** 0 ya da yok = kapalı. */
   statementTimeoutMs?: number;
   /** Boşta (idle) bağlantıda oluşan hata; verilmezse stderr'e yazılır. Dinleyici hiç olmazsa süreç çöker. */
@@ -27,7 +29,7 @@ export function createDb(connectionString: string, opts: CreateDbOptions = {}): 
   const pool = new pg.Pool({
     connectionString,
     max: opts.max ?? 10,
-    connectionTimeoutMillis: 5_000,
+    connectionTimeoutMillis: opts.connectTimeoutMs ?? 5_000,
     idleTimeoutMillis: 30_000,
     ...(opts.statementTimeoutMs ? { statement_timeout: opts.statementTimeoutMs } : {}),
     // İşlem açık kalıp bekleyen bağlantılar (istemci çökmesi vb.) havuzu tüketmesin.

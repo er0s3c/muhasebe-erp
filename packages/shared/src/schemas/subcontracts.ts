@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { currencyCode, isoDate, uuid } from './common';
+import { currencyCode, isoDate, uuid, pageParams } from './common';
 import { ROLES } from '../permissions';
 
 // --- İnşaat parametreleri (tarihli, kaynak notlu, doğrulama alanlı) ---------------
@@ -148,6 +148,7 @@ export const clientAcceptVariationSchema = z.object({
 export type ClientAcceptVariationInput = z.infer<typeof clientAcceptVariationSchema>;
 export const clientRejectVariationSchema = z.object({ note: z.string().trim().min(3).max(500) });
 export const variationListQuerySchema = z.object({
+  ...pageParams(),
   subcontractId: uuid.optional(),
   projectId: uuid.optional(),
   direction: z.enum(CONTRACT_DIRECTIONS).optional(),
@@ -215,6 +216,7 @@ export const updateProgressPaymentSchema = z.object(progressBody);
 export type UpdateProgressPaymentInput = z.infer<typeof updateProgressPaymentSchema>;
 
 export const progressPaymentListQuerySchema = z.object({
+  ...pageParams(),
   direction: z.enum(CONTRACT_DIRECTIONS).optional(),
   subcontractId: uuid.optional(),
   projectId: uuid.optional(),

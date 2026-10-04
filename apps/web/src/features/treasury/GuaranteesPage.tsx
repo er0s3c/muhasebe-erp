@@ -1,6 +1,7 @@
 import { BANK_GUARANTEE_STATUSES, todayIso, type GuaranteeDirection } from '@erp/shared';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -48,7 +49,8 @@ export function GuaranteesPage() {
   const [q, setQ] = useState('');
   const params = { direction, status, withinDays: within, q };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
-  const { data, isPending } = useCQuery<BankGuaranteeList>(['guarantees', 'list', qs], `/api/bank-guarantees${qs ? `?${qs}` : ''}`);
+  const lim = useListLimit(qs);
+  const { data, isPending } = useCQuery<BankGuaranteeList & { truncated?: boolean }>(['guarantees', 'list', qs, lim.limit], `/api/bank-guarantees?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const report = useCQuery<BankGuaranteeReport>(['guarantees', 'report'], '/api/bank-guarantees/report');
   const [editing, setEditing] = useState<BankGuaranteeRow | 'new' | null>(null);
   const [resolving, setResolving] = useState<BankGuaranteeRow | null>(null);
@@ -66,7 +68,7 @@ export function GuaranteesPage() {
         title={t('guarantees.title')}
         description={t('guarantees.subtitle')}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ExportMenu exportKey="bank-guarantees" params={params} disabled={!data || rows.length === 0} />
             {manage && (
               <Button variant="primary" onClick={() => { setError(null); setEditing('new'); }}>
@@ -86,7 +88,7 @@ export function GuaranteesPage() {
           <CardHeader title={t('guarantees.warning.title')} description={t('guarantees.warning.desc')} />
           <div className="flex flex-wrap items-end gap-3 px-5 pb-5">
             <Field label={t('guarantees.warning.days')} className="w-40">
-              {(id) => <Input id={id} type="number" min={0} max={3650} disabled={!manage} value={warnShown} onChange={(e) => setWarnInput(e.target.value)} />}
+              {(id) => <Input id={id} inputMode="numeric" disabled={!manage} value={warnShown} onChange={(e) => setWarnInput(e.target.value.replace(/\D/g, ''))} />}
             </Field>
             {manage && (
               <Button
@@ -147,7 +149,7 @@ export function GuaranteesPage() {
             </Select>
           )}
         </Field>
-        <Field label={t('guarantees.filters.within')} className="w-36">{(id) => <Input id={id} type="number" min={0} max={3650} value={within} onChange={(e) => setWithin(e.target.value)} />}</Field>
+        <Field label={t('guarantees.filters.within')} className="w-36">{(id) => <Input id={id} inputMode="numeric" value={within} onChange={(e) => setWithin(e.target.value.replace(/\D/g, ''))} />}</Field>
         <Field label={t('guarantees.filters.search')} className="w-48">{(id) => <Input id={id} value={q} onChange={(e) => setQ(e.target.value)} />}</Field>
       </div>
 
@@ -159,7 +161,8 @@ export function GuaranteesPage() {
           <EmptyState title={t('guarantees.empty')} description={t('guarantees.emptyDesc')} />
         </Card>
       ) : (
-        <TableWrap>
+        <>
+          <TableWrap>
           <Table aria-label={t('guarantees.title')}>
             <thead>
               <tr>
@@ -211,6 +214,8 @@ export function GuaranteesPage() {
             </tbody>
           </Table>
         </TableWrap>
+          <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+        </>
       )}
 
       {report.data && (report.data.byBank.length > 0 || report.data.byProject.length > 0) && (

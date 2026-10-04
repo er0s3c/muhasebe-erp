@@ -98,7 +98,7 @@ export function AccountDetailPage() {
           </div>
         </div>
         {canManage && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => setEditing(true)}>
               <Pencil className="size-4" aria-hidden />
               {t('common.edit')}

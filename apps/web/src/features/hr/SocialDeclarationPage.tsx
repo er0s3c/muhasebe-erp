@@ -13,10 +13,11 @@ import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money } from '../../lib/format';
+import { money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { SocialDeclarationDetail } from '../../lib/types';
 import { SOCIAL_INVALIDATE, SocialStatusBadge, SocialUnverifiedBadge, useSocialWarningText } from './social-common';
+import { fmtDate } from '../../lib/license';
 
 type Dlg = null | 'finalize' | 'reopen' | 'delete';
 
@@ -101,7 +102,7 @@ export function SocialDeclarationPage() {
         <Link to={`/hr/payroll/${d.payrollRunId}`} className="font-mono underline">
           {d.payrollRunNumber}
         </Link>
-        {d.finalizedAt ? ` · ${formatDateTR(d.finalizedAt.slice(0, 10))}` : ''}
+        {d.finalizedAt ? ` · ${fmtDate(d.finalizedAt)}` : ''}
       </p>
 
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">

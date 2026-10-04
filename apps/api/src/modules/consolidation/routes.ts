@@ -12,12 +12,14 @@ import {
   updateGroupSchema,
   uuid,
   voidEliminationSchema,
+  pageQuerySchema,
 } from '@erp/shared';
 import { renderCsv } from '../../files/csv-write';
 import type { ReportTable } from '../../files/table';
 import { writeXlsx, XLSX_CONTENT_TYPE } from '../../files/xlsx-write';
 import { authedRoute, tenantRoute, type AuthCtx } from '../../http/context';
 import { AppError } from '../../http/errors';
+import { paged } from '../../http/paging';
 import { companyExecutive, groupExecutive } from './executive';
 import { companyFxPosition, groupFxPosition } from './fx-position';
 import { addMember, createElimination, createGroup, listEligibleCompanies, listEliminations, listGroups, removeMember, updateGroup, voidElimination } from './groups';
@@ -82,7 +84,11 @@ export const consolidationRoutes: FastifyPluginAsync = async (app) => {
   // ---- Eliminasyonlar ----------------------------------------------------------------------------------------------
   app.get(
     '/api/consolidation/groups/:id/eliminations',
-    authedRoute(app, async (ctx) => ({ eliminations: await listEliminations(ctx, idParam.parse(ctx.req.params).id, { includeVoided: true }) })),
+    authedRoute(app, async (ctx) => {
+      const page = pageQuerySchema.parse(ctx.req.query);
+      const pg = paged(await listEliminations(ctx, idParam.parse(ctx.req.params).id, { includeVoided: true, limit: page.limit + 1, offset: page.offset }), page);
+      return { eliminations: pg.rows, truncated: pg.truncated };
+    }),
   );
   app.post(
     '/api/consolidation/groups/:id/eliminations',

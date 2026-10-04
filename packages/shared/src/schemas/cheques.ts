@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { BANK_GUARANTEE_STATUSES, CHEQUE_ACTIONS, CHEQUE_DIRECTIONS, CHEQUE_DOC_TYPES, CHEQUE_STATUSES, GUARANTEE_DIRECTIONS } from '../cheque-calc';
-import { dec } from '../money';
-import { isoDate, moneyString, uuid } from './common';
+import { decCheck, tryDec } from '../money';
+import { isoDate, moneyString, uuid, pageParams } from './common';
 import { treasuryItemSchema } from './treasury';
 
 const text = (max: number) => z.string().trim().max(max);
 const optText = (max: number) => text(max).nullable().optional();
-const positive = moneyString.refine((v) => dec(v).gt(0), 'Tutar sıfırdan büyük olmalı');
+const positive = moneyString.refine(decCheck((d) => d.gt(0)), 'Tutar sıfırdan büyük olmalı');
 
 // --- Çek / senet -------------------------------------------------------------------------------------------------
 
@@ -34,8 +34,9 @@ export const createChequeSchema = z
     if (v.dueDate < v.issueDate) issue('dueDate', 'Vade tarihi düzenleme tarihinden önce olamaz');
     const ids = v.items.map((i) => i.lineId);
     if (new Set(ids).size !== ids.length) issue('items', 'Aynı kalem iki kez seçilemez');
-    const used = v.items.reduce((s, i) => s.plus(i.settleAmount), dec(0));
-    if (used.gt(v.amount)) issue('items', 'Kalemlere ayrılan tutar belge tutarını aşıyor');
+    const amounts = [v.amount, ...v.items.map((i) => i.settleAmount)].map(tryDec);
+    const used = amounts.slice(1).reduce((s, d) => (s && d ? s.plus(d) : null), tryDec(0));
+    if (used && amounts[0] && used.gt(amounts[0])) issue('items', 'Kalemlere ayrılan tutar belge tutarını aşıyor');
   });
 export type CreateChequeInput = z.infer<typeof createChequeSchema>;
 
@@ -77,6 +78,7 @@ export const chequeActionSchema = z
 export type ChequeActionInput = z.infer<typeof chequeActionSchema>;
 
 export const chequeListQuerySchema = z.object({
+  ...pageParams(),
   direction: z.enum(CHEQUE_DIRECTIONS).optional(),
   docType: z.enum(CHEQUE_DOC_TYPES).optional(),
   /** Gerçek durum ya da 'open' (portföyde/tahsilde olan alınan + ödenmemiş verilen). */
@@ -103,7 +105,7 @@ export const chequeBouncedQuerySchema = z.object({ direction: z.enum(CHEQUE_DIRE
 
 // --- Banka teminat mektubu ---------------------------------------------------------------------------------------
 
-const rate = z.string().regex(/^\d{1,3}(\.\d{1,4})?$/, 'Geçersiz oran').refine((v) => dec(v).lte(100), "Oran 100'ü aşamaz");
+const rate = z.string().regex(/^\d{1,3}(\.\d{1,4})?$/, 'Geçersiz oran').refine(decCheck((d) => d.lte(100)), "Oran 100'ü aşamaz");
 
 export const createBankGuaranteeSchema = z
   .object({
@@ -155,6 +157,7 @@ export const resolveBankGuaranteeSchema = z.object({
 });
 
 export const bankGuaranteeListQuerySchema = z.object({
+  ...pageParams(),
   direction: z.enum(GUARANTEE_DIRECTIONS).optional(),
   status: z.enum(BANK_GUARANTEE_STATUSES).optional(),
   projectId: uuid.optional(),

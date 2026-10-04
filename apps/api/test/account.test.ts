@@ -197,7 +197,15 @@ describe('yöneticinin belirlediği ilk parola geçicidir', async () => {
     expect(same.json().error.code).toBe('SAME_PASSWORD');
     const weak = await client(app, token).post('/api/auth/change-password', { currentPassword: PASSWORD, newPassword: '1234567890' });
     expect(weak.statusCode).toBe(400);
-    const ok = await client(app, token).post('/api/auth/change-password', { currentPassword: PASSWORD, newPassword: NEW_PASSWORD });
+    // Tarayıcı gibi oturum çerezini de gönderir: parola değişimi diğer oturumları kapatır, bu oturum açık kalır
+    const cookie = login.cookies.find((c) => c.name === 'refresh_token')!.value;
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/api/auth/change-password',
+      headers: { authorization: `Bearer ${token}` },
+      cookies: { refresh_token: cookie },
+      payload: { currentPassword: PASSWORD, newPassword: NEW_PASSWORD },
+    });
     expect(ok.statusCode).toBe(200);
 
     expect((await member.get('/api/accounts')).statusCode).toBe(200);
@@ -235,9 +243,10 @@ describe('güvenlik olayları', async () => {
     await post(app, '/api/auth/login', { email: s.email, password: PASSWORD });
     await post(app, '/api/auth/forgot-password', { email: s.email });
     await post(app, '/api/auth/reset-password', { token: outbox.lastTokenFor(s.email)!, newPassword: NEW_PASSWORD });
-    const company = await createCompany(app, s.token);
-    // Şifre sıfırlama oturumları kapattığı için yeniden giriş
+    // Şifre sıfırlama oturumları (erişim belirteçleri dahil) kapattığı için yeniden giriş
+    expect((await client(app, s.token).get('/api/me')).statusCode).toBe(401);
     const token = (await post(app, '/api/auth/login', { email: s.email, password: NEW_PASSWORD })).json().accessToken as string;
+    const company = await createCompany(app, token);
     const owner = client(app, token, company.id);
     const m = await addMember(app, owner, company.id, 'accountant');
     await owner.patch(`/api/company/members/${m.userId}`, { role: 'viewer' });

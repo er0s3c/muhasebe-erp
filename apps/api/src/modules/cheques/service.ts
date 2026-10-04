@@ -23,11 +23,13 @@ import { conflict, notFound, unprocessable } from '../../http/errors';
 import { uuidList } from '../inventory/balances';
 import { createJournalEntry, type AutoJournalLine, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
-import { openItemsFor } from '../parties/service';
+import { assertAllocatable, openItemsFor } from '../parties/service';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { lockTreasuryAccounts, type TreasuryAccountRow } from '../treasury/accounts';
 import { buildSettlementJournal, planSettlement, type SettleItemInput } from '../treasury/journal';
+import { trContains } from '../../db/search';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 /**
  * Çek/senet yaşam döngüsü ve yevmiyeleri (Faz X1). Tek para birimi: defter para birimi (döviz çek/senet yoktur: belgelenmiş sınır).
@@ -118,7 +120,7 @@ export type ChequeView = {
 
 export const OPEN_SQL = sql`((c.direction = 'received' and c.status in ('portfolio','in_collection')) or (c.direction = 'issued' and c.status = 'issued'))`;
 
-export async function listCheques(tx: Tx, q: ChequeListQuery) {
+export async function listCheques(tx: Tx, q: Omit<ChequeListQuery, 'limit' | 'offset'>, page?: PageQuery) {
   const res = await tx.execute<ChequeView>(sql`
     select ${COLS} ${FROM}
      where true
@@ -129,12 +131,13 @@ export async function listCheques(tx: Tx, q: ChequeListQuery) {
        ${q.bankAccountId ? sql`and c.bank_account_id = ${q.bankAccountId}` : sql``}
        ${q.dueFrom ? sql`and c.due_date >= ${q.dueFrom}::date` : sql``}
        ${q.dueTo ? sql`and c.due_date <= ${q.dueTo}::date` : sql``}
-       ${q.q ? sql`and (c.doc_no ilike ${`%${q.q}%`} or c.bank_name ilike ${`%${q.q}%`} or p.name ilike ${`%${q.q}%`})` : sql``}
-     order by c.due_date, c.doc_no`);
+       ${q.q ? sql`and ${trContains(['c.doc_no', 'c.bank_name', 'p.name'], q.q)}` : sql``}
+     order by c.due_date, c.doc_no ${pageSql(page)}`);
+  const pg = paged(res.rows, page);
   const summary = await tx.execute<{ direction: string; status: string; count: number; amount: string }>(sql`
     select c.direction, c.status, count(*)::int as count, sum(c.amount)::numeric(19,2)::text as amount
       from cheques c group by c.direction, c.status order by c.direction, c.status`);
-  return { cheques: res.rows, summary: summary.rows, asOf: todayIso() };
+  return { cheques: pg.rows, truncated: pg.truncated, summary: summary.rows, asOf: todayIso() };
 }
 
 export async function getCheque(tx: Tx, id: string) {
@@ -190,7 +193,8 @@ export async function createCheque(tx: Tx, ctx: LedgerCtx, input: CreateChequeIn
     if (!o) throw unprocessable(`Kalem ${n + 1}: açık kalem bulunamadı ya da tümüyle kapanmış`, 'ITEM_NOT_OPEN', { lineId: it.lineId });
     return { lineId: it.lineId, currency: o.currencyCode, remainingDoc: dec(o.remaining), remainingBase: dec(o.remainingBase), amount: dec(it.amount), settleAmount: dec(it.settleAmount) };
   });
-  const plan = planSettlement({ kind: received ? 'receipt' : 'payment', amount, rate: dec(1), items });
+  await assertAllocatable(tx, control, input.items);
+  const plan = planSettlement({ kind: received ? 'receipt' : 'payment', amount, rate: dec(1), currency: ctx.baseCurrency, items });
   const key = docKey(input.direction, input.docType);
   const fxKeys: AccountMappingKey[] = [...(plan.fxGain.gt(0) ? (['fx_gain'] as const) : []), ...(plan.fxLoss.gt(0) ? (['fx_loss'] as const) : [])];
   const map = await requireMappings(tx, [key, control, ...fxKeys] as AccountMappingKey[]);
@@ -367,7 +371,8 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
     });
     const used = settleItems.reduce((s, i) => s.plus(i.settleAmount), dec(0));
     if (used.gt(total)) throw unprocessable('Kalemlere ayrılan tutar belge toplamını aşıyor', 'ALLOCATION_EXCEEDS_AMOUNT');
-    plan = planSettlement({ kind: 'payment', amount: total, rate: dec(1), items: settleItems });
+    await assertAllocatable(tx, 'payable', input.items);
+    plan = planSettlement({ kind: 'payment', amount: total, rate: dec(1), currency: ctx.baseCurrency, items: settleItems });
     if (plan.fxGain.gt(0)) keys.add('fx_gain');
     if (plan.fxLoss.gt(0)) keys.add('fx_loss');
   }

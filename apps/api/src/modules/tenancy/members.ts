@@ -30,7 +30,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/api/company/members',
-    tenantRoute(app, manage, async ({ tx }) => {
+    tenantRoute(app, manage, async ({ tx, company }) => {
       const rows = await tx
         .select({
           userId: users.id,
@@ -42,6 +42,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         })
         .from(memberships)
         .innerJoin(users, eq(users.id, memberships.userId))
+        .where(eq(memberships.companyId, company.id))
         .orderBy(sql`${users.fullName} collate ${TR}`);
       return { members: rows };
     }),
@@ -55,8 +56,12 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
       let [target] = await tx.select().from(users).where(eq(users.email, input.email));
       if (target && target.organizationId !== user.orgId) {
-        throw new AppError(409, 'EMAIL_TAKEN', 'Bu e-posta adresi başka bir kuruluşta kayıtlı');
+        // Genel ileti: adresin başka bir kuruluşta kayıtlı olduğu açıkça söylenmez (hesap varlığı sızdırılmaz).
+        throw new AppError(409, 'EMAIL_UNAVAILABLE', 'Bu e-posta adresiyle kullanıcı eklenemiyor; başka bir adres deneyin');
       }
+      // Mevcut kullanıcıyı şirkete bağlamak, onun üzerinde yetki (ör. iki adımlı doğrulamasını sıfırlama) kazandırır:
+      // çağıranın, kullanıcının üye olduğu HER şirkette en az onun rütbesinde yönetici olması gerekir.
+      if (target) await assertCanManageUser(tx, target.id);
       if (!target) {
         if (!input.password) {
           throw unprocessable('Yeni kullanıcı için ilk şifre gerekli', 'PASSWORD_REQUIRED');
@@ -127,6 +132,8 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)));
       if (!current) throw notFound('Üye');
       requireOwnerFor(callerRole, current.role);
+      // İki adımlı doğrulama kullanıcıya özgüdür (tüm şirketler): kullanıcının üye olduğu her şirkette yetki gerekir.
+      await assertCanManageUser(tx, userId);
       await tx.delete(userMfa).where(eq(userMfa.userId, userId));
       await recordSecurityEvent(app.db, app.log, req, { event: 'mfa_reset', organizationId: user.orgId, userId, meta: { companyId: company.id, by: user.id } });
       return { ok: true };
@@ -154,6 +161,20 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
     }),
   );
 };
+
+/**
+ * Çağıran, hedef kullanıcının üye olduğu her şirkette sahip/yönetici ve en az onun rütbesinde mi (sahip > yönetici > diğer)?
+ * Diğer şirketlerin üyelikleri RLS ile görünmediğinden SECURITY DEFINER `can_manage_user` işlevi kullanılır (0080).
+ */
+async function assertCanManageUser(tx: Tx, targetUserId: string) {
+  const res = await tx.execute<{ ok: boolean }>(sql`select can_manage_user(${targetUserId}::uuid) as ok`);
+  if (!res.rows[0]?.ok) {
+    throw forbidden(
+      'Bu kullanıcı üzerinde işlem için kullanıcının üye olduğu tüm şirketlerde en az onun yetkisinde sahip ya da yönetici olmalısınız',
+      'MEMBER_OUTRANKS_YOU',
+    );
+  }
+}
 
 /**
  * Şirketin sahipsiz kalmasını engeller. Sahip üyelik satırları kilitlenir: iki sahibin aynı anda birbirini

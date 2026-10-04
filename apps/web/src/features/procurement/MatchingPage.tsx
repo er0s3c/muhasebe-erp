@@ -1,5 +1,5 @@
 import { Link2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { dec } from '@erp/shared';
@@ -7,13 +7,15 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { EmptyState, PageLoading } from '../../components/ui/Feedback';
-import { Field, Input } from '../../components/ui/Field';
+import { Field } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { OrderMatchRow } from '../../lib/types';
+import { MoneyInput } from '../../components/ui/MoneyInput';
+import { useServerDraft } from '../../lib/useServerDraft';
 
 const stateOf = (r: OrderMatchRow) => (r.hasExcess ? 'excess' : dec(r.uninvoicedReceiptAmount).gt(0) ? 'uninvoiced' : dec(r.receivedAmount).isZero() ? 'open' : 'ok');
 const TONE = { ok: 'success', uninvoiced: 'warning', excess: 'danger', open: 'neutral' } as const;
@@ -79,26 +81,21 @@ function ToleranceCard({ canEdit, onSaved }: { canEdit: boolean; onSaved: () => 
   const { t } = useTranslation();
   const toast = useToast();
   const { data } = useCQuery<{ settings: { qtyTolerancePct: string; priceTolerancePct: string } }>(['procurement', 'settings'], '/api/procurement/settings');
-  const [qty, setQty] = useState('');
-  const [price, setPrice] = useState('');
-  useEffect(() => {
-    if (data) {
-      setQty(data.settings.qtyTolerancePct);
-      setPrice(data.settings.priceTolerancePct);
-    }
-  }, [data]);
+  const server = useMemo(() => ({ qty: data?.settings.qtyTolerancePct ?? '', price: data?.settings.priceTolerancePct ?? '' }), [data]);
+  const { value: form, update, reset } = useServerDraft(server);
+  const { qty, price } = form;
   const save = useCMutation(
-    (_: void, call) => call('/api/procurement/settings', { method: 'PUT', body: { qtyTolerancePct: qty.replace(',', '.'), priceTolerancePct: price.replace(',', '.') } }),
+    (_: void, call) => call('/api/procurement/settings', { method: 'PUT', body: { qtyTolerancePct: qty, priceTolerancePct: price } }),
     [['procurement']],
   );
   return (
     <Card className="mt-6 max-w-2xl">
       <CardHeader title={t('procurement.match.settingsTitle')} description={t('procurement.match.settingsDesc')} />
       <div className="flex flex-wrap items-end gap-4 p-4">
-        <Field label={t('procurement.match.qtyTol')}>{(id) => <Input id={id} className="w-32" inputMode="decimal" value={qty} disabled={!canEdit} onChange={(e) => setQty(e.target.value)} />}</Field>
-        <Field label={t('procurement.match.priceTol')}>{(id) => <Input id={id} className="w-32" inputMode="decimal" value={price} disabled={!canEdit} onChange={(e) => setPrice(e.target.value)} />}</Field>
+        <Field label={t('procurement.match.qtyTol')}>{(id) => <MoneyInput id={id} className="w-32" value={qty} disabled={!canEdit} onChange={(v) => update({ qty: v })} decimals={0} maxDecimals={4} />}</Field>
+        <Field label={t('procurement.match.priceTol')}>{(id) => <MoneyInput id={id} className="w-32" value={price} disabled={!canEdit} onChange={(v) => update({ price: v })} decimals={0} maxDecimals={4} />}</Field>
         {canEdit && (
-          <Button variant="primary" loading={save.isPending} onClick={() => save.mutate(undefined, { onSuccess: onSaved, onError: (e) => toast.error(errorMessage(e)) })}>
+          <Button variant="primary" loading={save.isPending} onClick={() => save.mutate(undefined, { onSuccess: () => { reset(); onSaved(); }, onError: (e) => toast.error(errorMessage(e)) })}>
             {t('common.save')}
           </Button>
         )}

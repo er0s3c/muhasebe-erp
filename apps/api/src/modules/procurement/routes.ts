@@ -14,9 +14,11 @@ import {
   updatePurchaseOrderSchema,
   updatePurchaseRequestSchema,
   upsertOfferSchema,
+  pageQuerySchema,
 } from '@erp/shared';
 import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { pageOf } from '../../http/paging';
 import type { ApprovalCtx } from '../approvals/service';
 import { cancelOrder, closeOrder, createOrder, deleteOrder, getOrder, issueOrder, listOrders, updateOrder } from './orders';
 import { getProcurementSettings, invoiceableOrderLines, orderMatchSummary, putProcurementSettings } from './matching';
@@ -56,7 +58,10 @@ export const procurementRoutes: FastifyPluginAsync = async (app) => {
   app.get('/api/procurement/matching', tenantRoute(app, read, async ({ tx }) => orderMatchSummary(tx)));
 
   // --- Talepler ---------------------------------------------------------------------------------
-  app.get('/api/purchase-requests', tenantRoute(app, read, async ({ tx, req }) => listRequests(tx, purchaseRequestListQuerySchema.parse(req.query))));
+  app.get('/api/purchase-requests', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = purchaseRequestListQuerySchema.parse(req.query);
+    return listRequests(tx, q, pageOf(q));
+  }));
   app.post(
     '/api/purchase-requests',
     tenantRoute(app, manage, async (c) => {
@@ -79,7 +84,7 @@ export const procurementRoutes: FastifyPluginAsync = async (app) => {
   app.post('/api/purchase-requests/:id/cancel', tenantRoute(app, manage, async ({ tx, req }) => cancelPurchaseRequest(tx, idParam.parse(req.params).id)));
 
   // --- RFQ ve teklifler ----------------------------------------------------------------------------
-  app.get('/api/rfqs', tenantRoute(app, read, async ({ tx }) => listRfqs(tx)));
+  app.get('/api/rfqs', tenantRoute(app, read, async ({ tx, req }) => listRfqs(tx, pageOf(pageQuerySchema.parse(req.query)))));
   app.post(
     '/api/rfqs',
     tenantRoute(app, manage, async (c) => {
@@ -109,7 +114,10 @@ export const procurementRoutes: FastifyPluginAsync = async (app) => {
   app.post('/api/rfqs/:id/cancel', tenantRoute(app, manage, async ({ tx, req }) => cancelRfq(tx, idParam.parse(req.params).id)));
 
   // --- Siparişler -------------------------------------------------------------------------------------
-  app.get('/api/purchase-orders', tenantRoute(app, read, async ({ tx, req }) => listOrders(tx, purchaseOrderListQuerySchema.parse(req.query))));
+  app.get('/api/purchase-orders', tenantRoute(app, read, async ({ tx, req }) => {
+    const q = purchaseOrderListQuerySchema.parse(req.query);
+    return listOrders(tx, q, pageOf(q));
+  }));
   app.post(
     '/api/purchase-orders',
     tenantRoute(app, manage, async (c) => {

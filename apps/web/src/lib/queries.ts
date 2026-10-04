@@ -14,12 +14,13 @@ export function useCompanyApi() {
   };
 }
 
-export function useCQuery<T>(key: QueryKey, path: string | null, opts: { enabled?: boolean } = {}) {
+export function useCQuery<T>(key: QueryKey, path: string | null, opts: { enabled?: boolean; allowForbidden?: boolean } = {}) {
   const { company, call } = useCompanyApi();
   return useQuery<T>({
     queryKey: [company.id, ...key],
     queryFn: () => call<T>(path as string),
     enabled: path !== null && (opts.enabled ?? true),
+    ...(opts.allowForbidden ? { meta: { allowForbidden: true } } : {}),
   });
 }
 

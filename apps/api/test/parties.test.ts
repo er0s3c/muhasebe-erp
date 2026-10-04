@@ -304,12 +304,15 @@ describe('cari (müşteri / tedarikçi)', async () => {
     expect((await sales.post('/api/parties', { name: 'Satış müşterisi' })).statusCode).toBe(201);
     expect((await sales.get(`/api/reports/party-aging?type=receivable&asOf=${day(9, 30)}`)).statusCode).toBe(200);
     expect((await sales.get('/api/journal-entries')).statusCode).toBe(403); // muhasebe defterini göremez
-    expect((await site.get('/api/parties')).statusCode).toBe(403);
+    // Şantiye sorumlusu cari seçicileri için yalnızca okur
+    expect((await site.get('/api/parties')).statusCode).toBe(200);
+    expect((await site.post('/api/parties', { name: 'Şantiye carisi' })).statusCode).toBe(403);
+    expect((await site.patch(`/api/parties/${p.id}`, { phone: '1' })).statusCode).toBe(403);
 
     const nav = async (cl: typeof sales) =>
       (await cl.get('/api/navigation')).json().groups.map((g: any) => g.key);
     expect(await nav(sales)).toEqual(['overview', 'parties', 'invoices', 'stock', 'directory', 'settings']);
-    expect(await nav(site)).not.toContain('parties');
+    expect(await nav(site)).toContain('parties');
   });
 });
 

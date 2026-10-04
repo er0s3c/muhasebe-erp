@@ -6,6 +6,7 @@ import { conflict, notFound, unprocessable } from '../../http/errors';
 import { getMonthLock } from '../hr/attendance';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { logSocialAccess, profilesAtMonthEnd, type SocialCtx } from './config';
+import { paged, type PageQuery } from '../../http/paging';
 
 type Decl = typeof socialDeclarations.$inferSelect;
 
@@ -185,13 +186,15 @@ export async function buildDeclaration(tx: Tx, ctx: SocialCtx, month: string) {
   return getDeclaration(tx, id, { log: false });
 }
 
-export async function listDeclarations(tx: Tx, q: { year?: number; status?: string }) {
-  const rows = await tx
+export async function listDeclarations(tx: Tx, q: { year?: number; status?: string }, page?: PageQuery) {
+  const query = tx
     .select()
     .from(socialDeclarations)
     .where(and(q.status ? eq(socialDeclarations.status, q.status) : undefined, q.year ? sql`${socialDeclarations.month} like ${`${q.year}-%`}` : undefined))
-    .orderBy(sql`${socialDeclarations.month} desc`);
-  return { declarations: rows };
+    .orderBy(sql`${socialDeclarations.month} desc`)
+    .$dynamic();
+  const pg = paged(page ? await query.limit(page.limit + 1).offset(page.offset) : await query, page);
+  return { declarations: pg.rows, truncated: pg.truncated };
 }
 
 /** Bildirim + satırlar. Numara yalnızca maskeli (son 4 hane) görünür; okuma erişim günlüğüne yazılır. */
@@ -250,5 +253,7 @@ export async function deleteDeclaration(tx: Tx, id: string) {
   const d = await lockDeclaration(tx, id);
   requireDraft(d);
   await tx.delete(socialDeclarationLines).where(eq(socialDeclarationLines.declarationId, id));
-  await tx.delete(socialDeclarations).where(eq(socialDeclarations.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(socialDeclarations).where(eq(socialDeclarations.id, id)).returning({ id: socialDeclarations.id });
+  if (deleted.length === 0) throw notFound('Sosyal güvenlik bildirimi');
 }

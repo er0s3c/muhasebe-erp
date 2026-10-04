@@ -1,5 +1,6 @@
 import { Building2, Layers, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { generateUnitNumbers } from '@erp/shared';
@@ -20,6 +21,7 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { UnitRow } from '../../lib/types';
 import { useProjectOptions } from '../projects/common';
 import { REAL_ESTATE_INVALIDATE, UNIT_STATUSES, UNIT_TYPES, UnitStatusBadge, unitLabel } from './common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 const CHIP = {
   available: 'border-border-strong bg-surface',
@@ -47,7 +49,8 @@ export function UnitsPage() {
     if (status) q.set('status', status);
     return q.toString();
   }, [projectId, status]);
-  const { data, isPending } = useCQuery<{ units: UnitRow[] }>(['units', 'list', qs], `/api/real-estate/units?${qs}`);
+  const lim = useListLimit(qs, 2000, 5000);
+  const { data, isPending } = useCQuery<{ units: UnitRow[] } & { truncated?: boolean }>(['units', 'list', qs, lim.limit], `/api/real-estate/units?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = useMemo(() => data?.units ?? [], [data]);
   const filtered = !!(projectId || status);
 
@@ -111,7 +114,8 @@ export function UnitsPage() {
           {rows.length === 0 ? (
             <Card><EmptyState title={t('common.noResults')} /></Card>
           ) : view === 'table' ? (
-            <TableWrap>
+            <>
+              <TableWrap>
               <Table>
                 <thead>
                   <tr>
@@ -141,6 +145,8 @@ export function UnitsPage() {
                 </tbody>
               </Table>
             </TableWrap>
+              <TruncatedNote truncated={data?.truncated} shown={rows.length} onMore={lim.more} atMax={lim.atMax} />
+            </>
           ) : (
             <div className="flex flex-col gap-4">
               {groups.map(([title, floors]) => (
@@ -216,10 +222,10 @@ function UnitSheet({ open, unit, projects, defaultProjectId, onOpenChange }: { o
     floor: f.floor.trim() === '' ? null : Number(f.floor),
     unitNo: f.unitNo.trim(),
     unitType: f.unitType,
-    grossM2: f.grossM2.trim() ? f.grossM2.replace(',', '.') : null,
-    netM2: f.netM2.trim() ? f.netM2.replace(',', '.') : null,
+    grossM2: f.grossM2.trim() ? f.grossM2 : null,
+    netM2: f.netM2.trim() ? f.netM2 : null,
     rooms: f.rooms.trim() || null,
-    listPrice: f.listPrice.trim() ? f.listPrice.replace(',', '.') : null,
+    listPrice: f.listPrice.trim() ? f.listPrice : null,
     listCurrency: f.listPrice.trim() ? f.listCurrency : null,
     note: f.note.trim() || null,
   });
@@ -263,9 +269,9 @@ function UnitSheet({ open, unit, projects, defaultProjectId, onOpenChange }: { o
             )}
           </Field>
           <Field label={t('realEstate.units.rooms')}>{(id) => <Input id={id} value={f.rooms} onChange={(e) => set('rooms', e.target.value)} placeholder="2+1" maxLength={20} />}</Field>
-          <Field label={t('realEstate.units.grossM2')}>{(id) => <Input id={id} inputMode="decimal" value={f.grossM2} onChange={(e) => set('grossM2', e.target.value)} />}</Field>
-          <Field label={t('realEstate.units.netM2')}>{(id) => <Input id={id} inputMode="decimal" value={f.netM2} onChange={(e) => set('netM2', e.target.value)} />}</Field>
-          <Field label={t('realEstate.cols.listPrice')}>{(id) => <Input id={id} inputMode="decimal" value={f.listPrice} onChange={(e) => set('listPrice', e.target.value)} />}</Field>
+          <Field label={t('realEstate.units.grossM2')}>{(id) => <MoneyInput id={id} value={f.grossM2} onChange={(v) => set('grossM2', v)} decimals={0} maxDecimals={2} />}</Field>
+          <Field label={t('realEstate.units.netM2')}>{(id) => <MoneyInput id={id} value={f.netM2} onChange={(v) => set('netM2', v)} decimals={0} maxDecimals={2} />}</Field>
+          <Field label={t('realEstate.cols.listPrice')}>{(id) => <MoneyInput id={id} value={f.listPrice} onChange={(v) => set('listPrice', v)} />}</Field>
           <Field label={t('realEstate.units.currency')}>
             {(id) => <Select id={id} value={f.listCurrency} onChange={(e) => set('listCurrency', e.target.value)}><CurrencyOptions wide /></Select>}
           </Field>
@@ -301,9 +307,9 @@ function BulkSheet({ open, onOpenChange, projects, defaultProjectId }: { open: b
           floorFrom: from,
           floorTo: to,
           perFloor: per,
-          grossM2: f.grossM2.trim() ? f.grossM2.replace(',', '.') : null,
+          grossM2: f.grossM2.trim() ? f.grossM2 : null,
           rooms: f.rooms.trim() || null,
-          listPrice: f.listPrice.trim() ? f.listPrice.replace(',', '.') : null,
+          listPrice: f.listPrice.trim() ? f.listPrice : null,
           listCurrency: f.listPrice.trim() ? f.listCurrency : null,
         },
       }),
@@ -342,8 +348,8 @@ function BulkSheet({ open, onOpenChange, projects, defaultProjectId }: { open: b
           <Field label={t('realEstate.units.floorTo')}>{(id) => <Input id={id} inputMode="numeric" value={f.floorTo} onChange={(e) => set('floorTo', e.target.value.replace(/\D/g, ''))} />}</Field>
           <Field label={t('realEstate.units.perFloor')}>{(id) => <Input id={id} inputMode="numeric" value={f.perFloor} onChange={(e) => set('perFloor', e.target.value.replace(/\D/g, ''))} />}</Field>
           <Field label={t('realEstate.units.rooms')}>{(id) => <Input id={id} value={f.rooms} onChange={(e) => set('rooms', e.target.value)} placeholder="2+1" />}</Field>
-          <Field label={t('realEstate.units.grossM2')}>{(id) => <Input id={id} inputMode="decimal" value={f.grossM2} onChange={(e) => set('grossM2', e.target.value)} />}</Field>
-          <Field label={t('realEstate.cols.listPrice')}>{(id) => <Input id={id} inputMode="decimal" value={f.listPrice} onChange={(e) => set('listPrice', e.target.value)} />}</Field>
+          <Field label={t('realEstate.units.grossM2')}>{(id) => <MoneyInput id={id} value={f.grossM2} onChange={(v) => set('grossM2', v)} decimals={0} maxDecimals={2} />}</Field>
+          <Field label={t('realEstate.cols.listPrice')}>{(id) => <MoneyInput id={id} value={f.listPrice} onChange={(v) => set('listPrice', v)} />}</Field>
           <Field label={t('realEstate.units.currency')}>
             {(id) => <Select id={id} value={f.listCurrency} onChange={(e) => set('listCurrency', e.target.value)}><CurrencyOptions wide /></Select>}
           </Field>

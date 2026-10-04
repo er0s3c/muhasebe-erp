@@ -26,6 +26,7 @@ import {
 import { nextNumber } from '../settings/numbering';
 import { requireRate } from '../settings/rates';
 import { createRevision, currentRevision, type SubcontractCtx } from './service';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 export { variationSummary } from './service';
 
@@ -204,7 +205,7 @@ export async function submitVariation(tx: Tx, approvalCtx: ApprovalCtx, id: stri
         'VARIATION_EMPTY',
       );
   }
-  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies);
+  const [company] = await tx.select({ base: companies.baseCurrency }).from(companies).where(sql`${companies.id} = app_company_id()`);
   const fx =
     sc.currencyCode === company!.base
       ? dec(1)
@@ -453,6 +454,7 @@ export async function getVariation(tx: Tx, id: string) {
 export async function listVariations(
   tx: Tx,
   q: { subcontractId?: string; projectId?: string; direction?: string; status?: string },
+  page?: PageQuery,
 ) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select v.id, v.code, v.title, v.reason, v.status, v.direction, v.subcontract_id as "subcontractId", s.code as "subcontractCode",
@@ -467,8 +469,9 @@ export async function listVariations(
        and (${q.projectId ?? null}::uuid is null or v.project_id = ${q.projectId ?? null}::uuid)
        and (${q.direction ?? null}::text is null or v.direction = ${q.direction ?? null}::text)
        and (${q.status ?? null}::text is null or v.status = ${q.status ?? null}::text)
-     order by v.created_at desc`);
-  return { variations: rows.rows };
+     order by v.created_at desc ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { variations: pg.rows, truncated: pg.truncated };
 }
 
 export async function variationOfRevision(tx: Tx, revisionId: string) {

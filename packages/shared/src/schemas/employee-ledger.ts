@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { dec } from '../money';
+import { decCheck } from '../money';
 import { isoDate, moneyString, uuid } from './common';
 
 const text = (max: number) => z.string().trim().max(max);
-const positive = moneyString.refine((v) => dec(v).gt(0), 'Tutar sıfırdan büyük olmalı').refine((v) => dec(v).decimalPlaces() <= 2, 'En çok 2 ondalık basamak');
+const positive = moneyString.refine(decCheck((d) => d.gt(0)), 'Tutar sıfırdan büyük olmalı').refine(decCheck((d) => d.decimalPlaces() <= 2), 'En çok 2 ondalık basamak');
 
 export const createAdvanceSchema = z.object({
   employeeId: uuid,
@@ -49,7 +49,7 @@ export type SetAdvanceDeductionsInput = z.infer<typeof setAdvanceDeductionsSchem
 const pct = z
   .string()
   .regex(/^\d{1,3}(\.\d{1,4})?$/, 'Geçersiz oran')
-  .refine((v) => dec(v).gt(0) && dec(v).lte(100), 'Oran 0 ile 100 arasında olmalı');
+  .refine(decCheck((d) => d.gt(0) && d.lte(100)), 'Oran 0 ile 100 arasında olmalı');
 
 export const updateLedgerSettingsSchema = z.object({
   /** Boş (null): sınır yok. Yasal bir değer koda gömülü değildir; bu alan kullanıcı verisidir. */

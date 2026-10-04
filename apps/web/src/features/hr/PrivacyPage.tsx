@@ -12,10 +12,10 @@ import { SegmentedTabs } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { AccessLogRow, DirContact, DsrRow, EmployeeRow, InventoryRow } from '../../lib/types';
 import { HR_INVALIDATE } from './common';
+import { fmtDate } from '../../lib/license';
 
 type Tab = 'inventory' | 'requests' | 'log';
 
@@ -188,7 +188,7 @@ function RequestsTab() {
             <tbody>
               {rows.map((r) => (
                 <Tr key={r.id}>
-                  <Td className="text-muted">{formatDateTR(r.openedAt.slice(0, 10))}</Td>
+                  <Td className="text-muted">{fmtDate(r.openedAt)}</Td>
                   <Td>{r.requesterName}{r.description ? <div className="text-xs text-muted">{r.description}</div> : null}</Td>
                   <Td>{t(`privacy.kinds.${r.kind}`)}</Td>
                   <Td>{r.employeeId ? <Link className="underline" to={`/hr/employees/${r.employeeId}`}>{r.employeeCode} {r.employeeName}</Link> : r.contactId ? <Link className="underline" to={`/directory/contacts/${r.contactId}`}>{r.contactName}</Link> : '—'}</Td>
@@ -319,7 +319,7 @@ function LogTab() {
         <tbody>
           {data.log.map((l) => (
             <Tr key={l.id}>
-              <Td className="text-muted">{formatDateTR(l.at.slice(0, 10))} {l.at.slice(11, 16)}</Td>
+              <Td className="text-muted">{fmtDate(l.at)} {l.at.slice(11, 16)}</Td>
               <Td>{l.employeeId ? <Link className="underline" to={`/hr/employees/${l.employeeId}`}>{l.employeeCode} {l.employeeName}</Link> : <Link className="underline" to={`/directory/contacts/${l.contactId}`}>{l.contactName}</Link>}</Td>
               <Td>{l.field === 'export' ? t('privacy.log.export') : l.field === 'directory_export' || l.field === 'directory_anonymize' ? t(`privacy.log.${l.field}`) : t(`hr.fields.${l.field}`)}</Td>
               <Td>{l.reason}</Td>

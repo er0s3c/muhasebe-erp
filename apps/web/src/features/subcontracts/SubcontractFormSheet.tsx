@@ -14,6 +14,7 @@ import type { ContractDirection, ProjectDetail, SubcontractDetail } from '../../
 import { usePartyOptions } from '../invoices/common';
 import { useProjectOptions } from '../projects/common';
 import { SUBCONTRACT_INVALIDATE } from './common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
 
 interface Props {
   open: boolean;
@@ -73,7 +74,7 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
   }, [receivable, edit, chosen]);
 
   const pctLocked = !!edit && edit.status !== 'draft';
-  const pct = (v: string) => (v.trim() === '' ? undefined : v.trim().replace(',', '.'));
+  const pct = (v: string) => (v.trim() === '' ? undefined : v.trim());
 
   const save = useCMutation((_: void, call) => {
     const common = {
@@ -176,10 +177,10 @@ export function SubcontractFormSheet({ open, onOpenChange, edit, defaultProjectI
           <legend className="px-1 text-[13px] text-muted">{t('subcontracts.form.deductions')}</legend>
           <p className="text-xs text-muted">{pctLocked ? t('subcontracts.form.pctLocked') : t('subcontracts.form.deductionsHint')}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label={t('subcontracts.form.retention')}>{(id) => <Input id={id} inputMode="decimal" value={retention} onChange={(e) => setRetention(e.target.value)} placeholder="—" />}</Field>
-            <Field label={t('subcontracts.form.advance')}>{(id) => <Input id={id} inputMode="decimal" value={advance} onChange={(e) => setAdvance(e.target.value)} placeholder="—" />}</Field>
-            <Field label={t('subcontracts.form.withholding')}>{(id) => <Input id={id} inputMode="decimal" value={withholding} onChange={(e) => setWithholding(e.target.value)} placeholder="—" />}</Field>
-            <Field label={t('subcontracts.form.vatWithholding')} hint={t('subcontracts.form.vatWithholdingHint')}>{(id) => <Input id={id} inputMode="decimal" value={vatWithholding} onChange={(e) => setVatWithholding(e.target.value)} placeholder="—" />}</Field>
+            <Field label={t('subcontracts.form.retention')}>{(id) => <MoneyInput id={id} value={retention} onChange={(v) => setRetention(v)} placeholder="—" decimals={0} maxDecimals={4} />}</Field>
+            <Field label={t('subcontracts.form.advance')}>{(id) => <MoneyInput id={id} value={advance} onChange={(v) => setAdvance(v)} placeholder="—" decimals={0} maxDecimals={4} />}</Field>
+            <Field label={t('subcontracts.form.withholding')}>{(id) => <MoneyInput id={id} value={withholding} onChange={(v) => setWithholding(v)} placeholder="—" decimals={0} maxDecimals={4} />}</Field>
+            <Field label={t('subcontracts.form.vatWithholding')} hint={t('subcontracts.form.vatWithholdingHint')}>{(id) => <MoneyInput id={id} value={vatWithholding} onChange={(v) => setVatWithholding(v)} placeholder="—" decimals={0} maxDecimals={4} />}</Field>
           </div>
         </fieldset>
 

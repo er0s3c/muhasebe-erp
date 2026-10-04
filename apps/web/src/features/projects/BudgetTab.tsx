@@ -12,11 +12,12 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
-import { currencySymbol, formatDateTR, money } from '../../lib/format';
+import { currencySymbol, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ProjectBudgetDetail, ProjectBudgetRow, ProjectDetail, ProjectWbsRow } from '../../lib/types';
 import { PROJECT_INVALIDATE } from './common';
+import { fmtDate } from '../../lib/license';
 
 const STATUS_TONE = { draft: 'warning', approved: 'success', superseded: 'neutral' } as const;
 
@@ -111,7 +112,7 @@ export function BudgetTab({ project }: { project: ProjectDetail }) {
                     <Td>
                       <Badge tone={STATUS_TONE[b.status]}>{t(`projects.budget.status.${b.status}`)}</Badge>
                     </Td>
-                    <Td className="text-muted">{b.approvedAt ? formatDateTR(b.approvedAt.slice(0, 10)) : '—'}</Td>
+                    <Td className="text-muted">{b.approvedAt ? fmtDate(b.approvedAt) : '—'}</Td>
                     <Td num>{money(b.total)}</Td>
                   </Tr>
                 ))}
@@ -129,7 +130,7 @@ export function BudgetTab({ project }: { project: ProjectDetail }) {
             action={
               selected.status === 'draft' &&
               canBudget && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button variant="danger" onClick={() => setConfirmDelete(true)} aria-label={t('projects.budget.deleteDraft')}>
                     <Trash2 className="size-4" aria-hidden />
                   </Button>

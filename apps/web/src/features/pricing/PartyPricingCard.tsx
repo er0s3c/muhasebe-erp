@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
-import { Field, Input, Select } from '../../components/ui/Field';
+import { Field, Select } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { PartyPricing } from '../../lib/types';
 import { PRICING_INVALIDATE, trimNum, usePriceLists } from './common';
+import { MoneyInput } from '../../components/ui/MoneyInput';
+import { useServerDraft } from '../../lib/useServerDraft';
 
 /** Cari kartında: atanan satış/alış fiyat listesi, genel iskonto ve cariye özel fiyatlara kısayol. */
 export function PartyPricingCard({ partyId, kind }: { partyId: string; kind: 'customer' | 'supplier' | 'both' }) {
@@ -20,11 +22,12 @@ export function PartyPricingCard({ partyId, kind }: { partyId: string; kind: 'cu
   const { data } = useCQuery<PartyPricing>(['party-pricing', partyId], enabled ? `/api/parties/${partyId}/pricing` : null);
   const sales = usePriceLists('sales');
   const purchase = usePriceLists('purchase');
-  const [f, setF] = useState({ salesList: '', purchaseList: '', salesDiscount: '', purchaseDiscount: '' });
-
-  useEffect(() => {
-    if (data) setF({ salesList: data.salesPriceListId ?? '', purchaseList: data.purchasePriceListId ?? '', salesDiscount: trimNum(data.salesDiscountPct), purchaseDiscount: trimNum(data.purchaseDiscountPct) });
-  }, [data]);
+  // Sunucu değeri kullanıcı dokunana dek gösterilir; geç gelen/yeniden çekilen sorgu girilen değeri ezmez
+  const server = useMemo(
+    () => ({ salesList: data?.salesPriceListId ?? '', purchaseList: data?.purchasePriceListId ?? '', salesDiscount: data ? trimNum(data.salesDiscountPct) : '', purchaseDiscount: data ? trimNum(data.purchaseDiscountPct) : '' }),
+    [data],
+  );
+  const { value: f, update, reset } = useServerDraft(server);
 
   const save = useCMutation(
     (_: void, call) =>
@@ -65,14 +68,14 @@ export function PartyPricingCard({ partyId, kind }: { partyId: string; kind: 'cu
           <>
             <Field label={t('pricing.partyCard.salesList')}>
               {(id) => (
-                <Select id={id} value={f.salesList} disabled={!canManage} onChange={(e) => setF({ ...f, salesList: e.target.value })}>
+                <Select id={id} value={f.salesList} disabled={!canManage} onChange={(e) => update({ salesList: e.target.value })}>
                   <option value="">{t('pricing.partyCard.noList')}</option>
                   {listOptions(sales.data?.lists, f.salesList)}
                 </Select>
               )}
             </Field>
             <Field label={t('pricing.partyCard.salesDiscount')}>
-              {(id) => <Input id={id} inputMode="decimal" value={f.salesDiscount} disabled={!canManage} placeholder="0" onChange={(e) => setF({ ...f, salesDiscount: e.target.value.replace(',', '.') })} />}
+              {(id) => <MoneyInput id={id} value={f.salesDiscount} disabled={!canManage} placeholder="0" onChange={(v) => update({ salesDiscount: v })} decimals={0} maxDecimals={4} />}
             </Field>
           </>
         )}
@@ -80,14 +83,14 @@ export function PartyPricingCard({ partyId, kind }: { partyId: string; kind: 'cu
           <>
             <Field label={t('pricing.partyCard.purchaseList')}>
               {(id) => (
-                <Select id={id} value={f.purchaseList} disabled={!canManage} onChange={(e) => setF({ ...f, purchaseList: e.target.value })}>
+                <Select id={id} value={f.purchaseList} disabled={!canManage} onChange={(e) => update({ purchaseList: e.target.value })}>
                   <option value="">{t('pricing.partyCard.noList')}</option>
                   {listOptions(purchase.data?.lists, f.purchaseList)}
                 </Select>
               )}
             </Field>
             <Field label={t('pricing.partyCard.purchaseDiscount')}>
-              {(id) => <Input id={id} inputMode="decimal" value={f.purchaseDiscount} disabled={!canManage} placeholder="0" onChange={(e) => setF({ ...f, purchaseDiscount: e.target.value.replace(',', '.') })} />}
+              {(id) => <MoneyInput id={id} value={f.purchaseDiscount} disabled={!canManage} placeholder="0" onChange={(v) => update({ purchaseDiscount: v })} decimals={0} maxDecimals={4} />}
             </Field>
           </>
         )}
@@ -98,7 +101,7 @@ export function PartyPricingCard({ partyId, kind }: { partyId: string; kind: 'cu
             variant="primary"
             size="sm"
             loading={save.isPending}
-            onClick={() => save.mutate(undefined, { onSuccess: () => toast.success(t('pricing.partyCard.saved')), onError: (e) => toast.error(errorMessage(e)) })}
+            onClick={() => save.mutate(undefined, { onSuccess: () => { reset(); toast.success(t('pricing.partyCard.saved')); }, onError: (e) => toast.error(errorMessage(e)) })}
           >
             {t('common.save')}
           </Button>

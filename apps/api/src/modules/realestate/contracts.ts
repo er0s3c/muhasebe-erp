@@ -14,12 +14,13 @@ import { companies, journalLines, parties, realEstateUnits, salesContracts, sale
 import { notFound, unprocessable } from '../../http/errors';
 import { createJournalEntry, reverseJournalEntry, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
-import { openItemsFor } from '../parties/service';
+import { describeSettlements, entrySettlements, openItemsFor, openItemsForParties } from '../parties/service';
 import { requireOpenPeriod } from '../settings/periods';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireRate } from '../settings/rates';
 import { buildActivationJournal, buildHandoverJournal } from './journal';
 import type { RealEstateCtx } from './units';
+import { pageSql, paged, slicePage, type PageQuery } from '../../http/paging';
 
 export interface SalesCtx extends RealEstateCtx {
   reportingCurrency: string | null;
@@ -174,6 +175,8 @@ export async function cancelContract(tx: Tx, ctx: SalesCtx, id: string, reason: 
   const c = await lockContract(tx, id);
   if (c.status !== 'draft' && c.status !== 'active') throw unprocessable('Bu durumdaki sözleşme iptal edilemez', 'CONTRACT_CANNOT_CANCEL');
   if (c.status === 'active') {
+    const paid = await entrySettlements(tx, c.activationEntryId!);
+    if (paid.length > 0) throw unprocessable(`Tahsilatı olan sözleşme iptal edilemez (${describeSettlements(paid)}); fesih kaydı açın`, 'CONTRACT_HAS_PAYMENTS');
     await requireOpenPeriod(tx, todayIso());
     await reverseJournalEntry(tx, ledgerCtx(ctx), c.activationEntryId!, { entryDate: todayIso(), description: `Satış sözleşmesi iptali ${c.code}: ${reason}`.slice(0, 300), source: { type: 'sales_contract', id } });
   }
@@ -262,7 +265,7 @@ export async function getContract(tx: Tx, id: string) {
   };
 }
 
-export async function listContracts(tx: Tx, q: { projectId?: string; partyId?: string; status?: string }) {
+export async function listContracts(tx: Tx, q: { projectId?: string; partyId?: string; status?: string }, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select c.id, c.code, c.status, c.contract_date::text as "contractDate", c.currency_code as "currencyCode", c.price::text as price,
            p.code as "projectCode", u.block, u.unit_no as "unitNo", pa.name as "partyName",
@@ -274,15 +277,16 @@ export async function listContracts(tx: Tx, q: { projectId?: string; partyId?: s
      where (${q.projectId ?? null}::uuid is null or c.project_id = ${q.projectId ?? null}::uuid)
        and (${q.partyId ?? null}::uuid is null or c.party_id = ${q.partyId ?? null}::uuid)
        and (${q.status ?? null}::text is null or c.status = ${q.status ?? null}::text)
-     order by c.code desc`);
-  return { contracts: rows.rows };
+     order by c.code desc ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { contracts: pg.rows, truncated: pg.truncated };
 }
 
 /**
  * Tahsil edilecek taksitler (etkin ve teslim edilmiş sözleşmeler): açık kalem hesabından kalan tutar ve gecikme günü.
  * Vadesine göre sıralı; `overdueOnly` yalnızca gecikenleri verir.
  */
-export async function listInstallments(tx: Tx, q: { asOf?: string; projectId?: string; overdueOnly?: boolean }) {
+export async function listInstallments(tx: Tx, q: { asOf?: string; projectId?: string; overdueOnly?: boolean }, page?: PageQuery) {
   const asOf = q.asOf ?? todayIso();
   const rows = await tx.execute<{ id: string; contract_id: string; code: string; party_id: string; party_name: string; project_code: string; block: string; unit_no: string; currency_code: string; seq: number; kind: string; due_date: string; amount: string; journal_line_id: string }>(sql`
     select i.id, c.id as contract_id, c.code, c.party_id, pa.name as party_name, p.code as project_code, u.block, u.unit_no, c.currency_code,
@@ -295,9 +299,10 @@ export async function listInstallments(tx: Tx, q: { asOf?: string; projectId?: s
      where i.journal_line_id is not null
        and (${q.projectId ?? null}::uuid is null or c.project_id = ${q.projectId ?? null}::uuid)
      order by i.due_date, c.code, i.seq`);
+  // Tüm carilerin açık kalemleri tek seferde (cari başına sorgu yapılmaz; API-7)
+  const openByParty = await openItemsForParties(tx, [...new Set(rows.rows.map((r) => r.party_id))], 'receivable', asOf);
   const byParty = new Map<string, Map<string, { remaining: string; daysOverdue: number }>>();
-  for (const partyId of new Set(rows.rows.map((r) => r.party_id))) {
-    const open = await openItemsFor(tx, partyId, 'receivable', asOf);
+  for (const [partyId, open] of openByParty) {
     byParty.set(partyId, new Map(open.items.map((o) => [o.lineId, { remaining: o.remaining, daysOverdue: o.daysOverdue }])));
   }
   const out = [];
@@ -323,7 +328,8 @@ export async function listInstallments(tx: Tx, q: { asOf?: string; projectId?: s
       daysOverdue,
     });
   }
-  return { asOf, installments: out };
+  const pg = slicePage(out, page);
+  return { asOf, installments: pg.rows, truncated: pg.truncated };
 }
 
 /** Proje satış özeti: birim durumları, satılan alan, para birimi bazında sözleşme/tahsil/kalan/geciken tutar. */

@@ -93,7 +93,9 @@ export async function updateWbs(tx: Tx, id: string, input: UpdateWbsInput) {
 
 export async function deleteWbs(tx: Tx, id: string) {
   await getWbsRow(tx, id);
-  await tx.delete(projectWbs).where(eq(projectWbs.id, id));
+  // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
+  const deleted = await tx.delete(projectWbs).where(eq(projectWbs.id, id)).returning({ id: projectWbs.id });
+  if (deleted.length === 0) throw notFound('İş kalemi');
 }
 
 /** Ağaçta kökler (testler ve raporlar için). */

@@ -11,7 +11,7 @@ import { useCurrencyLabel } from '../../components/ui/CurrencyOptions';
 import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCQuery, useNavigation } from '../../lib/queries';
 import { useSession } from '../../lib/session';
-import { MODULE_LABEL_KEYS } from '../../lib/types';
+import { moduleName } from '../../lib/modules';
 
 interface CompanyRow {
   id: string;
@@ -135,7 +135,7 @@ export function CompanyPage() {
               <dd className="flex flex-wrap gap-1.5">
                 {nav?.modules.map((m) => (
                   <Badge key={m} tone="brand">
-                    {t((MODULE_LABEL_KEYS[m as keyof typeof MODULE_LABEL_KEYS] ?? 'modules.dashboard') as never)}
+                    {moduleName(m)}
                   </Badge>
                 ))}
               </dd>

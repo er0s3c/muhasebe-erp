@@ -27,6 +27,7 @@ import { validateDimensions } from '../projects/dimension';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { assertCashOk, lockTreasuryAccounts } from '../treasury/accounts';
+import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 const EXPENSE_NUMBER_KEY = 'EXP';
 const EXPENSE_PREFIX = 'GDF';
@@ -54,7 +55,7 @@ async function validateCard(tx: Tx, companyId: string, c: { accountId?: string; 
   await validateDimensions(tx, companyId, [{ label: 'Gider kartı', projectId: c.projectId, wbsId: c.wbsId, costCodeId: c.costCodeId }]);
 }
 
-export async function listExpenseCards(tx: Tx, opts: { all?: boolean } = {}) {
+export async function listExpenseCards(tx: Tx, opts: { all?: boolean } = {}, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select c.id, c.code, c.name, c.account_id as "accountId", a.code as "accountCode", a.name as "accountName", c.tax_code as "taxCode",
            c.withholding_rate::text as "withholdingRate", c.project_id as "projectId", p.code as "projectCode", c.wbs_id as "wbsId",
@@ -65,8 +66,9 @@ export async function listExpenseCards(tx: Tx, opts: { all?: boolean } = {}) {
       left join projects p on p.id = c.project_id
       left join cost_codes cc on cc.id = c.cost_code_id
      ${opts.all ? sql`` : sql`where c.is_active`}
-     order by c.code`);
-  return { cards: rows.rows };
+     order by c.code ${pageSql(page)}`);
+  const pg = paged(rows.rows, page);
+  return { cards: pg.rows, truncated: pg.truncated };
 }
 
 export async function createExpenseCard(tx: Tx, companyId: string, input: CreateExpenseCardInput) {
