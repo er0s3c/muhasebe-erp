@@ -24,3 +24,10 @@ export function isoYear(iso: string): number {
 export function isoMonth(iso: string): number {
   return Number(iso.slice(5, 7));
 }
+
+/** "2026-03-30" + 3 -> "2026-04-02" (takvim günü aritmetiği, saat dilimi/yaz saati etkisiz). */
+export function addDaysIso(iso: string, days: number): string {
+  const d = new Date(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))));
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}

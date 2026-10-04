@@ -314,6 +314,9 @@ export const router = createBrowserRouter([
                     ],
                   },
                   { path: 'account/security', ...page(() => import('../features/settings/SecurityPage'), 'SecurityPage', null) },
+                  // Bildirimler çekirdektir (modül kapısı yok): her üye kendi bildirimlerini ve tercihlerini görür
+                  { path: 'notifications', ...page(() => import('../features/notifications/NotificationsPage'), 'NotificationsPage', null) },
+                  { path: 'settings/notifications', ...page(() => import('../features/notifications/NotificationPreferencesPage'), 'NotificationPreferencesPage', null) },
                   { path: '*', element: <NotFoundPage /> },
                 ],
               },

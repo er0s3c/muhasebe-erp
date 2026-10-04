@@ -97,6 +97,17 @@ const envSchema = z
     LICENSE_ENFORCEMENT_DEV: flag(false),
     /** YALNIZCA geliştirme/test: pakete gömülü halka yokken kullanılacak açık anahtar halkası (JSON). Üretimde yok sayılır/reddedilir. */
     LICENSE_DEV_KEYRING: z.string().optional(),
+    /**
+     * Bildirim zamanlayıcısı (docs/OPERATIONS.md §9b): her şirkete ayrı işlemde ve kendi RLS bağlamıyla uygulama içi bildirimleri üretir/çözer,
+     * kapanmış eski bildirimleri budar ve (SMTP açıksa, kullanıcı istediyse) günde en çok bir e-posta özeti gönderir. Testlerde süreç
+     * başlatılmaz (zamanlayıcıyı yalnızca server.ts başlatır).
+     */
+    NOTIFY_ENABLED: flag(true),
+    NOTIFY_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
+    /** Okunmuş/kapatılmış/çözülmüş bildirimlerin saklama süresi (gün). */
+    NOTIFY_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(90),
+    /** E-posta özetinin gönderileceği ilk yerel saat (Europe/Nicosia, 0–23). */
+    NOTIFY_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(8),
     /** Sürüm etiketi (imaj derlemesinde verilir); destek için `/api/public-config` döndürür. */
     APP_VERSION: z.string().default('dev'),
   })

@@ -326,5 +326,13 @@
   "0081_audit_accounting": {
     "sha256": "b37204bb2aa1be296f21fe2aa5974a6aedeaaec1730155452f9ca6982e4d045d",
     "when": 1791039726643
+  },
+  "0082_notifications": {
+    "sha256": "8c368e4fe461973a92fb9b1537d8eb6929d41e17e09f560d8740803b5c23abda",
+    "when": 1791150718118
+  },
+  "0083_notifications_rules": {
+    "sha256": "7e461b68c13b4d2784803a6b7f230a2d88d17630ad0a63693630437a396f2e90",
+    "when": 1791150726408
   }
 }

@@ -274,6 +274,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     module: 'core.dashboard',
   },
   {
+    // Bildirimler çekirdektir: her üye kendi bildirimlerini görür (kaynakları kendi modül ve izinlerine göre üretilir); izin ya da yeni modül yok
+    key: 'notifications',
+    labelKey: 'nav.notifications',
+    path: '/notifications',
+    icon: 'bell',
+    group: 'overview',
+    module: 'core.dashboard',
+  },
+  {
     key: 'parties',
     labelKey: 'nav.parties',
     path: '/parties',

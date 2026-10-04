@@ -30,8 +30,10 @@ interface MiscOpts {
 
 export async function seedPortfolio(tx: Tx, ctx: LedgerCtx, o: MiscOpts): Promise<string> {
   const today = todayIso();
-  // Kapalı dönemlere (Ocak–Haziran) düşmesin: en erken tarih Temmuz başı
-  const floor = `${today.slice(0, 4)}-07-01`;
+  // Kapalı dönemlere (Ocak–Haziran) düşmesin: en erken tarih Temmuz başı; yılın ilk yarısındaki bir "bugün"de ise yılın ilk günü
+  // (önceki yılın dönemi yoktur, gelecekteki Temmuz da bugünden sonradır)
+  const year = today.slice(0, 4);
+  const floor = today >= `${year}-07-01` ? `${year}-07-01` : `${year}-01-01`;
   const at = (n: number) => {
     const d = addDays(today, n);
     return d < floor ? floor : d;
@@ -42,10 +44,13 @@ export async function seedPortfolio(tx: Tx, ctx: LedgerCtx, o: MiscOpts): Promis
   const idOf = (r: unknown) => ((r as { id?: string; cheque?: { id: string } }).id ?? (r as { cheque: { id: string } }).cheque.id);
 
   // Alınan: portföyde bekleyen çek (vadesi ileride); carinin en eski açık kalemine kısmen eşleştirilir
-  const aliOpen = (await openItemsFor(tx, p('ali'), 'receivable', at(-40))).items[0];
+  // Çek yalnızca defter para biriminde işlenir: eşleştirme kalemi de TL olmalı ve kısmi kapatmada kapatılan tutar karşılığa eşittir.
+  // (Kur farkından kalan kuruşluk/dövizli artık kalemler eşleştirilmez: kalem para biriminde 0 tutar oransız kur üretir.)
+  const aliOpen = (await openItemsFor(tx, p('ali'), 'receivable', at(-40))).items.find((i) => i.currencyCode === ctx.baseCurrency && Number(i.remaining) > 0);
+  const aliSettle = aliOpen ? Math.min(100000, Number(aliOpen.remaining)).toFixed(2) : '0';
   await cheque({
     direction: 'received', docType: 'cheque', docNo: 'ÇK-100231', bankName: 'Örnek Banka', branch: 'Lefkoşa', partyId: p('ali'), amount: '150000', issueDate: at(-40), dueDate: addDays(today, 20), description: 'A Blok daire bedeli — 2. taksit',
-    items: aliOpen ? [{ lineId: aliOpen.lineId, amount: aliOpen.remaining, settleAmount: Math.min(100000, Number(aliOpen.remaining)).toFixed(2) }] : [],
+    items: aliOpen ? [{ lineId: aliOpen.lineId, amount: aliSettle, settleAmount: aliSettle }] : [],
   });
   // Alınan: tahsile verilip tahsil edilen çek
   const collected = await cheque({ direction: 'received', docType: 'cheque', docNo: 'ÇK-100198', bankName: 'Örnek Banka', branch: 'Girne', partyId: p('ali'), amount: '80000', issueDate: at(-50), dueDate: at(-10), items: [] });
@@ -80,7 +85,8 @@ export async function seedPortfolio(tx: Tx, ctx: LedgerCtx, o: MiscOpts): Promis
 
 export async function seedExpenses(tx: Tx, ctx: LedgerCtx, o: MiscOpts): Promise<string> {
   const today = todayIso();
-  const floor = `${today.slice(0, 4)}-07-01`;
+  const year = today.slice(0, 4);
+  const floor = today >= `${year}-07-01` ? `${year}-07-01` : `${year}-01-01`;
   const at = (n: number) => {
     const d = addDays(today, n);
     return d < floor ? floor : d;

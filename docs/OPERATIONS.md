@@ -188,6 +188,10 @@ Geçersiz/eksik değerde uygulama başlamaz ve nedenini yazar. Boş değer "tan�
 | `MAIL_FROM` | yok | `SMTP_URL` ile birlikte zorunlu: `"Muhasebe ERP <no-reply@ornek.com>"` |
 | `APP_BASE_URL` | yok | E-postalardaki bağlantı kökü (`https://erp.ornek.com`); posta açıkken zorunlu |
 | `MAIL_TRANSPORT` | yok | `log` yalnızca geliştirme (bağlantıyı günlüğe yazar); **üretimde reddedilir** |
+| `NOTIFY_ENABLED` | `true` | Bildirim zamanlayıcısı (§9b). `false`: otomatik tarama durur (elle tarama ve mevcut bildirimler çalışır) |
+| `NOTIFY_INTERVAL_MINUTES` | `30` | Tarama aralığı (1–1440 dk). Bildirimler ve hatırlatmalar en çok bu kadar gecikir |
+| `NOTIFY_RETENTION_DAYS` | `90` | Okunmuş/kapatılmış/çözülmüş bildirimlerin saklama süresi (7–3650 gün); açık bildirim silinmez |
+| `NOTIFY_DIGEST_HOUR` | `8` | E-posta özetinin gönderileceği ilk yerel saat (Europe/Nicosia, 0–23); yalnızca SMTP açıkken ve kullanıcı istediyse |
 | `WEB_DIST_DIR` | imajda `/app/web` | Derlenmiş arayüz klasörü |
 | `APP_VERSION` | `dev` | İmaj derlemesinde verilir; `/api/public-config` döndürür |
 | `LICENSE_SERVER_URL` | imaja gömülü | Lisans sunucusu adresi (yalnızca `https`); verilirse derlemede gömülü varsayılanın yerine geçer. Normalde boş bırakılır: satıcı imajı derlerken belirler |
@@ -428,6 +432,17 @@ $D stop app && $D run --rm demo-reset && $D up -d app
 - **SPF, DKIM ve DMARC kayıtları alan adınızda sizin işinizdir**; olmazsa mesajlar spam'e düşer. SMTP sağlayıcınızın belgelerine bakın.
 - TLS sertifikası doğrulaması **kapatılamaz**; kendi imzalı sertifikalı bir SMTP için CA'yı `NODE_EXTRA_CA_CERTS` ile verin.
 
+### 9b. Bildirim zamanlayıcısı ve e-posta özeti
+
+Uygulama içi bildirimler (zil, `/notifications`) ek kurulum gerektirmez. API süreci açılışta bir zamanlayıcı başlatır (`NOTIFY_ENABLED`, varsayılan açık) ve her `NOTIFY_INTERVAL_MINUTES` dakikada (varsayılan 30; ilk tur açılıştan 20–40 sn sonra):
+
+- Tüm şirketleri **tek tek**, her biri ayrı işlemde ve kendi RLS bağlamıyla tarar: vadesi gelen çek/senet, süresi dolan teminat mektubu ve yabancı işçi belgesi, ajanda (bugün/geciken, hatırlatma ofseti), onay bekleyen belge, lisans durumu, kapatılmamış puantaj/bordro ayı, vadesi geçmiş alacak, kritik stok, eski taslak. Her kullanıcıya yalnızca **o kaynak modülü şirkette açıksa ve izni varsa** bildirim gider.
+- Aynı durum için kopya üretmez; durum değişince yeni bildirim açar, koşul kalkınca eskisini "çözüldü" yapar, `NOTIFY_RETENTION_DAYS` sonrası kapanmış bildirimleri siler. Eşik günleri kullanıcı tercihidir (varsayılanlar düz kullanım değerleridir, yasal süre değildir).
+- **Çok örnekli güvenlik:** şirket başına PostgreSQL advisory kilidi vardır; iki uygulama örneği aynı şirketi aynı anda taramaz (kilidi alamayan örnek o şirketi atlar, bir sonraki turda yine dener) ve veritabanı kısıtı kopyayı ayrıca engeller. Bir örnek ölürse kilit işlemle birlikte kendiliğinden düşer.
+- Hata: bir şirketin ya da kaynağın hatası günlüğe `uyarı` olarak yazılır ve diğerlerini durdurmaz. İzleme için günlükte `bildirim taraması tamam` (yalnızca değişiklik olduğunda) ve `bildirim taraması başarısız` satırlarına bakın. Sahip/yönetici, **Bildirimler → Şimdi tara** ile (ya da `POST /api/notifications/scan`) şirketi hemen taratabilir.
+- **E-posta özeti** yalnızca e-posta yapılandırılmışsa (§9: `SMTP_URL` + `MAIL_FROM` + `APP_BASE_URL`) çalışır ve **kullanıcı başına, türe göre isteğe bağlıdır (varsayılan kapalı)**: kullanıcı + şirket + gün başına en çok bir ileti, yerel saat `NOTIFY_DIGEST_HOUR`'dan sonraki ilk turda; yalnızca okunmamış bildirim başlıklarını (tür ve sayı) ve `APP_BASE_URL/notifications` bağlantısını taşır — ad, kimlik no, IBAN, ücret, belge numarası ya da tutar içermez. SMTP yoksa özet hiç üretilmez ve arayüzde e-posta anahtarı kapalıdır. Gönderim mevcut arka plan hattıyla yapılır; SMTP hatası taramayı bozmaz ve aynı gün yeniden denenmez (özet kaydı gönderimden önce yazılır). SMTP sağlayıcısı yurt dışındaysa bildirim özeti de aktarım değerlendirmesine girer (LEGAL-NOTES §5, §24).
+- Zamanlayıcıyı kapatmak (`NOTIFY_ENABLED=false`) mevcut bildirimleri silmez; yeni bildirim yalnızca elle taramayla üretilir.
+
 ## 10. Üçüncü taraf bildirimi
 
 İmaj derlenirken `npm run licenses:notices` ile üretim bağımlılıklarından `THIRD-PARTY-NOTICES.md` oluşturulur ve imajda `/app/THIRD-PARTY-NOTICES.md` ile arayüz kökünde **`/THIRD-PARTY-NOTICES.md`** olarak sunulur (MIT/BSD/Apache dağıtımda telif bildirimi şartı). Sekiz paket lisans dosyasını yayımlamaz; bildirimde lisans türü ve kaynak adresi yazılıdır (LEGAL-NOTES §2). Ticari dağıtımdan önce bu dosyayı ve ürün adı/marka taramasını hukuki olarak gözden geçirin.
@@ -462,4 +477,4 @@ $D stop app && $D run --rm demo-reset && $D up -d app
 
 ## 12. Bilinen sınırlar
 
-Tek uygulama örneği varsayımı (bellek içi oran sınırı; lisans durumu ve cihaz koltukları tek kurulum içindir); uygulama kullanıcıları için TOTP isteğe bağlıdır, şirket düzeyinde zorunlu kılma yoktur (lisans yönetim paneli için TOTP zorunludur: LICENSING.md); MFA sırrı `JWT_SECRET`'ten türetilen anahtarla şifrelenir, `JWT_SECRET` değişirse kayıtlı MFA sırları çözülemez (kullanıcıların MFA'sı yönetici tarafından sıfırlanır); lisanslama müşteri sunucusunda çalıştığından **%100 kırılamaz değildir** (LICENSING.md §1, §10); çevrimdışı lisans yıllık yenilenir; `users` tablosu çalışma zamanı rolüne tüm kiracılar için açıktır (giriş bunu gerektirir; kolon yetkisi/ayrı giriş rolü sonraya); dışa aktarma bellek içi üretilir (eşzamanlılık kapısı ve satır tavanı ile sınırlı); yıl sonu kapanış/devir ve kur değerlemesi (M7b) mali müşavir teyidine bağlıdır ve henüz yoktur; yedekleme/saklama/kişisel veri politikası hukuken **doğrulanmamıştır** (LEGAL-NOTES §5); imaj kayıt defterine yayınlanmaz ve Caddy TLS profili otomatik sınanmaz.
+Tek uygulama örneği varsayımı (bellek içi oran sınırı; bildirim zamanlayıcısı bundan **muaftır**, çok örnekte advisory kilidiyle güvenlidir, §9b; lisans durumu ve cihaz koltukları tek kurulum içindir); uygulama kullanıcıları için TOTP isteğe bağlıdır, şirket düzeyinde zorunlu kılma yoktur (lisans yönetim paneli için TOTP zorunludur: LICENSING.md); MFA sırrı `JWT_SECRET`'ten türetilen anahtarla şifrelenir, `JWT_SECRET` değişirse kayıtlı MFA sırları çözülemez (kullanıcıların MFA'sı yönetici tarafından sıfırlanır); lisanslama müşteri sunucusunda çalıştığından **%100 kırılamaz değildir** (LICENSING.md §1, §10); çevrimdışı lisans yıllık yenilenir; `users` tablosu çalışma zamanı rolüne tüm kiracılar için açıktır (giriş bunu gerektirir; kolon yetkisi/ayrı giriş rolü sonraya); dışa aktarma bellek içi üretilir (eşzamanlılık kapısı ve satır tavanı ile sınırlı); yıl sonu kapanış/devir ve kur değerlemesi (M7b) mali müşavir teyidine bağlıdır ve henüz yoktur; yedekleme/saklama/kişisel veri politikası hukuken **doğrulanmamıştır** (LEGAL-NOTES §5); imaj kayıt defterine yayınlanmaz ve Caddy TLS profili otomatik sınanmaz.

@@ -1,5 +1,5 @@
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronsUpDown, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, ShieldCheck, Sun, X } from 'lucide-react';
+import { Bell, Check, ChevronsUpDown, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, ShieldCheck, Sun, X, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -15,6 +15,7 @@ import { Callout } from '../ui/Feedback';
 import { Field, Input } from '../ui/Field';
 import { Modal } from '../ui/Sheet';
 import { useToast } from '../ui/Toast';
+import { NotificationBell } from '../../features/notifications/NotificationBell';
 import { BrandLogo } from './Brand';
 import { CommandPalette } from './CommandPalette';
 import { navIcon } from './icons';
@@ -141,6 +142,7 @@ export function AppShell() {
             <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[11px] sm:inline">Ctrl K</kbd>
           </button>
           <div className="ml-auto flex items-center gap-1">
+            <NotificationBell />
             <ThemeButton />
             <UserMenu onChangePassword={() => setPasswordOpen(true)} onLogout={() => navigate('/login')} />
           </div>
@@ -322,6 +324,15 @@ function UserMenu({ onChangePassword, onLogout }: { onChangePassword: () => void
             <p className="text-sm">{user.fullName}</p>
             <p className="text-xs text-muted">{user.email}</p>
           </div>
+          <Dropdown.Separator className="my-1 h-px bg-border" />
+          <Dropdown.Item className={menuItem} onSelect={() => navigate('/notifications')}>
+            <Bell className="size-4 text-muted" aria-hidden />
+            {t('shell.notifications')}
+          </Dropdown.Item>
+          <Dropdown.Item className={menuItem} onSelect={() => navigate('/settings/notifications')}>
+            <SlidersHorizontal className="size-4 text-muted" aria-hidden />
+            {t('shell.notificationPrefs')}
+          </Dropdown.Item>
           <Dropdown.Separator className="my-1 h-px bg-border" />
           <Dropdown.Item className={menuItem} onSelect={onChangePassword}>
             <KeyRound className="size-4 text-muted" aria-hidden />

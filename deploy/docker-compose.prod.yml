@@ -72,6 +72,11 @@ services:
       MAIL_FROM: ${MAIL_FROM:-}
       APP_BASE_URL: ${APP_BASE_URL:-}
       SESSION_MAX_DAYS: ${SESSION_MAX_DAYS:-90}
+      # Bildirim zamanlayıcısı (docs/OPERATIONS.md §9b): tarama aralığı, saklama süresi, e-posta özeti saati
+      NOTIFY_ENABLED: ${NOTIFY_ENABLED:-true}
+      NOTIFY_INTERVAL_MINUTES: ${NOTIFY_INTERVAL_MINUTES:-30}
+      NOTIFY_RETENTION_DAYS: ${NOTIFY_RETENTION_DAYS:-90}
+      NOTIFY_DIGEST_HOUR: ${NOTIFY_DIGEST_HOUR:-8}
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
       DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-60000}
       # Lisans sunucusu (satıcı); imajda varsayılan adres gömülüyse boş bırakılabilir. Çıkış HTTPS (443) izni gerekir.

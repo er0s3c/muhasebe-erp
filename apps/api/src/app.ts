@@ -47,6 +47,7 @@ import { landedRoutes } from './modules/landed/routes';
 import { expenseRoutes } from './modules/expenses/routes';
 import { employeeLedgerRoutes } from './modules/employee-ledger/routes';
 import { directoryRoutes } from './modules/directory/routes';
+import { notificationRoutes } from './modules/notifications/routes';
 import { consolidationRoutes } from './modules/consolidation/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { yearEndRoutes } from './modules/yearend/routes';
@@ -235,6 +236,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(expenseRoutes);
   await app.register(employeeLedgerRoutes);
   await app.register(directoryRoutes);
+  await app.register(notificationRoutes);
   await app.register(consolidationRoutes);
   await app.register(treasuryRoutes);
   await app.register(exportRoutes);

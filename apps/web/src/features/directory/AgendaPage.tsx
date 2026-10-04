@@ -57,7 +57,7 @@ export function AgendaRow({ item, compact, onEdit }: { item: AgendaItem; compact
   );
 }
 
-/** Ajanda: gecikmiş / bugün / yaklaşan listeleri. Hatırlatma ofseti yalnızca veridir; bildirim gönderilmez. */
+/** Ajanda: gecikmiş / bugün / yaklaşan listeleri. Hatırlatma ofseti Bildirimler (agenda_reminder) tarafından kullanılır. */
 export function AgendaPage() {
   const { t } = useTranslation();
   const can = useCan();

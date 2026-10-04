@@ -8,7 +8,10 @@ import type {
   ChequeStatus,
   GuaranteeDirection,
   GuaranteeExpiryState,
+  LeadUnit,
   MaturityBucket,
+  NotificationKind,
+  NotificationSeverity,
 } from '@erp/shared';
 
 export interface Account {
@@ -3346,4 +3349,56 @@ export interface ClosingPreviewData {
   accountCount: number;
   closingEntry: { date: string; description: string; lines: ClosingPreviewLine[]; totals: { debitBase: string; creditBase: string } } | null;
   carryEntry: { date: string; description: string; lines: ClosingPreviewLine[] } | null;
+}
+
+// --- Bildirimler -----------------------------------------------------------------------------------------------------
+
+export interface NotificationItem {
+  id: string;
+  kind: NotificationKind;
+  severity: NotificationSeverity;
+  /** Genel metin: yalnızca sayı; ad, kimlik, tutar yoktur. */
+  title: string;
+  body: string;
+  /** Arayüz içi yol. */
+  link: string;
+  count: number;
+  createdAt: string;
+  readAt: string | null;
+  dismissedAt: string | null;
+  resolvedAt: string | null;
+}
+
+export interface NotificationList {
+  notifications: NotificationItem[];
+  truncated: boolean;
+  unreadCount: number;
+}
+
+export interface NotificationCount {
+  count: number;
+  hasCritical: boolean;
+}
+
+export interface NotificationPreference {
+  kind: NotificationKind;
+  inApp: boolean;
+  email: boolean;
+  leadDays: number | null;
+  leadDefault: number | null;
+  leadUnit: LeadUnit | null;
+  leadMin: number | null;
+  leadMax: number | null;
+  /** Varsayılan eşik, kaynak modülün kendi şirket ayarından geliyor (ör. teminat mektubu uyarı günü). */
+  leadFromSetting: boolean;
+}
+
+export interface NotificationPreferences {
+  kinds: NotificationPreference[];
+  /** Sunucuda e-posta (SMTP) yapılandırılmış mı: değilse e-posta özeti seçeneği kapalıdır. */
+  emailAvailable: boolean;
+}
+
+export interface NotificationScanResult {
+  result: { skipped: boolean; users: number; created: number; resolved: number; pruned: number; digests: number };
 }

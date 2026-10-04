@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   BadgeCheck,
+  Bell,
   BarChart3,
   BookMarked,
   BookOpen,
@@ -58,6 +59,7 @@ import {
 /** Modül kaydındaki (shared) ikon adı -> bileşen */
 const NAV_ICONS: Record<string, LucideIcon> = {
   'layout-dashboard': LayoutDashboard,
+  bell: Bell,
   'badge-check': BadgeCheck,
   'monitor-smartphone': MonitorSmartphone,
   'book-open': BookOpen,
