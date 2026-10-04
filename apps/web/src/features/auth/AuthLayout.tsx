@@ -11,7 +11,7 @@ export function AuthLayout({ title, subtitle, children, footer }: { title: strin
   return (
     <div className="grid min-h-full lg:grid-cols-[1.05fr_1fr]">
       <aside className="hidden flex-col justify-between bg-inverted p-12 text-on-inverted lg:flex">
-        <BrandLogo onDark className="h-10" />
+        <BrandLogo onDark className="h-12" />
         <div className="max-w-md">
           <h2 className="text-heading-lg">{t('app.tagline')}</h2>
           <ul className="mt-10 flex flex-col gap-3.5">

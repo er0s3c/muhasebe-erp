@@ -9,7 +9,7 @@ export function BrandLogo({ mark = false, onDark = false, className }: { mark?: 
   const light = mark ? '/logo-mark.webp' : '/logo.webp';
   const dark = mark ? '/logo-mark-on-dark.webp' : '/logo-on-dark.webp';
   const size = mark ? { width: 256, height: 192 } : { width: 960, height: 190 };
-  const base = cn('w-auto max-w-none select-none', className);
+  const base = cn('w-fit max-w-none shrink-0 select-none', className);
   if (onDark) return <img src={dark} alt="Ada Muhasebe" className={base} draggable={false} {...size} />;
   return (
     <>
