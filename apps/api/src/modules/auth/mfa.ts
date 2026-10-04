@@ -11,7 +11,7 @@ import { AppError, unprocessable } from '../../http/errors';
 import { assertSameOrigin } from '../../http/origin';
 import { recordSecurityEvent } from './events';
 
-const ISSUER = 'Muhasebe ERP';
+const ISSUER = 'Ada Muhasebe';
 const RECOVERY_CODE_COUNT = 8;
 export const MFA_MAX_FAILS = 5;
 export const MFA_WINDOW_MS = 15 * 60 * 1000;

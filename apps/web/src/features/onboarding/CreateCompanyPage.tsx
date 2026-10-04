@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { z } from 'zod';
 import { SECTORS, createCompanySchema, type CreateCompanyInput } from '@erp/shared';
-import { BrandMark } from '../../components/layout/Brand';
+import { BrandLogo } from '../../components/layout/Brand';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Callout } from '../../components/ui/Feedback';
@@ -66,9 +66,8 @@ export function CreateCompanyPage() {
   return (
     <div className="min-h-full bg-bg px-4 py-10 sm:py-16">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-8 flex items-center gap-3">
-          <BrandMark />
-          <span className="text-lg">{t('app.name')}</span>
+        <div className="mb-8">
+          <BrandLogo className="h-10" />
         </div>
         <div className="grid gap-6 md:grid-cols-[1fr_280px]">
           <Card className="p-6 sm:p-8">
