@@ -8,7 +8,7 @@ import {
   type NotificationListQuery,
   type NotificationPreferenceView,
   type NotificationSeverity,
-  type Role,
+  type PermissionSet,
   type UpdateNotificationPreferencesInput,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
@@ -38,22 +38,28 @@ const UNREAD = sql`read_at is null and dismissed_at is null and resolved_at is n
 const ACTIVE = sql`dismissed_at is null and resolved_at is null`;
 
 /**
+ * Kullanıcının GÖREBİLECEĞİ türler (etkin izin + açık modül). Modül erişimi sonradan kapatılan üyenin eski açık bildirimleri, bir sonraki tarama
+ * onları çözene kadar da listelenmez ve sayılmaz.
+ */
+const visibleKinds = (kinds: readonly NotificationKind[]) => (kinds.length === 0 ? sql`false` : sql`kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)})`);
+
+/**
  * Kullanıcının kendi bildirimleri (RLS ayrıca kullanıcıya süzer: başkasının satırı hiçbir sorguda görünmez).
  * `status`: active = kapatılmamış ve çözülmemiş; unread = bunlardan okunmamış; all = geçmiş dahil.
  */
-export async function listNotifications(tx: Tx, q: NotificationListQuery) {
-  const where = [q.status === 'unread' ? UNREAD : q.status === 'active' ? ACTIVE : sql`true`];
+export async function listNotifications(tx: Tx, q: NotificationListQuery, kinds: readonly NotificationKind[]) {
+  const where = [q.status === 'unread' ? UNREAD : q.status === 'active' ? ACTIVE : sql`true`, visibleKinds(kinds)];
   if (q.kind) where.push(sql`kind = ${q.kind}`);
   const page: PageQuery = { limit: q.limit, offset: q.offset };
   const res = await tx.execute<NotificationView>(sql`
     select ${COLS} from notifications where ${sql.join(where, sql` and `)} order by created_at desc, id desc ${pageSql(page)}`);
   const { rows, truncated } = paged(res.rows, page);
-  return { notifications: rows, truncated, unreadCount: (await unreadCount(tx)).count };
+  return { notifications: rows, truncated, unreadCount: (await unreadCount(tx, kinds)).count };
 }
 
-export async function unreadCount(tx: Tx): Promise<{ count: number; hasCritical: boolean }> {
+export async function unreadCount(tx: Tx, kinds: readonly NotificationKind[]): Promise<{ count: number; hasCritical: boolean }> {
   const r = await tx.execute<{ n: number; crit: boolean }>(sql`
-    select count(*)::int as n, coalesce(bool_or(severity = 'critical'), false) as crit from notifications where ${UNREAD}`);
+    select count(*)::int as n, coalesce(bool_or(severity = 'critical'), false) as crit from notifications where ${UNREAD} and ${visibleKinds(kinds)}`);
   return { count: r.rows[0]?.n ?? 0, hasCritical: r.rows[0]?.crit ?? false };
 }
 
@@ -73,8 +79,8 @@ export async function dismiss(tx: Tx, id: string): Promise<NotificationView> {
   return r.rows[0];
 }
 
-export async function markAllRead(tx: Tx): Promise<{ updated: number }> {
-  const r = await tx.execute<{ id: string }>(sql`update notifications set read_at = now() where ${UNREAD} returning id`);
+export async function markAllRead(tx: Tx, kinds: readonly NotificationKind[]): Promise<{ updated: number }> {
+  const r = await tx.execute<{ id: string }>(sql`update notifications set read_at = now() where ${UNREAD} and ${visibleKinds(kinds)} returning id`);
   return { updated: r.rows.length };
 }
 
@@ -82,7 +88,7 @@ export async function markAllRead(tx: Tx): Promise<{ updated: number }> {
 
 export interface PrefCtx {
   userId: string;
-  role: Role;
+  permissions: PermissionSet;
   enabledModules: ReadonlySet<string>;
   companyId: string;
   today: string;
@@ -96,7 +102,7 @@ export async function getPreferences(tx: Tx, ctx: PrefCtx, emailAvailable: boole
   const byKind = new Map(rows.map((r) => [r.kind, r]));
   const scanCtx = { tx, companyId: ctx.companyId, today: ctx.today, time: '00:00', enabled: ctx.enabledModules, license: null, ownerOrg: false } satisfies ScanCtx;
   const kinds: (NotificationPreferenceView & { leadFromSetting: boolean })[] = [];
-  for (const kind of eligibleNotificationKinds(ctx.role, ctx.enabledModules)) {
+  for (const kind of eligibleNotificationKinds(ctx.permissions, ctx.enabledModules)) {
     const def = notificationKindDef(kind);
     const p = byKind.get(kind);
     const src = NOTIFICATION_SOURCES[kind];
@@ -127,7 +133,7 @@ export async function updatePreferences(tx: Tx, ctx: PrefCtx, input: UpdateNotif
   );
   for (const p of input.preferences) {
     const def = notificationKindDef(p.kind);
-    if (!canReceiveKind(def, ctx.role, ctx.enabledModules)) {
+    if (!canReceiveKind(def, ctx.permissions, ctx.enabledModules)) {
       throw unprocessable('Bu bildirim türü bu şirkette ya da rolünüz için kullanılamıyor', 'NOTIFICATION_KIND_UNAVAILABLE', { kind: p.kind });
     }
     if (p.leadDays != null) {

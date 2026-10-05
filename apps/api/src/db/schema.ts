@@ -291,6 +291,37 @@ export const memberships = pgTable(
   ],
 );
 
+/**
+ * Kullanıcı bazlı modül erişimi (üye + erişim alanı): satır yoksa rol varsayılanı geçerlidir. `module_key` bir erişim alanıdır
+ * (kayıt modülü anahtarı; bkz. packages/shared module-access). Yalnızca sahip/yönetici yazar; üye yalnızca kendi satırlarını okur.
+ */
+export const memberModuleAccess = pgTable(
+  'member_module_access',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    moduleKey: text().notNull(),
+    level: text().notNull(),
+    setBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    setAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    note: text(),
+  },
+  (t) => [
+    unique('member_module_access_uq').on(t.companyId, t.userId, t.moduleKey),
+    index('member_module_access_user_idx').on(t.companyId, t.userId),
+    check('member_module_access_level_ck', sql`${t.level} in ('none','read','write')`),
+    check('member_module_access_key_ck', sql`${t.moduleKey} ~ '^[a-z][a-z0-9_.]{2,59}$'`),
+    check('member_module_access_note_ck', sql`${t.note} is null or length(${t.note}) <= 300`),
+  ],
+);
+
 export const auditLog = pgTable(
   'audit_log',
   {

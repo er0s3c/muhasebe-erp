@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { calcInvoice, calcLine } from './invoice-calc';
 import { createInvoiceSchema, defaultMappingCodes, ACCOUNT_MAPPING_KEYS } from './schemas/invoices';
-import { hasPermission } from './permissions';
+import { roleHasDefault as hasPermission } from './permissions';
 
 const line = (quantity: string, unitPrice: string, vatRate: string, discountPct = '0') => ({ quantity, unitPrice, vatRate, discountPct });
 

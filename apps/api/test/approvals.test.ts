@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import type { Role } from '@erp/shared';
+import { effectivePermissions, type Role } from '@erp/shared';
 import { withContext } from '../src/db/client';
 import { cancelRequest, decide, requestApproval, registerApprovalHandler } from '../src/modules/approvals/service';
 import { resolveParam } from '../src/modules/subcontracts/params';
@@ -17,7 +17,7 @@ describe('inşaat parametreleri ve onay motoru (B2a)', async () => {
     const c = client(app, s.token, company.id);
     const orgId = await orgOf(app, s.token);
     const me = app.jwt.decode<{ sub: string }>(s.token)!.sub;
-    const ctxFor = (userId: string, role: Role) => ({ companyId: company.id, userId, role });
+    const ctxFor = (userId: string, role: Role) => ({ companyId: company.id, userId, role, permissions: effectivePermissions(role) });
     const run = <T>(userId: string, fn: Parameters<typeof withContext<T>>[2]) => withContext(handle.db, { userId, orgId, companyId: company.id }, fn);
     return { s, company, c, orgId, me, ctxFor, run };
   }

@@ -1,9 +1,11 @@
 import { and, asc, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import {
   hasPermission,
+  roleDefaultPermissions,
   type ApprovalDocType,
   type CreateApprovalRuleInput,
   type DecideApprovalInput,
+  type PermissionSet,
   type Role,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
@@ -14,6 +16,8 @@ export interface ApprovalCtx {
   companyId: string;
   userId: string;
   role: Role;
+  /** Etkin izinler (rol + kullanıcı bazlı modül erişimi): karar yetkisi bunlarla sınanır, yalnızca rol eşleşmesi yetmez. */
+  permissions: PermissionSet;
 }
 
 type StepSpec = { approverRole: string | null; approverUserId: string | null; label: string | null };
@@ -49,8 +53,11 @@ async function assertApprovers(tx: Tx, companyId: string, input: CreateApprovalR
   const perm = approvePermission(input.docType);
   const manage = input.docType === 'purchase_request' ? 'procurement.manage' : 'subcontracts.manage';
   // Karar ucuna erişim (okuma) ve belge türünde onay ya da yönetim yetkisi (ör. şantiye şefi ilk adımı onaylayabilir; salt-okuyucu onaylayamaz)
-  const canDecide = (role: string) =>
-    hasPermission(role as Role, 'subcontracts.read') && (hasPermission(role as Role, perm) || hasPermission(role as Role, manage));
+  // Kural kurulumunda rol şablonuna bakılır (kullanıcı istisnası başkasına görünmez); çalışma anında etkin izin ayrıca sınanır (stepMatches)
+  const canDecide = (role: string) => {
+    const p = roleDefaultPermissions(role as Role);
+    return hasPermission(p, 'subcontracts.read') && (hasPermission(p, perm) || hasPermission(p, manage));
+  };
   for (const [i, s] of input.steps.entries()) {
     if (s.role && !canDecide(s.role)) {
       throw unprocessable(`${i + 1}. adımın rolü bu belge türünü onaylama iznine sahip değil`, 'APPROVER_INVALID', { step: i + 1 });
@@ -179,10 +186,13 @@ export async function requestsForDoc(tx: Tx, docType: ApprovalDocType, docId: st
 }
 
 function stepMatches(step: StepSpec, ctx: ApprovalCtx, docType: string): boolean {
-  if (step.approverUserId) return step.approverUserId === ctx.userId;
-  if (step.approverRole) return step.approverRole === ctx.role;
+  // Rol/kullanıcı eşleşmesi yetmez: belge türünde etkin onay (ya da yönetim) izni de gerekir; modülü "Erişim yok"/"Sadece görüntüle" yapılan üye karar veremez
+  const manage = docType === 'purchase_request' ? 'procurement.manage' : 'subcontracts.manage';
+  const mayDecide = hasPermission(ctx.permissions, approvePermission(docType)) || hasPermission(ctx.permissions, manage);
+  if (step.approverUserId) return step.approverUserId === ctx.userId && mayDecide;
+  if (step.approverRole) return step.approverRole === ctx.role && mayDecide;
   // Varsayılan adım: belge türüne göre onaylayıcı izni
-  return hasPermission(ctx.role, approvePermission(docType));
+  return hasPermission(ctx.permissions, approvePermission(docType));
 }
 
 /** Bekleyen taleplerden sıradaki adımı bu kullanıcı için olanlar. */
@@ -231,7 +241,7 @@ export async function cancelRequest(tx: Tx, ctx: ApprovalCtx, requestId: string)
   await tx.execute(sql`select 1 from approval_requests where id = ${requestId} for update`);
   const req = await getRequest(tx, requestId);
   if (req.status !== 'pending') throw unprocessable('Bu talep zaten sonuçlanmış', 'APPROVAL_NOT_PENDING');
-  if (req.requestedBy !== ctx.userId && !hasPermission(ctx.role, req.docType === 'purchase_request' ? 'procurement.approve' : 'subcontracts.approve')) throw forbidden('Talebi yalnızca gönderen veya onaylayıcı geri çekebilir');
+  if (req.requestedBy !== ctx.userId && !hasPermission(ctx.permissions, req.docType === 'purchase_request' ? 'procurement.approve' : 'subcontracts.approve')) throw forbidden('Talebi yalnızca gönderen veya onaylayıcı geri çekebilir');
   await tx.update(approvalRequests).set({ status: 'cancelled', completedAt: new Date() }).where(eq(approvalRequests.id, requestId));
   return getRequest(tx, requestId);
 }

@@ -11,7 +11,7 @@ import {
 import { closeFiscalYearSchema, createFiscalYearSchema, previewFiscalYearQuerySchema, reopenFiscalYearSchema } from './schemas/year-end';
 import { trialBalanceQuerySchema } from './schemas/ledger';
 import { ACCOUNT_MAPPING_KEYS, defaultMappingCodes } from './schemas/invoices';
-import { hasPermission } from './permissions';
+import { roleHasDefault as hasPermission } from './permissions';
 
 const ref = (code: string, name: string) => ({ id: `id-${code}`, code, name });
 const refs = { profit: ref('590', 'Dönem Net Kârı'), loss: ref('591', 'Dönem Net Zararı'), retainedProfit: ref('570', 'Geçmiş Yıllar Kârları'), retainedLoss: ref('580', 'Geçmiş Yıllar Zararları') };

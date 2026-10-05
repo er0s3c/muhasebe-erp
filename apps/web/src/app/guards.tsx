@@ -1,7 +1,7 @@
 import { LockKeyhole, ShieldOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Outlet, useLocation, useMatches } from 'react-router-dom';
-import type { Permission } from '@erp/shared';
+import { ACCESS_AREAS, areaOfPermission, type Permission } from '@erp/shared';
 import { EmptyState, PageLoading } from '../components/ui/Feedback';
 import { useNavigation } from '../lib/queries';
 import { useSession } from '../lib/session';
@@ -74,15 +74,23 @@ export interface RouteHandle {
   permission: Permission | null;
 }
 
-/** "Bu sayfayı görme yetkiniz yok" ekranı (UI-7). */
-export function ForbiddenPage() {
+/**
+ * "Bu sayfayı görme yetkiniz yok" ekranı (UI-7). Neden yönetici tarafından verilen özel modül erişimiyse (erişim yok / sadece görüntüle)
+ * bunu açıkça söyler; aksi halde rolün olağan açıklamasını gösterir.
+ */
+export function ForbiddenPage({ permission }: { permission?: Permission | null }) {
   const { t } = useTranslation();
+  const { data } = useNavigation();
+  const area = permission ? areaOfPermission(permission) : null;
+  const custom = area ? data?.moduleAccess?.[area] : undefined;
+  const isWrite = !!(area && permission && (ACCESS_AREAS[area].write as readonly string[]).includes(permission));
+  const reason: 'blocked' | 'readOnly' | 'role' = custom === 'none' ? 'blocked' : custom === 'read' && isWrite ? 'readOnly' : 'role';
   return (
-    <div data-testid="forbidden-page">
+    <div data-testid="forbidden-page" data-reason={reason}>
       <EmptyState
         icon={<ShieldOff className="size-5" />}
-        title={t('common.forbiddenTitle')}
-        description={t('common.forbiddenDesc')}
+        title={reason === 'blocked' ? t('common.moduleBlockedTitle') : t('common.forbiddenTitle')}
+        description={reason === 'blocked' ? t('common.moduleBlockedDesc') : reason === 'readOnly' ? t('common.moduleReadOnlyDesc') : t('common.forbiddenDesc')}
         action={
           <Link to="/">
             <Button variant="secondary">{t('common.goHome')}</Button>
@@ -105,6 +113,6 @@ export function RequireRoutePermission() {
   const permission = handle?.permission ?? null;
   if (!permission) return <Outlet />;
   if (isPending) return <PageLoading />;
-  if (!data?.permissions.includes(permission)) return <ForbiddenPage />;
+  if (!data?.permissions.includes(permission)) return <ForbiddenPage permission={permission} />;
   return <Outlet />;
 }

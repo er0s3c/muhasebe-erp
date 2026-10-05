@@ -16,6 +16,7 @@ import {
 import { notificationListQuerySchema, updateNotificationPreferencesSchema } from './schemas/notifications';
 import { MODULES, resolveEnabledModules } from './module-registry';
 import { PERMISSIONS } from './permissions';
+import { effectivePermissions } from './module-access';
 
 describe('bildirim türleri sözlüğü', () => {
   it('her tür tam bir kez tanımlıdır; modül ve izin gerçek kayıtlardandır', () => {
@@ -34,29 +35,29 @@ describe('bildirim türleri sözlüğü', () => {
 
   it('kaynak izni ve modül kapısı: izleyici İK/ajanda bildirimi almaz; modül kapalıysa hiçbir rol almaz', () => {
     const all = resolveEnabledModules('CONSTRUCTION', []);
-    expect(eligibleNotificationKinds('viewer', all)).toEqual(['cheque_due', 'guarantee_expiring', 'approval_pending', 'receivable_overdue', 'stock_below_min']);
-    expect(eligibleNotificationKinds('viewer', all)).not.toContain('foreign_doc_expiring');
-    expect(eligibleNotificationKinds('owner', all)).toContain('license_expiring');
-    expect(eligibleNotificationKinds('admin', all)).not.toContain('license_expiring'); // yalnız sahip
-    expect(canReceiveKind(notificationKindDef('foreign_doc_expiring'), 'accountant', all)).toBe(true);
-    expect(canReceiveKind(notificationKindDef('payroll_open'), 'accountant', all)).toBe(true);
-    expect(canReceiveKind(notificationKindDef('attendance_open'), 'accountant', all)).toBe(false); // hr.manage yok
+    expect(eligibleNotificationKinds(effectivePermissions('viewer'), all)).toEqual(['cheque_due', 'guarantee_expiring', 'approval_pending', 'receivable_overdue', 'stock_below_min']);
+    expect(eligibleNotificationKinds(effectivePermissions('viewer'), all)).not.toContain('foreign_doc_expiring');
+    expect(eligibleNotificationKinds(effectivePermissions('owner'), all)).toContain('license_expiring');
+    expect(eligibleNotificationKinds(effectivePermissions('admin'), all)).not.toContain('license_expiring'); // yalnız sahip
+    expect(canReceiveKind(notificationKindDef('foreign_doc_expiring'), effectivePermissions('accountant'), all)).toBe(true);
+    expect(canReceiveKind(notificationKindDef('payroll_open'), effectivePermissions('accountant'), all)).toBe(true);
+    expect(canReceiveKind(notificationKindDef('attendance_open'), effectivePermissions('accountant'), all)).toBe(false); // hr.manage yok
     const noForeign = resolveEnabledModules('CONSTRUCTION', [{ module: 'hr.foreign', enabled: false }]);
-    expect(canReceiveKind(notificationKindDef('foreign_doc_expiring'), 'owner', noForeign)).toBe(false);
+    expect(canReceiveKind(notificationKindDef('foreign_doc_expiring'), effectivePermissions('owner'), noForeign)).toBe(false);
     const noCheques = resolveEnabledModules('CONSTRUCTION', [{ module: 'treasury.cheques', enabled: false }]);
-    expect(canReceiveKind(notificationKindDef('cheque_due'), 'owner', noCheques)).toBe(false);
-    expect(canReceiveKind(notificationKindDef('guarantee_expiring'), 'owner', noCheques)).toBe(true);
+    expect(canReceiveKind(notificationKindDef('cheque_due'), effectivePermissions('owner'), noCheques)).toBe(false);
+    expect(canReceiveKind(notificationKindDef('guarantee_expiring'), effectivePermissions('owner'), noCheques)).toBe(true);
   });
 
   it('taslak bildirimi: fatura ya da yevmiye kaynağından biri yetkili ve açık olmalı', () => {
     const all = resolveEnabledModules('CONSTRUCTION', []);
     const def = notificationKindDef('draft_stale');
-    expect(canReceiveKind(def, 'sales', all)).toBe(true); // invoices.manage
-    expect(canReceiveKind(def, 'viewer', all)).toBe(false);
-    expect(canReceiveKind(def, 'accountant', all)).toBe(true);
+    expect(canReceiveKind(def, effectivePermissions('sales'), all)).toBe(true); // invoices.manage
+    expect(canReceiveKind(def, effectivePermissions('viewer'), all)).toBe(false);
+    expect(canReceiveKind(def, effectivePermissions('accountant'), all)).toBe(true);
     const noInvoices = resolveEnabledModules('CONSTRUCTION', [{ module: 'core.invoices', enabled: false }]);
-    expect(canReceiveKind(def, 'sales', noInvoices)).toBe(false);
-    expect(canReceiveKind(def, 'accountant', noInvoices)).toBe(true); // yevmiye taslağı
+    expect(canReceiveKind(def, effectivePermissions('sales'), noInvoices)).toBe(false);
+    expect(canReceiveKind(def, effectivePermissions('accountant'), noInvoices)).toBe(true); // yevmiye taslağı
   });
 });
 

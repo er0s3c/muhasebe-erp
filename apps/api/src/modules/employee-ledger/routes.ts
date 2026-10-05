@@ -5,7 +5,6 @@ import {
   createAdvanceSchema,
   employeeBalancesQuerySchema,
   employeeStatementQuerySchema,
-  hasPermission,
   idParam,
   outstandingAdvancesQuerySchema,
   repayAdvanceSchema,
@@ -15,7 +14,6 @@ import {
   verifyLedgerSettingsSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
-import { forbidden } from '../../http/errors';
 import type { LedgerCtx } from '../ledger/journal';
 import { getRun } from '../payroll/runs';
 import { getLedgerSettings } from './hooks';
@@ -47,7 +45,7 @@ export const employeeLedgerRoutes: FastifyPluginAsync = async (app) => {
   const read = { module: MODULE, permission: 'hr.payroll' } as const;
   const manage = { module: MODULE, permission: 'hr.payroll_manage' } as const;
   const needTreasury = (c: TenantCtx) => {
-    if (!hasPermission(c.role, 'treasury.post')) throw forbidden();
+    c.require('treasury.post');
   };
   const runParam = z.object({ id: z.uuid() });
 

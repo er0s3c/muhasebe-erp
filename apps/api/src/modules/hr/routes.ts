@@ -8,7 +8,6 @@ import {
   createEmployeeSchema,
   employeeListQuerySchema,
   exportEmployeeDataSchema,
-  hasPermission,
   idParam,
   rehireEmployeeSchema,
   reopenAttendanceMonthSchema,
@@ -23,7 +22,6 @@ import {
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { pageOf } from '../../http/paging';
-import { forbidden } from '../../http/errors';
 import {
   createEmployee,
   exportEmployeeData,
@@ -124,7 +122,7 @@ export const hrRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     '/api/privacy/employees/:id/export',
     tenantRoute(app, privacy, async (c) => {
-      if (!hasPermission(c.role, 'hr.sensitive')) throw forbidden();
+      c.require('hr.sensitive');
       return exportEmployeeData(c.tx, hrCtx(c), idParam.parse(c.req.params).id, exportEmployeeDataSchema.parse(c.req.body).reason);
     }),
   );

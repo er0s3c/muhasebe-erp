@@ -18,6 +18,7 @@ import {
   createTreasuryTransactionSchema,
   isoYear,
   monthBounds,
+  PERMISSIONS,
   todayIso,
   toDbRate,
   type CreateDeliveryNoteInput,
@@ -505,8 +506,8 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
     lines: [{ lineKey: keyOf('1.1'), cumulativeQty: '8000' }, { lineKey: keyOf('1.2'), cumulativeQty: '6' }, { lineKey: keyOf('1.3'), cumulativeQty: '100' }],
     deductions: [],
   });
-  const submitted = await submitProgress(tx, pgctx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' }, hk1.payment.id as string);
-  await decide(tx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' }, submitted.approvals[0]!.id, { decision: 'approve' });
+  const submitted = await submitProgress(tx, pgctx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner', permissions: new Set(PERMISSIONS) }, hk1.payment.id as string);
+  await decide(tx, { companyId: ctx.companyId, userId: ctx.userId, role: 'owner', permissions: new Set(PERMISSIONS) }, submitted.approvals[0]!.id, { decision: 'approve' });
   // Taşerona malzeme: depodan 100 m kablo verilir (stok sarfı, projeye etiketli); ikinci hakedişte bakiye kadar mahsup edilir
   const givenMaterial = await giveMaterial(tx, stockCtx, sub.id, {
     date: date(9, 26), warehouseId: main.id, note: 'Kat tesisatı kablosu (demo)', lines: [{ itemId: await itemId('NYY kablo 3x2,5 mm²'), quantity: '100', wbsId: w.elektrik }],
@@ -520,7 +521,7 @@ async function seedProjects(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string>
   });
 
   // ---- İşveren sözleşmesi ve alınan hakediş (Faz B2e): Kuzey Villa ------------------------------------
-  const ctxOwner = { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' as const };
+  const ctxOwner = { companyId: ctx.companyId, userId: ctx.userId, role: 'owner' as const, permissions: new Set(PERMISSIONS) };
   const emp = await createSubcontract(tx, pgctx, {
     direction: 'receivable', projectId: kuzey, partyId: employer.id, title: 'Anahtar teslim villa (işveren sözleşmesi)', currencyCode: 'TRY', paymentDays: 30, startDate: date(8, 15), endDate: date(12, 15),
   });

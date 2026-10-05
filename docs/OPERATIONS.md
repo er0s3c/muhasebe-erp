@@ -260,6 +260,23 @@ Compose dikkat: kabuk ortam değişkenleri `--env-file` değerlerinden **önceli
 - **Üye işlemleri:** başka şirketlerde de üyeliği olan kullanıcının iki adımlı doğrulamasını sıfırlamak ya da mevcut bir kullanıcıyı şirkete eklemek, işlemi yapanın o kullanıcının üye olduğu her şirkette en az onun rütbesinde sahip/yönetici olmasını ister (`MEMBER_OUTRANKS_YOU`); gerekirse ilgili şirketin sahibi yapar.
 - **Çıkış ve parola değişikliği** açık oturumların erişim belirteçlerini de hemen geçersiz kılar (diğer sekmeler/cihazlar yeniden giriş ister).
 
+### 4b. Kullanıcı bazlı modül erişimi (sahip/yönetici)
+
+Rol herkesin varsayılan yetkisidir; bir kullanıcının belirli bir modülde farklı davranmasını istiyorsanız Ayarlar > **Kullanıcılar ve yetkiler** sayfasında kullanıcının satırındaki **Modül erişimi** düğmesini kullanın. Her modül için: *Rol varsayılanı* (hiçbir şey değişmez), *Erişim yok* (menüden kalkar, adres yetki ekranı gösterir, işlemler reddedilir), *Sadece görüntüle* (liste ve ayrıntıyı görür; ekle/düzenle/kaydet/onayla yok) ya da *Görüntüle ve düzenle* (rolün izin vermediği modülde bile kayıt açabilir). Kaydetmeden önce değişiklik özeti onay ister; değişiklik kullanıcının bir sonraki isteğinde hemen geçerlidir (oturumu kapatması gerekmez). Kullanıcı listesinde özel erişimi olanlar **Özel erişim** rozetiyle işaretlenir; "Etkin erişim" sekmesi sonucu gösterir; "Tümünü rol varsayılanına döndür" hepsini sıfırlar.
+
+- **Kimler yönetir:** sahipler herkesin (sahipler hariç), yöneticiler yalnızca yönetici olmayan üyelerin erişimini değiştirir. Kimse kendi erişimini değiştiremez; sahibin erişimi kısıtlanamaz; yönetici kendinde olmayan bir yetkiyi başkasına veremez. Kullanıcı bu düğmeyi görmüyorsa kural gereği değiştiremiyordur.
+- **Her zaman role bağlı olanlar** (buradan verilemez): şirket ve üye yönetimi, ayarlar, yıl sonu kapanışı, konsolidasyon, hassas personel verisi (kimlik no, IBAN) ve veri koruma yönetimi, verileri dışa aktarma. Personel modülünü "Görüntüle ve düzenle" yapmak hassas veri görme yetkisi vermez; bordro ayrı bir modüldür.
+- **Rol değiştirilirse** üyenin özel erişim ayarları silinir ve yeni rolün varsayılanı geçerli olur (yanıtta ve ekranda kaç ayarın silindiği bildirilir). Üye şirketten çıkarılırsa da silinir; yeniden eklenirse eski ayarlar geri gelmez. Özel erişimi olan bir üye kendi rolünü değiştiremez; özel erişimi olan yöneticinin rolünü yalnızca sahip değiştirir (kısıt, rol değiştirerek aşılamasın diye).
+- **Menüde görünen bazı modüller birlikte yönetilir:** çek/senet, teminat mektubu ve gider kartları "Kasa ve banka" ile; satış teklif/sipariş ve fiyat listeleri "Fatura ve irsaliye" ile; yabancı işçi takibi "Personel" ile; personel cari ve sosyal güvenlik "Bordro" ile. Raporlar muhasebe alanına bağlıdır ("Muhasebe" erişim yok ise raporlar da kapanır).
+- **İzleme:** her değişiklik denetim kaydına (`audit_log`, tablo `member_module_access`) ve güvenlik olaylarına (`member_module_access_changed`) yazılır:
+
+  ```sql
+  select at, user_id as hedef, meta->>'by' as yapan, meta->'changes' as degisiklik
+    from security_events where event = 'member_module_access_changed' order by at desc limit 100;
+  ```
+
+  Bir kullanıcıya erişim sorunuyla gelinirse API yanıt kodlarına bakın: `MODULE_ACCESS_DENIED` (modül yönetici tarafından kapatıldı), `MODULE_READ_ONLY` (yalnızca görüntüleme), `MODULE_DISABLED` (modül şirketçe kapalı), `FORBIDDEN` (rolün yetkisi yok).
+
 ## 5. Yükseltme
 
 ### Uzaktan güncelleme (sihirbazla kurulmuş müşteri kurulumları)
@@ -394,12 +411,12 @@ select at, email, ip, meta from security_events where event = 'refresh_reuse_det
 select at, event, ip, meta from security_events where email = 'kisi@ornek.com' order by at desc limit 100;
 -- Rol/üyelik değişiklikleri
 select at, email, event, meta from security_events
- where event in ('member_added','member_role_changed','member_removed') order by at desc limit 100;
+ where event in ('member_added','member_role_changed','member_removed','member_module_access_changed') order by at desc limit 100;
 -- Parola sıfırlamaları (operatör komutu via=operator-cli imzalıdır)
 select at, email, meta from security_events where event like 'password_reset%' order by at desc limit 50;
 ```
 
-Olay adları: `login_succeeded`, `login_failed`, `password_changed`, `password_reset_requested`, `password_reset_completed`, `email_verified`, `refresh_reuse_detected`, `member_added`, `member_role_changed`, `member_removed`.
+Olay adları: `login_succeeded`, `login_failed`, `password_changed`, `password_reset_requested`, `password_reset_completed`, `email_verified`, `refresh_reuse_detected`, `member_added`, `member_role_changed`, `member_removed`, `member_module_access_changed`.
 
 `audit_log` (hangi satırı kim/ne zaman değiştirdi) şirket bazlıdır ve **sahip rolüne karşı bile** yalnız-ekleme tetikleyicisiyle (ERP07) korunur. Şişmesi sorun olursa budamak bilinçli bir operatör kararıdır: tetikleyici geçici olarak devre dışı bırakılmalıdır (`ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only`, işlem sonrası yeniden etkinleştirilir). **Kaç yıl saklanması gerektiği doğrulanmamıştır** (LEGAL-NOTES §5); mali müşavir/avukatla teyit etmeden silmeyin.
 

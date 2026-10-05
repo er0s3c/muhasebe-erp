@@ -2,7 +2,6 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   cancelInvoiceSchema,
   createInvoiceSchema,
-  hasPermission,
   idParam,
   itemProfitQuerySchema,
   listInvoicesQuerySchema,
@@ -79,8 +78,8 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, manage, async (c) => {
       const input = createInvoiceSchema.parse(c.req.body);
       // Taslak hazırlama ile muhasebeleştirme ayrı yetkilerdir
-      if (input.post && !hasPermission(c.role, 'invoices.post')) throw forbidden();
-      if (input.matchOverrideReason && !hasPermission(c.role, 'procurement.approve')) throw forbidden('Eşleştirme sapmasını geçirmek için satın alma onay yetkisi gerekir');
+      if (input.post) c.require('invoices.post');
+      if (input.matchOverrideReason && !c.can('procurement.approve')) throw forbidden('Eşleştirme sapmasını geçirmek için satın alma onay yetkisi gerekir');
       const ctx = invoiceCtx(c);
       if (input.post) await lockForPosting(c.tx, input.lines);
       const id = await createInvoiceDraft(c.tx, ctx, input);
@@ -95,8 +94,8 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, manage, async (c) => {
       const { id } = idParam.parse(c.req.params);
       const input = updateInvoiceSchema.parse(c.req.body);
-      if (input.post && !hasPermission(c.role, 'invoices.post')) throw forbidden();
-      if (input.matchOverrideReason && !hasPermission(c.role, 'procurement.approve')) throw forbidden('Eşleştirme sapmasını geçirmek için satın alma onay yetkisi gerekir');
+      if (input.post) c.require('invoices.post');
+      if (input.matchOverrideReason && !c.can('procurement.approve')) throw forbidden('Eşleştirme sapmasını geçirmek için satın alma onay yetkisi gerekir');
       const ctx = invoiceCtx(c);
       if (input.post && input.lines) await lockForPosting(c.tx, input.lines);
       await updateInvoiceDraft(c.tx, ctx, id, input);

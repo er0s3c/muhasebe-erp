@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, ShieldOff, Trash2, Users } from 'lucide-react';
+import { Plus, ShieldOff, SlidersHorizontal, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -14,9 +14,10 @@ import { Modal, Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { useCMutation, useCQuery } from '../../lib/queries';
+import { useCMutation, useCQuery, useNavigation } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import type { Member } from '../../lib/types';
+import { MemberAccessSheet } from './MemberAccessSheet';
 
 type FormInput = z.input<typeof addMemberSchema>;
 
@@ -24,6 +25,10 @@ export function MembersPage() {
   const { t } = useTranslation();
   const toast = useToast();
   const { user } = useSession();
+  const callerRole = useNavigation().data?.role;
+  const [accessFor, setAccessFor] = useState<Member | null>(null);
+  // Rütbe kuralları (sunucu da denetler): kimse kendi erişimini, kimse sahibin erişimini değiştiremez; yöneticininkini yalnızca sahip
+  const canEditAccess = (m: Member) => m.userId !== user?.id && m.role !== 'owner' && (callerRole === 'owner' || m.role !== 'admin');
   const { data, isPending } = useCQuery<{ members: Member[] }>(['members'], '/api/company/members');
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Member | null>(null);
@@ -90,7 +95,7 @@ export function MembersPage() {
                 <Th>{t('settings.members.email')}</Th>
                 <Th>{t('settings.members.role')}</Th>
                 <Th className="w-28">{t('settings.members.mfa')}</Th>
-                <Th className="w-16" />
+                <Th className="w-28" />
               </tr>
             </thead>
             <tbody>
@@ -99,6 +104,11 @@ export function MembersPage() {
                   <Td>
                     <span>{m.fullName}</span>
                     {m.userId === user?.id && <Badge tone="brand" className="ml-2">{t('settings.members.you')}</Badge>}
+                    {m.customAccessCount > 0 && (
+                      <span className="ml-2" data-testid={`custom-access-${m.userId}`} title={t('settings.members.access.customBadgeHint', { count: m.customAccessCount })}>
+                        <Badge tone="warning">{t('settings.members.access.customBadge')}</Badge>
+                      </span>
+                    )}
                   </Td>
                   <Td className="text-muted">{m.email}</Td>
                   <Td>
@@ -110,7 +120,10 @@ export function MembersPage() {
                         changeRole.mutate(
                           { userId: m.userId, role: e.target.value },
                           {
-                            onSuccess: () => toast.success(t('settings.members.roleUpdated')),
+                            onSuccess: (res) => {
+                              const cleared = (res as { clearedModuleAccess?: number } | undefined)?.clearedModuleAccess ?? 0;
+                              toast.success(cleared > 0 ? t('settings.members.access.clearedOnRole', { count: cleared }) : t('settings.members.roleUpdated'));
+                            },
                             onError: (err) => toast.error(errorMessage(err)),
                           },
                         )
@@ -148,6 +161,17 @@ export function MembersPage() {
                     )}
                   </Td>
                   <Td>
+                    {canEditAccess(m) && (
+                      <button
+                        className="rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-text"
+                        onClick={() => setAccessFor(m)}
+                        aria-label={`${t('settings.members.access.action')}: ${m.fullName}`}
+                        title={t('settings.members.access.action')}
+                        data-testid={`member-access-${m.userId}`}
+                      >
+                        <SlidersHorizontal className="size-4" />
+                      </button>
+                    )}
                     <button
                       className="rounded-md p-1.5 text-muted hover:bg-danger-soft hover:text-danger"
                       onClick={() => setRemoving(m)}
@@ -162,6 +186,8 @@ export function MembersPage() {
           </Table>
         </TableWrap>
       )}
+
+      <MemberAccessSheet member={accessFor} onClose={() => setAccessFor(null)} />
 
       <Sheet
         open={adding}

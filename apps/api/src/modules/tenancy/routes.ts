@@ -5,7 +5,7 @@ import {
   MODULES,
   NAV_GROUPS,
   NAV_ITEMS,
-  ROLE_PERMISSIONS,
+  areaOfModule,
   checkModuleToggle,
   createCompanySchema,
   describeModules,
@@ -67,7 +67,7 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/api/navigation',
-    tenantRoute(app, {}, async ({ company, role, enabledModules }) => {
+    tenantRoute(app, {}, async ({ company, role, enabledModules, access }) => {
       const groups = NAV_GROUPS.map((g) => ({
         key: g.key,
         labelKey: g.labelKey,
@@ -75,14 +75,18 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
           (i) =>
             i.group === g.key &&
             enabledModules.has(i.module) &&
-            (!i.permission || hasPermission(role, i.permission)),
+            !(areaOfModule(i.module) && access.overrides[areaOfModule(i.module)!] === 'none') &&
+            (!i.permission || hasPermission(access.permissions, i.permission)),
         ).map(({ key, labelKey, path, icon, module }) => ({ key, labelKey, path, icon, module })),
       })).filter((g) => g.items.length > 0);
 
       return {
         company,
         role,
-        permissions: ROLE_PERMISSIONS[role],
+        // Etkin izinler (rol + kullanıcı bazlı modül erişimi): menü, sayfa kapıları ve düğmeler bunlara bakar
+        permissions: [...access.permissions],
+        // Yöneticinin bu üyeye verdiği özel erişim (alan → düzey); boşsa rol varsayılanı. Yetki ekranı nedeni göstermek için kullanır.
+        moduleAccess: access.overrides,
         modules: [...enabledModules],
         groups,
       };

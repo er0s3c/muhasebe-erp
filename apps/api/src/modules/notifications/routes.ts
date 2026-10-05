@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { idParam, notificationListQuerySchema, todayIso, updateNotificationPreferencesSchema } from '@erp/shared';
+import { eligibleNotificationKinds, idParam, notificationListQuerySchema, todayIso, updateNotificationPreferencesSchema } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { dismiss, getPreferences, listNotifications, markAllRead, markRead, unreadCount, updatePreferences } from './service';
 import { scanCompany } from './scan';
@@ -13,11 +13,12 @@ import { notificationScanOptions } from './scheduler';
 export const notificationRoutes: FastifyPluginAsync = async (app) => {
   const member = { permission: 'settings.read' } as const;
   const manage = { permission: 'settings.manage' } as const;
-  const prefCtx = (c: TenantCtx) => ({ userId: c.user.id, role: c.role, enabledModules: c.enabledModules, companyId: c.company.id, today: todayIso() });
+  const prefCtx = (c: TenantCtx) => ({ userId: c.user.id, permissions: c.access.permissions, enabledModules: c.enabledModules, companyId: c.company.id, today: todayIso() });
 
-  app.get('/api/notifications', tenantRoute(app, member, async ({ tx, req }) => listNotifications(tx, notificationListQuerySchema.parse(req.query))));
-  app.get('/api/notifications/unread-count', tenantRoute(app, member, async ({ tx }) => unreadCount(tx)));
-  app.post('/api/notifications/read-all', tenantRoute(app, member, async ({ tx }) => markAllRead(tx)));
+  const kindsOf = (c: TenantCtx) => eligibleNotificationKinds(c.access.permissions, c.enabledModules);
+  app.get('/api/notifications', tenantRoute(app, member, async (c) => listNotifications(c.tx, notificationListQuerySchema.parse(c.req.query), kindsOf(c))));
+  app.get('/api/notifications/unread-count', tenantRoute(app, member, async (c) => unreadCount(c.tx, kindsOf(c))));
+  app.post('/api/notifications/read-all', tenantRoute(app, member, async (c) => markAllRead(c.tx, kindsOf(c))));
   app.post('/api/notifications/:id/read', tenantRoute(app, member, async ({ tx, req }) => ({ notification: await markRead(tx, idParam.parse(req.params).id) })));
   app.post('/api/notifications/:id/dismiss', tenantRoute(app, member, async ({ tx, req }) => ({ notification: await dismiss(tx, idParam.parse(req.params).id) })));
 

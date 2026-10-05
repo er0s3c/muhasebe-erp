@@ -2,7 +2,6 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   cancelDeliveryNoteSchema,
   createDeliveryNoteSchema,
-  hasPermission,
   idParam,
   listDeliveryNotesQuerySchema,
   openDeliveryLinesQuerySchema,
@@ -11,7 +10,6 @@ import {
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { tenantRoute, type TenantCtx } from '../../http/context';
-import { forbidden } from '../../http/errors';
 import { lockItems } from '../inventory/balances';
 import { lockDeliveryLines } from '../invoices/delivery-link';
 import { lockOrderLines } from '../sales/usage';
@@ -75,7 +73,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, manage, async (c) => {
       const input = createDeliveryNoteSchema.parse(c.req.body);
       // Taslak hazırlama ile stok hareketini işleme ayrı yetkilerdir
-      if (input.post && !hasPermission(c.role, 'deliveries.post')) throw forbidden();
+      if (input.post) c.require('deliveries.post');
       const ctx = deliveryCtx(c);
       // Kartlar, satırlar yazılmadan ÖNCE kilitlenir (yabancı anahtar KEY SHARE -> FOR UPDATE yükseltmesi kilitlenme yaratır)
       if (input.post) await lockForPosting(c.tx, input.lines);
@@ -91,7 +89,7 @@ export const deliveryRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, manage, async (c) => {
       const { id } = idParam.parse(c.req.params);
       const input = updateDeliveryNoteSchema.parse(c.req.body);
-      if (input.post && !hasPermission(c.role, 'deliveries.post')) throw forbidden();
+      if (input.post) c.require('deliveries.post');
       const ctx = deliveryCtx(c);
       if (input.post && input.lines) await lockForPosting(c.tx, input.lines);
       await updateDeliveryDraft(c.tx, ctx, id, input);

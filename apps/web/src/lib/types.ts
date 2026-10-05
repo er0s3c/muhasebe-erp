@@ -73,6 +73,8 @@ export interface Member {
   isActive: boolean;
   role: string;
   mfaEnabled: boolean;
+  /** Rol varsayılanından farklı (özel) modül erişimi tanımlı alan sayısı. */
+  customAccessCount: number;
 }
 
 export interface JournalListItem {

@@ -13,7 +13,6 @@ import {
   duplicateQuerySchema,
   exportContactDataSchema,
   followUpSchema,
-  hasPermission,
   idParam,
   mergeContactSchema,
   noteListQuerySchema,
@@ -27,7 +26,6 @@ import {
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { pageOf } from '../../http/paging';
-import { forbidden } from '../../http/errors';
 import { agendaSummary, createAgendaItem, createFollowUp, getAgendaItem, listAgenda, setAgendaStatus, updateAgendaItem, type AgendaCtx } from './agenda';
 import {
   anonymizeContact,
@@ -58,7 +56,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
   const read = { module: MODULE, permission: 'directory.read' } as const;
   const manage = { module: MODULE, permission: 'directory.manage' } as const;
   const dctx = ({ company, user }: TenantCtx) => ({ companyId: company.id, userId: user.id });
-  const actx = (c: TenantCtx): AgendaCtx => ({ companyId: c.company.id, userId: c.user.id, canManage: hasPermission(c.role, 'directory.manage') });
+  const actx = (c: TenantCtx): AgendaCtx => ({ companyId: c.company.id, userId: c.user.id, canManage: c.can('directory.manage') });
 
   // --- Kurumlar -------------------------------------------------------------------------------------
   app.get('/api/directory/organizations', tenantRoute(app, read, async ({ tx, req }) => {
@@ -131,7 +129,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     '/api/privacy/contacts/:id/export',
     tenantRoute(app, { module: MODULE, permission: 'privacy.manage' }, async (c) => {
-      if (!hasPermission(c.role, 'directory.manage')) throw forbidden();
+      c.require('directory.manage');
       return exportContactData(c.tx, dctx(c), idParam.parse(c.req.params).id, exportContactDataSchema.parse(c.req.body).reason);
     }),
   );

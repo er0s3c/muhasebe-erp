@@ -7,12 +7,15 @@ import {
   resolveEnabledModules,
   resolveLeadDays,
   type NotificationKind,
+  type Permission,
+  type PermissionSet,
   type Role,
   type Sector,
 } from '@erp/shared';
 import { setContext, withContext, type Db, type Tx } from '../../db/client';
 import type { MailMessage } from '../mail/mailer';
 import { notificationDigestMail } from '../mail/templates';
+import { loadMemberAccess } from '../access/effective';
 import { NOTIFICATION_SOURCES, type Finding, type LicenseView, type ScanCtx } from './sources';
 
 /** Advisory kilit ad alanı ("NOTI"): şirket başına ikinci anahtar `hashtext(company_id)`. Aynı şirketi iki örnek aynı anda taramaz. */
@@ -60,6 +63,8 @@ export interface CompanyScanResult {
 interface Member {
   userId: string;
   role: Role;
+  /** Etkin izinler (rol + kullanıcı bazlı modül erişimi); üyenin kendi RLS bağlamında her taramada okunur. */
+  permissions: PermissionSet;
   email: string;
   fullName: string;
 }
@@ -96,13 +101,13 @@ export async function scanCompany(db: Db, target: { companyId: string; orgId: st
     const owner = license && license.ownerOrgId !== undefined ? license.ownerOrgId : dbOwner;
     const ctx: ScanCtx = { tx, companyId: target.companyId, today: local.date, time: local.time, enabled, license, ownerOrg: owner === target.orgId };
 
-    const members = (
+    const members: Member[] = (
       await tx.execute<{ userId: string; role: Role; email: string; fullName: string }>(sql`
         select m.user_id as "userId", m.role, u.email, u.full_name as "fullName"
           from memberships m join users u on u.id = m.user_id
          where m.company_id = ${target.companyId}::uuid and u.is_active
          order by m.created_at, m.user_id`)
-    ).rows;
+    ).rows.map((m) => ({ ...m, permissions: new Set<Permission>() }));
 
     const res = emptyResult(target.companyId);
     const failed = new Set<NotificationKind>();
@@ -118,7 +123,7 @@ export async function scanCompany(db: Db, target: { companyId: string; orgId: st
       let out: Finding | null | 'failed';
       try {
         // Kaynak hatası işlemi bozmasın: kaydedilen nokta (savepoint) geri alınır
-        out = await tx.transaction((sp) => src.scan({ ...ctx, tx: sp as Tx }, { lead, user: { id: member.userId, role: member.role } }));
+        out = await tx.transaction((sp) => src.scan({ ...ctx, tx: sp as Tx }, { lead, user: { id: member.userId, role: member.role, permissions: member.permissions } }));
       } catch (err) {
         opts.log?.warn({ err: err instanceof Error ? err.message : String(err), kind, companyId: target.companyId }, 'bildirim kaynağı taranamadı');
         out = 'failed';
@@ -135,7 +140,8 @@ export async function scanCompany(db: Db, target: { companyId: string; orgId: st
           await tx.execute<PrefRow>(sql`select kind, in_app as "inApp", email, lead_days as "leadDays" from notification_preferences`)
         ).rows.map((p) => [p.kind, p]),
       );
-      const eligible = eligibleNotificationKinds(member.role, enabled);
+      member.permissions = (await loadMemberAccess(tx, target.companyId, member.userId, member.role)).permissions;
+      const eligible = eligibleNotificationKinds(member.permissions, enabled);
 
       const desired = new Map<NotificationKind, { key: string; finding: Finding }>();
       const userFailed = new Set<NotificationKind>();

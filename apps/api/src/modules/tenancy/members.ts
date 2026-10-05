@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { WEAK_PASSWORD_MESSAGE, addMemberSchema, isWeakPassword, updateMemberSchema, uuid } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { memberships, userMfa, users } from '../../db/schema';
+import { memberModuleAccess, memberships, userMfa, users } from '../../db/schema';
 import { tenantRoute } from '../../http/context';
 import { AppError, forbidden, notFound, unprocessable } from '../../http/errors';
 import { TR } from '../../db/search';
@@ -39,6 +39,8 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
           isActive: users.isActive,
           role: memberships.role,
           mfaEnabled: sql<boolean>`exists (select 1 from user_mfa m where m.user_id = ${users.id} and m.enabled_at is not null)`,
+          // Özel modül erişimi olan alan sayısı (liste rozeti); yalnızca sahip/yönetici bu satırları okuyabilir (RLS)
+          customAccessCount: sql<number>`(select count(*)::int from member_module_access a where a.company_id = ${memberships.companyId} and a.user_id = ${users.id})`,
         })
         .from(memberships)
         .innerJoin(users, eq(users.id, memberships.userId))
@@ -109,7 +111,9 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)));
       if (!current) throw notFound('Üye');
       requireOwnerFor(callerRole, role, current.role);
+      await assertAccessOverridesAllowRoleChange(tx, company.id, userId, current.role, callerRole, user.id);
       await assertNotLastOwner(tx, company.id, userId, role);
+      const overridesBefore = await countOverrides(tx, company.id, userId);
       const [row] = await tx
         .update(memberships)
         .set({ role })
@@ -117,7 +121,8 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         .returning();
       if (!row) throw notFound('Üye');
       await recordSecurityEvent(app.db, app.log, req, { event: 'member_role_changed', organizationId: user.orgId, userId, meta: { companyId: company.id, from: current.role, to: role, by: user.id } });
-      return { member: { userId, role: row.role } };
+      // Rol değişince üyenin kullanıcı bazlı modül erişimi (özel istisnalar) veritabanı tetikleyicisiyle silinir: yeni rol şablonu aynen geçerli olur
+      return { member: { userId, role: row.role }, clearedModuleAccess: overridesBefore };
     }),
   );
 
@@ -150,6 +155,7 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)));
       if (!current) throw notFound('Üye');
       requireOwnerFor(callerRole, current.role);
+      await assertAccessOverridesAllowRoleChange(tx, company.id, userId, current.role, callerRole, user.id);
       await assertNotLastOwner(tx, company.id, userId, null);
       const deleted = await tx
         .delete(memberships)
@@ -161,6 +167,31 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
     }),
   );
 };
+
+async function countOverrides(tx: Tx, companyId: string, userId: string): Promise<number> {
+  const [r] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(memberModuleAccess)
+    .where(and(eq(memberModuleAccess.companyId, companyId), eq(memberModuleAccess.userId, userId)));
+  return r?.n ?? 0;
+}
+
+/**
+ * Rol değişimi/çıkarma üyenin özel modül erişimini siler; bu bir kısıtı kaldırma yolu olmasın diye: özel erişimi olan üyenin kendi rolünü
+ * değiştirmesi ve özel erişimi olan YÖNETİCİNİN rolünü/üyeliğini sahip dışında kimsenin değiştirmesi yasaktır (kısıtlı yönetici,
+ * başka bir yönetici eliyle kısıtını sıfırlayamaz).
+ */
+async function assertAccessOverridesAllowRoleChange(tx: Tx, companyId: string, targetId: string, targetRole: string, callerRole: string, callerId: string) {
+  if (callerRole === 'owner' && callerId !== targetId) return;
+  if (targetId === callerId && targetRole === 'owner') return;
+  if ((await countOverrides(tx, companyId, targetId)) === 0) return;
+  if (targetId === callerId) {
+    throw forbidden('Özel modül erişimi tanımlı üye kendi rolünü değiştiremez ya da kendi üyeliğini kaldıramaz', 'MODULE_ACCESS_SELF');
+  }
+  if (targetRole === 'admin') {
+    throw forbidden('Özel modül erişimi tanımlı yöneticinin rolünü ya da üyeliğini yalnızca şirket sahibi değiştirebilir', 'MODULE_ACCESS_ADMIN_ONLY_OWNER');
+  }
+}
 
 /**
  * Çağıran, hedef kullanıcının üye olduğu her şirkette sahip/yönetici ve en az onun rütbesinde mi (sahip > yönetici > diğer)?

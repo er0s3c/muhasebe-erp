@@ -1,5 +1,5 @@
 import { addDaysIso, COMPANY_TIME_ZONE, todayIso } from './dates';
-import { hasPermission, type Permission, type Role } from './permissions';
+import { hasPermission, type Permission, type PermissionSet } from './permissions';
 
 /**
  * Bildirim sistemi (uygulama içi + isteğe bağlı e-posta özeti): paylaşılan sözlük ve saf yardımcılar.
@@ -9,7 +9,7 @@ import { hasPermission, type Permission, type Role } from './permissions';
  *   (kişisel veri; docs/LEGAL-NOTES.md §5). Ayrıntıya bağlantıdaki liste ekranından, kullanıcının kendi izniyle gidilir.
  * - Önceden-uyarı ("öncül") günleri kullanıcı tercihidir ve düz kullanım varsayılanlarıdır; YASAL süre değildir. Kaynak modülün kendi
  *   kullanıcı ayarı (ör. teminat mektubu uyarı günü) varsa tercih yokken o geçerlidir.
- * - Bildirim yalnızca kaynak modül şirkette açıksa ve kullanıcı kaynak iznine sahipse üretilir.
+ * - Bildirim yalnızca kaynak modül şirkette açıksa ve kullanıcı kaynak iznine (etkin izin: rol + kullanıcı bazlı modül erişimi) sahipse üretilir.
  */
 
 export const NOTIFICATION_SEVERITIES = ['info', 'warning', 'critical'] as const;
@@ -65,17 +65,17 @@ const DEFS = new Map(NOTIFICATION_KIND_DEFS.map((d) => [d.kind, d]));
 export const notificationKindDef = (kind: NotificationKind): NotificationKindDef => DEFS.get(kind)!;
 
 /** Kaynak modül açık ve rol kaynak iznine sahip mi? (Alt izinler kaynak içinde ayrıca denetlenir: ör. taslak bildirimi.) */
-export function canReceiveKind(def: NotificationKindDef, role: Role, enabledModules: ReadonlySet<string>): boolean {
+export function canReceiveKind(def: NotificationKindDef, permissions: PermissionSet, enabledModules: ReadonlySet<string>): boolean {
   if (def.modules.length > 0 && !def.modules.some((m) => enabledModules.has(m))) return false;
   if (def.kind === 'draft_stale') {
     // Taslak: fatura (invoices.manage + fatura modülü) ya da yevmiye (ledger.post + muhasebe modülü) kaynağından en az biri
-    return (enabledModules.has('core.invoices') && hasPermission(role, 'invoices.manage')) || (enabledModules.has('core.ledger') && hasPermission(role, 'ledger.post'));
+    return (enabledModules.has('core.invoices') && hasPermission(permissions, 'invoices.manage')) || (enabledModules.has('core.ledger') && hasPermission(permissions, 'ledger.post'));
   }
-  return hasPermission(role, def.permission);
+  return hasPermission(permissions, def.permission);
 }
 
-export const eligibleNotificationKinds = (role: Role, enabledModules: ReadonlySet<string>): NotificationKind[] =>
-  NOTIFICATION_KIND_DEFS.filter((d) => canReceiveKind(d, role, enabledModules)).map((d) => d.kind);
+export const eligibleNotificationKinds = (permissions: PermissionSet, enabledModules: ReadonlySet<string>): NotificationKind[] =>
+  NOTIFICATION_KIND_DEFS.filter((d) => canReceiveKind(d, permissions, enabledModules)).map((d) => d.kind);
 
 /** Gün eşiği çözümü: tercih → kaynak ayarı → düz varsayılan; sınırlara kırpılır. Eşiksiz türde null. */
 export function resolveLeadDays(def: NotificationKindDef, preference: number | null | undefined, sourceSetting: number | null | undefined): number | null {

@@ -11,6 +11,7 @@ import {
   previousMonths,
   type NotificationKind,
   type NotificationSeverity,
+  type PermissionSet,
   type Role,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
@@ -49,6 +50,8 @@ export interface ScanCtx {
 export interface SourceUser {
   id: string;
   role: Role;
+  /** Etkin izinler (rol + kullanıcı bazlı modül erişimi). */
+  permissions: PermissionSet;
 }
 
 export interface Finding {
@@ -207,7 +210,7 @@ const approvalPending: NotificationSource = {
   kind: 'approval_pending',
   perUser: true,
   async scan({ tx, companyId }, { user }) {
-    const requests = await pendingForMe(tx, { companyId, userId: user.id, role: user.role });
+    const requests = await pendingForMe(tx, { companyId, userId: user.id, role: user.role, permissions: user.permissions });
     if (requests.length === 0) return null;
     return {
       severity: 'warning',
@@ -345,12 +348,12 @@ const draftStale: NotificationSource = {
     const cutoff = addDaysIso(today, -days);
     let invoices: string[] = [];
     let entries: string[] = [];
-    if (enabled.has('core.invoices') && hasPermission(user.role, 'invoices.manage')) {
+    if (enabled.has('core.invoices') && hasPermission(user.permissions, 'invoices.manage')) {
       const r = await tx.execute<IdRow>(sql`
         select i.id from invoices i where i.status = 'draft' and (i.created_at at time zone 'Europe/Nicosia')::date <= ${cutoff}::date`);
       invoices = ids(r.rows);
     }
-    if (enabled.has('core.ledger') && hasPermission(user.role, 'ledger.post')) {
+    if (enabled.has('core.ledger') && hasPermission(user.permissions, 'ledger.post')) {
       const r = await tx.execute<IdRow>(sql`
         select j.id from journal_entries j where j.status = 'draft' and (j.created_at at time zone 'Europe/Nicosia')::date <= ${cutoff}::date`);
       entries = ids(r.rows);
