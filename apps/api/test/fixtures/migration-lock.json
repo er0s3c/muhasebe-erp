@@ -342,5 +342,9 @@
   "0085_member_module_access_rules": {
     "sha256": "e55a13f46a4f967053d75a53b0b6c51ee91d5b7263aa26f63b0da568fcfd5d87",
     "when": 1791156223649
+  },
+  "0086_termination_fx_residue": {
+    "sha256": "74efd015f3bdd93a81e9f5371c48e9ff7e8ed9cd911dec80faaff00a407fa4a9",
+    "when": 1791156223650
   }
 }

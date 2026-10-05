@@ -3894,7 +3894,10 @@ export const salesWriteoffs = pgTable(
     chargeLineId: uuid().notNull(),
     settleLineId: uuid().notNull(),
     entryId: uuid().notNull(),
-    /** Kalemin para biriminde ve defter tutarında kapatılan pay. */
+    /**
+     * Kalemin para biriminde ve defter tutarında kapatılan pay. Yalnızca kur/yuvarlama artığı kalmış kalemde (kalan 0,00,
+     * defter tutarı > 0) `amount` 0'dır: artık defter para birimindeki bir cari satırıyla kapatılır.
+     */
     amount: money().notNull(),
     amountBase: money().notNull(),
     createdAt: createdAt(),
@@ -3928,7 +3931,7 @@ export const salesWriteoffs = pgTable(
       columns: [t.entryId, t.companyId],
       foreignColumns: [journalEntries.id, journalEntries.companyId],
     }),
-    check('sales_writeoffs_amount_ck', sql`${t.amount} > 0 and ${t.amountBase} > 0`),
+    check('sales_writeoffs_amount_ck', sql`${t.amount} >= 0 and ${t.amountBase} > 0`),
   ],
 );
 
