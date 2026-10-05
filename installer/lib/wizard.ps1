@@ -65,7 +65,7 @@ function Import-ExistingSettings([string]$p) {
   $script:Cur = @{}
   $conf = if ($p -eq 'native') { Join-Path $DataDir 'wizard.conf' } else { Join-Path $Root 'deploy\wizard.conf' }
   $envf = if ($p -eq 'native') { Join-Path $DataDir 'erp.env' } else { Join-Path $Root 'deploy\.env' }
-  foreach ($l in (Read-Lines $conf)) { if ($l -match '^([A-Z_]+)=(.*)$') { $script:Cur[$Matches[1]] = $Matches[2] } }
+  foreach ($l in (Read-Lines $conf)) { if ($l -cmatch '^([A-Z_]+)=(.*)$') { $script:Cur[$Matches[1]] = $Matches[2] } }
   if (-not (Get-Cur 'ACCESS')) {
     if ($p -eq 'docker') {
       $d = Get-EnvValue $envf 'ERP_DOMAIN'

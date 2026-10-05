@@ -12,9 +12,10 @@ import { compareVersions } from '@erp/license-core';
  * hiçbir sınama /opt, /etc, systemd ya da gerçek PostgreSQL rollerine dokunmaz.
  */
 const ROOT = resolve(__dirname, '../../..');
-const PWSH = process.env.PWSH || 'pwsh';
-const HAS_PWSH = spawnSync(PWSH, ['-NoProfile', '-Command', '1'], { stdio: 'ignore' }).status === 0;
+const PWSH = process.env.PWSH || (process.platform === 'win32' ? 'powershell' : 'pwsh');
+const HAS_PWSH = spawnSync(PWSH, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', '1'], { stdio: 'ignore' }).status === 0;
 const HAS_SHELLCHECK = spawnSync('shellcheck', ['--version'], { stdio: 'ignore' }).status === 0;
+const HAS_BASH = process.platform !== 'win32' && spawnSync('bash', ['-c', 'true'], { stdio: 'ignore' }).status === 0;
 
 let dir: string;
 beforeAll(() => {
@@ -27,7 +28,8 @@ const bash = (script: string, env: Record<string, string> = {}) => {
   return { out: (r.stdout ?? '') + (r.stderr ?? ''), stdout: r.stdout ?? '', code: r.status ?? -1 };
 };
 const pwsh = (script: string, env: Record<string, string> = {}) => {
-  const r = spawnSync(PWSH, ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', env: { ...process.env, ...env } });
+  const full = `$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ${script}`;
+  const r = spawnSync(PWSH, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', full], { encoding: 'utf8', env: { ...process.env, ...env } });
   return { out: (r.stdout ?? '') + (r.stderr ?? ''), stdout: r.stdout ?? '', code: r.status ?? -1 };
 };
 
@@ -69,10 +71,10 @@ describe('yanıt dosyası: yorum, BOM, tırnak (OPS-1, OPS-17, OPS-18)', () => {
     return Object.fromEntries([...r.stdout.matchAll(/^([A-Z_]+)=\[(.*)\]\r?$/gm)].map((m) => [m[1], m[2]]));
   };
 
-  it('bash: installer/answers.example olduğu gibi geçerli; "ANAHTAR=   # yorum" boş değerdir', () => {
+  it.skipIf(!HAS_BASH)('bash: installer/answers.example olduğu gibi geçerli; "ANAHTAR=   # yorum" boş değerdir', () => {
     expect(bashRead(join(ROOT, 'installer/answers.example'), Object.keys(exampleExpected))).toEqual(exampleExpected);
   });
-  it('bash: BOM, CRLF, tırnaklı değerde # ve boşluk korunur, # ile başlayan değer yorumdur', () => {
+  it.skipIf(!HAS_BASH)('bash: BOM, CRLF, tırnaklı değerde # ve boşluk korunur, # ile başlayan değer yorumdur', () => {
     expect(bashRead(sample(), Object.keys(expected))).toEqual(expected);
   });
   it.skipIf(!HAS_PWSH)('PowerShell: aynı dosyalardan aynı değerler (answers.example ve kurallar)', () => {
@@ -98,7 +100,7 @@ describe('SemVer karşılaştırması: TypeScript, bash ve PowerShell aynı sonu
   it('TypeScript sıralaması SemVer önceliğine uyar', () => {
     for (let i = 0; i < 11; i++) expect(compareVersions(vs[i]!, vs[i + 1]!), `${vs[i]} < ${vs[i + 1]}`).toBe(-1);
   });
-  it('bash ver_cmp', () => {
+  it.skipIf(!HAS_BASH)('bash ver_cmp', () => {
     const input = `${pairs.map(([a, b]) => `${a} ${b}`).join('\n')}\n`;
     const out = spawnSync('bash', ['-c', `${CFG_PRE}while read -r a b; do ver_cmp "$a" "$b"; done`], { input, encoding: 'utf8' }).stdout.trim().split('\n').map(Number);
     expect(out).toEqual(want);
@@ -111,7 +113,7 @@ describe('SemVer karşılaştırması: TypeScript, bash ve PowerShell aynı sonu
 });
 
 describe('üretilen dosyalarda güvenli JSON ve tırnaklama (OPS-6, OPS-22)', () => {
-  it('updater.json Node ile üretilir: tırnak/ters bölü/boşluklu yollar JSON\'u bozmaz; HTTPS denetimi yazılır', () => {
+  it.skipIf(!HAS_BASH)('updater.json Node ile üretilir: tırnak/ters bölü/boşluklu yollar JSON\'u bozmaz; HTTPS denetimi yazılır', () => {
     const t = mkdtempSync(join(dir, 'upd-'));
     const kit = join(t, 'kit "a\\b" x');
     mkdirSync(join(kit, 'app', 'runtime'), { recursive: true });
@@ -127,7 +129,7 @@ install_updater docker "${t}/deploy/.env" >/dev/null 2>&1; cat "${t}/etc/updater
     expect(cfg).toMatchObject({ mode: 'docker', dockerDir: kit, workDir: `${t}/updw`, installArgs: ['--port=3001', '--access=domain', '--domain=erp.test'], httpsCheck: { port: 8443, host: 'erp.test' } });
   });
 
-  it('systemd ve cron satırları boşluk, %, $, tırnak içeren yolları kaçışlar', () => {
+  it.skipIf(!HAS_BASH)('systemd ve cron satırları boşluk, %, $, tırnak içeren yolları kaçışlar', () => {
     const r = bash(`${CFG_PRE}sd_quote '/a b/%x$y"z'; echo; sd_path '/a b/%x'; echo; cron_quote '/a b/%x'`);
     expect(r.stdout.split('\n')).toEqual(['"/a b/%%x$$y\\"z"', '/a b/%%x', '/a\\ b/\\%x']);
   });
@@ -171,7 +173,7 @@ describe('yedek temizliği yalnızca kendi dosyalarına dokunur, en az 1 yedek k
     for (const n of names) writeFileSync(join(d, n), 'x');
   };
 
-  it('scripts/backup.sh: --keep-count 0 reddedilir; yabancı erp-*.dump dosyaları silinmez; parola argümanda değil', () => {
+  it.skipIf(!HAS_BASH)('scripts/backup.sh: --keep-count 0 reddedilir; yabancı erp-*.dump dosyaları silinmez; parola argümanda değil', () => {
     const t = mkdtempSync(join(dir, 'bk-'));
     const bin = fakePg(t);
     const d = join(t, 'yedek klasörü');
@@ -190,7 +192,7 @@ describe('yedek temizliği yalnızca kendi dosyalarına dokunur, en az 1 yedek k
     for (const m of calls.matchAll(/args=(.*?) pw=/g)) expect(m[1]).not.toMatch(/gi%40zli|gi@zli/);
   });
 
-  it('yerel yedek betiği (erp-backup): boşluklu klasör, yalnızca erp-YYYYMMDD-HHMMSS.dump temizlenir, parola argümanda değil', () => {
+  it.skipIf(!HAS_BASH)('yerel yedek betiği (erp-backup): boşluklu klasör, yalnızca erp-YYYYMMDD-HHMMSS.dump temizlenir, parola argümanda değil', () => {
     const t = mkdtempSync(join(dir, 'nbk-'));
     const bin = fakePg(t);
     const d = join(t, 'my backups %x');
@@ -227,7 +229,7 @@ describe('kaldırma: kuru çalıştırma ve kalıcı silme onayı (OPS-2, OPS-16
   };
   const run = (t: string, args: string, env: Record<string, string> = {}) => installSh(t, args, 'init_input; detect >/dev/null 2>&1; uninstall_main', env);
 
-  it('--uninstall --purge --dry-run hiçbir şeyi çalıştırmaz, silinecekleri listeler', () => {
+  it.skipIf(!HAS_BASH)('--uninstall --purge --dry-run hiçbir şeyi çalıştırmaz, silinecekleri listeler', () => {
     const t = setup();
     const r = run(t, '--uninstall --purge --dry-run --yes');
     expect(r.code).toBe(0);
@@ -236,7 +238,7 @@ describe('kaldırma: kuru çalıştırma ve kalıcı silme onayı (OPS-2, OPS-16
     expect(r.out).toMatch(/Özel yedek klasörü \(\/srv\/ozel-yedek\) KORUNUR/);
   });
 
-  it('--purge --yes onay vermez: terminal yoksa durur; yanlış yanıtta durur; SIL yazılınca yalnızca kayıtlı veritabanı silinir', () => {
+  it.skipIf(!HAS_BASH)('--purge --yes onay vermez: terminal yoksa durur; yanlış yanıtta durur; SIL yazılınca yalnızca kayıtlı veritabanı silinir', () => {
     const t = setup();
     const none = run(t, '--uninstall --purge --yes');
     expect(none.out).toMatch(/onayı alınamadı/);
@@ -253,7 +255,7 @@ describe('kaldırma: kuru çalıştırma ve kalıcı silme onayı (OPS-2, OPS-16
     expect(flag.out).toMatch(/^PG: psql .*drop database/m);
   });
 
-  it('kurulumdan önce var olan veritabanı --purge ile silinmez; --purge olmadan veri korunur', () => {
+  it.skipIf(!HAS_BASH)('kurulumdan önce var olan veritabanı --purge ile silinmez; --purge olmadan veri korunur', () => {
     const t = setup();
     writeFileSync(join(t, 'etc', 'wizard.conf'), 'DB_NAME=erp\nDB_CREATED=no\nROLES_CREATED=no\n');
     const r = run(t, '--uninstall --purge --i-understand-purge');
@@ -276,9 +278,11 @@ function Unregister-ScheduledTask { Write-Output 'UNREGISTER' }; function Get-Ne
 $DataDir = '${t}/data'; $ProgDir = '${t}/prog'; $Root = '${t}/kit'; $DbName = 'erp'; $SvcId = 'MuhasebeERP'; $Purge = $true; $DryRun = $${dry}; $IUnderstandPurge = $false; $Path = ''
 $Yes = $true; $AnswersFile = ''; . '${ROOT}/installer/lib/config.ps1'
 $ast = [System.Management.Automation.Language.Parser]::ParseFile('${ROOT}/installer/install.ps1', [ref]$null, [ref]$null)
-foreach ($n in @('Test-SamePath', 'Confirm-Purge', 'Invoke-Step', 'Invoke-Uninstall', 'Uninstall-Native', 'Uninstall-Docker')) { . ([scriptblock]::Create($ast.Find({ param($x) $x -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $x.Name -eq $n }, $true).Extent.Text)) }
+$fns = @{}; foreach ($f in $ast.FindAll({ param($x) $x -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) { $fns[$f.Name] = $f.Extent.Text }
+foreach ($n in @('Test-SamePath', 'Confirm-Purge', 'Invoke-Step', 'Invoke-Uninstall', 'Uninstall-Native', 'Uninstall-Docker')) { if ($fns.ContainsKey($n)) { . ([scriptblock]::Create($fns[$n])) } }
 $wast = [System.Management.Automation.Language.Parser]::ParseFile('${ROOT}/installer/lib/wizard.ps1', [ref]$null, [ref]$null)
-foreach ($n in @('Import-ExistingSettings', 'Read-Lines')) { . ([scriptblock]::Create($wast.Find({ param($x) $x -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $x.Name -eq $n }, $true).Extent.Text)) }
+$wfns = @{}; foreach ($f in $wast.FindAll({ param($x) $x -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) { $wfns[$f.Name] = $f.Extent.Text }
+foreach ($n in @('Import-ExistingSettings', 'Read-Lines')) { if ($wfns.ContainsKey($n)) { . ([scriptblock]::Create($wfns[$n])) } }
 function Get-EnvValue($f, $k) { '' }
 $script:StepErrors = 0; $script:Cur = @{}
 Invoke-Uninstall
@@ -303,7 +307,7 @@ describe('kurulu sistemde yanıt dosyası/bayrak ve sürüm düşürme (OPS-15, 
   };
   const body = 'MODE=prod; EXISTING=1; EXISTING_PATH=native; load_existing_settings native; refuse_settings_on_existing && echo GECTI';
 
-  it('farklı bayrak ya da yanıt dosyası sessizce yok sayılmaz: sihirbaz durur (kuru çalıştırmada da)', () => {
+  it.skipIf(!HAS_BASH)('farklı bayrak ya da yanıt dosyası sessizce yok sayılmaz: sihirbaz durur (kuru çalıştırmada da)', () => {
     const t = mkdtempSync(join(dir, 'ex-'));
     conf(t);
     expect(installSh(t, '--port=4000 --dry-run', body).out).toMatch(/Kurulu sistemin ayarlarından farklı bayrak verildi: PORT: kurulu=3000, verilen=4000/);
@@ -315,7 +319,7 @@ describe('kurulu sistemde yanıt dosyası/bayrak ve sürüm düşürme (OPS-15, 
     expect(installSh(t, '--port=4000', body, { ERP_UPDATER_RUN: '1' }).out).toContain('GECTI');
   });
 
-  it('kurulu sürümden eski kit kurulmaz; --restore-db (geri dönüş) ve --allow-downgrade istisnadır', () => {
+  it.skipIf(!HAS_BASH)('kurulu sürümden eski kit kurulmaz; --restore-db (geri dönüş) ve --allow-downgrade istisnadır', () => {
     const t = mkdtempSync(join(dir, 'dg-'));
     conf(t);
     const dg = 'MODE=prod; EXISTING=1; KIT=1; KIT_VERSION=1.1.0; load_existing_settings native; check_downgrade && echo GECTI';
@@ -328,11 +332,11 @@ describe('kurulu sistemde yanıt dosyası/bayrak ve sürüm düşürme (OPS-15, 
 });
 
 describe('sürüm kiti: lisans sunucusu adresi zorunlu, --out mutlak yol (OPS-11, OPS-20)', () => {
-  const tsx = join(ROOT, 'node_modules/.bin/tsx');
+  const tsxLoader = new URL(import.meta.resolve('tsx')).href;
   const release = (args: string[], env: Record<string, string | undefined>, cwd = ROOT) => {
     const e = { ...process.env, ...env };
     for (const [k, v] of Object.entries(env)) if (v === undefined) delete e[k];
-    return spawnSync(tsx, [join(ROOT, 'scripts/release.ts'), ...args], { cwd, encoding: 'utf8', env: e });
+    return spawnSync(process.execPath, ['--import', tsxLoader, join(ROOT, 'scripts/release.ts'), ...args], { cwd, encoding: 'utf8', env: e });
   };
 
   it('LICENSE_SERVER_URL yoksa ya da https değilse kit üretilmez', () => {
@@ -357,7 +361,7 @@ describe('sürüm kiti: lisans sunucusu adresi zorunlu, --out mutlak yol (OPS-11
     expect(readdirSync(cwd)).toEqual([]);
   });
 
-  it('kit.json lisans sunucusu adresini kaydeder; sihirbaz kitte adres olup olmadığını söyler', () => {
+  it.skipIf(!HAS_BASH)('kit.json lisans sunucusu adresini kaydeder; sihirbaz kitte adres olup olmadığını söyler', () => {
     expect(readFileSync(join(ROOT, 'scripts/release.ts'), 'utf8')).toMatch(/licenseServerUrl: licenseServerUrl \|\| null/);
     const r = bash(`ROOT=/x; KIT=1; KIT_LICENSE_URL=""; LICENSE_SERVER_URL=""; LICENSE_CODE=""; MODE=prod; ACCESS=local; PORT=3000; DEMO=no; MAIL_ENABLED=no; REGISTRATION=yes; BACKUP_TIME=02:30; BACKUP_DIR=/b; BACKUP_KEEP=14
 say(){ echo "$*"; }; source "${ROOT}/installer/lib/wizard.sh"; print_settings`);
@@ -367,7 +371,7 @@ say(){ echo "$*"; }; source "${ROOT}/installer/lib/wizard.sh"; print_settings`);
 
 describe('betikler: sözdizimi ve statik denetim', () => {
   const files = ['installer/install.sh', 'installer/lib/config.sh', 'installer/lib/wizard.sh', 'scripts/backup.sh', 'scripts/restore.sh'];
-  it('bash -n', () => {
+  it.skipIf(!HAS_BASH)('bash -n', () => {
     for (const f of files) expect(spawnSync('bash', ['-n', join(ROOT, f)]).status, f).toBe(0);
   });
   it.skipIf(!HAS_SHELLCHECK)('shellcheck (uyarı düzeyi) temiz', () => {
@@ -377,14 +381,14 @@ describe('betikler: sözdizimi ve statik denetim', () => {
   it('compose dosyalarında günlük döndürme (json-file, boyut sınırı) var (OPS-23)', () => {
     for (const f of ['deploy/docker-compose.prod.yml', 'deploy/docker-compose.demo.yml', 'deploy/license/docker-compose.yml']) {
       const y = readFileSync(join(ROOT, f), 'utf8');
-      expect(y, f).toMatch(/x-logging: &default-logging\n {2}driver: json-file\n {2}options:\n {4}max-size: '10m'\n {4}max-file: '5'/);
-      const services = y.split('\nvolumes:')[0]!.split('\nservices:\n')[1]!;
+      expect(y, f).toMatch(/x-logging: &default-logging\r?\n {2}driver: json-file\r?\n {2}options:\r?\n {4}max-size: '10m'\r?\n {4}max-file: '5'/);
+      const services = y.split(/\r?\nvolumes:/)[0]!.split(/\r?\nservices:\r?\n/)[1]!;
       const names = [...services.matchAll(/^ {2}([a-z][a-z0-9_-]*):\s*$/gm)].map((m) => m[1]);
       const logged = (services.match(/logging: \*default-logging/g) ?? []).length;
       expect(logged, f).toBe(names.length);
     }
   });
-  it('ayar yedekleri (.bak-*) birikmez: her dosyanın en yeni 5 yedeği kalır (OPS-24)', () => {
+  it.skipIf(!HAS_BASH)('ayar yedekleri (.bak-*) birikmez: her dosyanın en yeni 5 yedeği kalır (OPS-24)', () => {
     const names = Array.from({ length: 8 }, (_, i) => `/e/erp.env.bak-2026010${i + 1}-000000`).concat(['/e/erp.env.bak-elle', '/e/wizard.conf.bak-20260101-000000']);
     const r = spawnSync('bash', ['-c', `${CFG_PRE}prune_bak_list /e/erp.env 5`], { input: names.join('\n'), encoding: 'utf8' });
     expect(r.stdout.trim().split('\n')).toEqual(['/e/erp.env.bak-20260103-000000', '/e/erp.env.bak-20260102-000000', '/e/erp.env.bak-20260101-000000']);

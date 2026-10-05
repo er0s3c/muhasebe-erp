@@ -37,6 +37,7 @@ function page<K extends string>(
 }
 
 export const router = createBrowserRouter([
+  { path: '/portal', ...page(() => import('../features/workspace/PortalPage'), 'PortalPage', null), errorElement: <RouteError /> },
   {
     element: <PublicOnly />,
     errorElement: <RouteError />,
@@ -75,6 +76,11 @@ export const router = createBrowserRouter([
                 errorElement: <RouteError />,
                 children: [
                   { index: true, ...page(() => import('../features/dashboard/DashboardPage'), 'DashboardPage', null) },
+                  { path: 'workspace', ...page(() => import('../features/workspace/WorkPage'), 'WorkPage', null) },
+                  { path: 'workspace/portal', ...page(() => import('../features/workspace/PortalAdminPage'), 'PortalAdminPage', 'members.manage') },
+                  { path: 'workspace/operations', ...page(() => import('../features/workspace/OperationsPage'), 'OperationsPage', null) },
+                  { path: 'workspace/scenarios', element: <RequireModule module="core.treasury" />, children: [{ index: true, ...page(() => import('../features/workspace/ScenariosPage'), 'ScenariosPage', 'treasury.read') }] },
+                  { path: 'workspace/documents', ...page(() => import('../features/workspace/DocumentsPage'), 'DocumentsPage', null) },
                   {
                     element: <RequireModule module="core.ledger" />,
                     children: [

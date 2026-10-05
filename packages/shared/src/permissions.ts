@@ -1,4 +1,5 @@
 export const PERMISSIONS = [
+  'workspace.use',
   'company.manage',
   'members.manage',
   'settings.read',
@@ -64,7 +65,7 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   owner: PERMISSIONS,
   admin: PERMISSIONS.filter((p) => p !== 'company.manage'),
-  accountant: [
+  accountant: ['workspace.use', 
     'settings.read',
     'rates.manage',
     'accounts.manage',
@@ -107,7 +108,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Satış temsilcisi: müşteri kartı ve cari hareketleri yönetir (kapsam belgesi, Modül 13)
   // Faturayı taslak olarak hazırlar; muhasebeleştirmeyi (invoices.post) muhasebeci yapar.
   // İrsaliyeyi de taslak olarak hazırlar; stok hareketini işleyen (deliveries.post) depo/şantiye/muhasebedir.
-  sales: [
+  sales: ['workspace.use', 
     'settings.read',
     'parties.read',
     'parties.manage',
@@ -123,7 +124,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Şantiye sorumlusu: malzeme sarfı/transferi/sayım girer, stok kartı açmaz; mal kabul (alış irsaliyesi)
   // ve sevk irsaliyesi işler, faturaya dokunmaz.
   // Proje: şantiye şefi proje/iş kalemi/ilerleme girer; bütçeyi (projects.budget) muhasebe/yönetim onaylar.
-  site_manager: [
+  site_manager: ['workspace.use', 
     'settings.read',
     // Yalnızca okuma: irsaliye, satın alma siparişi ve taşeron sözleşmesindeki cari seçicileri için (cari ekleyemez/değiştiremez)
     'parties.read',
@@ -142,7 +143,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'directory.read',
     'directory.manage',
   ],
-  viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'deliveries.read', 'treasury.read', 'reports.read', 'projects.read', 'subcontracts.read', 'procurement.read', 'realestate.read'],
+  viewer: ['workspace.use', 'settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'deliveries.read', 'treasury.read', 'reports.read', 'projects.read', 'subcontracts.read', 'procurement.read', 'realestate.read'],
 };
 
 /** Bir üyenin ETKİN izin kümesi (rol şablonu + kullanıcı bazlı modül erişimi); `effectivePermissions` üretir. */

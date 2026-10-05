@@ -28,8 +28,15 @@ describe('rota izinleri (UI-7)', () => {
 
   it('menüdeki her sayfanın rota izni menü izniyle aynı (menüde görünen sayfa yetki ekranı vermez)', () => {
     for (const item of NAV_ITEMS) {
-      expect(pages.has(item.path), item.path).toBe(true);
-      expect(pages.get(item.path)!.permission, item.path).toBe(item.permission ?? null);
+      const pathname = item.path.split('?')[0]!;
+      expect(pages.has(pathname), item.path).toBe(true);
+      const pagePermission = pages.get(pathname)!.permission;
+      if (item.path.includes('?')) {
+        // Parametreli rotalar (örn. /workspace/operations?kind=...) genel sayfayı paylaşır; sayfa bileşeni kendi içinde izin kapısını işletir
+        expect(pagePermission === null || pagePermission === item.permission, item.path).toBe(true);
+        continue;
+      }
+      expect(pagePermission, item.path).toBe(item.permission ?? null);
     }
   });
 
