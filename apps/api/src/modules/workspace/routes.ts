@@ -14,7 +14,8 @@ import { setupChecklist } from './setup';
 
 const taskFields = sql`w.id, w.title, w.description, w.due_date::text AS "dueDate", w.owner_id AS "ownerId",
   u.full_name AS "ownerName", w.priority, w.status, w.version, w.record_kind AS "recordKind", w.record_id AS "recordId", w.created_by AS "createdBy"`;
-const admin = (c: TenantCtx) => c.role === 'owner' || c.role === 'admin';
+const admin = (c: TenantCtx) => c.can('members.manage');
+const canWrite = (c: TenantCtx) => Array.from(c.access.permissions).some((p) => !p.endsWith('.read') && p !== 'workspace.use' && p !== 'data.export');
 async function ownerValid(c: TenantCtx, id: string) {
   const r = await c.tx.execute(sql`select 1 from memberships m join users u on u.id = m.user_id
     where m.company_id = ${c.company.id}::uuid and m.user_id = ${id}::uuid and u.is_active`);
@@ -60,7 +61,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     return { items: rows.rows.slice(0,100), hasMore: rows.rows.length > 100, today: todayIso() };
   }));
   app.post('/api/workspace/tasks', tenantRoute(app, access, async (c) => {
-    if (c.role === 'viewer') throw forbidden();
+    if (!canWrite(c)) throw forbidden();
     const input = workItemSchema.parse(c.req.body);
     const owner = input.ownerId ?? c.user.id;
     if (owner !== c.user.id && !admin(c)) throw forbidden('Başkasına görev atamak için yönetici yetkisi gerekir');
@@ -73,7 +74,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     return { item: await getTask(c, id) };
   }));
   app.patch('/api/workspace/tasks/:id', tenantRoute(app, access, async (c) => {
-    if (c.role === 'viewer') throw forbidden();
+    if (!canWrite(c)) throw forbidden();
     const { id } = idParam.parse(c.req.params);
     const input = workItemUpdateSchema.parse(c.req.body);
     const cur = await getTask(c,id);
