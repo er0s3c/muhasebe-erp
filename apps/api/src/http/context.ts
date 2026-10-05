@@ -1,7 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import {
-  hasPermission,
   resolveEnabledModules,
   type Permission,
   type Role,
@@ -11,6 +10,7 @@ import type { Config } from '../config';
 import { setContext, withContext, type Db, type Tx } from '../db/client';
 import { companies, companyModules, memberships, users } from '../db/schema';
 import { AppError, forbidden, unauthorized, badRequest } from './errors';
+import { denialFor, isModuleDenied, loadMemberAccess, moduleAccessDenied, requirePermission, type MemberAccess } from '../modules/access/effective';
 import type { MemoryLimiter, Semaphore } from './limits';
 import type { Mailer } from '../modules/mail/mailer';
 import { assertLicensed } from '../licensing/gate';
@@ -89,8 +89,15 @@ export interface CompanyInfo {
 
 export interface TenantCtx extends AuthCtx {
   company: CompanyInfo;
+  /** Üyeliğin rolü (şablon). İzin kararı için ROL DEĞİL `access`/`can`/`require` kullanılır: kullanıcı bazlı modül erişimi rolü değiştirir. */
   role: Role;
   enabledModules: Set<string>;
+  /** Etkin erişim: rol şablonu + kullanıcı bazlı modül erişimi (istek başına, işlem içinde okunur; önbellek yok). */
+  access: MemberAccess;
+  /** Etkin izin var mı. */
+  can: (permission: Permission) => boolean;
+  /** Etkin izin yoksa nedene uygun 403 atar (istisnadan kaynaklanıyorsa MODULE_ACCESS_DENIED / MODULE_READ_ONLY). */
+  require: (permission: Permission) => void;
 }
 
 const passwordChangeRequired = () =>
@@ -223,9 +230,10 @@ export function tenantRoute<T>(
       if (options.module && !enabledModules.has(options.module)) {
         throw forbidden('Bu modül şirketinizde etkin değil', 'MODULE_DISABLED');
       }
-      if (options.permission && !hasPermission(role, options.permission)) {
-        throw forbidden();
-      }
+      // Kullanıcı bazlı modül erişimi: şirket düzeyindeki modül anahtarından SONRA, izinden ÖNCE uygulanır
+      const access = await loadMemberAccess(tx, companyId, user.id, role);
+      if (options.module && isModuleDenied(access, options.module)) throw moduleAccessDenied();
+      if (options.permission && !access.permissions.has(options.permission)) throw denialFor(access, options.permission);
 
       return handler({
         tx,
@@ -234,6 +242,9 @@ export function tenantRoute<T>(
         reply,
         role,
         enabledModules,
+        access,
+        can: (permission) => access.permissions.has(permission),
+        require: (permission) => requirePermission(access, permission),
         company: { ...company, sector: company.sector as Sector },
       });
     });

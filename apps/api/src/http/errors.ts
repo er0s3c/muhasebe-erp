@@ -80,6 +80,7 @@ export const PG_RULE_CODES: Readonly<Record<string, string>> = {
   ERP23: 'FISCAL_YEAR_RULE_VIOLATION', // mali yıl kapanışı
   ERP24: 'SETTINGS_RULE_VIOLATION', // KDV oranı, kur
   ERP25: 'NOTIFICATION_RULE_VIOLATION', // bildirim satırı değiştirilemez, kapanmamış bildirim silinemez
+  ERP26: 'MODULE_ACCESS_RULE_VIOLATION', // kullanıcı bazlı modül erişimi: kendi erişimi, sahip, yönetici rütbesi
 };
 
 /** Benzersizlik kısıtı adından kullanıcıya gösterilecek alan ve ileti (kısıt adı yanıtta yer almaz; API-10). */

@@ -18,7 +18,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
   for (const def of EXPORTS) {
     app.get(
       `/api/exports/${def.key}`,
-      tenantRoute(app, { module: def.module, permission: def.permission, limit: { name: 'export', max: 30, windowMs: 60_000 } }, async ({ tx, req, reply, company, user, role, enabledModules }) => {
+      tenantRoute(app, { module: def.module, permission: def.permission, limit: { name: 'export', max: 30, windowMs: 60_000 } }, async ({ tx, req, reply, company, user, access, enabledModules }) => {
         const { format } = formatSchema.parse(req.query);
         if (!def.formats.includes(format)) throw badRequest(`Bu rapor yalnızca ${def.formats.join(', ').toUpperCase()} olarak alınabilir`, 'EXPORT_FORMAT_UNSUPPORTED');
         const q = def.schema.parse(req.query);
@@ -28,7 +28,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
           throw new AppError(429, 'EXPORT_BUSY', 'Şu anda başka dışa aktarmalar çalışıyor; birkaç saniye sonra tekrar deneyin');
         }
         try {
-          const tables = await def.build({ tx, company, user: { id: user.id, role }, access: { companyId: company.id, role, enabledModules } }, q as never);
+          const tables = await def.build({ tx, company, user: { id: user.id }, access: { companyId: company.id, permissions: access.permissions, enabledModules } }, q as never);
           const name = def.fileName(q as never);
 
           void reply

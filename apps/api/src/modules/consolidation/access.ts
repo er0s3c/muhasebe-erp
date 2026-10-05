@@ -1,11 +1,12 @@
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { hasPermission, resolveEnabledModules, type Role, type Sector } from '@erp/shared';
+import { hasPermission, resolveEnabledModules, type PermissionSet, type Role, type Sector } from '@erp/shared';
 import { setContext, type Tx } from '../../db/client';
 import { companies, companyModules, consolidationGroups, consolidationMembers, memberships } from '../../db/schema';
 import type { AuthCtx } from '../../http/context';
 import { AppError, notFound } from '../../http/errors';
 import { assertLicensed } from '../../licensing/gate';
+import { loadMemberAccess } from '../access/effective';
 
 /**
  * ÇOKLU ŞİRKET ERİŞİM KATMANI (Faz X7). Konsolidasyonun tek güvenlik kapısıdır.
@@ -29,6 +30,8 @@ export interface MemberScope {
   reportingCurrency: string | null;
   taxNumber: string | null;
   role: Role;
+  /** Etkin izinler (rol + kullanıcı bazlı modül erişimi) — o şirketin kendi bağlamında hesaplanır. */
+  permissions: PermissionSet;
   enabledModules: Set<string>;
 }
 
@@ -87,7 +90,8 @@ export async function evaluateMember(
     if (!company) return deny('NOT_A_MEMBER');
     if (license && !app.license.sectorAllowed(license, company.sector)) return deny('LICENSE_SECTOR_MISMATCH');
     const role = member.role as Role;
-    if (!hasPermission(role, CONSOLIDATION_PERMISSION) || !hasPermission(role, 'reports.read')) return deny('ROLE_INSUFFICIENT');
+    const { permissions } = await loadMemberAccess(tx, companyId, u.userId, role);
+    if (!hasPermission(permissions, CONSOLIDATION_PERMISSION) || !hasPermission(permissions, 'reports.read')) return deny('ROLE_INSUFFICIENT');
     const overrides = await tx.select({ module: companyModules.module, enabled: companyModules.enabled }).from(companyModules);
     const enabledModules = resolveEnabledModules(company.sector as Sector, overrides);
     if (!enabledModules.has(CONSOLIDATION_MODULE)) return deny('MODULE_DISABLED');
@@ -100,6 +104,7 @@ export async function evaluateMember(
         reportingCurrency: company.reportingCurrency,
         taxNumber: company.taxNumber,
         role,
+        permissions,
         enabledModules,
       },
     };

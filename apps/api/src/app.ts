@@ -54,6 +54,7 @@ import { yearEndRoutes } from './modules/yearend/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
 import { settingsRoutes } from './modules/settings/routes';
+import { accessRoutes } from './modules/access/routes';
 import { memberRoutes } from './modules/tenancy/members';
 import { tenancyRoutes } from './modules/tenancy/routes';
 
@@ -222,6 +223,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(mfaRoutes);
   await app.register(tenancyRoutes);
   await app.register(memberRoutes);
+  await app.register(accessRoutes);
   await app.register(settingsRoutes);
   await app.register(ledgerRoutes);
   await app.register(yearEndRoutes);

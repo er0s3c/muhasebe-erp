@@ -594,7 +594,8 @@ describe('kasa ve banka', async () => {
     const receive = (d: number, accountId: string) => txn(c, { type: 'receipt', date: day(3, d), accountId, amount: '1000', partyId: cust.id, items: [{ lineId: item.lineId, amount: '1000', settleAmount: '1000' }] });
     const [a, b] = await Promise.all([receive(10, bank.id), receive(11, bank2.id)]);
     expect([a.statusCode, b.statusCode].sort()).toEqual([201, 422]);
-    expect((a.statusCode === 422 ? a : b).json().error.code).toBe('ITEM_NOT_OPEN');
+    // Kaybeden istek kilidi beklerken kalem kapanmış ya da tutar aşılmış görünebilir; ikisi de doğru ret
+    expect(['ITEM_NOT_OPEN', 'ALLOCATION_EXCEEDED']).toContain((a.statusCode === 422 ? a : b).json().error.code);
     expect((await open(c, cust.id)).items).toHaveLength(0);
 
     await fund(c, ids, cash.id, '100');

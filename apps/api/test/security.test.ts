@@ -419,10 +419,11 @@ describe('sözleşme testleri', async () => {
       // can_manage_user / company_has_members: üyelik kurallarının diğer şirketlerdeki üyelikleri görmesi gereken evet/hayır yanıtları;
       // installation_owner_org / claim_installation_owner: kurulumun sahibi kuruluşun kimliği (lisans/güncelleme/cihaz yönetimi);
       // directory_mark_merged: birleştirme bayrağını yalnızca işlev içinden geçerli kılar;
+      // member_module_access_cleanup: rol değişince/üyelik silinince o üyenin özel modül erişim satırlarını siler (kendi üyeliğini silen yöneticinin satırları da kalmaz);
       // notification_scan_targets: bildirim zamanlayıcısı için yalnızca şirket/kuruluş kimliklerini listeler; notification_prune: yalnızca app_company_id() şirketinin KAPANMIŞ eski bildirimlerini siler
       expect(definers.rows.map((r) => r.proname)).toEqual([
         'audit_row_change', 'can_manage_user', 'claim_installation_owner', 'company_has_members', 'directory_anonymize_contact', 'directory_mark_merged',
-        'directory_repoint_notes', 'directory_subject_notes', 'installation_owner_org', 'license_company_count', 'notification_prune', 'notification_scan_targets',
+        'directory_repoint_notes', 'directory_subject_notes', 'installation_owner_org', 'license_company_count', 'member_module_access_cleanup', 'notification_prune', 'notification_scan_targets',
       ]);
       const role = await q(`select rolsuper, rolbypassrls from pg_roles where rolname = 'erp_app'`);
       expect(role.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });

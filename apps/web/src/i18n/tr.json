@@ -71,7 +71,10 @@
     "forbiddenPartial": "Bu sayfadaki bazı bilgileri görme yetkiniz yok; ilgili alanlar boş görünebilir.",
     "goHome": "Ana sayfaya dön",
     "mainMenu": "Ana menü",
-    "loadingLabel": "Yükleniyor"
+    "loadingLabel": "Yükleniyor",
+    "moduleBlockedTitle": "Bu modüle erişiminiz kapalı",
+    "moduleBlockedDesc": "Bu modüle erişiminiz yönetici tarafından kapatıldı. Erişim gerekiyorsa şirket yöneticinizden isteyin.",
+    "moduleReadOnlyDesc": "Bu modülde yalnızca görüntüleme yetkiniz var; düzenleme yönetici tarafından kapatıldı. Düzenleme gerekiyorsa şirket yöneticinizden isteyin."
   },
   "months": [
     "Ocak",
@@ -396,7 +399,7 @@
     },
     "members": {
       "title": "Kullanıcılar ve yetkiler",
-      "subtitle": "Kimin neyi görebileceğini rol belirler.",
+      "subtitle": "Kimin neyi görebileceğini rol belirler; gerekirse her kullanıcı için modül bazında erişimi daraltabilir ya da genişletebilirsiniz.",
       "add": "Kullanıcı ekle",
       "role": "Rol",
       "email": "E-posta",
@@ -420,7 +423,43 @@
       "mfaOn": "Açık",
       "mfaResetAction": "İki adımlı doğrulamayı sıfırla",
       "mfaResetConfirm": "{{name}} için iki adımlı doğrulama sıfırlansın mı? Kullanıcı gerekirse yeniden kurar.",
-      "mfaReset": "İki adımlı doğrulama sıfırlandı"
+      "mfaReset": "İki adımlı doğrulama sıfırlandı",
+      "access": {
+        "action": "Modül erişimi",
+        "customBadge": "Özel erişim",
+        "customBadgeHint": "{{count}} modülde rolün varsayılanından farklı erişim tanımlı",
+        "title": "Modül erişimi: {{name}}",
+        "description": "Bu kullanıcının hangi modüllere erişebileceğini ve hangilerinde düzenleme yapabileceğini seçin. “Rol varsayılanı” seçiliyse rolün olağan yetkisi geçerlidir.",
+        "tabEdit": "Erişim ayarı",
+        "tabEffective": "Etkin erişim",
+        "level": {
+          "default": "Rol varsayılanı",
+          "none": "Erişim yok",
+          "read": "Sadece görüntüle",
+          "write": "Görüntüle ve düzenle"
+        },
+        "choose": "{{module}} için erişim düzeyi",
+        "roleDefault": "Rol varsayılanı: {{level}}",
+        "partial": "kısmi",
+        "partialHint": "Rol bu modülün yalnızca bir kısmına yetkili",
+        "covers": "Kapsadığı bölümler: {{modules}}",
+        "resetAll": "Tümünü rol varsayılanına döndür",
+        "save": "Kaydet",
+        "confirmTitle": "Değişiklikleri onaylayın",
+        "confirmIntro": "{{name}} için şu değişiklikler kaydedilecek ve hemen geçerli olacak:",
+        "changeLine": "{{module}}: {{from}} → {{to}}",
+        "noChanges": "Değişiklik yok",
+        "saved": "Modül erişimi kaydedildi",
+        "effectiveIntro": "Kullanıcının kaydedilmiş ayarlarına ve rolüne göre bugünkü erişimi. Henüz kaydetmediğiniz seçimler de önizlemede gösterilir.",
+        "effectiveCol": "Etkin erişim",
+        "preview": "önizleme",
+        "boundNote": "Şirket ve üye yönetimi, yıl sonu kapanışı, konsolidasyon, hassas personel verisi ve dışa aktarma yetkileri yalnızca role bağlıdır; buradan verilemez. Rol değiştirilirse bu kullanıcının özel erişimi silinir ve yeni rolün varsayılanı geçerli olur.",
+        "blocked": "Bu kullanıcının erişimini değiştiremezsiniz",
+        "loadFailed": "Erişim bilgisi yüklenemedi",
+        "setBy": "Ayarlayan: {{name}}",
+        "partialRole": "Rol bu modülde kısmi yetkili",
+        "clearedOnRole": "Rol güncellendi; {{count}} modüldeki özel erişim ayarı silindi, yeni rolün varsayılanı geçerli"
+      }
     },
     "currencies": {
       "title": "Para birimi ve kurlar",
@@ -897,7 +936,15 @@
     "MODULE_SECTOR_MISMATCH": "Bu modül şirketinizin faaliyet alanında bulunmuyor.",
     "PROJECT_CLOSED": "Bu proje tamamlanmış ya da iptal edilmiş; yeni kayıt yazılamaz. Projeyi yeniden açın.",
     "PROJECT_MODULE_DISABLED": "Proje etiketi için Ayarlar > Modüller bölümünden \"Şantiye ve projeler\" modülünü açın.",
-    "PROJECT_HAS_POSTINGS": "Bu projede maliyet kaydı var; silinemez ya da iptal edilemez. Tamamlandı olarak işaretleyin."
+    "PROJECT_HAS_POSTINGS": "Bu projede maliyet kaydı var; silinemez ya da iptal edilemez. Tamamlandı olarak işaretleyin.",
+    "MODULE_ACCESS_DENIED": "Bu modüle erişiminiz yönetici tarafından kapatıldı.",
+    "MODULE_READ_ONLY": "Bu modülde yalnızca görüntüleme yetkiniz var; düzenleme yönetici tarafından kapatıldı.",
+    "MODULE_ACCESS_SELF": "Kendi modül erişiminizi değiştiremezsiniz.",
+    "MODULE_ACCESS_OWNER": "Sahibin modül erişimi kısıtlanamaz.",
+    "MODULE_ACCESS_ADMIN_ONLY_OWNER": "Yöneticinin modül erişimini yalnızca şirket sahibi değiştirebilir.",
+    "MODULE_ACCESS_EXCEEDS_OWN": "Kendinizde bulunmayan bir yetkiyi başkasına veremezsiniz.",
+    "MODULE_ACCESS_UNKNOWN_MODULE": "Bu modül için erişim düzeyi belirlenemez.",
+    "MODULE_ACCESS_RULE_VIOLATION": "Modül erişimi kuralına aykırı işlem."
   },
   "parties": {
     "title": "Cari hesaplar",

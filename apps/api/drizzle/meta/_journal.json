@@ -589,6 +589,20 @@
       "when": 1791150726408,
       "tag": "0083_notifications_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1791156217615,
+      "tag": "0084_member_module_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1791156223649,
+      "tag": "0085_member_module_access_rules",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
-import { formatDateTR, hasPermission, type FullDataQuery } from '@erp/shared';
+import { areaAccessOf, formatDateTR, hasPermission, type AccessAreaKey, type FullDataQuery } from '@erp/shared';
 import { TR } from '../../db/search';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ReportTable, TableColumn } from '../../files/table';
@@ -21,6 +21,37 @@ const ATTENDANCE_DAY_LABEL: Record<string, string> = {
   unpaid_leave: 'Ücretsiz izin',
   public_holiday: 'Resmî tatil',
   weekly_rest: 'Hafta tatili',
+};
+
+/** Çalışma kitabı sayfası → erişim alanı: üyenin o alanda hiçbir okuma izni yoksa sayfa dosyaya girmez (bağlam yoksa yalnızca alansız sayfalar). */
+const FULL_DATA_AREA: Record<string, AccessAreaKey> = {
+  Cariler: 'core.parties',
+  'Stok kartları': 'core.inventory',
+  'Seri no sicili': 'core.inventory',
+  'İthalat dosyaları': 'core.inventory',
+  'Stok hareketleri': 'core.inventory',
+  'Hesap planı': 'core.ledger',
+  'Yevmiye satırları': 'core.ledger',
+  Faturalar: 'core.invoices',
+  'Fatura satırları': 'core.invoices',
+  İrsaliyeler: 'core.invoices',
+  'Satış teklif ve siparişleri': 'core.invoices',
+  'Fiyat listeleri': 'core.invoices',
+  'Cari özel fiyatlar': 'core.invoices',
+  'Gider fişleri': 'core.treasury',
+  'Kasa ve banka hesapları': 'core.treasury',
+  'Kasa ve banka hareketleri': 'core.treasury',
+  Projeler: 'construction.projects',
+  'İş kırılımı': 'construction.projects',
+  'Proje bütçeleri': 'construction.projects',
+  'Taşeron sözleşmeleri': 'construction.subcontracts',
+  BOQ: 'construction.subcontracts',
+  Hakedişler: 'construction.subcontracts',
+  'Değişiklik emirleri': 'construction.subcontracts',
+  Personel: 'hr.core',
+  Puantaj: 'hr.core',
+  Bordro: 'hr.payroll',
+  'Sosyal güvenlik': 'hr.payroll',
 };
 
 /** İsteğe bağlı tarih aralığı koşulu. */
@@ -598,12 +629,20 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
   }
 
   // Rehber (X6): üçüncü kişilerin kişisel verisi → yalnızca rehber yönetim izni olanların dosyasına girer; görüşme notları dahil değildir
-  if (ctx.user && hasPermission(ctx.user.role, 'directory.manage')) {
+  if (ctx.user && ctx.access && hasPermission(ctx.access.permissions, 'directory.manage')) {
     const [contacts] = await directoryContactsTable(ctx, { archived: 'all' });
     if (contacts && contacts.rows.length > 0) tables.push({ ...contacts, key: 'rehber', title: 'Rehber', sheet: 'Rehber' });
     const [orgs] = await directoryOrganizationsTable(ctx, { archived: 'all' });
     if (orgs && orgs.rows.length > 0) tables.push({ ...orgs, key: 'rehber-kurumlari', title: 'Rehber kurumları', sheet: 'Rehber kurumları' });
   }
 
-  return tables;
+  // Kullanıcı bazlı modül erişimi: bu dosya çok modüllü bir dökümdür; üyenin "Erişim yok" yaptığı alanların sayfaları dosyaya girmez.
+  if (ctx.access) {
+    const perms = ctx.access.permissions;
+    return tables.filter((t) => {
+      const area = FULL_DATA_AREA[t.key];
+      return !area || areaAccessOf(perms, area).level !== 'none';
+    });
+  }
+  return tables.filter((t) => !FULL_DATA_AREA[t.key]);
 }

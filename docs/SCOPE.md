@@ -14,6 +14,7 @@ Durum: ✅ var · 🔜 yol haritasında (kilometre taşı) · ⏳ MVP sonrası �
 | Genel bakış: kurulum kontrol listesi, özetler | ✅ |
 | Rehber: kişi/kurum defteri, ajanda, görüşme ve toplantı notları (özel/paylaşılan not, takip görevi, birleştirme, vCard/CSV, ilgili kişi dışa aktarma ve anonimleştirme) | ✅ (X6) ⚠️ kişisel veri dayanağı/saklama süresi doğrulanmadı; tekrarlayan ajanda kalemi yok (hatırlatma: bildirimler) |
 | Bildirimler: uygulama içi bildirim (zil, liste, tercihler) + isteğe bağlı günlük e-posta özeti; çek/senet vadesi, teminat mektubu ve yabancı işçi belge süresi, ajanda (bugün/geciken, hatırlatma ofseti), onay bekleyen, lisans, puantaj/bordro ayı, vadesi geçmiş alacak, kritik stok, eski taslak; kaynak modül/izne göre kullanıcıya adreslenir, kopya önleme + otomatik çözme, çok örnekli güvenli zamanlayıcı | ✅ (N1) ⚠️ e-posta özeti SMTP gerektirir (varsayılan kapalı); eşikler yasal değer değil kullanıcı tercihidir; push/SMS yok |
+| Kullanıcı bazlı modül erişimi: sahip/yönetici üye başına modül bazında Erişim yok / Sadece görüntüle / Görüntüle ve düzenle (rol varsayılanını daraltır ya da genişletir; role bağlı yetkiler verilmez; rütbe ve verme sınırı kuralları; RLS + denetim izi; menü, API, dışa aktarma, bildirim, onay ve konsolidasyon etkin izne bakar) | ✅ |
 | Özel kodlar (kayıtları kendi ölçütünle grupla) | ✅ |
 | Çalışma alanı ve şirket ayarları (unvan, vergi bilgileri) | ✅ |
 

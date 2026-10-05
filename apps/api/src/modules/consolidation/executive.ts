@@ -16,7 +16,7 @@ import {
   type Kpis,
   type MoneyValue,
   type Permission,
-  type Role,
+  type PermissionSet,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import type { AuthCtx } from '../../http/context';
@@ -47,7 +47,7 @@ export interface ExecScope {
   name: string;
   baseCurrency: string;
   reportingCurrency: string | null;
-  role: Role;
+  permissions: PermissionSet;
   enabledModules: ReadonlySet<string>;
 }
 
@@ -160,7 +160,7 @@ async function incomeFor(tx: Tx, scope: ExecScope, from: string, to: string, inc
 
 /** Şirket yönetici özeti: her bölüm kendi modül + izniyle kapılıdır; kapalı/yetkisiz bölüm çıkarılır. Tutarlar şirketin defter para biriminde. */
 export async function companyExecutive(tx: Tx, scope: ExecScope, q: ExecutiveSummaryQuery): Promise<ExecutiveSummary> {
-  const can = (k: keyof typeof SECTION_RULES) => scope.enabledModules.has(SECTION_RULES[k].module) && hasPermission(scope.role, SECTION_RULES[k].permission);
+  const can = (k: keyof typeof SECTION_RULES) => scope.enabledModules.has(SECTION_RULES[k].module) && hasPermission(scope.permissions, SECTION_RULES[k].permission);
   const cmp = comparePeriod(q.from, q.to, q.compare);
   const days = daysInclusive(q.from, q.to);
   const out: ExecutiveSummary = {

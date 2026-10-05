@@ -145,6 +145,19 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   viewer: ['settings.read', 'ledger.read', 'parties.read', 'inventory.read', 'invoices.read', 'deliveries.read', 'treasury.read', 'reports.read', 'projects.read', 'subcontracts.read', 'procurement.read', 'realestate.read'],
 };
 
-export function hasPermission(role: Role, permission: Permission): boolean {
+/** Bir üyenin ETKİN izin kümesi (rol şablonu + kullanıcı bazlı modül erişimi); `effectivePermissions` üretir. */
+export type PermissionSet = ReadonlySet<Permission>;
+
+/**
+ * İzin denetiminin TEK kapısı: istek bağlamındaki etkin izin kümesine bakar. Rol şablonuna doğrudan bakmak (kullanıcı bazlı
+ * modül erişimini atlatır) yasaktır; yalnızca `roleHasDefault` (rol varsayılanı, arayüzde ipucu göstermek için) vardır ve
+ * test/access-scan.test.ts kaynakta başka yerde kullanılmadığını doğrular.
+ */
+export function hasPermission(permissions: PermissionSet, permission: Permission): boolean {
+  return permissions.has(permission);
+}
+
+/** Rol şablonunun varsayılanı (kullanıcı istisnası YOK). Yalnızca varsayılan/ipucu hesapları ve testler için. */
+export function roleHasDefault(role: Role, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role].includes(permission);
 }

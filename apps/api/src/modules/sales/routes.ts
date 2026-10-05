@@ -4,7 +4,6 @@ import {
   batchPreviewQuerySchema,
   batchRunSchema,
   createSalesDocSchema,
-  hasPermission,
   idParam,
   listSalesDocsQuerySchema,
   orderToDeliverySchema,
@@ -15,7 +14,6 @@ import {
 } from '@erp/shared';
 import { sql } from 'drizzle-orm';
 import { tenantRoute, type TenantCtx } from '../../http/context';
-import { forbidden } from '../../http/errors';
 import { orderToDelivery, orderToInvoice } from './convert';
 import { batchPreview, runBatch } from './batch';
 import {
@@ -133,7 +131,7 @@ export const salesRoutes: FastifyPluginAsync = async (app) => {
     '/api/invoice-batches',
     tenantRoute(app, core, async (c) => {
       const input = batchRunSchema.parse(c.req.body);
-      if (input.post && !hasPermission(c.role, 'invoices.post')) throw forbidden();
+      if (input.post) c.require('invoices.post');
       const result = await runBatch(c.tx, docCtx(c), input);
       void c.reply.code(201);
       return result;

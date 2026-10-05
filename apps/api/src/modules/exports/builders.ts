@@ -1,4 +1,4 @@
-import { dec, formatDateTR, hasPermission, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type Role, type TreasuryTxnType, type ContactListQuery, type AgendaListQuery } from '@erp/shared';
+import { dec, formatDateTR, hasPermission, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type PermissionSet, type TreasuryTxnType, type ContactListQuery, type AgendaListQuery } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
@@ -50,9 +50,9 @@ export interface BuildCtx {
   tx: Tx;
   company: { name: string; baseCurrency: string; reportingCurrency: string | null };
   /** İsteği yapan kullanıcı (yalnızca kullanıcıya göre görünürlüğü olan raporlar için: ajanda). */
-  user?: { id: string; role: Role };
+  user?: { id: string };
   /** Şirket kimliği, rol ve açık modüller (bölümleri izin/modüle göre kapılayan raporlar: yönetici özeti, döviz pozisyonu). */
-  access?: { companyId: string; role: Role; enabledModules: ReadonlySet<string> };
+  access?: { companyId: string; permissions: PermissionSet; enabledModules: ReadonlySet<string> };
 }
 
 const CODE_IN_LABEL = /\(([A-Z]{3})\)$/;
@@ -2167,7 +2167,7 @@ const AGENDA_STATUS_LABEL: Record<string, string> = { open: 'Açık', done: 'Bit
 /** Ajanda dışa aktarma: yalnızca isteği yapanın görebildiği kalemler (kendi + şirket; rehber yöneticisi hepsi). */
 export async function agendaTable(ctx: BuildCtx, q: Partial<AgendaListQuery>): Promise<ReportTable[]> {
   if (!ctx.user) throw unprocessable('Kullanıcı bağlamı yok', 'EXPORT_NO_USER');
-  const { items } = await listAgenda(ctx.tx, { companyId: '', userId: ctx.user.id, canManage: hasPermission(ctx.user.role, 'directory.manage') }, { scope: 'all', ...q } as AgendaListQuery);
+  const { items } = await listAgenda(ctx.tx, { companyId: '', userId: ctx.user.id, canManage: !!ctx.access && hasPermission(ctx.access.permissions, 'directory.manage') }, { scope: 'all', ...q } as AgendaListQuery);
   return [
     {
       key: 'ajanda',

@@ -20,6 +20,7 @@ export type SecurityEventName =
   | 'member_added'
   | 'member_role_changed'
   | 'member_removed'
+  | 'member_module_access_changed'
   | 'license_activated'
   | 'license_offline_activated'
   | 'license_refreshed'

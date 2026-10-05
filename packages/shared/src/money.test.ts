@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyRate, currencySymbol, dec, formatMoney, formatTR, parseTR, roundMoney, sum, toDbAmount } from './money';
 import { resolveEnabledModules, MODULES, type ModuleDef } from './module-registry';
-import { hasPermission } from './permissions';
+import { roleHasDefault as hasPermission } from './permissions';
 import { createJournalSchema, accountTypeForCode } from './schemas/ledger';
 import { todayIso, formatDateTR } from './dates';
 

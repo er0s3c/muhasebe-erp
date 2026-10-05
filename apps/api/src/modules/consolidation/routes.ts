@@ -185,10 +185,10 @@ export const consolidationRoutes: FastifyPluginAsync = async (app) => {
   );
   app.get(
     '/api/reports/executive-summary',
-    tenantRoute(app, { module: 'reports.executive', permission: 'reports.read' }, async ({ tx, req, company, role, enabledModules }) => ({
+    tenantRoute(app, { module: 'reports.executive', permission: 'reports.read' }, async ({ tx, req, company, access, enabledModules }) => ({
       report: await companyExecutive(
         tx,
-        { companyId: company.id, name: company.name, baseCurrency: company.baseCurrency, reportingCurrency: company.reportingCurrency, role, enabledModules },
+        { companyId: company.id, name: company.name, baseCurrency: company.baseCurrency, reportingCurrency: company.reportingCurrency, permissions: access.permissions, enabledModules },
         executiveSummaryQuerySchema.parse(req.query),
       ),
     })),

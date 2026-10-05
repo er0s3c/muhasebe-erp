@@ -334,5 +334,13 @@
   "0083_notifications_rules": {
     "sha256": "7e461b68c13b4d2784803a6b7f230a2d88d17630ad0a63693630437a396f2e90",
     "when": 1791150726408
+  },
+  "0084_member_module_access": {
+    "sha256": "741d1fc43a0aa7724b6c5a233d2033f017790945676f7d57a6693afba237720c",
+    "when": 1791156217615
+  },
+  "0085_member_module_access_rules": {
+    "sha256": "e55a13f46a4f967053d75a53b0b6c51ee91d5b7263aa26f63b0da568fcfd5d87",
+    "when": 1791156223649
   }
 }

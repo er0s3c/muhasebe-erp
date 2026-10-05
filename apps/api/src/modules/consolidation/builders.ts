@@ -20,6 +20,6 @@ export async function fxPositionBuild(ctx: BuildCtx, q: FxPositionQuery): Promis
 export async function executiveBuild(ctx: BuildCtx, q: ExecutiveSummaryQuery): Promise<ReportTable[]> {
   const a = need(ctx);
   return executiveTables(
-    await companyExecutive(ctx.tx, { companyId: a.companyId, name: ctx.company.name, baseCurrency: ctx.company.baseCurrency, reportingCurrency: ctx.company.reportingCurrency, role: a.role, enabledModules: a.enabledModules }, q),
+    await companyExecutive(ctx.tx, { companyId: a.companyId, name: ctx.company.name, baseCurrency: ctx.company.baseCurrency, reportingCurrency: ctx.company.reportingCurrency, permissions: a.permissions, enabledModules: a.enabledModules }, q),
   );
 }

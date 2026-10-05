@@ -75,6 +75,8 @@ export interface NavigationData {
   company: { id: string; name: string; sector: string; baseCurrency: string; reportingCurrency: string | null; allowNegativeStock: boolean };
   role: string;
   permissions: string[];
+  /** Yöneticinin bu üyeye verdiği özel modül erişimi (alan → düzey); boşsa rol varsayılanı. */
+  moduleAccess: Record<string, 'none' | 'read' | 'write'>;
   modules: string[];
   groups: {
     key: string;
@@ -83,7 +85,8 @@ export interface NavigationData {
   }[];
 }
 
-export const useNavigation = () => useCQuery<NavigationData>(['navigation'], '/api/navigation');
+// Pencereye dönünce yenilenir: yöneticinin değiştirdiği modül erişimi bu üyede kısa sürede görünür (sunucu her istekte ayrıca denetler)
+export const useNavigation = () => useCQuery<NavigationData>(['navigation'], '/api/navigation', { refetchOnWindowFocus: true });
 
 /** Modül şirkette açık mı (menü ve sayfa kapıları ile aynı kaynak: `/api/navigation`). Yüklenirken false. */
 export function useModuleEnabled(key: string): boolean {

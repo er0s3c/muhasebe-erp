@@ -12,7 +12,6 @@ import {
   decideApprovalSchema,
   giveAdvanceSchema,
   giveMaterialSchema,
-  hasPermission,
   idParam,
   progressPaymentListQuerySchema,
   putBoqLinesSchema,
@@ -29,7 +28,6 @@ import {
 import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { pageOf } from '../../http/paging';
-import { forbidden } from '../../http/errors';
 import {
   cancelRequest,
   createRule,
@@ -99,7 +97,7 @@ const stockCtx = ({ company, user }: TenantCtx): StockCtx => ({
   reportingCurrency: company.reportingCurrency,
   allowNegativeStock: company.allowNegativeStock,
 });
-const approvalCtx = ({ company, user, role }: TenantCtx): ApprovalCtx => ({ companyId: company.id, userId: user.id, role });
+const approvalCtx = ({ company, user, role, access }: TenantCtx): ApprovalCtx => ({ companyId: company.id, userId: user.id, role, permissions: access.permissions });
 
 export const subcontractRoutes: FastifyPluginAsync = async (app) => {
   const MODULE = 'construction.subcontracts';
@@ -256,7 +254,7 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
     '/api/subcontracts/:id/material-issues',
     tenantRoute(app, manage, async (c) => {
       // Stok çıkışı yapıldığı için stok hareketi izni de gerekir (sözleşme yönetimi tek başına yetmez)
-      if (!hasPermission(c.role, 'inventory.move')) throw forbidden();
+      c.require('inventory.move');
       const out = await giveMaterial(c.tx, stockCtx(c), idParam.parse(c.req.params).id, giveMaterialSchema.parse(c.req.body));
       void c.reply.code(201);
       return out;

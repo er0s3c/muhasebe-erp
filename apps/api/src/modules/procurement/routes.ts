@@ -37,7 +37,7 @@ import {
 import { awardRfq, cancelRfq, createRfq, deleteOffer, getRfq, listRfqs, upsertOffer } from './rfq';
 
 const pctx = ({ company, user }: TenantCtx): ProcurementCtx => ({ companyId: company.id, userId: user.id, baseCurrency: company.baseCurrency });
-const actx = ({ company, user, role }: TenantCtx): ApprovalCtx => ({ companyId: company.id, userId: user.id, role });
+const actx = ({ company, user, role, access }: TenantCtx): ApprovalCtx => ({ companyId: company.id, userId: user.id, role, permissions: access.permissions });
 
 export const procurementRoutes: FastifyPluginAsync = async (app) => {
   const MODULE = 'construction.procurement';
