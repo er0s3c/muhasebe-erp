@@ -4,7 +4,8 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/cn';
-import { useNavigation } from '../../lib/queries';
+import { useCQuery, useNavigation } from '../../lib/queries';
+import type { SearchHit } from '@erp/shared';
 import { navIcon } from './icons';
 
 interface Command {
@@ -24,6 +25,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const navigate = useNavigate();
   const { data: nav } = useNavigation();
   const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
+  useEffect(() => { const timer = setTimeout(() => setDebounced(query.trim()), 250); return () => clearTimeout(timer); }, [query]);
+  const recordSearch = useCQuery<{ items: SearchHit[] }>(['record-search', debounced], open && debounced.length >= 2 ? `/api/workspace/search?q=${encodeURIComponent(debounced)}` : null);
   const [active, setActive] = useState(0);
   const listId = useId();
   const optionId = (i: number) => `${listId}-o${i}`;
@@ -63,8 +67,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const results = useMemo(() => {
     const q = norm(query.trim());
-    return q ? commands.filter((c) => norm(`${c.label} ${c.keywords ?? ''}`).includes(q)) : commands;
-  }, [commands, query]);
+    const pages = q ? commands.filter((c) => norm(`${c.label} ${c.keywords ?? ''}`).includes(q)) : commands;
+    const records: Command[] = debounced === query.trim() && q.length >= 2 ? (recordSearch.data?.items ?? []).map((item) => ({ id: `${item.kind}:${item.id}`, label: item.label, group: 'Kayıtlar', path: item.path, icon: 'search' })) : [];
+    return [...pages, ...records];
+  }, [commands, query, debounced, recordSearch.data]);
 
   useEffect(() => setActive(0), [query, open]);
   // Ok tuşlarıyla seçilen öğe görünür kalsın
@@ -128,6 +134,8 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             <kbd className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted">Esc</kbd>
           </div>
           <div id={listId} role="listbox" aria-label={t('shell.commandPalette')} className="max-h-80 overflow-y-auto p-2">
+            {recordSearch.isFetching && <p role="status" className="px-3 py-2 text-sm text-muted">Kayıtlar aranıyor…</p>}
+            {recordSearch.isError && <p role="alert" className="px-3 py-2 text-sm text-danger">Kayıt araması yüklenemedi.</p>}
             {results.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">{t('common.noResults')}</p>}
             {groups.map((g) => (
               <div key={g.name} role="group" aria-labelledby={`${listId}-g-${g.index}`}>

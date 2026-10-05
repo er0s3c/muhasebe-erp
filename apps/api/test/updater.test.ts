@@ -139,7 +139,7 @@ describe('ana makine güncelleyicisi', () => {
     expect(r.outcome).toBe('done');
     expect(w.reports.map((x) => x.status)).toEqual(['downloading', 'applying', 'done']);
     expect(w.installs).toHaveLength(1);
-    expect(w.installs[0]![0]).toMatch(/kits\/1\.1\.0\/muhasebe-erp-1\.1\.0-linux-x64\/installer\/install\.sh$/);
+    expect(w.installs[0]![0]).toMatch(/kits[/\\]1\.1\.0[/\\]muhasebe-erp-1\.1\.0-linux-x64[/\\]installer[/\\]install\.sh$/);
     expect(w.installs[0]).toEqual(expect.arrayContaining(['--yes', '--mode=prod', '--path=native', '--port=3000']));
     // İş kalmadı
     expect((await new Updater(w.cfg, ring, w.io).runOnce()).outcome).toBe('idle');
@@ -176,7 +176,7 @@ describe('ana makine güncelleyicisi', () => {
     const r = await new Updater(w.cfg, ring, w.io).runOnce();
     expect(r.outcome).toBe('rolled_back');
     expect(w.installs).toHaveLength(2);
-    expect(w.installs[1]![0]).toMatch(/versions\/1\.0\.0\/installer\/install\.sh$/);
+    expect(w.installs[1]![0]).toMatch(/versions[/\\]1\.0\.0[/\\]installer[/\\]install\.sh$/);
     expect(w.installs[1]).toContain('--restore-db=/var/lib/muhasebe-erp/backups/erp-1.dump');
     // Uygulama kapalıyken bildirimler gidemez; geri dönünce son durum bildirilir
     expect(w.reports.at(-1)!.status).toBe('rolled_back');
@@ -185,7 +185,7 @@ describe('ana makine güncelleyicisi', () => {
   it('aynı anda ikinci çalıştırma beklemez; belirteç yoksa iş yapmaz', async () => {
     const w = world();
     mkdirSync(w.cfg.workDir, { recursive: true });
-    writeFileSync(join(w.cfg.workDir, 'updater.lock'), '1');
+    writeFileSync(join(w.cfg.workDir, 'updater.lock'), String(process.pid));
     expect((await new Updater(w.cfg, ring, w.io).runOnce()).outcome).toBe('busy');
     const w2 = world();
     writeFileSync(w2.cfg.envFile, 'PORT=3000\n');

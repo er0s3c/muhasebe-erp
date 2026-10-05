@@ -28,6 +28,8 @@ const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow()
 const money = () => numeric({ precision: 19, scale: 4 });
 const rate = () => numeric({ precision: 19, scale: 8 });
 const qty = () => numeric({ precision: 19, scale: 4 });
+// Product expansion tables are declared below with the existing schema so future
+// drizzle generations preserve the same migration history.
 const unitCost = () => numeric({ precision: 19, scale: 6 });
 
 // ---------------------------------------------------------------------------
@@ -5618,6 +5620,37 @@ export const fiscalYearEvents = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Work tracking, document archive, field operations and external portal
+// ---------------------------------------------------------------------------
+export const workItems = pgTable('work_items', {
+  id:id(),companyId:uuid().notNull().references(()=>companies.id),title:text().notNull(),description:text().notNull().default(''),
+  dueDate:date({mode:'string'}).notNull(),ownerId:uuid().notNull().references(()=>users.id),createdBy:uuid().notNull().references(()=>users.id),
+  priority:text().notNull().default('normal'),status:text().notNull().default('open'),recordKind:text(),recordId:uuid(),version:integer().notNull().default(1),
+  createdAt:createdAt(),updatedAt:timestamp({withTimezone:true}).notNull().defaultNow(),
+},t=>[index('work_items_due_idx').on(t.companyId,t.ownerId,t.status,t.dueDate),check('work_items_title_ck',sql`length(btrim(${t.title})) between 2 and 200`),check('work_items_priority_ck',sql`${t.priority} in ('normal','high')`),check('work_items_status_ck',sql`${t.status} in ('open','done','cancelled')`),check('work_items_version_ck',sql`${t.version} > 0`),check('work_items_ref_ck',sql`(${t.recordKind} is null) = (${t.recordId} is null)`)]);
+
+export const recordDocuments = pgTable('record_documents', {
+ id:id(),companyId:uuid().notNull().references(()=>companies.id),recordKind:text().notNull(),recordId:uuid().notNull(),filename:text().notNull(),mime:text().notNull(),size:integer().notNull(),sha256:text().notNull(),previousId:uuid(),createdBy:uuid().notNull().references(()=>users.id),createdAt:createdAt(),
+},t=>[unique('record_documents_id_company_uq').on(t.id,t.companyId),unique('record_documents_previous_uq').on(t.previousId),foreignKey({name:'record_documents_previous_fk',columns:[t.previousId,t.companyId],foreignColumns:[t.id,t.companyId]}),index('record_documents_record_idx').on(t.companyId,t.recordKind,t.recordId,t.createdAt),check('record_documents_size_ck',sql`${t.size} between 1 and 5242880`),check('record_documents_mime_ck',sql`${t.mime} in ('application/pdf','image/jpeg','image/png')`)]);
+export const recordDocumentContent = pgTable('record_document_content', {
+ id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),content:text().notNull(),
+},t=>[foreignKey({name:'record_document_content_document_fk',columns:[t.id,t.companyId],foreignColumns:[recordDocuments.id,recordDocuments.companyId]})]);
+export const workAlertStates=pgTable('work_alert_states',{
+ companyId:uuid().notNull().references(()=>companies.id),userId:uuid().notNull().references(()=>users.id),key:text().notNull(),snoozedUntil:date({mode:'string'}),readAt:timestamp({withTimezone:true}),
+},t=>[primaryKey({columns:[t.companyId,t.userId,t.key]})]);
+export const operationEntries=pgTable('operation_entries',{
+ id:id(),companyId:uuid().notNull().references(()=>companies.id),kind:text().notNull(),title:text().notNull(),projectId:uuid(),partyId:uuid(),ownerId:uuid().notNull().references(()=>users.id),eventDate:date({mode:'string'}).notNull(),dueDate:date({mode:'string'}).notNull(),payload:jsonb().notNull(),status:text().notNull().default('open'),version:integer().notNull().default(1),createdBy:uuid().notNull().references(()=>users.id),createdAt:createdAt(),updatedAt:timestamp({withTimezone:true}).notNull().defaultNow(),
+},t=>[index('operation_entries_list_idx').on(t.companyId,t.kind,t.status,t.dueDate),index('operation_entries_project_idx').on(t.companyId,t.projectId,t.kind),foreignKey({name:'operation_entries_project_fk',columns:[t.projectId,t.companyId],foreignColumns:[projects.id,projects.companyId]}),foreignKey({name:'operation_entries_party_fk',columns:[t.partyId,t.companyId],foreignColumns:[parties.id,parties.companyId]}),check('operation_entries_kind_ck',sql`${t.kind} in ('collection','site_report','schedule','equipment','equipment_log','defect')`),check('operation_entries_status_ck',sql`${t.status} in ('open','done','cancelled')`),check('operation_entries_title_ck',sql`length(btrim(${t.title})) between 2 and 200`),check('operation_entries_version_ck',sql`${t.version}>0`),check('operation_entries_ref_ck',sql`(${t.kind}='collection' and ${t.partyId} is not null) or (${t.kind}<>'collection' and ${t.projectId} is not null)`)]);
+export const cashScenarios=pgTable('cash_scenarios',{
+ id:id(),companyId:uuid().notNull().references(()=>companies.id),name:text().notNull(),assumptions:jsonb().notNull(),createdBy:uuid().notNull().references(()=>users.id),createdAt:createdAt(),
+});
+export const portalLinks=pgTable('portal_links',{
+ id:id(),companyId:uuid().notNull().references(()=>companies.id),orgId:uuid().notNull().references(()=>organizations.id),partyId:uuid().notNull(),label:text().notNull(),tokenHash:text().notNull().unique(),passwordHash:text().notNull(),expiresAt:timestamp({withTimezone:true}).notNull(),revokedAt:timestamp({withTimezone:true}),createdBy:uuid().notNull().references(()=>users.id),createdAt:createdAt(),documentIds:uuid().array().notNull().default(sql`'{}'::uuid[]`),
+},t=>[foreignKey({name:'portal_links_party_fk',columns:[t.partyId,t.companyId],foreignColumns:[parties.id,parties.companyId]})]);
+export const portalAccessEvents=pgTable('portal_access_events',{
+ id:id(),companyId:uuid().notNull().references(()=>companies.id),linkId:uuid().notNull().references(()=>portalLinks.id),action:text().notNull(),at:timestamp({withTimezone:true}).notNull().defaultNow(),
+});
+
 // Bildirimler (uygulama içi + isteğe bağlı e-posta özeti)
 // ---------------------------------------------------------------------------
 

@@ -231,6 +231,12 @@
     "expenseEntries": "Gider fişleri",
     "expenseCards": "Gider kartları",
     "expenseReports": "Gider raporları",
+    "workspace": "Bugünkü işlerim",
+    "documents": "Belge arşivi",
+    "siteOperations": "Saha ve iş takibi",
+    "collectionWork": "Tahsilat takibi",
+    "cashScenarios": "Nakit senaryoları",
+    "portalAccess": "Portal erişimleri",
     "notifications": "Bildirimler"
   },
   "shell": {
@@ -5974,10 +5980,10 @@
     "mapLevel": "Hesap eşleme",
     "mapLevelHint": "Şirketler arası hesap KODUNA göre",
     "levels": {
-      "full": "Tam kod",
-      "3": "İlk 3 hane",
+      "1": "Sınıf (1 hane)",
       "2": "İlk 2 hane",
-      "1": "Sınıf (1 hane)"
+      "3": "İlk 3 hane",
+      "full": "Tam kod"
     },
     "closingRates": "Elle kapanış kuru",
     "plRates": "Elle dönem kuru",

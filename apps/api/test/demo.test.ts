@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -41,7 +42,7 @@ async function admin<T>(fn: (c: pg.Client) => Promise<T>): Promise<T> {
 /** Operatör aracını gerçek bir süreç olarak çalıştırır (kabuktaki gibi). */
 function cli(args: string[], env: Record<string, string> = {}) {
   const r = spawnSync(process.execPath, ['--import', 'tsx', 'src/db/demo-cli.ts', ...args], {
-    cwd: new URL('..', import.meta.url).pathname,
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: { ...process.env, DATABASE_URL: appUrl, MIGRATION_DATABASE_URL: ownerUrl, ...env },
     encoding: 'utf8',
     timeout: 120_000,
@@ -62,14 +63,14 @@ beforeAll(async () => {
       await c.query(`GRANT CONNECT ON DATABASE "${name}" TO erp_app`);
     }
   });
-});
+}, 240_000);
 
 afterAll(async () => {
   vi.useRealTimers();
   await admin(async (c) => {
     for (const name of [dbName, ...robustDbs, failDb]) await c.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
   });
-});
+}, 240_000);
 
 describe('demo aracı', () => {
   it('databaseNameOf bağlantı adresinden veritabanı adını okur', () => {

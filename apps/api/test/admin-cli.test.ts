@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { asOwner, client, createCompany, execAsOwner, makeApp, registerUser, PASSWORD } from './helpers';
@@ -7,7 +8,7 @@ const { app } = await makeApp();
 
 function admin(args: string[]) {
   const r = spawnSync(process.execPath, ['--import', 'tsx', 'src/db/admin-cli.ts', ...args], {
-    cwd: new URL('..', import.meta.url).pathname,
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: { ...process.env },
     encoding: 'utf8',
     timeout: 60_000,

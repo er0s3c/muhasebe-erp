@@ -610,6 +610,20 @@
       "when": 1791156223650,
       "tag": "0086_termination_fx_residue",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0087_product_expansion",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1791200000001,
+      "tag": "0088_product_expansion_rules",
+      "breakpoints": true
     }
   ]
 }

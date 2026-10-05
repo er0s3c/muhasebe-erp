@@ -346,5 +346,13 @@
   "0086_termination_fx_residue": {
     "sha256": "74efd015f3bdd93a81e9f5371c48e9ff7e8ed9cd911dec80faaff00a407fa4a9",
     "when": 1791156223650
+  },
+  "0087_product_expansion": {
+    "sha256": "ca5f125b9463dbf20085eeb8cea87f853a5079112fd6250e8b0d7103805ea2ff",
+    "when": 1791200000000
+  },
+  "0088_product_expansion_rules": {
+    "sha256": "9879d83906efe5bebb581290ccb6c8b67a413763bd7d47719d4fce1bb9837946",
+    "when": 1791200000001
   }
 }

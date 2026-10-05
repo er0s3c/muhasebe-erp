@@ -105,7 +105,7 @@ function makeLine(
   return {
     accountId,
     currency: currency as CurrencyCode,
-    ...(foreign ? { fxRate: toDbRate(base.gt(0) ? base.div(amount) : dec(1)) } : {}),
+    ...(foreign ? { fxRate: toDbRate(base.gt(0) && amount.gt(0) ? base.div(amount) : dec(1)) } : {}),
     debit: side === 'debit' ? toDbAmount(amount) : '0',
     credit: side === 'credit' ? toDbAmount(amount) : '0',
     debitBase: side === 'debit' ? toDbAmount(base) : '0',

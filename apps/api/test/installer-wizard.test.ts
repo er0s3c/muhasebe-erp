@@ -14,8 +14,9 @@ const ROOT = resolve(__dirname, '../../..');
 const CONFIG_SH = join(ROOT, 'installer/lib/config.sh');
 const hasBin = (cmd: string) => spawnSync(cmd, ['--version'], { stdio: 'ignore' }).status === 0 || spawnSync(cmd, ['version'], { stdio: 'ignore' }).status === 0;
 const HAS_OPENSSL = hasBin('openssl');
-const PWSH = process.env.PWSH || 'pwsh';
-const HAS_PWSH = spawnSync(PWSH, ['-NoProfile', '-Command', '1'], { stdio: 'ignore' }).status === 0;
+const PWSH = process.env.PWSH || (process.platform === 'win32' ? 'powershell' : 'pwsh');
+const HAS_PWSH = spawnSync(PWSH, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', '1'], { stdio: 'ignore' }).status === 0;
+const HAS_BASH = process.platform !== 'win32' && spawnSync('bash', ['-c', 'true'], { stdio: 'ignore' }).status === 0;
 
 /** config.sh'yi kaynak alıp betiği çalıştırır (die/warn kısaltmalarıyla). */
 function sh(script: string, env: Record<string, string> = {}): { out: string; code: number } {
@@ -44,7 +45,7 @@ describe('SMTP adresi', () => {
     expect(() => buildSmtpUrl({ host: 'h', port: '1', security: 'x' })).toThrow();
   });
 
-  it('bash işlevi Node yardımcısıyla aynı adresi üretir', () => {
+  it.skipIf(!HAS_BASH)('bash işlevi Node yardımcısıyla aynı adresi üretir', () => {
     for (const c of cases) {
       const { out } = sh(`smtp_url "$H" "$P" "$S" "$U" "$W"`, { H: c.host, P: c.port, S: c.security, U: c.user, W: c.pass });
       expect(out, JSON.stringify(c)).toBe(buildSmtpUrl(c));
@@ -55,7 +56,7 @@ describe('SMTP adresi', () => {
     const lib = join(ROOT, 'installer/lib/config.ps1');
     for (const c of cases) {
       const script = `function Die($m){throw $m}; function Warn($m){}; $Yes=$false; $AnswersFile=''; . '${lib}'; New-SmtpUrl $env:H $env:P $env:S $env:U $env:W`;
-      const r = spawnSync(PWSH, ['-NoProfile', '-Command', script], { encoding: 'utf8', env: { ...process.env, H: c.host, P: c.port, S: c.security, U: c.user, W: c.pass } });
+      const r = spawnSync(PWSH, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], { encoding: 'utf8', env: { ...process.env, H: c.host, P: c.port, S: c.security, U: c.user, W: c.pass } });
       expect(r.stdout.trim(), JSON.stringify(c)).toBe(buildSmtpUrl(c));
     }
   });
@@ -97,7 +98,7 @@ describe('SMTP adresi', () => {
   });
 });
 
-describe('yanıt dosyası (bash)', () => {
+describe.skipIf(!HAS_BASH)('yanıt dosyası (bash)', () => {
   const run = (answers: string, pre = '') => {
     const f = join(dir, 'answers.txt');
     writeFileSync(f, answers, { mode: 0o600 });
@@ -124,10 +125,10 @@ describe('yanıt dosyası (bash)', () => {
 
   it('örnek dosya geçerli ve her anahtar belgelenmiş; Windows kitaplığıyla anahtar kümesi aynı', () => {
     const example = join(ROOT, 'installer/answers.example');
-    expect(sh(`load_answers "${example}"; echo ok`).out).toContain('ok');
+    if (HAS_BASH) expect(sh(`load_answers "${example}"; echo ok`).out).toContain('ok');
     const keysSh = /ANSWER_KEYS="([^"]+)"/.exec(readFileSync(CONFIG_SH, 'utf8').replace(/\\\n/g, ''))![1]!.split(/\s+/).sort();
     const ps = readFileSync(join(ROOT, 'installer/lib/config.ps1'), 'utf8');
-    const keysPs = [...(/\$script:AnswerKeys = @\(([\s\S]*?)\)\n/.exec(ps)![1]!.matchAll(/'([A-Z_]+)'/g))].map((m) => m[1]!).sort();
+    const keysPs = [...(/\$script:AnswerKeys = @\(([\s\S]*?)\)\r?\n/.exec(ps)![1]!.matchAll(/'([A-Z_]+)'/g))].map((m) => m[1]!).sort();
     expect(keysPs).toEqual(keysSh);
     const exampleText = readFileSync(example, 'utf8');
     const ops = readFileSync(join(ROOT, 'docs/OPERATIONS.md'), 'utf8');
@@ -138,7 +139,7 @@ describe('yanıt dosyası (bash)', () => {
   });
 });
 
-describe('doğrulayıcılar ve ortam düzenleyici (bash)', () => {
+describe.skipIf(!HAS_BASH)('doğrulayıcılar ve ortam düzenleyici (bash)', () => {
   const ok = (fn: string, v: string) => sh(`${fn} "$V" >/dev/null && echo yes || echo no`, { V: v }).out.trim() === 'yes';
 
   it('port, e-posta, alan adı, saat, lisans', () => {
@@ -236,7 +237,7 @@ describe.skipIf(!HAS_OPENSSL)('sertifika denetimi (openssl ve Node aynı karara 
 });
 
 describe('betikler', () => {
-  it('bash sözdizimi geçerli; --help çalışır', () => {
+  it.skipIf(!HAS_BASH)('bash sözdizimi geçerli; --help çalışır', () => {
     for (const f of ['installer/install.sh', 'installer/lib/config.sh', 'installer/lib/wizard.sh', 'scripts/backup.sh', 'scripts/restore.sh']) {
       expect(spawnSync('bash', ['-n', join(ROOT, f)], { encoding: 'utf8' }).status, f).toBe(0);
     }
@@ -250,7 +251,7 @@ describe('betikler', () => {
       const bytes = readFileSync(join(ROOT, f));
       expect([...bytes.subarray(0, 3)], `${f} BOM`).toEqual([0xef, 0xbb, 0xbf]); // Windows PowerShell 5.1 BOM'suz dosyayı ANSI sanır
       if (HAS_PWSH) {
-        const r = spawnSync(PWSH, ['-NoProfile', '-Command', `$e=$null;$t=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('${join(ROOT, f)}',[ref]$t,[ref]$e);$e.Count`], { encoding: 'utf8' });
+        const r = spawnSync(PWSH, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `$e=$null;$t=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('${join(ROOT, f)}',[ref]$t,[ref]$e);$e.Count`], { encoding: 'utf8' });
         expect(r.stdout.trim(), f).toBe('0');
       }
     }

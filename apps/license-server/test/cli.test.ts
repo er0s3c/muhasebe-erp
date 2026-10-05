@@ -2,16 +2,18 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { openSigningKey, signToken, type SealedKeyFile } from '@erp/license-core';
 import { setupToken } from '../src/crypto';
 import { DATA_KEY, activate, createAdmin, loginAdmin, makeInstallation, makeServer, totpNow } from './helpers';
 
 const s = await makeServer();
-const cwd = new URL('..', import.meta.url).pathname;
+const cwd = fileURLToPath(new URL('..', import.meta.url));
+const tsx = new URL(import.meta.resolve('tsx')).href;
 
 function cli(args: string[], env: Record<string, string> = {}) {
-  const r = spawnSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', ...args], {
+  const r = spawnSync(process.execPath, ['--import', tsx, 'src/cli.ts', ...args], {
     cwd,
     env: { ...process.env, LICENSE_DATA_KEY: DATA_KEY, ...env },
     encoding: 'utf8',
@@ -28,7 +30,7 @@ describe('komut satırı', () => {
       const env = { LICENSE_SIGNING_KEY_PASSPHRASE: 'cok-uzun-bir-parola-42' };
       const r = cli(['keygen', '--kid=k-2026a', `--out=${out}`], env);
       expect(r.code, r.out).toBe(0);
-      expect(statSync(out).mode & 0o777).toBe(0o600);
+      if (process.platform !== 'win32') expect(statSync(out).mode & 0o777).toBe(0o600);
       const file = JSON.parse(readFileSync(out, 'utf8')) as SealedKeyFile;
       expect(r.out).toContain(file.publicKey);
       expect(readFileSync(out, 'utf8')).not.toContain('PRIVATE KEY');

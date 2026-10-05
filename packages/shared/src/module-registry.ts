@@ -265,6 +265,12 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
 ];
 
 export const NAV_ITEMS: readonly NavItemDef[] = [
+  { key: 'portal-access', labelKey: 'nav.portalAccess', path: '/workspace/portal', icon: 'users', group: 'settings', module: 'core.parties', permission: 'members.manage' },
+  { key: 'cash-scenarios', labelKey: 'nav.cashScenarios', path: '/workspace/scenarios', icon: 'chart-no-axes-combined', group: 'treasury', module: 'core.treasury', permission: 'treasury.read' },
+  { key: 'site-operations', labelKey: 'nav.siteOperations', path: '/workspace/operations?kind=site_report', icon: 'hard-hat', group: 'construction', module: 'construction.projects', permission: 'projects.read' },
+  { key: 'collection-work', labelKey: 'nav.collectionWork', path: '/workspace/operations?kind=collection', icon: 'wallet', group: 'parties', module: 'core.parties', permission: 'parties.read' },
+  { key: 'workspace', labelKey: 'nav.workspace', path: '/workspace', icon: 'calendar-check', group: 'overview', module: 'core.dashboard' },
+  { key: 'documents', labelKey: 'nav.documents', path: '/workspace/documents', icon: 'files', group: 'overview', module: 'core.dashboard' },
   {
     key: 'dashboard',
     labelKey: 'nav.dashboard',

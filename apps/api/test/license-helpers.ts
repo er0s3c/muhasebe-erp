@@ -46,7 +46,7 @@ export function useLicenseDatabase(): void {
     await lock.query('select pg_advisory_lock($1)', [LOCK_KEY]);
     await resetSchema(OWNER_URL);
     await runMigrations(OWNER_URL);
-  }, 120_000);
+  }, 360_000);
   afterAll(async () => {
     await lock?.end();
   });

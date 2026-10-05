@@ -110,6 +110,8 @@ export function DashboardPage() {
   const ratesDone = ratesLoaded && rateQueries.every((q) => q.data?.rate);
 
   const steps: Step[] = [];
+  const setup = useCQuery<{ steps: Step[] }>(['workspace-setup'], '/api/workspace/setup');
+  steps.push(...(setup.data?.steps ?? []));
   if (can('rates.manage')) {
     steps.push({ key: 'rates', title: t('dashboard.stepRates'), description: t('dashboard.stepRatesDesc'), done: ratesDone, to: '/settings/currencies' });
   }
