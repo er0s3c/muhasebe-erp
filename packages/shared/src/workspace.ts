@@ -17,9 +17,12 @@ export const workItemUpdateSchema = workItemSchema.partial().extend({
   status: z.enum(['open', 'done', 'cancelled']).optional(),
   version: z.number().int().positive(),
 });
+const hasInvalidFilenameChar = (value: string) =>
+  [...value].some((char) => char === '/' || char === '\\' || char.charCodeAt(0) <= 0x1f);
+
 export const documentUploadSchema = z.object({
   record: recordRefSchema,
-  filename: z.string().trim().min(1).max(180).refine((v) => !/[\\/\r\n\u0000-\u001f]/.test(v), 'Geçersiz dosya adı'),
+  filename: z.string().trim().min(1).max(180).refine((v) => !hasInvalidFilenameChar(v), 'Geçersiz dosya adı'),
   mime: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
   base64: z.string().min(4).max(7_000_000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
   previousId: uuid.optional(),
