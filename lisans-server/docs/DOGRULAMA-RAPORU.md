@@ -14,13 +14,14 @@ Docker ve Cloudflare Tunnel düzeni için yapılan kontroller:
 | Gerçek Caddy HTTP akışı | Doğru istemci IP'si, HTTPS başlığı, no-store, panel IP kısıtı, yanlış Host reddi, CI/zaman/indirme yolu erişimi doğrulandı |
 | VPS shell araçları | Docker içindeki Bash ile söz dizimi kontrolü başarılı |
 | Kaynak kodsuz VPS kurulum arşivi | İzinli dosya listesinden üretildi, içeriği kontrol edildi; yerel deneme build-info.json içinde localTest/dirty olarak işaretlendi |
-| VPS giriş ve kurtarma regresyonları | 11 test; etiket/digest doğrulaması, eksik paket, ortam parolası aktarımı, mevcut anahtar ve güvenli ayar okuma |
+| VPS giriş ve kurtarma regresyonları | 14 test; etiket/digest doğrulaması, eksik paket, ortam parolası aktarımı, mevcut anahtar, güvenli ayar okuma, mevcut yöneticiyle başarılı tekrar çalıştırma ve gerçek hata durumlarının korunması |
 | Gerçek Docker anahtar üretimi | Mühürlü anahtar üretildi; ikinci çalıştırmada aynı anahtar korundu |
 | PostgreSQL ilk kurulum ve kurtarma | Linux volume üzerinde eski 0700 izin hatası tekrarlandı; eksik roller tamamlandı; mevcut kayıt ve parolalar korundu; 0644 ile temiz kurulum doğrulandı |
 | Veritabanından sunucuya zincir | Gerçek migration, uygulama rolüyle sunucu sağlık kontrolü ve ilk yönetici kurulum kodu üretimi doğrulandı |
 | Açık onayla parola onarımı | Gerçek PostgreSQL 16 üzerinde iki farklı parola eşitlendi; salt okunur teşhis, yanlış konteyner/veri birimi/rol yetkisi/ayar izni reddi, yedekleme hatasında değişmeme, başarısız girişte eski parola doğrulayıcılarının aynen geri gelmesi ve eşzamanlı işlem kilidi doğrulandı |
 | Onarım yedeği ve tekrar çalıştırma | Döküm ayrı test veritabanına geri yüklendi; kayıt, rol yetkileri, ayarlar, anahtar ve token korundu; ikinci çalıştırma parolaları değiştirmedi |
 | Onarım sonrası hizmet | Eşitlenen parolalarla gerçek migration, uygulama rolüyle sunucu sağlık kontrolü ve yönetici kurulum kodu üretimi başarılı |
+| Mevcut yöneticiyle kurulum sonu | Gerçek PostgreSQL ve lisans CLI ile oluşturulan yöneticide tekrar kurulum kontrolü `/login` adresini verdi; hesap kaydı değişmedi, yeniden kurulum kodu istenmedi |
 
 Tekrarlamak için depo kökünde:
 

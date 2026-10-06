@@ -138,6 +138,11 @@ try {
     }
     assert.ok(healthy, 'The license server must start after repairing both database passwords');
     assert.match(docker(['exec', server, 'node', 'dist/cli.js', 'setup:token']), /İlk yönetici kurulum kodu:/);
+    docker(['exec', server, 'node', 'dist/cli.js', 'admin:create', '--email=test-admin@example.test', '--name=Test Admin']);
+    const adminBefore = hash(query('SELECT row_to_json(a)::text FROM admins a', 'erp_license'));
+    const repeat = shell('source /test/kit/tools/resume-setup-vps.sh; test_transport() { [[ $1 == exec && $2 == -T && $3 == db ]] || return 91; shift 3; "$@"; }; show_admin_entrypoint admin.example.test test_transport');
+    assert.match(repeat, /Kurulum tamamlandı.*admin.example.test\/login/);
+    assert.equal(hash(query('SELECT row_to_json(a)::text FROM admins a', 'erp_license')), adminBefore);
   }
   shell("flock -x /etc/muhasebe-lisans/setup.lock -c 'touch /test/lock-ready; sleep 60' >/dev/null 2>&1 &");
   for (let i = 0; i < 20; i++) { try { shell('test -f /test/lock-ready'); break; } catch { await sleep(); } }

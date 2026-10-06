@@ -143,3 +143,20 @@ test('resume reads only the requested setting without executing .env contents', 
     rmSync(fixture, { recursive: true, force: true });
   }
 });
+
+test('repeated setup with an existing admin succeeds without generating another token', () => {
+  const code = 'source "${SETUP_TEST_HELPER%/*}/resume-setup-vps.sh"; docker() { [[ "$*" == *"SELECT EXISTS"* ]] || return 1; printf t; }; show_admin_entrypoint admin.example.test docker compose';
+  assert.equal(run(code), 'Kurulum tamamlandı; mevcut yönetici hesabınızla https://admin.example.test/login adresinden giriş yapın (MFA zorunlu).');
+});
+
+test('first setup offers its code only when the admin table is empty', () => {
+  const code = 'source "${SETUP_TEST_HELPER%/*}/resume-setup-vps.sh"; docker() { if [[ "$*" == *"SELECT EXISTS"* ]]; then printf f; elif [[ "$*" == *setup:token ]]; then printf test-setup-code; else return 1; fi; }; show_admin_entrypoint admin.example.test docker compose';
+  assert.equal(run(code), 'Kurulum hizmetleri hazır: https://admin.example.test/setup (MFA zorunlu).\ntest-setup-code');
+});
+
+test('admin-state query and token failures remain failures', () => {
+  for (const body of ['return 1', 'printf unexpected', 'if [[ "$*" == *"SELECT EXISTS"* ]]; then printf f; else return 1; fi']) {
+    const code = `source "\${SETUP_TEST_HELPER%/*}/resume-setup-vps.sh"; docker() { ${body}; }; if show_admin_entrypoint admin.example.test docker compose >/dev/null 2>&1; then exit 1; fi; printf rejected`;
+    assert.equal(run(code), 'rejected');
+  }
+});

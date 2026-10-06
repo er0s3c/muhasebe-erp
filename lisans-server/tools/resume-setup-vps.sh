@@ -2,6 +2,26 @@
 set +x
 set -euo pipefail
 
+show_admin_entrypoint() {
+  local domain=$1 has_admin
+  shift
+  # Read-only check: an existing administrator makes repeated setup successful.
+  if ! has_admin=$("$@" exec -T db psql -X -q -v ON_ERROR_STOP=1 -U postgres -d erp_license -Atc 'SELECT EXISTS (SELECT 1 FROM admins)'); then
+    echo 'Yönetici durumu okunamadı; lisans veritabanı bağlantısını kontrol edin.' >&2
+    return 1
+  fi
+  case "$has_admin" in
+    t) echo "Kurulum tamamlandı; mevcut yönetici hesabınızla https://$domain/login adresinden giriş yapın (MFA zorunlu)." ;;
+    f)
+      echo "Kurulum hizmetleri hazır: https://$domain/setup (MFA zorunlu)."
+      if ! "$@" exec -T license node dist/cli.js setup:token; then
+        echo 'Kurulum kodu üretilemedi; lisans hizmetini kontrol edin.' >&2
+        return 1
+      fi ;;
+    *) echo 'Yönetici durumu beklenen biçimde değil; işlem durduruldu.' >&2; return 1 ;;
+  esac
+}
+
 ensure_signing_key() {
   local keys=$1 image=$2
   if [[ -e "$keys/signing-key.json" ]]; then
@@ -90,11 +110,7 @@ WantedBy=timers.target
 EOF
   systemctl daemon-reload
   systemctl enable --now erp-license-backup.timer
-  echo "Kurulum hizmetleri hazır: https://$domain/setup (MFA zorunlu)."
-  if ! "${DC[@]}" exec -T license node dist/cli.js setup:token; then
-    echo 'Kurulum kodu üretilemedi. Yönetici daha önce oluşturulduysa mevcut hesabınızla giriş yapın; aksi halde lisans hizmetini kontrol edin.' >&2
-    return 1
-  fi
+  show_admin_entrypoint "$domain" "${DC[@]}"
   echo 'İmza anahtarını ve .env dosyasını ayrı, güvenli bir çevrimdışı depoya yedekleyin.'
 }
 
