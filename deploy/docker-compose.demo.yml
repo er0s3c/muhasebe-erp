@@ -110,6 +110,7 @@ services:
       # Ana makinedeki hizmetlere (örn. yerel lisans sunucusu, SMTP geçidi) host.docker.internal adıyla erişim
       - 'host.docker.internal:host-gateway'
     volumes:
+      - license_clock:/var/lib/erp-licensing
       - type: bind
         source: /etc/machine-id
         target: /etc/host-machine-id
@@ -126,3 +127,4 @@ services:
 
 volumes:
   demo_pgdata:
+  license_clock:

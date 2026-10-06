@@ -101,6 +101,8 @@ services:
     volumes:
       - ${CONSTRUCTION_FILES_DIR:-./construction-data}:/var/lib/erp-construction
       - ${BACKUP_FILES_DIR:-./backups}:/var/lib/erp-backups
+      # Trusted license time survives container replacement and ordinary database restores.
+      - license_clock:/var/lib/erp-licensing
       # Lisans parmak izi: ana makinenin kimliği (yalnızca okuma). Dosya yoksa compose başlamayı reddeder (ana makinede oluşturun:
       # systemd-machine-id-setup). Bu kimlik olmadan lisans yalnızca veritabanı kümesine bağlanır (klon koruması zayıf).
       - type: bind
@@ -141,5 +143,6 @@ services:
 
 volumes:
   pgdata:
+  license_clock:
   caddy_data:
   caddy_config:

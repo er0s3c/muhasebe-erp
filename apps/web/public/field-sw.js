@@ -13,7 +13,10 @@ self.addEventListener('message', (event) => {
         });
         await Promise.all(
           urls.map(async (url) => {
-            const response = await fetch(url);
+            // The production SPA fallback only serves HTML when explicitly requested.
+            const response = await fetch(url, new URL(url, self.location.origin).pathname === '/field-offline'
+              ? { headers: { Accept: 'text/html' } }
+              : undefined);
             if (!response.ok) throw new Error('cache failed');
             await cache.put(url, response);
           }),

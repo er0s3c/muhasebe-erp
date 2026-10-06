@@ -4,6 +4,7 @@
 .agents
 .codex
 apps/api/data
+**/data/licensing
 apps/api/test
 .github
 node_modules

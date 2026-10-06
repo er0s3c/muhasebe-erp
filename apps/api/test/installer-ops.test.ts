@@ -200,6 +200,11 @@ describe('yedek temizliği yalnızca kendi dosyalarına dokunur, en az 1 yedek k
     mkdirSync(join(t, 'etc'), { recursive: true });
     mkdirSync(join(t, 'opt', 'bin'), { recursive: true });
     writeFileSync(join(t, 'etc', 'migrate.env'), 'MIGRATION_DATABASE_URL=postgres://erp:p%2540ss%20w@127.0.0.1:5432/erp\n');
+    writeFileSync(join(t, 'etc', 'erp.env'), `CONSTRUCTION_STORAGE_DIR=${join(t, 'files')}\n`);
+    mkdirSync(join(t, 'opt', 'current', 'app', 'runtime'), { recursive: true });
+    mkdirSync(join(t, 'opt', 'current', 'app', 'dist'), { recursive: true });
+    symlinkSync(process.execPath, join(t, 'opt', 'current', 'app', 'runtime', 'node'));
+    writeFileSync(join(t, 'opt', 'current', 'app', 'dist', 'construction-files.mjs'), readFileSync(join(ROOT, 'installer', 'tools', 'construction-files.mjs')));
     const body = `as_root(){ case "$1" in tee) shift; cat > "$1" ;; chown|systemctl) ;; *) "$@" ;; esac; }; HAS_SYSTEMD=0; can_root(){ return 1; }; PG_MAJOR=x
 BACKUP_DIR=${JSON.stringify(d)} BACKUP_KEEP=0 write_backup_tool >/dev/null 2>&1
 sed -i "s#/usr/lib/postgresql/x/bin/pg_dump#${bin}/pg_dump#" "${t}/opt/bin/erp-backup"
@@ -208,7 +213,10 @@ bash "${t}/opt/bin/erp-backup"`;
     expect(r.out).toMatch(/Yedek: .*my backups %x\/erp-\d{8}-\d{6}\.dump/);
     const left = readdirSync(d).sort();
     // BACKUP_KEEP=0 → en az 1: yalnızca yeni yedek kalır; başka adlandırılmış dosyalar korunur
-    expect(left.filter((n) => /^erp-\d{8}-\d{6}\.dump$/.test(n))).toHaveLength(1);
+    const dumps = left.filter((n) => /^erp-\d{8}-\d{6}\.dump$/.test(n));
+    expect(dumps).toHaveLength(1);
+    expect(existsSync(join(d, `${dumps[0]}.files.gz`))).toBe(true);
+    expect(existsSync(join(d, `${dumps[0]}.files.gz.sha256`))).toBe(true);
     expect(left).toEqual(expect.arrayContaining(['erp-baska.dump', 'erp-erp-20200101T000000Z.dump']));
     const calls = readFileSync(join(t, 'calls'), 'utf8');
     expect(calls).toContain('pw=p%40ss w user=erp db=erp');

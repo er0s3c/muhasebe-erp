@@ -60,6 +60,8 @@ ENV CONSTRUCTION_PYTHON=/opt/construction/bin/python \
     CONSTRUCTION_TESSDATA_DIR=/opt/construction-tessdata \
     CONSTRUCTION_STORAGE_DIR=/var/lib/erp-construction
 ENV BACKUP_DIRECTORY=/var/lib/erp-backups
+ENV LICENSE_CLOCK_FILE=/var/lib/erp-licensing/clock.json
+RUN mkdir -p /var/lib/erp-licensing && chown node:node /var/lib/erp-licensing && chmod 700 /var/lib/erp-licensing
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/web/dist ./web
 # Bildirim hem imajın kökünde hem de web kökünde (arayüz /THIRD-PARTY-NOTICES.md olarak sunar)

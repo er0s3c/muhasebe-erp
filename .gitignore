@@ -31,3 +31,4 @@ installer/windows/**/bin/
 installer/windows/**/obj/
 **/data/construction/
 **/data/construction-runtime/
+**/data/licensing/
