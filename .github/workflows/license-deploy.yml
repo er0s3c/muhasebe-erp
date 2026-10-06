@@ -66,7 +66,9 @@ jobs:
           echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
       - name: Kaynak kodsuz VPS kurulum paketini hazırla
         if: steps.gate.outputs.run == 'true'
-        run: node lisans-server/tools/package-vps.mjs "$RELEASE_SHA"
+        env:
+          PUBLISHED_IMAGE: ghcr.io/${{ github.repository }}-license@${{ steps.image.outputs.digest }}
+        run: node lisans-server/tools/package-vps.mjs "$RELEASE_SHA" --image "${PUBLISHED_IMAGE,,}"
       - name: VPS kurulum paketini sakla
         if: steps.gate.outputs.run == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

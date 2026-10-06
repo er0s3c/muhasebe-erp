@@ -12,11 +12,7 @@ source "$HERE/setup-input.sh"
 require_setup_files "$HERE/.."
 repository=er0s3c/muhasebe-erp
 repository_id=1395438415
-default_image=
-if [[ -f "$HERE/../COMMIT" ]]; then
-  source_commit=$(tr -d '\r\n' < "$HERE/../COMMIT")
-  if [[ $source_commit =~ ^[a-f0-9]{40}$ ]]; then default_image="docker pull $LICENSE_IMAGE_REPOSITORY:$source_commit"; fi
-fi
+default_image=$(default_image_prompt "$HERE/..")
 echo 'Ok tuşlarıyla düzenleyebilirsiniz. Enter, ekrandaki varsayılanı kullanır.'
 echo "GitHub deposu otomatik: $repository (kimlik: $repository_id)"
 while true; do

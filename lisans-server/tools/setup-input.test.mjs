@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, copyFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, copyFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -76,6 +76,21 @@ test('rejects a standalone input patch and accepts the complete deployment kit',
     copyFileSync(join(dirname(helper), 'setup-vps.sh'), join(fixture, 'tools/setup-vps.sh'));
     assert.equal(run('if require_setup_files "$1" 2>/dev/null; then exit 1; fi; printf rejected', [fixture.replaceAll('\\', '/')]), 'rejected');
     assert.equal(run('require_setup_files "$1"; printf complete', [join(dirname(helper), '..').replaceAll('\\', '/')]), 'complete');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('uses the explicitly published image and never infers it from an installer commit', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'erp-vps-image-'));
+  try {
+    const fixturePath = fixture.replaceAll('\\', '/');
+    writeFileSync(join(fixture, 'COMMIT'), '64635547a35b8003c28ee51235923f9640770f59\n');
+    assert.equal(run('default_image_prompt "$1"', [fixturePath]), '');
+    writeFileSync(join(fixture, 'RUNTIME_IMAGE'), `${digest}\n`);
+    assert.equal(run('default_image_prompt "$1"', [fixturePath]), `docker pull ${digest}`);
+    writeFileSync(join(fixture, 'RUNTIME_IMAGE'), 'docker pull ghcr.io/other/image:v1\n');
+    assert.equal(run('if default_image_prompt "$1" 2>/dev/null; then exit 1; fi; printf rejected', [fixturePath]), 'rejected');
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }

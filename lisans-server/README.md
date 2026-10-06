@@ -10,4 +10,4 @@
 - `deploy/`: Docker ve ters vekil yapılandırmaları
 - `tools/`: kurulum, dağıtım, yedekleme/geri yükleme, paket hazırlama ve Tunnel testi
 
-Depo kökünden `npm run build:license`, `npm test -w @erp/license-server`, `npm test -w @erp/license-core` çalıştırılır. Docker HTTP/port güvenlik testi: `node lisans-server/tools/test-tunnel.mjs`. Üretim VPS paketi: `node lisans-server/tools/package-vps.mjs <tam-HEAD-commit>`; yalnız temiz checkout kabul edilir. Geliştirme denemesi için `--local-test` kullanılır ve paketin `build-info.json` dosyasında işaretlenir.
+Depo kökünden `npm run build:license`, `npm test -w @erp/license-server`, `npm test -w @erp/license-core` çalıştırılır. Docker HTTP/port güvenlik testi: `node lisans-server/tools/test-tunnel.mjs`. Üretim VPS paketi: `node lisans-server/tools/package-vps.mjs <tam-HEAD-commit> --image ghcr.io/er0s3c/muhasebe-erp-license@sha256:<yayımlanmış-digest>`; yalnız temiz checkout kabul edilir. Geliştirme denemesi için `--local-test` kullanılır ve paketin `build-info.json` dosyasında işaretlenir.

@@ -25,6 +25,16 @@ trim_input() {
   printf '%s' "$value"
 }
 
+default_image_prompt() {
+  local root=$1 image
+  # Installer source commits can exist before their container is published.
+  # Only use the explicit image recorded when the distribution kit was built.
+  if [[ -f "$root/RUNTIME_IMAGE" ]]; then
+    image=$(normalize_image_input "$(cat "$root/RUNTIME_IMAGE")") || return 1
+    printf 'docker pull %s' "$image"
+  fi
+}
+
 prompt_input() {
   local target=$1 prompt=$2 initial=${3:-} answer
   if [[ -t 0 ]]; then
