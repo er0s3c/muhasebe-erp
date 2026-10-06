@@ -51,6 +51,9 @@ jobs:
       - name: Tip denetimi
         run: npm run typecheck
 
+      - name: VPS kurulum girişleri ve sabit imaj doğrulaması
+        run: node --test lisans-server/tools/setup-input.test.mjs
+
       - name: Birim ve entegrasyon testleri (gerçek PostgreSQL, RLS dahil)
         run: npm test
 

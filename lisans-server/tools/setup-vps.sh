@@ -6,19 +6,41 @@ source /etc/os-release
 [[ ${ID:-} == ubuntu || ${ID:-} == debian ]] || { echo 'Ubuntu/Debian gerekli.' >&2; exit 1; }
 BASE=/etc/muhasebe-lisans
 [[ ! -e "$BASE/.env" ]] || { echo 'Kurulum zaten var; deploy/backup araçlarını kullanın.' >&2; exit 1; }
-read -r -p 'Lisans alan adı (varsayılan admin.er0s3c.com): ' domain
-domain=${domain:-admin.er0s3c.com}
-read -r -p 'Yönetici e-postası: ' email
-read -r -p 'Özel GHCR imajı (ghcr.io/...@sha256:...): ' image
-read -r -p 'GitHub depo adı (sahip/depo): ' repository
-read -r -p 'GitHub sayısal depo kimliği: ' repository_id
-[[ $domain =~ ^[a-zA-Z0-9.-]+$ && $domain == *.* && $email == *@* && $repository =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ && $repository_id =~ ^[0-9]+$ && $image =~ ^ghcr.io/[a-z0-9/_.-]+@sha256:[a-f0-9]{64}$ ]] || { echo 'Girdi biçimi geçersiz.' >&2; exit 1; }
-read -r -p 'Yedekleme klasörü (varsayılan /var/backups/muhasebe-lisans): ' backups
-backups=${backups:-/var/backups/muhasebe-lisans}
-[[ $backups == /* && $backups != / && $backups != *$'\n'* ]] || exit 1
-read -r -p 'Tunnel: 1=aynı Docker kurulumu (varsayılan), 2=mevcut sunucu hizmeti: ' tunnel_mode
-tunnel_mode=${tunnel_mode:-1}
-[[ $tunnel_mode == 1 || $tunnel_mode == 2 ]] || { echo 'Tunnel seçeneği geçersiz'; exit 1; }
+HERE=$(cd "$(dirname "$0")" && pwd)
+source "$HERE/setup-input.sh"
+repository=er0s3c/muhasebe-erp
+repository_id=1395438415
+default_image=
+if [[ -f "$HERE/../COMMIT" ]]; then
+  source_commit=$(tr -d '\r\n' < "$HERE/../COMMIT")
+  if [[ $source_commit =~ ^[a-f0-9]{40}$ ]]; then default_image="docker pull $LICENSE_IMAGE_REPOSITORY:$source_commit"; fi
+fi
+echo 'Ok tuşlarıyla düzenleyebilirsiniz. Enter, ekrandaki varsayılanı kullanır.'
+echo "GitHub deposu otomatik: $repository (kimlik: $repository_id)"
+while true; do
+  prompt_input domain 'Lisans alan adı: ' admin.er0s3c.com
+  [[ $domain =~ ^[a-zA-Z0-9.-]+$ && $domain == *.* ]] && break
+  echo 'Alan adı geçersiz; örnek: admin.er0s3c.com' >&2
+done
+while true; do
+  prompt_input email 'Yönetici e-postası: '
+  [[ $email == *@* && $email != *[[:space:]]* && $email != *$'\n'* ]] && break
+  echo 'E-posta adresi geçersiz; tekrar girin.' >&2
+done
+while true; do
+  prompt_input image_input 'İmaj / docker pull komutu: ' "$default_image"
+  if image=$(normalize_image_input "$image_input"); then break; fi
+done
+while true; do
+  prompt_input backups 'Yedekleme klasörü: ' /var/backups/muhasebe-lisans
+  [[ $backups == /* && $backups != / && $backups != *$'\n'* ]] && break
+  echo 'Yedekleme klasörü tam yol olmalı; örnek: /var/backups/muhasebe-lisans' >&2
+done
+while true; do
+  prompt_input tunnel_mode 'Tunnel: 1=aynı Docker kurulumu, 2=mevcut sunucu hizmeti: ' 1
+  [[ $tunnel_mode == 1 || $tunnel_mode == 2 ]] && break
+  echo 'Tunnel için 1 veya 2 girin.' >&2
+done
 if [[ $tunnel_mode == 1 ]]; then
   read -r -s -p 'Cloudflare Tunnel token (ekranda gösterilmez): ' tunnel_token; echo
   [[ $tunnel_token =~ ^[A-Za-z0-9_+/=-]{32,8192}$ ]] || { echo 'Tunnel token biçimi geçersiz'; exit 1; }
@@ -40,13 +62,14 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 systemctl enable --now docker
 if ! docker pull "$image"; then
-  read -r -p 'GHCR kullanıcı adı: ' registry_user
-  read -r -s -p 'Yalnız packages:read yetkili GHCR anahtarı: ' registry_token; echo
+  prompt_input registry_user 'GHCR kullanıcı adı: ' er0s3c
+  read -r -s -p 'Yalnız read:packages yetkili GHCR anahtarı: ' registry_token; echo
   printf '%s' "$registry_token" | docker login ghcr.io -u "$registry_user" --password-stdin
   unset registry_token
   docker pull "$image"
 fi
-HERE=$(cd "$(dirname "$0")" && pwd)
+image=$(resolve_image_digest "$image")
+echo "Kurulum için sabitlenen imaj: $image"
 umask 077
 install -d -m 700 "$BASE" "$BASE/keys" "$backups"
 install -m 600 "$HERE/../deploy/compose.runtime.yml" "$BASE/compose.yml"

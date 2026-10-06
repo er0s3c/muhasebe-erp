@@ -20,7 +20,7 @@ await mkdir(stage, { recursive: true });
 const files = [
   'deploy/compose.runtime.yml', 'deploy/compose.host-tunnel.yml', 'deploy/compose.managed-tunnel.yml',
   'deploy/Caddyfile.tunnel', 'deploy/init-prod.sh',
-  'tools/setup-vps.sh', 'tools/configure-deploy.sh', 'tools/deploy-vps.sh',
+  'tools/setup-vps.sh', 'tools/setup-input.sh', 'tools/configure-deploy.sh', 'tools/deploy-vps.sh',
   'tools/backup-vps.sh', 'tools/restore-vps.sh', 'docs/DOCKER-TUNNEL-KURULUM.md',
 ];
 for (const file of files) {
