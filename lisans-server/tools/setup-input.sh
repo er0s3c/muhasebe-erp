@@ -6,6 +6,7 @@ require_setup_files() {
   local root=$1 file missing=0
   for file in deploy/compose.runtime.yml deploy/compose.host-tunnel.yml deploy/compose.managed-tunnel.yml \
     deploy/Caddyfile.tunnel deploy/init-prod.sh deploy/ensure-database.sql tools/setup-input.sh tools/backup-vps.sh \
+    deploy/validate-credential-repair.sql tools/repair-db-credentials.sh \
     tools/deploy-vps.sh tools/restore-vps.sh tools/configure-deploy.sh tools/resume-setup-vps.sh; do
     if [[ ! -f "$root/$file" ]]; then
       printf 'Eksik kurulum dosyası: %s\n' "$file" >&2

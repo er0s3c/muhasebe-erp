@@ -22,6 +22,24 @@ PostgreSQL ilk kurulum betiği sır içermez ve PostgreSQL kullanıcısının ok
 
 Cloudflare Tunnel'ın `--token-file` desteği kullanılır. [Resmî Tunnel parametreleri](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/run-parameters/).
 
+## Yeni kurulumda veritabanı parola onarımı
+
+`password authentication failed for user "erp"` hatasında, yalnız yeni kurulum için mevcut `/etc/muhasebe-lisans/.env` parolalarının doğru olduğuna karar verildiyse bu araç kullanılabilir. Normal kurtarma aracı kendiliğinden parola sıfırlamaz. GitHub API yetkisini artırmak bu hatayı çözmez.
+
+Tam onarım paketini doğrulayıp açtıktan sonra paket klasöründe root olarak çalıştırın:
+
+```bash
+bash tools/repair-db-credentials.sh --apply
+```
+
+Araç önce tam olarak `muhasebe-lisans` projesinin PostgreSQL 16 konteynerini, `licensedata` veri birimini, veritabanı sahibini ve iki rolün beklenen yetkilerini denetler. Kurulum, dağıtım veya yedekleme çalışıyorsa işlem durur. Lisans hizmeti çalışıyorsa yedek ve onarım sırasında kısa süre durdurulur.
+
+Yerel PostgreSQL yönetici bağlantısıyla veritabanı dökümü ve rol yedeği alınır; mevcut ayarlar, imza anahtarı ve Tunnel token'ı da aynı korumalı klasöre kopyalanır. Döküm içindekiler denetimi ve dosya özetleri doğrulanmadan parola değişmez. Bu yedek klasörü `backup-directory` ayarındaki hedefte `credential-repair-*` adıyla ve yalnız root erişimiyle oluşur; sır içerdiğinden paylaşmayın, sunucu dışında şifreli olarak saklayın.
+
+Yalnız `erp` ve `erp_app` parolaları `.env` ile eşitlenir. Parolalar komut argümanlarına ve çıktıya yazılmaz. İki rolün ağ arayüzünden parolalı girişi doğrulanamazsa önceki parola doğrulayıcıları tek işlemde geri getirilir. Kayıtlar, rol yetkileri, imza anahtarı ve Tunnel token'ı değişmez. Başarıdan sonra araç otomatik olarak `resume-setup-vps.sh` ile migration, hizmetler, günlük yedekleme ve yönetici kurulum kodu adımlarına devam eder. Tekrar çalıştırma, zaten uyumlu parolaları değiştirmez.
+
+`--apply` olmadan çalıştırma yalnız teşhis yapar; kilit veya yedek dosyası oluşturmaz. Çıkış kodu `0` uyumlu, `2` parola uyuşmazlığı, `1` güvenlik/hazırlık hatasıdır. Onarım başarılı olsa da sonraki migration veya Tunnel adımı başarısız olursa parolalar tekrar bozulmaz; ilgili sorun giderildikten sonra normal kurtarma aracını çalıştırın. `.env`, anahtarlar veya Docker veri birimlerini silmeyin.
+
 ## Cloudflare kuralları
 
 - Bu host için **cache bypass** uygulayın; API cevapları ve indirmeler önbelleğe alınmamalı. Caddy ayrıca `Cache-Control: no-store` gönderir.

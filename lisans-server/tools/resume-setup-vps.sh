@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set +x
 set -euo pipefail
 
 ensure_signing_key() {
@@ -60,7 +61,7 @@ resume_setup() {
   # password-authenticated interface as migration and application connections.
   if ! "${DC[@]}" exec -T db sh -c 'PGPASSWORD="$ERP_OWNER_PASSWORD" psql -X -w -h "$HOSTNAME" -U erp -d erp_license -Atc "SELECT 1" >/dev/null' || \
      ! "${DC[@]}" exec -T db sh -c 'PGPASSWORD="$ERP_APP_PASSWORD" psql -X -w -h "$HOSTNAME" -U erp_app -d erp_license -Atc "SELECT 1" >/dev/null'; then
-    echo 'Mevcut rol parolaları kaydedilmiş ayarlarla uyuşmuyor. Parolalar ve veriler değiştirilmedi; veritabanı erişim ayarlarını kontrol edin.' >&2
+    echo 'Mevcut rol parolaları kaydedilmiş ayarlarla uyuşmuyor. Yedekli onarım için bash tools/repair-db-credentials.sh --apply çalıştırın. Parolalar ve veriler değiştirilmedi.' >&2
     return 1
   fi
   "${DC[@]}" run --rm migrate

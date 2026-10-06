@@ -24,9 +24,9 @@ await mkdir(stage, { recursive: true });
 // Deliberate allowlist: no source repo, database, signing key or environment files.
 const files = [
   'deploy/compose.runtime.yml', 'deploy/compose.host-tunnel.yml', 'deploy/compose.managed-tunnel.yml',
-  'deploy/Caddyfile.tunnel', 'deploy/init-prod.sh', 'deploy/ensure-database.sql',
+  'deploy/Caddyfile.tunnel', 'deploy/init-prod.sh', 'deploy/ensure-database.sql', 'deploy/validate-credential-repair.sql',
   'tools/setup-vps.sh', 'tools/setup-input.sh', 'tools/resume-setup-vps.sh', 'tools/configure-deploy.sh', 'tools/deploy-vps.sh',
-  'tools/backup-vps.sh', 'tools/restore-vps.sh', 'docs/DOCKER-TUNNEL-KURULUM.md',
+  'tools/backup-vps.sh', 'tools/restore-vps.sh', 'tools/repair-db-credentials.sh', 'docs/DOCKER-TUNNEL-KURULUM.md',
 ];
 for (const file of files) {
   const destination = join(stage, file);

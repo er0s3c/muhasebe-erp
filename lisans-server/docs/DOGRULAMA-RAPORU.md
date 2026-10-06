@@ -18,6 +18,9 @@ Docker ve Cloudflare Tunnel düzeni için yapılan kontroller:
 | Gerçek Docker anahtar üretimi | Mühürlü anahtar üretildi; ikinci çalıştırmada aynı anahtar korundu |
 | PostgreSQL ilk kurulum ve kurtarma | Linux volume üzerinde eski 0700 izin hatası tekrarlandı; eksik roller tamamlandı; mevcut kayıt ve parolalar korundu; 0644 ile temiz kurulum doğrulandı |
 | Veritabanından sunucuya zincir | Gerçek migration, uygulama rolüyle sunucu sağlık kontrolü ve ilk yönetici kurulum kodu üretimi doğrulandı |
+| Açık onayla parola onarımı | Gerçek PostgreSQL 16 üzerinde iki farklı parola eşitlendi; salt okunur teşhis, yanlış konteyner/veri birimi/rol yetkisi/ayar izni reddi, yedekleme hatasında değişmeme, başarısız girişte eski parola doğrulayıcılarının aynen geri gelmesi ve eşzamanlı işlem kilidi doğrulandı |
+| Onarım yedeği ve tekrar çalıştırma | Döküm ayrı test veritabanına geri yüklendi; kayıt, rol yetkileri, ayarlar, anahtar ve token korundu; ikinci çalıştırma parolaları değiştirmedi |
+| Onarım sonrası hizmet | Eşitlenen parolalarla gerçek migration, uygulama rolüyle sunucu sağlık kontrolü ve yönetici kurulum kodu üretimi başarılı |
 
 Tekrarlamak için depo kökünde:
 
@@ -32,7 +35,10 @@ LICENSE_TEST_IMAGE=muhasebe-lisans:test node lisans-server/tools/test-tunnel.mjs
 node --test lisans-server/tools/setup-input.test.mjs
 LICENSE_TEST_IMAGE=muhasebe-lisans:test node lisans-server/tools/test-setup-keygen.mjs
 LICENSE_TEST_IMAGE=muhasebe-lisans:test node lisans-server/tools/test-setup-database.mjs
+LICENSE_TEST_IMAGE=muhasebe-lisans:test node lisans-server/tools/test-repair-db-credentials.mjs
 ```
+
+Parola onarım testi, üretim root CLI betiğini izole Linux PostgreSQL konteynerinde çalıştırır. Docker taşıma çağrıları test adaptörüyle aynı gerçek PostgreSQL araçlarına yönlendirilir; son kurtarma çağrısı işaret dosyasıyla izlenir. Kilitler, yedekleme, SQL, parolalı TCP bağlantısı ve geri dönüş gerçek işlemlerdir. Migration ve sunucu sağlığı ayrıca gerçek lisans imajı ile sınanır. `LICENSE_TEST_IMAGE` verilmezse migration/sağlık/kod adımları çalıştırılmaz; CI bu değişkeni verir.
 
 **Henüz doğrulanmayan canlı adımlar:** Cloudflare hesabında gerçek Tunnel/route oluşturma, gerçek token ile bağlantı, hedef VPS'te ilk kurulum ve dosyaları içeren geri yükleme tatbikatı, GitHub Actions secrets ile canlı otomatik dağıtım. Tunnel testi yerel Docker ağı üzerinde yapıldı; Cloudflare'a bağlı canlı uç testi olarak değerlendirilmemelidir.
 
