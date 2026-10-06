@@ -57,6 +57,13 @@
       "when": 1791270000002,
       "tag": "0007_windows_installer",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791270000003,
+      "tag": "0008_customer_delete",
+      "breakpoints": true
     }
   ]
 }

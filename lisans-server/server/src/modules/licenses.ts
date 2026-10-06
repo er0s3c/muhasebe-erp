@@ -88,9 +88,20 @@ export async function createCustomer(tx: Tx, input: CreateCustomerInput, actor: 
   return row!;
 }
 
+/** Customer, licenses and activations are removed in the same audited transaction. */
+export async function deleteCustomer(tx: Tx, id: string, actor: Actor) {
+  const result = await tx.execute<{ customer_name: string; license_count: number; activation_count: number }>(sql`SELECT * FROM public.delete_license_customer(${id}::uuid)`);
+  const row = result.rows[0];
+  if (!row) throw notFound('Müşteri bulunamadı');
+  const deleted = { name: row.customer_name, licenseCount: row.license_count, activationCount: row.activation_count };
+  await audit(tx, { ...actor, action: 'customer.delete', targetType: 'customer', targetId: id, meta: deleted });
+  return deleted;
+}
+
 /** Yeni lisans ve etkinleştirme kodu (kod yalnızca burada bir kez döner; yalnızca özeti saklanır). */
 export async function createLicense(tx: Tx, input: CreateLicenseInput, actor: Actor): Promise<{ license: LicenseRow; code: string }> {
-  const [customer] = await tx.select({ id: customers.id }).from(customers).where(eq(customers.id, input.customerId));
+  // Serialize license creation with customer deletion before the FK insert.
+  const [customer] = await tx.select({ id: customers.id }).from(customers).where(eq(customers.id, input.customerId)).for('key share');
   if (!customer) throw notFound('Müşteri bulunamadı');
   if (input.validUntil.getTime() <= Date.now()) throw badRequest('Bitiş tarihi gelecekte olmalı', 'VALID_UNTIL_PAST');
 

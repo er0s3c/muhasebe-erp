@@ -46,6 +46,25 @@ test('yönetim paneli: TOTP'+"'"+'lu giriş, müşteri ve lisans verme (kod bir 
   const nav = page.getByRole('navigation', { name: 'Ana menü' });
   const customer = `Panel Deneme ${Date.now()} A.Ş.`;
 
+  // Unused customer deletion needs confirmation; cancel keeps the card.
+  await nav.getByRole('link', { name: 'Müşteriler' }).click();
+  const unusedCustomer = `Silme Deneme ${Date.now()}`;
+  await page.getByRole('button', { name: 'Yeni müşteri' }).click();
+  await page.getByLabel('Ad / unvan').fill(unusedCustomer);
+  await page.getByRole('button', { name: 'Ekle' }).click();
+  const unusedRow = page.getByTestId(`customer-${unusedCustomer}`);
+  await unusedRow.getByRole('button', { name: 'Sil', exact: true }).click();
+  const deletionDialog = page.getByRole('dialog', { name: 'Müşteriyi sil' });
+  await expect(deletionDialog).toContainText(unusedCustomer);
+  await deletionDialog.getByRole('button', { name: 'Vazgeç' }).click();
+  await expect(unusedRow).toBeVisible();
+  await unusedRow.getByRole('button', { name: 'Sil', exact: true }).click();
+  await deletionDialog.getByRole('button', { name: 'Kalıcı olarak sil', exact: true }).click();
+  await expect(page.getByText('Müşteri silindi.', { exact: true })).toBeVisible();
+  await expect(unusedRow).toHaveCount(0);
+  await page.reload();
+  await expect(unusedRow).toHaveCount(0);
+
   // Müşteri ekle → "Lisans ver" formu müşteri ön seçimiyle açılır
   await nav.getByRole('link', { name: 'Müşteriler' }).click();
   await page.getByRole('button', { name: 'Yeni müşteri' }).click();
@@ -115,6 +134,15 @@ test('yönetim paneli: TOTP'+"'"+'lu giriş, müşteri ve lisans verme (kod bir 
   await page.getByRole('dialog').getByRole('button', { name: 'İptal et' }).click();
   await expect(page.getByText('İptal', { exact: true }).first()).toBeVisible();
 
+  // Purge a customer with its license after displaying the affected counts.
+  await nav.getByRole('link', { name: 'Müşteriler' }).click();
+  await row.getByRole('button', { name: 'Sil', exact: true }).click();
+  await expect(deletionDialog).toContainText('1 lisans ve 0 kurulum');
+  await deletionDialog.getByRole('button', { name: 'Kalıcı olarak sil', exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await nav.getByRole('link', { name: 'Lisanslar' }).click();
+  await expect(page.getByTestId(`license-${customer}`)).toHaveCount(0);
+
   // CLI ile verilip uygulamayı etkinleştiren CI lisansı: etkinleştirme ve kurulum bilgisi görünür
   await nav.getByRole('link', { name: 'Lisanslar' }).click();
   await page.getByTestId('license-CI Müşterisi').getByRole('link', { name: 'CI Müşterisi' }).click();
@@ -125,6 +153,7 @@ test('yönetim paneli: TOTP'+"'"+'lu giriş, müşteri ve lisans verme (kod bir 
   await nav.getByRole('link', { name: 'Denetim kaydı' }).click();
   await expect(page.getByRole('cell', { name: 'Lisans verildi' }).first()).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Müşteri oluşturuldu' }).first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Müşteri silindi', exact: true }).first()).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Yönetici girişi' }).first()).toBeVisible();
 
   // Çıkış

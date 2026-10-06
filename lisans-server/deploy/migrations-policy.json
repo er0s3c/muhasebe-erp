@@ -1,12 +1,13 @@
 {
   "compatible": {
     "0000_core.sql": "bb063b08acebe782afcf771ecc17f829e9f57109c6997e7ea1803784475cc108",
-    "0001_rules.sql": "2b4172e61e65e1998fdbd488ecac68b98f475355b192ec8d1ed413c81ee9a335",
-    "0002_passkeys.sql": "b1e9951210cff71ee30a1ad3b94c9fcc37cde6dea43707b8fef5d1c2ab2119b2",
+    "0001_rules.sql": "07cfeea05b830ca837e6166b79e225cac6a56215360ee487b39a0e33e38de3f5",
+    "0002_passkeys.sql": "ad67b1776db0daad4e0d16fb345c5ef171e764c16317ba06b233c2e602c8869f",
     "0003_releases.sql": "b22acd8b59b316c38667bd0efa71bee3c387b296b1c57e8a14c8c60bbb5cbd71",
-    "0004_releases_rules.sql": "b5be73d971150fbb35072926c281ee48f76ad360d46316371a7b96a69de681a0",
+    "0004_releases_rules.sql": "a1c4420e8936dbce6ea5cba210f8b44afc8262a9961b667a12c8bc08a07c42b7",
     "0005_subscription_validity.sql": "97a608b3cfc6ab5c95e5f6f0466f15c52183098a5513e2edf78e5aa400faa2ea",
     "0006_release_provenance.sql": "1a3a020e420c6ddfd295658fe6cc6086314130c7bcc957b254a93462bf1f7169",
-    "0007_windows_installer.sql": "c83b41e12fae8be1bfcf8f2c907fb97fcbd4aa02822c761a014e37edb32a964d"
+    "0007_windows_installer.sql": "c83b41e12fae8be1bfcf8f2c907fb97fcbd4aa02822c761a014e37edb32a964d",
+    "0008_customer_delete.sql": "012855a13b074087f5d5db06aab716e96a3816cb07af78587574138b6a9ae70a"
   }
 }

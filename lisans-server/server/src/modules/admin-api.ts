@@ -21,6 +21,7 @@ import {
   createCustomerSchema,
   createLicense,
   createLicenseSchema,
+  deleteCustomer,
   deactivateActivation,
   extendLicense,
   getLicenseForUpdate,
@@ -97,7 +98,9 @@ export const adminApiRoutes: FastifyPluginAsync = async (app) => {
       const [customer] = await tx.select().from(customers).where(eq(customers.id, id));
       if (!customer) throw notFound('Müşteri bulunamadı');
       const rows = await tx.select().from(licenses).where(eq(licenses.customerId, id)).orderBy(desc(licenses.createdAt));
-      return { customer, licenses: rows.map(serializeLicense) };
+      const [activationsCount] = await tx.select({ n: sql<number>`count(*)::int` }).from(activations)
+        .innerJoin(licenses, eq(activations.licenseId, licenses.id)).where(eq(licenses.customerId, id));
+      return { customer, licenses: rows.map(serializeLicense), activationCount: activationsCount?.n ?? 0 };
     }),
   );
 
@@ -113,6 +116,15 @@ export const adminApiRoutes: FastifyPluginAsync = async (app) => {
       if (!row) throw notFound('Müşteri bulunamadı');
       await audit(tx, { ...actor(admin, req.ip), action: 'customer.update', targetType: 'customer', targetId: id, meta: { fields: Object.keys(set) } });
       return { customer: row };
+    }),
+  );
+
+  app.delete(
+    '/admin/api/customers/:id',
+    adminRoute(app, async ({ tx, admin, req }) => {
+      const { id } = idParam.parse(req.params);
+      const deleted = await deleteCustomer(tx, id, actor(admin, req.ip));
+      return { ok: true, deleted };
     }),
   );
 

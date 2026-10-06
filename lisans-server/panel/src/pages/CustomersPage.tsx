@@ -5,7 +5,7 @@ import { Button } from '@ui/Button';
 import { PageHeader } from '@ui/Card';
 import { Callout, EmptyState, PageLoading } from '@ui/Feedback';
 import { Field, Input, Textarea } from '@ui/Field';
-import { Sheet } from '@ui/Sheet';
+import { Modal, Sheet } from '@ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '@ui/Table';
 import { useToast } from '@ui/Toast';
 import { api, errorText, type Customer } from '../api';
@@ -22,9 +22,19 @@ export function CustomersPage() {
   const [form, setForm] = useState(blank);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<Customer | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const { data, isPending } = useQuery({
     queryKey: ['customers', q],
     queryFn: () => api<{ customers: Customer[] }>(`/admin/api/customers${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`),
+  });
+  const deletionDetails = useQuery({
+    queryKey: ['customer-delete', removing?.id],
+    queryFn: () => api<{ licenses: { id: string }[]; activationCount: number }>(`/admin/api/customers/${removing!.id}`),
+    enabled: removing !== null,
+    staleTime: 0,
+    retry: false,
   });
 
   const submit = async () => {
@@ -41,6 +51,29 @@ export function CustomersPage() {
       setError(errorText(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!removing || removeBusy) return;
+    setRemoveBusy(true);
+    setRemoveError(null);
+    try {
+      await api(`/admin/api/customers/${removing.id}`, { method: 'DELETE' });
+      toast.success('Müşteri silindi.');
+      setRemoving(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['customers'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['audit'] }),
+        queryClient.invalidateQueries({ queryKey: ['licenses'] }),
+        queryClient.invalidateQueries({ queryKey: ['license'] }),
+        queryClient.removeQueries({ queryKey: ['customer-delete'] }),
+      ]);
+    } catch (e) {
+      setRemoveError(errorText(e));
+    } finally {
+      setRemoveBusy(false);
     }
   };
 
@@ -93,6 +126,9 @@ export function CustomersPage() {
                       <Button size="sm" onClick={() => navigate(`/licenses?new=${c.id}`)}>
                         Lisans ver
                       </Button>
+                      <Button size="sm" variant="danger" onClick={() => { setRemoveError(null); setRemoving(c); }}>
+                        Sil
+                      </Button>
                     </span>
                   </Td>
                 </Tr>
@@ -132,6 +168,27 @@ export function CustomersPage() {
           <Field label="Notlar">{(id) => <Textarea id={id} rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />}</Field>
         </form>
       </Sheet>
+      <Modal
+        open={removing !== null}
+        onOpenChange={(next) => { if (!next && !removeBusy) setRemoving(null); }}
+        title="Müşteriyi sil"
+        description={removing ? `“${removing.name}” müşteri kaydı silinecek. Bu işlem geri alınamaz.` : undefined}
+        footer={
+          <>
+            <Button disabled={removeBusy} onClick={() => setRemoving(null)}>Vazgeç</Button>
+            <Button variant="danger" loading={removeBusy} disabled={!deletionDetails.data || !!deletionDetails.error} onClick={() => void remove()}>Kalıcı olarak sil</Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {removeError && <Callout tone="danger">{removeError}</Callout>}
+          {deletionDetails.error && <Callout tone="danger">{errorText(deletionDetails.error)}</Callout>}
+          {deletionDetails.isPending ? <p className="text-sm text-muted" role="status">Silinecek kayıtlar kontrol ediliyor…</p> : deletionDetails.data && (
+            <Callout tone="warning">Müşteriyle birlikte {deletionDetails.data.licenses.length} lisans ve {deletionDetails.data.activationCount} kurulum kaydı kalıcı olarak silinecek.</Callout>
+          )}
+          <p className="text-sm text-muted">Silinen lisanslarla yeniden etkinleştirme yapılamaz. Mevcut imzalı lisansı olan kurulumlar, o lisansın süresi bitene kadar çalışabilir. Silme işleminin denetim kaydı korunur.</p>
+        </div>
+      </Modal>
     </>
   );
 }

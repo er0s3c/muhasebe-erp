@@ -5,7 +5,7 @@ Docker ve Cloudflare Tunnel düzeni için yapılan kontroller:
 | Kontrol | Sonuç |
 | --- | --- |
 | Ortak lisans çekirdeği | 4 dosya, 34 test başarılı |
-| Lisans sunucusu: lisans, yönetim, OIDC, parçalı taslak yükleme, imzalı kurulum indirmesi | 10 dosya, 70 test başarılı; gerçek yerel PostgreSQL |
+| Lisans sunucusu: lisans, yönetim, OIDC, parçalı taslak yükleme, imzalı kurulum indirmesi, kalıcı müşteri silme | 11 dosya, 75 test başarılı; gerçek yerel PostgreSQL |
 | ERP uzaktan güncelleme akışı ve bakım kilidi | 5 test başarılı |
 | Çalışma alanı tip denetimi | Başarılı |
 | ESLint | Başarılı |
@@ -22,6 +22,9 @@ Docker ve Cloudflare Tunnel düzeni için yapılan kontroller:
 | Onarım yedeği ve tekrar çalıştırma | Döküm ayrı test veritabanına geri yüklendi; kayıt, rol yetkileri, ayarlar, anahtar ve token korundu; ikinci çalıştırma parolaları değiştirmedi |
 | Onarım sonrası hizmet | Eşitlenen parolalarla gerçek migration, uygulama rolüyle sunucu sağlık kontrolü ve yönetici kurulum kodu üretimi başarılı |
 | Mevcut yöneticiyle kurulum sonu | Gerçek PostgreSQL ve lisans CLI ile oluşturulan yöneticide tekrar kurulum kontrolü `/login` adresini verdi; hesap kaydı değişmedi, yeniden kurulum kodu istenmedi |
+| Kalıcı müşteri silme | Yetki/CSRF/köken kontrolü, bağlı lisans ve kurulumların silinmesi, diğer müşterilerin korunması, eşzamanlı lisans verme, transaction geri dönüşü, özet ve denetim kaydı doğrulandı |
+| Panelde müşteri silme | Üretim paneli ve gerçek yerel sunucuyla Edge/Playwright: onay öncesi kayıt sayıları, vazgeçme, boş ve lisanslı müşteri silme, yenileme sonrası kalıcılık ve denetim kaydı başarılı |
+| Silme migration uyumu | Önceki SQL dosyaları değiştirilmedi; üç eski uyumluluk özeti yayımlanmış `6351c5d` sürümünün aynı dosyalarıyla doğrulanıp düzeltildi. Yeni `0008_customer_delete.sql` ve üretim `backwardCompatible: true` bildirimi kontrol edildi |
 
 Tekrarlamak için depo kökünde:
 

@@ -24,6 +24,7 @@ export const AUDIT_LABELS: Record<string, string> = {
   'admin.login_failed': 'Başarısız yönetici girişi',
   'customer.create': 'Müşteri oluşturuldu',
   'customer.update': 'Müşteri güncellendi',
+  'customer.delete': 'Müşteri silindi',
   'license.create': 'Lisans verildi',
   'license.update': 'Lisans güncellendi',
   'license.extend': 'Lisans uzatıldı',
