@@ -11,7 +11,8 @@ import { setContext, withContext, type Db, type Tx } from '../db/client';
 import { companies, companyModules, memberships, users } from '../db/schema';
 import { AppError, forbidden, unauthorized, badRequest } from './errors';
 import { denialFor, isModuleDenied, loadMemberAccess, moduleAccessDenied, requirePermission, type MemberAccess } from '../modules/access/effective';
-import type { MemoryLimiter, Semaphore } from './limits';
+import type { Semaphore } from './limits';
+import type { RateLimiter } from './postgres-limiter';
 import type { Mailer } from '../modules/mail/mailer';
 import { assertLicensed } from '../licensing/gate';
 import type { DeviceService } from '../licensing/devices';
@@ -46,7 +47,7 @@ declare module 'fastify' {
     /** Merkez Bankası kur XML'ini indirir; testlerde değiştirilebilir. */
     rateFetcher: (isoDate?: string) => Promise<string>;
     /** Bellek içi oran sınırlayıcı (RATE_LIMIT_ENABLED kapalıyken hiçbir şeyi engellemez). */
-    limiter: MemoryLimiter;
+    limiter: RateLimiter;
     /** Bellek içi dışa aktarmalar için eşzamanlılık kapısı. */
     exportGate: Semaphore;
     /** Giden posta (SMTP, günlük modu ya da kapalı). */
@@ -176,7 +177,7 @@ export function tenantRoute<T>(
     const license = await assertLicensed(app.license, req);
     const user = await authenticate(app, req);
     if (options.limit) {
-      const r = app.limiter.consume(`${options.limit.name}:${user.id}`, options.limit.max, options.limit.windowMs);
+      const r = await app.limiter.consume(`${options.limit.name}:${user.id}`, options.limit.max, options.limit.windowMs);
       if (!r.ok) {
         void reply.header('retry-after', String(r.retryAfterSec));
         throw new AppError(429, 'RATE_LIMITED', 'Çok fazla istek; lütfen biraz sonra tekrar deneyin');
@@ -203,6 +204,8 @@ export function tenantRoute<T>(
       if (member.mustChangePassword) throw passwordChangeRequired();
 
       await setContext(tx, { userId: user.id, orgId: user.orgId, companyId, ip: req.ip });
+      const securityPolicy = (await tx.execute<{ required: boolean; enabled: boolean }>(sql`select coalesce((select (settings->>'requireMfa')::boolean from company_operations_settings),false) as required,exists(select 1 from user_mfa where user_id=${user.id}::uuid and enabled_at is not null) as enabled`)).rows[0];
+      if(securityPolicy?.required && !securityPolicy.enabled) throw forbidden('Bu şirket iki adımlı doğrulama gerektiriyor. Hesap güvenliği ekranından MFA kurulumunu tamamlayın.','MFA_SETUP_REQUIRED');
 
       const [company] = await tx
         .select({

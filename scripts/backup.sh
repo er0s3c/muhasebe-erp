@@ -19,11 +19,13 @@ DIR="${BACKUP_DIR:-./backups}"
 KEEP="${BACKUP_KEEP_DAYS:-30}"
 KEEP_COUNT="${BACKUP_KEEP_COUNT:-}"
 COMPOSE_FILE="${COMPOSE_FILE:-deploy/docker-compose.prod.yml}"
+FILES_DIR="${CONSTRUCTION_STORAGE_DIR:-apps/api/data/construction}"
 ENV_FILE="${ENV_FILE:-deploy/.env}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --compose) MODE=compose ;;
+    --files-dir) FILES_DIR="${2:?--files-dir bir değer ister}"; shift ;;
     --dir) DIR="${2:?--dir bir değer ister}"; shift ;;
     --keep-days) KEEP="${2:?--keep-days bir değer ister}"; shift ;;
     --keep-count) KEEP_COUNT="${2:?--keep-count bir değer ister}"; shift ;;
@@ -82,6 +84,12 @@ trap 'rm -f "$PARTIAL"' EXIT
 dump > "$PARTIAL"
 [ -s "$PARTIAL" ] || { echo "Döküm boş" >&2; exit 1; }
 list < "$PARTIAL" || { echo "Döküm arşivi doğrulanamadı (pg_restore --list)" >&2; exit 1; }
+if [ "$MODE" = compose ] && [ "$FILES_DIR" = apps/api/data/construction ]; then
+  FILES_DIR="${CONSTRUCTION_FILES_DIR:-$(envval CONSTRUCTION_FILES_DIR)}"; FILES_DIR="${FILES_DIR:-construction-data}"
+  [[ "$FILES_DIR" = /* ]] || FILES_DIR="$(dirname "$ENV_FILE")/$FILES_DIR"
+fi
+FILES_NODE="${NODE_BIN:-node}"; if [ -z "${NODE_BIN:-}" ] && [ -x app/runtime/node ]; then FILES_NODE=app/runtime/node; fi
+"$FILES_NODE" installer/tools/construction-files.mjs --mode=backup --root="$FILES_DIR" --archive="$FINAL.files.gz"
 mv "$PARTIAL" "$FINAL"
 ( cd "$DIR" && sha256sum "$(basename "$FINAL")" > "$(basename "$FINAL").sha256" )
 
@@ -90,10 +98,10 @@ OWN_RE=".*/erp-$(printf '%s' "$DB" | sed 's/[.]/\\./g')-[0-9]{8}T[0-9]{6}Z\.dump
 if [ -n "$KEEP_COUNT" ]; then
   # Sayıya göre: en yeni N döküm kalır (özet dosyalarıyla birlikte); ad zaman damgası içerdiğinden ada göre sıralanır
   find "$DIR" -maxdepth 1 -type f -regextype posix-extended -regex "$OWN_RE" -print | sort -r | tail -n +"$((10#$KEEP_COUNT + 1))" \
-    | while IFS= read -r old; do [ "$old" = "$FINAL" ] || rm -f -- "$old" "$old.sha256"; done
+    | while IFS= read -r old; do [ "$old" = "$FINAL" ] || rm -f -- "$old" "$old.sha256" "$old.files.gz" "$old.files.gz.sha256"; done
 else
   find "$DIR" -maxdepth 1 -type f -regextype posix-extended -regex "$OWN_RE" -mtime +"$KEEP" -print \
-    | while IFS= read -r old; do [ "$old" = "$FINAL" ] || rm -f -- "$old" "$old.sha256"; done
+    | while IFS= read -r old; do [ "$old" = "$FINAL" ] || rm -f -- "$old" "$old.sha256" "$old.files.gz" "$old.files.gz.sha256"; done
 fi
 
 SIZE="$(du -h "$FINAL" | cut -f1)"

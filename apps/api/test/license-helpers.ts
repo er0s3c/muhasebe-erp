@@ -337,8 +337,7 @@ export function useLicensedApp(opts: LicensedAppOptions & { each?: boolean } = {
     holder.ctx = await createLicensedApp(opts);
   };
   const teardown = async () => {
-    await holder.ctx.app.close();
-    await holder.ctx.handle.close();
+    if(holder.ctx){await holder.ctx.app.close();await holder.ctx.handle.close();}
   };
   if (opts.each) {
     beforeEach(setup);

@@ -21,13 +21,30 @@ interface LsNode {
 
 const root = process.cwd();
 const out = process.argv[2] ?? join(root, 'THIRD-PARTY-NOTICES.md');
-const raw = execFileSync('npm', ['ls', '--omit=dev', '--all', '--json', '--long', '-w', '@erp/api', '-w', '@erp/web'], {
-  cwd: root,
-  encoding: 'utf8',
-  maxBuffer: 256 * 1024 * 1024,
-  // npm ls, eksik/fazla bağımlılıkta 1 döner; çıktı yine de kullanılabilir
-  stdio: ['ignore', 'pipe', 'ignore'],
-});
+let raw: string;
+try {
+  raw = execFileSync(
+    process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    ['ls', '--omit=dev', '--all', '--json', '--long', '-w', '@erp/api', '-w', '@erp/web'],
+    {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+      // npm ls, eksik/fazla bağımlılıkta 1 döner; çıktı yine de kullanılabilir
+      stdio: ['ignore', 'pipe', 'ignore'],
+      shell: process.platform === 'win32',
+    },
+  );
+} catch (error) {
+  const failure = error as { status?: number; stdout?: string };
+  if (failure.status !== 1 || typeof failure.stdout !== 'string') throw error;
+  const tree = JSON.parse(failure.stdout) as LsNode & { problems?: string[] };
+  if (!tree.dependencies) throw new Error('npm bağımlılık ağacı okunamadı.', { cause: error });
+  console.warn(
+    `npm ls ${tree.problems?.length ?? 0} bağımlılık uyarısı verdi; kurulu paketlerin lisansları bildirime dahil ediliyor.`,
+  );
+  raw = failure.stdout;
+}
 
 const packages = new Map<string, { name: string; version: string; dir: string }>();
 const walk = (deps: Record<string, LsNode> | undefined) => {
@@ -54,13 +71,30 @@ const sections: string[] = [];
 const missing: string[] = [];
 for (const key of [...packages.keys()].sort((a, b) => a.localeCompare(b))) {
   const p = packages.get(key)!;
-  const pkg = JSON.parse(readFileSync(join(p.dir, 'package.json'), 'utf8')) as Record<string, unknown>;
-  const license = asText(pkg.license ?? (Array.isArray(pkg.licenses) ? (pkg.licenses as unknown[]).map(asText).join(' OR ') : undefined));
-  const repo = asText(typeof pkg.repository === 'object' && pkg.repository ? (pkg.repository as { url?: string }).url : pkg.repository ?? pkg.homepage ?? '');
+  const pkg = JSON.parse(readFileSync(join(p.dir, 'package.json'), 'utf8')) as Record<
+    string,
+    unknown
+  >;
+  const license = asText(
+    pkg.license ??
+      (Array.isArray(pkg.licenses)
+        ? (pkg.licenses as unknown[]).map(asText).join(' OR ')
+        : undefined),
+  );
+  const repo = asText(
+    typeof pkg.repository === 'object' && pkg.repository
+      ? (pkg.repository as { url?: string }).url
+      : (pkg.repository ?? pkg.homepage ?? ''),
+  );
   const file = licenseFile(p.dir);
   if (!file) missing.push(key);
-  const text = file && existsSync(file) ? readFileSync(file, 'utf8').trim() : `(Pakette ayrı bir lisans dosyası yok; lisans: ${license}. Kaynak: ${repo || 'belirtilmemiş'})`;
-  sections.push(`## ${p.name} ${p.version}\n\nLisans: ${license}${repo ? `  \nKaynak: ${repo}` : ''}\n\n\`\`\`text\n${text}\n\`\`\`\n`);
+  const text =
+    file && existsSync(file)
+      ? readFileSync(file, 'utf8').trim()
+      : `(Pakette ayrı bir lisans dosyası yok; lisans: ${license}. Kaynak: ${repo || 'belirtilmemiş'})`;
+  sections.push(
+    `## ${p.name} ${p.version}\n\nLisans: ${license}${repo ? `  \nKaynak: ${repo}` : ''}\n\n\`\`\`text\n${text}\n\`\`\`\n`,
+  );
 }
 
 const header = `# Üçüncü taraf bildirimleri
@@ -70,4 +104,6 @@ Bildirim, \`npm run licenses:notices\` ile kurulu paketlerden üretilmiştir.
 
 `;
 writeFileSync(out, header + sections.join('\n'));
-console.log(`${packages.size} paket → ${out}${missing.length ? ` (lisans dosyası olmayan ${missing.length} paket: ${missing.join(', ')})` : ''}`);
+console.log(
+  `${packages.size} paket → ${out}${missing.length ? ` (lisans dosyası olmayan ${missing.length} paket: ${missing.join(', ')})` : ''}`,
+);

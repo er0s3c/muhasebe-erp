@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { EXPORT_FORMATS } from '@erp/shared';
 import { renderCsv } from '../../files/csv-write';
-import { writeXlsx, XLSX_CONTENT_TYPE } from '../../files/xlsx-write';
+import { writeXlsxStream, XLSX_CONTENT_TYPE } from '../../files/xlsx-write';
 import { AppError, badRequest } from '../../http/errors';
 import { tenantRoute } from '../../http/context';
 import { EXPORTS } from './registry';
@@ -22,11 +22,12 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
         const { format } = formatSchema.parse(req.query);
         if (!def.formats.includes(format)) throw badRequest(`Bu rapor yalnızca ${def.formats.join(', ').toUpperCase()} olarak alınabilir`, 'EXPORT_FORMAT_UNSUPPORTED');
         const q = def.schema.parse(req.query);
-        // Dışa aktarmalar bellekte üretilir: aynı anda en çok EXPORT_CONCURRENCY tane (aşılırsa beklemeden 429).
+        // Queries retain report rows; XLSX XML/ZIP output streams with backpressure.
         if (!app.exportGate.tryAcquire()) {
           void reply.header('retry-after', '5');
           throw new AppError(429, 'EXPORT_BUSY', 'Şu anda başka dışa aktarmalar çalışıyor; birkaç saniye sonra tekrar deneyin');
         }
+        let streamOwnsGate=false;
         try {
           const tables = await def.build({ tx, company, user: { id: user.id }, access: { companyId: company.id, permissions: access.permissions, enabledModules } }, q as never);
           const name = def.fileName(q as never);
@@ -39,9 +40,12 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
             return renderCsv(tables[0]!);
           }
           void reply.header('content-type', XLSX_CONTENT_TYPE);
-          return Buffer.from(writeXlsx(tables));
+          const stream=writeXlsxStream(tables);
+          stream.once('close',()=>app.exportGate.release());
+          streamOwnsGate=true;
+          return stream;
         } finally {
-          app.exportGate.release();
+          if(!streamOwnsGate)app.exportGate.release();
         }
       }),
     );

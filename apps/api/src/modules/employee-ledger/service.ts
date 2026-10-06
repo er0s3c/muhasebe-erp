@@ -51,7 +51,11 @@ async function lockEmployee(tx: Tx, id: string) {
 }
 
 async function lockAdvance(tx: Tx, id: string): Promise<Advance> {
-  const [row] = await tx.select().from(employeeAdvances).where(eq(employeeAdvances.id, id)).for('update');
+  const [row] = await tx
+    .select()
+    .from(employeeAdvances)
+    .where(eq(employeeAdvances.id, id))
+    .for('update');
   if (!row) throw notFound('Avans');
   return row;
 }
@@ -60,7 +64,10 @@ async function lockAdvance(tx: Tx, id: string): Promise<Advance> {
 async function requireBaseTreasury(tx: Tx, ctx: LedgerCtx, accountId: string) {
   const ta = await getTreasuryAccountRow(tx, accountId);
   if (ta.currencyCode !== ctx.baseCurrency) {
-    throw unprocessable(`Personel avansı ve maaş ödemesi yalnızca ${ctx.baseCurrency} (defter para birimi) hesaplarından yapılır`, 'EMPLOYEE_LEDGER_CURRENCY');
+    throw unprocessable(
+      `Personel avansı ve maaş ödemesi yalnızca ${ctx.baseCurrency} (defter para birimi) hesaplarından yapılır`,
+      'EMPLOYEE_LEDGER_CURRENCY',
+    );
   }
   return ta;
 }
@@ -80,20 +87,39 @@ export async function openEmployeeParty(tx: Tx, ctx: LedgerCtx, employeeId: stri
   const code = await generateCode(tx, ctx.companyId);
   const [party] = await tx
     .insert(parties)
-    .values({ companyId: ctx.companyId, code, name: emp.fullName, kind: 'employee', currencyCode: ctx.baseCurrency, paymentTermDays: 0, notes: 'Personel carisi (personel kartından açıldı)' })
+    .values({
+      companyId: ctx.companyId,
+      code,
+      name: emp.fullName,
+      kind: 'employee',
+      currencyCode: ctx.baseCurrency,
+      paymentTermDays: 0,
+      notes: 'Personel carisi (personel kartından açıldı)',
+    })
     .returning();
-  await tx.update(employees).set({ partyId: party!.id, updatedAt: new Date() }).where(eq(employees.id, employeeId));
-  return { created: true, party: { id: party!.id, code: party!.code, name: party!.name, kind: party!.kind } };
+  await tx
+    .update(employees)
+    .set({ partyId: party!.id, updatedAt: new Date() })
+    .where(eq(employees.id, employeeId));
+  return {
+    created: true,
+    party: { id: party!.id, code: party!.code, name: party!.name, kind: party!.kind },
+  };
 }
 
 // --- Avans ----------------------------------------------------------------------------------------------------------------
 
 export async function giveAdvance(tx: Tx, ctx: LedgerCtx, input: CreateAdvanceInput) {
   const emp = await lockEmployee(tx, input.employeeId);
-  if (emp.status !== 'active') throw unprocessable('İşten ayrılmış personele avans verilemez', 'EMPLOYEE_LEFT');
-  if (input.date > todayIso()) throw unprocessable('Avans tarihi gelecekte olamaz', 'ADVANCE_DATE_FUTURE');
+  if (emp.status !== 'active')
+    throw unprocessable('İşten ayrılmış personele avans verilemez', 'EMPLOYEE_LEFT');
+  if (input.date > todayIso())
+    throw unprocessable('Avans tarihi gelecekte olamaz', 'ADVANCE_DATE_FUTURE');
   if (input.projectId) {
-    const [p] = await tx.select({ id: projects.id }).from(projects).where(eq(projects.id, input.projectId));
+    const [p] = await tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.id, input.projectId));
     if (!p) throw unprocessable('Proje bulunamadı', 'PROJECT_NOT_FOUND');
   }
   await requireBaseTreasury(tx, ctx, input.treasuryAccountId);
@@ -108,7 +134,11 @@ export async function giveAdvance(tx: Tx, ctx: LedgerCtx, input: CreateAdvanceIn
     items: [],
   });
   const year = isoYear(input.date);
-  const number = formatDocumentNumber('AVN', year, await nextNumber(tx, ctx.companyId, 'EMPLOYEE_ADVANCE', year));
+  const number = formatDocumentNumber(
+    'AVN',
+    year,
+    await nextNumber(tx, ctx.companyId, 'EMPLOYEE_ADVANCE', year),
+  );
   const [row] = await tx
     .insert(employeeAdvances)
     .values({
@@ -142,14 +172,21 @@ export async function getAdvance(tx: Tx, id: string) {
   const advance = res.rows[0];
   if (!advance) throw notFound('Avans');
   const settlements = await tx.execute<Record<string, unknown>>(sql`
-    select s.id, s.kind, s.amount::text as amount, s.settled_date::text as "settledDate", s.note, s.reversed_at as "reversedAt", s.reverse_reason as "reverseReason",
+    select s.id, s.kind, s.expense_entry_id as "expenseEntryId", ex.entry_no as "expenseEntryNo", s.amount::text as amount, s.settled_date::text as "settledDate", s.note, s.reversed_at as "reversedAt", s.reverse_reason as "reverseReason",
            r.number as "runNumber", t.txn_no as "txnNo"
       from employee_advance_settlements s
+      left join expense_entries ex on ex.id=s.expense_entry_id
       left join payroll_runs r on r.id = s.payroll_run_id
       left join treasury_transactions t on t.id = s.treasury_txn_id
      where s.advance_id = ${id} order by s.created_at`);
   const events = await tx
-    .select({ fromStatus: employeeAdvanceEvents.fromStatus, toStatus: employeeAdvanceEvents.toStatus, settledAmount: employeeAdvanceEvents.settledAmount, at: employeeAdvanceEvents.createdAt, by: users.email })
+    .select({
+      fromStatus: employeeAdvanceEvents.fromStatus,
+      toStatus: employeeAdvanceEvents.toStatus,
+      settledAmount: employeeAdvanceEvents.settledAmount,
+      at: employeeAdvanceEvents.createdAt,
+      by: users.email,
+    })
     .from(employeeAdvanceEvents)
     .leftJoin(users, eq(users.id, employeeAdvanceEvents.createdBy))
     .where(eq(employeeAdvanceEvents.advanceId, id))
@@ -160,38 +197,80 @@ export async function getAdvance(tx: Tx, id: string) {
 /** Kapanmamış avansı iptal eder: avans önce iptal edilir, ardından ödeme hareketi ters kayıtla iptal edilir (aynı işlemde). */
 export async function cancelAdvance(tx: Tx, ctx: LedgerCtx, id: string, input: CancelAdvanceInput) {
   const a = await lockAdvance(tx, id);
-  if (a.status === 'cancelled') throw unprocessable('Avans zaten iptal edilmiş', 'ADVANCE_CANCELLED');
-  if (dec(a.settledAmount).gt(0)) throw unprocessable('Kısmen ya da tamamen kapanmış avans iptal edilemez; önce kesinti/geri ödemeyi geri alın', 'ADVANCE_HAS_SETTLEMENTS');
-  const planned = await tx.select({ id: employeeAdvanceDeductions.id }).from(employeeAdvanceDeductions).where(eq(employeeAdvanceDeductions.advanceId, id)).limit(1);
+  if (a.status === 'cancelled')
+    throw unprocessable('Avans zaten iptal edilmiş', 'ADVANCE_CANCELLED');
+  if (dec(a.settledAmount).gt(0))
+    throw unprocessable(
+      'Kısmen ya da tamamen kapanmış avans iptal edilemez; önce kesinti/geri ödemeyi geri alın',
+      'ADVANCE_HAS_SETTLEMENTS',
+    );
+  const planned = await tx
+    .select({ id: employeeAdvanceDeductions.id })
+    .from(employeeAdvanceDeductions)
+    .where(eq(employeeAdvanceDeductions.advanceId, id))
+    .limit(1);
   if (planned.length > 0) {
-    const [r] = await tx.execute<{ n: number }>(sql`select count(*)::int as n from employee_advance_deductions d join payroll_runs r on r.id = d.run_id where d.advance_id = ${id} and r.status = 'draft'`).then((x) => x.rows);
-    if ((r?.n ?? 0) > 0) throw unprocessable('Avans taslak bir bordroda kesinti olarak seçili; önce kesintiyi kaldırın', 'ADVANCE_IN_DRAFT_RUN');
+    const [r] = await tx
+      .execute<{ n: number }>(
+        sql`select count(*)::int as n from employee_advance_deductions d join payroll_runs r on r.id = d.run_id where d.advance_id = ${id} and r.status = 'draft'`,
+      )
+      .then((x) => x.rows);
+    if ((r?.n ?? 0) > 0)
+      throw unprocessable(
+        'Avans taslak bir bordroda kesinti olarak seçili; önce kesintiyi kaldırın',
+        'ADVANCE_IN_DRAFT_RUN',
+      );
   }
   await tx
     .update(employeeAdvances)
-    .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, cancelReason: input.reason.trim(), updatedAt: new Date() })
+    .set({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      cancelledBy: ctx.userId,
+      cancelReason: input.reason.trim(),
+      updatedAt: new Date(),
+    })
     .where(eq(employeeAdvances.id, id));
-  await cancelTreasuryTransaction(tx, ctx, a.treasuryTxnId, { reason: `Avans iptali ${a.number}: ${input.reason}`.slice(0, 300), date: input.date });
+  await cancelTreasuryTransaction(tx, ctx, a.treasuryTxnId, {
+    reason: `Avans iptali ${a.number}: ${input.reason}`.slice(0, 300),
+    date: input.date,
+  });
   return getAdvance(tx, id);
 }
 
 /** Personelden kasa/banka ile geri ödeme: tahsilat (diğer tahsilat, karşı hesap personel avansları) + kapama taksiti. */
 export async function repayAdvance(tx: Tx, ctx: LedgerCtx, id: string, input: RepayAdvanceInput) {
   const a = await lockAdvance(tx, id);
-  if (a.status !== 'open' && a.status !== 'partial') throw unprocessable('Yalnızca açık ya da kısmen kapanmış avansa geri ödeme alınır', 'ADVANCE_NOT_OPEN');
-  if (input.date < a.advanceDate) throw unprocessable('Geri ödeme tarihi avans tarihinden önce olamaz', 'ADVANCE_REPAY_DATE');
-  if (input.date > todayIso()) throw unprocessable('Geri ödeme tarihi gelecekte olamaz', 'ADVANCE_DATE_FUTURE');
+  if (a.status !== 'open' && a.status !== 'partial')
+    throw unprocessable(
+      'Yalnızca açık ya da kısmen kapanmış avansa geri ödeme alınır',
+      'ADVANCE_NOT_OPEN',
+    );
+  if (input.date < a.advanceDate)
+    throw unprocessable('Geri ödeme tarihi avans tarihinden önce olamaz', 'ADVANCE_REPAY_DATE');
+  if (input.date > todayIso())
+    throw unprocessable('Geri ödeme tarihi gelecekte olamaz', 'ADVANCE_DATE_FUTURE');
   const remaining = dec(a.amount).minus(a.settledAmount);
-  if (dec(input.amount).gt(remaining)) throw unprocessable(`Geri ödeme kalan avans tutarını (${remaining.toFixed(2)}) aşamaz`, 'ADVANCE_EXCEEDS_OPEN');
+  if (dec(input.amount).gt(remaining))
+    throw unprocessable(
+      `Geri ödeme kalan avans tutarını (${remaining.toFixed(2)}) aşamaz`,
+      'ADVANCE_EXCEEDS_OPEN',
+    );
   await requireBaseTreasury(tx, ctx, input.treasuryAccountId);
   const map = await requireMappings(tx, ['employee_advance']);
-  const [emp] = await tx.select({ code: employees.code, fullName: employees.fullName }).from(employees).where(eq(employees.id, a.employeeId));
+  const [emp] = await tx
+    .select({ code: employees.code, fullName: employees.fullName })
+    .from(employees)
+    .where(eq(employees.id, a.employeeId));
   const txn = await postTreasuryTransaction(tx, ctx, {
     type: 'other_receipt',
     date: input.date,
     accountId: input.treasuryAccountId,
     amount: input.amount,
-    description: `Personel avansı geri ödemesi ${a.number} — ${emp?.code} ${emp?.fullName}`.slice(0, 300),
+    description: `Personel avansı geri ödemesi ${a.number} — ${emp?.code} ${emp?.fullName}`.slice(
+      0,
+      300,
+    ),
     glAccountId: map.employee_advance,
     items: [],
   });
@@ -227,16 +306,23 @@ async function unpaidSalary(tx: Tx, employeeId: string, runId?: string | null) {
  */
 export async function paySalary(tx: Tx, ctx: LedgerCtx, input: SalaryPaymentInput) {
   const emp = await lockEmployee(tx, input.employeeId);
-  if (input.date > todayIso()) throw unprocessable('Ödeme tarihi gelecekte olamaz', 'SALARY_PAY_DATE_FUTURE');
+  if (input.date > todayIso())
+    throw unprocessable('Ödeme tarihi gelecekte olamaz', 'SALARY_PAY_DATE_FUTURE');
   const open = await unpaidSalary(tx, emp.id, input.payrollRunId);
   if (dec(input.amount).gt(open)) {
-    throw unprocessable(`Ödeme, ödenmemiş net ücreti (${open.isNegative() ? '0.00' : open.toFixed(2)}) aşamaz; fazlası için avans verin`, 'SALARY_PAYMENT_EXCEEDS');
+    throw unprocessable(
+      `Ödeme, ödenmemiş net ücreti (${open.isNegative() ? '0.00' : open.toFixed(2)}) aşamaz; fazlası için avans verin`,
+      'SALARY_PAYMENT_EXCEEDS',
+    );
   }
   await requireBaseTreasury(tx, ctx, input.treasuryAccountId);
   const map = await requireMappings(tx, ['payroll_payable']);
   let runNo = '';
   if (input.payrollRunId) {
-    const [r] = await tx.select({ number: payrollRuns.number }).from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId));
+    const [r] = await tx
+      .select({ number: payrollRuns.number })
+      .from(payrollRuns)
+      .where(eq(payrollRuns.id, input.payrollRunId));
     runNo = r ? ` (${r.number})` : '';
   }
   const txn = await postTreasuryTransaction(tx, ctx, {
@@ -274,22 +360,40 @@ export async function listSalaryPayments(tx: Tx, q: { employeeId?: string }) {
       left join payroll_runs r on r.id = p.payroll_run_id
      where (${q.employeeId ?? null}::uuid is null or p.employee_id = ${q.employeeId ?? null}::uuid)
      order by p.pay_date desc, t.txn_no desc limit 500`);
-  await logLedgerAccess(tx, res.rows.map((r) => r.employeeId as string), 'Maaş ödemeleri görüntüleme');
+  await logLedgerAccess(
+    tx,
+    res.rows.map((r) => r.employeeId as string),
+    'Maaş ödemeleri görüntüleme',
+  );
   return { payments: res.rows };
 }
 
 // --- Bordro avans kesintisi ---------------------------------------------------------------------------------------------
 
 async function ensureAdvanceItem(tx: Tx, companyId: string) {
-  const [cur] = await tx.select().from(payrollItems).where(eq(payrollItems.code, ADVANCE_DEDUCTION_ITEM_CODE));
+  const [cur] = await tx
+    .select()
+    .from(payrollItems)
+    .where(eq(payrollItems.code, ADVANCE_DEDUCTION_ITEM_CODE));
   if (cur) {
-    if (cur.kind !== 'deduction') throw unprocessable(`${ADVANCE_DEDUCTION_ITEM_CODE} kodlu bordro kalemi kesinti türünde olmalı`, 'PAYROLL_ITEM_RESERVED');
-    if (!cur.isActive) await tx.update(payrollItems).set({ isActive: true }).where(eq(payrollItems.id, cur.id));
+    if (cur.kind !== 'deduction')
+      throw unprocessable(
+        `${ADVANCE_DEDUCTION_ITEM_CODE} kodlu bordro kalemi kesinti türünde olmalı`,
+        'PAYROLL_ITEM_RESERVED',
+      );
+    if (!cur.isActive)
+      await tx.update(payrollItems).set({ isActive: true }).where(eq(payrollItems.id, cur.id));
     return cur.id;
   }
   const [row] = await tx
     .insert(payrollItems)
-    .values({ companyId, code: ADVANCE_DEDUCTION_ITEM_CODE, name: 'Personel avansı kesintisi', kind: 'deduction', liability: 'other' })
+    .values({
+      companyId,
+      code: ADVANCE_DEDUCTION_ITEM_CODE,
+      name: 'Personel avansı kesintisi',
+      kind: 'deduction',
+      liability: 'other',
+    })
     .returning({ id: payrollItems.id });
   return row!.id;
 }
@@ -302,7 +406,11 @@ export async function outstandingAdvances(tx: Tx, q: { employeeId?: string }) {
       from employee_advances a join employees e on e.id = a.employee_id
      where a.status in ('open','partial') and (${q.employeeId ?? null}::uuid is null or a.employee_id = ${q.employeeId ?? null}::uuid)
      order by a.advance_date, a.number`);
-  await logLedgerAccess(tx, res.rows.map((r) => r.employeeId as string), 'Açık avans listesi görüntüleme');
+  await logLedgerAccess(
+    tx,
+    res.rows.map((r) => r.employeeId as string),
+    'Açık avans listesi görüntüleme',
+  );
   return { advances: res.rows, settings: await getLedgerSettings(tx) };
 }
 
@@ -314,7 +422,11 @@ export async function listRunDeductions(tx: Tx, runId: string) {
       join employees e on e.id = d.employee_id
       join employee_advances a on a.id = d.advance_id
      where d.run_id = ${runId} order by e.code, a.advance_date`);
-  await logLedgerAccess(tx, res.rows.map((r) => r.employeeId as string), 'Bordro avans kesintileri görüntüleme');
+  await logLedgerAccess(
+    tx,
+    res.rows.map((r) => r.employeeId as string),
+    'Bordro avans kesintileri görüntüleme',
+  );
   return { deductions: res.rows, settings: await getLedgerSettings(tx) };
 }
 
@@ -323,25 +435,61 @@ export async function listRunDeductions(tx: Tx, runId: string) {
  * yazılır, bordro yeniden hesaplanır. Üst sınır (kullanıcı parametresi, varsayılan yok) kesinti öncesi net ücrete uygulanır.
  * Onayda kesinti avansa taksit olur, bordro iptalinde veritabanı taksiti geri alır.
  */
-export async function setRunAdvanceDeductions(tx: Tx, ctx: LedgerCtx, runId: string, input: SetAdvanceDeductionsInput) {
+export async function setRunAdvanceDeductions(
+  tx: Tx,
+  ctx: LedgerCtx,
+  runId: string,
+  input: SetAdvanceDeductionsInput,
+) {
   const [run] = await tx.select().from(payrollRuns).where(eq(payrollRuns.id, runId)).for('update');
   if (!run) throw notFound('Bordro');
-  if (run.status !== 'draft') throw unprocessable('Avans kesintisi yalnızca taslak bordroda belirlenir', 'PAYROLL_NOT_DRAFT');
+  if (run.status !== 'draft')
+    throw unprocessable('Avans kesintisi yalnızca taslak bordroda belirlenir', 'PAYROLL_NOT_DRAFT');
   const emp = await lockEmployee(tx, input.employeeId);
   const { end } = monthBounds(run.month);
 
-  await tx.delete(employeeAdvanceDeductions).where(and(eq(employeeAdvanceDeductions.runId, runId), eq(employeeAdvanceDeductions.employeeId, emp.id)));
+  await tx
+    .delete(employeeAdvanceDeductions)
+    .where(
+      and(
+        eq(employeeAdvanceDeductions.runId, runId),
+        eq(employeeAdvanceDeductions.employeeId, emp.id),
+      ),
+    );
   let total = dec(0);
   const seen = new Set<string>();
   for (const d of input.deductions) {
-    if (seen.has(d.advanceId)) throw unprocessable('Aynı avans iki kez seçilemez', 'ADVANCE_DUPLICATE');
+    if (seen.has(d.advanceId))
+      throw unprocessable('Aynı avans iki kez seçilemez', 'ADVANCE_DUPLICATE');
     seen.add(d.advanceId);
     const a = await lockAdvance(tx, d.advanceId);
-    if (a.employeeId !== emp.id) throw unprocessable('Avans bu personele ait değil', 'ADVANCE_EMPLOYEE_MISMATCH');
-    if (a.status !== 'open' && a.status !== 'partial') throw unprocessable(`${a.number} kesinti için uygun değil (durum: ${a.status})`, 'ADVANCE_NOT_OPEN');
-    if (a.advanceDate > end) throw unprocessable(`${a.number} bordro ayından sonra verilmiş; kesilemez`, 'ADVANCE_AFTER_PERIOD');
-    if (dec(d.amount).gt(dec(a.amount).minus(a.settledAmount))) throw unprocessable(`${a.number}: kesinti kalan avans tutarını aşıyor`, 'ADVANCE_EXCEEDS_OPEN');
-    await tx.insert(employeeAdvanceDeductions).values({ companyId: ctx.companyId, runId, advanceId: a.id, employeeId: emp.id, amount: toDbAmount(d.amount), createdBy: ctx.userId });
+    if (a.employeeId !== emp.id)
+      throw unprocessable('Avans bu personele ait değil', 'ADVANCE_EMPLOYEE_MISMATCH');
+    if (a.status !== 'open' && a.status !== 'partial')
+      throw unprocessable(
+        `${a.number} kesinti için uygun değil (durum: ${a.status})`,
+        'ADVANCE_NOT_OPEN',
+      );
+    if (a.advanceDate > end)
+      throw unprocessable(
+        `${a.number} bordro ayından sonra verilmiş; kesilemez`,
+        'ADVANCE_AFTER_PERIOD',
+      );
+    if (dec(d.amount).gt(dec(a.amount).minus(a.settledAmount)))
+      throw unprocessable(
+        `${a.number}: kesinti kalan avans tutarını aşıyor`,
+        'ADVANCE_EXCEEDS_OPEN',
+      );
+    await tx
+      .insert(employeeAdvanceDeductions)
+      .values({
+        companyId: ctx.companyId,
+        runId,
+        advanceId: a.id,
+        employeeId: emp.id,
+        amount: toDbAmount(d.amount),
+        createdBy: ctx.userId,
+      });
     total = total.plus(d.amount);
   }
 
@@ -349,29 +497,67 @@ export async function setRunAdvanceDeductions(tx: Tx, ctx: LedgerCtx, runId: str
   if (total.gt(0)) {
     await tx
       .insert(payrollAdjustments)
-      .values({ companyId: ctx.companyId, runId, employeeId: emp.id, itemId, amount: toDbAmount(total), note: 'Personel avansı kesintisi', createdBy: ctx.userId })
-      .onConflictDoUpdate({ target: [payrollAdjustments.runId, payrollAdjustments.employeeId, payrollAdjustments.itemId], set: { amount: toDbAmount(total) } });
+      .values({
+        companyId: ctx.companyId,
+        runId,
+        employeeId: emp.id,
+        itemId,
+        amount: toDbAmount(total),
+        note: 'Personel avansı kesintisi',
+        createdBy: ctx.userId,
+      })
+      .onConflictDoUpdate({
+        target: [
+          payrollAdjustments.runId,
+          payrollAdjustments.employeeId,
+          payrollAdjustments.itemId,
+        ],
+        set: { amount: toDbAmount(total) },
+      });
   } else {
-    await tx.delete(payrollAdjustments).where(and(eq(payrollAdjustments.runId, runId), eq(payrollAdjustments.employeeId, emp.id), eq(payrollAdjustments.itemId, itemId)));
+    await tx
+      .delete(payrollAdjustments)
+      .where(
+        and(
+          eq(payrollAdjustments.runId, runId),
+          eq(payrollAdjustments.employeeId, emp.id),
+          eq(payrollAdjustments.itemId, itemId),
+        ),
+      );
   }
   await calculateRun(tx, ctx, runId);
 
   if (total.gt(0)) {
     const settings = await getLedgerSettings(tx);
-    const [line] = await tx.select({ net: payrollLines.net }).from(payrollLines).where(and(eq(payrollLines.runId, runId), eq(payrollLines.employeeId, emp.id)));
-    if (!line) throw unprocessable('Personel bu bordroda yok (ücret şartı ya da puantaj eksik)', 'PAYROLL_LINE_MISSING');
+    const [line] = await tx
+      .select({ net: payrollLines.net })
+      .from(payrollLines)
+      .where(and(eq(payrollLines.runId, runId), eq(payrollLines.employeeId, emp.id)));
+    if (!line)
+      throw unprocessable(
+        'Personel bu bordroda yok (ücret şartı ya da puantaj eksik)',
+        'PAYROLL_LINE_MISSING',
+      );
     const cap = advanceDeductionCap(dec(line.net).plus(total).toFixed(2), settings.deductionCapPct);
     if (cap && total.gt(cap)) {
-      throw unprocessable(`Avans kesintisi (${total.toFixed(2)}) kullanıcı üst sınırını (${cap.toFixed(2)}) aşıyor`, 'ADVANCE_DEDUCTION_CAP');
+      throw unprocessable(
+        `Avans kesintisi (${total.toFixed(2)}) kullanıcı üst sınırını (${cap.toFixed(2)}) aşıyor`,
+        'ADVANCE_DEDUCTION_CAP',
+      );
     }
-    if (dec(line.net).isNegative()) throw unprocessable('Kesinti sonrası net ücret negatif olamaz', 'PAYROLL_NEGATIVE_NET');
+    if (dec(line.net).isNegative())
+      throw unprocessable('Kesinti sonrası net ücret negatif olamaz', 'PAYROLL_NEGATIVE_NET');
   }
   return listRunDeductions(tx, runId);
 }
 
 // --- Ayarlar --------------------------------------------------------------------------------------------------------------
 
-export async function updateLedgerSettings(tx: Tx, ctx: LedgerCtx, input: UpdateLedgerSettingsInput) {
+export async function updateLedgerSettings(
+  tx: Tx,
+  ctx: LedgerCtx,
+  input: UpdateLedgerSettingsInput,
+) {
   const values = {
     deductionCapPct: input.deductionCapPct,
     sourceNote: input.sourceNote?.trim() || null,
@@ -380,7 +566,10 @@ export async function updateLedgerSettings(tx: Tx, ctx: LedgerCtx, input: Update
     updatedBy: ctx.userId,
     updatedAt: new Date(),
   };
-  await tx.insert(employeeLedgerSettings).values({ companyId: ctx.companyId, ...values }).onConflictDoUpdate({ target: employeeLedgerSettings.companyId, set: values });
+  await tx
+    .insert(employeeLedgerSettings)
+    .values({ companyId: ctx.companyId, ...values })
+    .onConflictDoUpdate({ target: employeeLedgerSettings.companyId, set: values });
   return getLedgerSettings(tx);
 }
 
@@ -388,8 +577,13 @@ export async function verifyLedgerSettings(tx: Tx, ctx: LedgerCtx, note?: string
   const [u] = await tx.select({ email: users.email }).from(users).where(eq(users.id, ctx.userId));
   const rows = await tx
     .update(employeeLedgerSettings)
-    .set({ verifiedBy: u?.email ?? ctx.userId, verifiedAt: new Date(), ...(note ? { sourceNote: note } : {}) })
+    .set({
+      verifiedBy: u?.email ?? ctx.userId,
+      verifiedAt: new Date(),
+      ...(note ? { sourceNote: note } : {}),
+    })
     .returning({ id: employeeLedgerSettings.id });
-  if (rows.length === 0) throw unprocessable('Doğrulanacak bir üst sınır tanımı yok', 'LEDGER_SETTINGS_EMPTY');
+  if (rows.length === 0)
+    throw unprocessable('Doğrulanacak bir üst sınır tanımı yok', 'LEDGER_SETTINGS_EMPTY');
   return getLedgerSettings(tx);
 }

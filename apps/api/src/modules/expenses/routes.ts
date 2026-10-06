@@ -11,6 +11,8 @@ import {
 } from '@erp/shared';
 import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
+import { isModuleDenied } from '../access/effective';
+import { forbidden } from '../../http/errors';
 import { pageOf } from '../../http/paging';
 import type { LedgerCtx } from '../ledger/journal';
 import { expenseReport } from './reports';
@@ -32,6 +34,19 @@ const ledgerCtx = ({ company, user }: TenantCtx): LedgerCtx => ({
   reportingCurrency: company.reportingCurrency,
 });
 
+function requireEmployeeExpense(c: TenantCtx) {
+  c.require('hr.payroll_manage');
+  if (
+    !c.enabledModules.has('hr.employee_ledger') ||
+    isModuleDenied(c.access, 'hr.employee_ledger')
+  ) {
+    throw forbidden(
+      'Personel masrafı için personel cari modülüne erişim gerekir.',
+      'MODULE_ACCESS_DENIED',
+    );
+  }
+}
+
 /** Gider kartları ve gider fişi (treasury.expenses); izinler kasa/banka izinleridir: okuma treasury.read, kart yönetimi treasury.manage, fiş kaydı/iptali treasury.post. */
 export const expenseRoutes: FastifyPluginAsync = async (app) => {
   const mod = 'treasury.expenses';
@@ -39,19 +54,38 @@ export const expenseRoutes: FastifyPluginAsync = async (app) => {
   const manage = { module: mod, permission: 'treasury.manage' } as const;
   const post = { module: mod, permission: 'treasury.post' } as const;
 
-  app.get('/api/expense-cards', tenantRoute(app, read, async ({ tx, req }) => {
-    const q = z.object({ all: z.enum(['true', 'false']).optional(), ...pageParams(2000, 5000) }).parse(req.query);
-    return listExpenseCards(tx, { all: q.all === 'true' }, pageOf(q));
-  }));
+  app.get(
+    '/api/expense-cards',
+    tenantRoute(app, read, async ({ tx, req }) => {
+      const q = z
+        .object({ all: z.enum(['true', 'false']).optional(), ...pageParams(2000, 5000) })
+        .parse(req.query);
+      return listExpenseCards(tx, { all: q.all === 'true' }, pageOf(q));
+    }),
+  );
   app.post(
     '/api/expense-cards',
     tenantRoute(app, manage, async (c) => {
-      const card = await createExpenseCard(c.tx, c.company.id, createExpenseCardSchema.parse(c.req.body));
+      const card = await createExpenseCard(
+        c.tx,
+        c.company.id,
+        createExpenseCardSchema.parse(c.req.body),
+      );
       void c.reply.code(201);
       return { card };
     }),
   );
-  app.patch('/api/expense-cards/:id', tenantRoute(app, manage, async (c) => ({ card: await updateExpenseCard(c.tx, c.company.id, idParam.parse(c.req.params).id, updateExpenseCardSchema.parse(c.req.body)) })));
+  app.patch(
+    '/api/expense-cards/:id',
+    tenantRoute(app, manage, async (c) => ({
+      card: await updateExpenseCard(
+        c.tx,
+        c.company.id,
+        idParam.parse(c.req.params).id,
+        updateExpenseCardSchema.parse(c.req.body),
+      ),
+    })),
+  );
   app.delete(
     '/api/expense-cards/:id',
     tenantRoute(app, manage, async ({ tx, req, reply }) => {
@@ -61,16 +95,48 @@ export const expenseRoutes: FastifyPluginAsync = async (app) => {
     }),
   );
 
-  app.get('/api/expense-entries', tenantRoute(app, read, async ({ tx, req }) => listExpenseEntries(tx, listExpenseEntriesQuerySchema.parse(req.query))));
-  app.get('/api/expense-entries/report', tenantRoute(app, read, async ({ tx, req }) => expenseReport(tx, expenseReportQuerySchema.parse(req.query))));
-  app.get('/api/expense-entries/:id', tenantRoute(app, read, async ({ tx, req }) => ({ entry: await getExpenseEntry(tx, idParam.parse(req.params).id) })));
+  app.get(
+    '/api/expense-entries',
+    tenantRoute(app, read, async ({ tx, req }) =>
+      listExpenseEntries(tx, listExpenseEntriesQuerySchema.parse(req.query)),
+    ),
+  );
+  app.get(
+    '/api/expense-entries/report',
+    tenantRoute(app, read, async ({ tx, req }) =>
+      expenseReport(tx, expenseReportQuerySchema.parse(req.query)),
+    ),
+  );
+  app.get(
+    '/api/expense-entries/:id',
+    tenantRoute(app, read, async ({ tx, req }) => ({
+      entry: await getExpenseEntry(tx, idParam.parse(req.params).id),
+    })),
+  );
   app.post(
     '/api/expense-entries',
     tenantRoute(app, post, async (c) => {
-      const entry = await createExpenseEntry(c.tx, ledgerCtx(c), createExpenseEntrySchema.parse(c.req.body));
+      const input = createExpenseEntrySchema.parse(c.req.body);
+      if (input.paymentKind === 'employee') requireEmployeeExpense(c);
+      const entry = await createExpenseEntry(c.tx, ledgerCtx(c), input);
       void c.reply.code(201);
       return { entry };
     }),
   );
-  app.post('/api/expense-entries/:id/cancel', tenantRoute(app, post, async (c) => ({ entry: await cancelExpenseEntry(c.tx, ledgerCtx(c), idParam.parse(c.req.params).id, cancelExpenseEntrySchema.parse(c.req.body)) })));
+  app.post(
+    '/api/expense-entries/:id/cancel',
+    tenantRoute(app, post, async (c) => {
+      const id = idParam.parse(c.req.params).id;
+      const entry = await getExpenseEntry(c.tx, id);
+      if (entry.paymentKind === 'employee') requireEmployeeExpense(c);
+      return {
+        entry: await cancelExpenseEntry(
+          c.tx,
+          ledgerCtx(c),
+          id,
+          cancelExpenseEntrySchema.parse(c.req.body),
+        ),
+      };
+    }),
+  );
 };

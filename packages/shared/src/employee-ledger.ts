@@ -19,7 +19,7 @@ export function advanceStatusFor(amount: string, settled: string): Exclude<Advan
 }
 
 /** Hareket türleri: personel cari ekstresi satırı. */
-export const LEDGER_KINDS = ['salary_net', 'salary_payment', 'advance', 'advance_deduction', 'advance_repayment'] as const;
+export const LEDGER_KINDS = ['salary_net', 'salary_payment', 'advance', 'advance_deduction', 'advance_repayment', 'advance_expense'] as const;
 export type LedgerKind = (typeof LEDGER_KINDS)[number];
 
 /** Alacak (şirket personele borçlanır) mı, borç mu? Bakiye = alacak − borç: pozitif ise şirket personele borçludur. */
@@ -29,6 +29,7 @@ export const LEDGER_SIDE: Record<LedgerKind, 'credit' | 'debit'> = {
   advance: 'debit',
   advance_deduction: 'credit',
   advance_repayment: 'credit',
+  advance_expense: 'credit',
 };
 
 export interface LedgerRowInput {
@@ -73,13 +74,14 @@ export interface EmployeeBalanceInput {
   advanceGiven: string;
   advanceDeducted: string;
   advanceRepaid: string;
+  advanceExpensed?: string;
 }
 
 /** Personel bakiyesi özeti. net > 0: şirket personele borçlu; net < 0: personel şirkete borçlu (açık avans). */
 export function employeeBalance(i: EmployeeBalanceInput) {
-  const credit = dec(i.salaryNet).plus(i.advanceDeducted).plus(i.advanceRepaid);
+  const credit = dec(i.salaryNet).plus(i.advanceDeducted).plus(i.advanceRepaid).plus(i.advanceExpensed ?? 0);
   const debit = dec(i.salaryPaid).plus(i.advanceGiven);
-  const openAdvance = dec(i.advanceGiven).minus(i.advanceDeducted).minus(i.advanceRepaid);
+  const openAdvance = dec(i.advanceGiven).minus(i.advanceDeducted).minus(i.advanceRepaid).minus(i.advanceExpensed ?? 0);
   const unpaidSalary = dec(i.salaryNet).minus(i.salaryPaid);
   return { net: credit.minus(debit).toFixed(2), openAdvance: openAdvance.toFixed(2), unpaidSalary: unpaidSalary.toFixed(2) };
 }

@@ -133,6 +133,8 @@
     "treasuryExpenses": "Gider kartları ve raporları"
   },
   "nav": {
+    "fixedAssets": "Demirbaş ve amortisman",
+    "companyBudgets": "Bütçe ve sapma",
     "groups": {
       "overview": "Genel",
       "accounting": "Muhasebe",
@@ -237,7 +239,14 @@
     "collectionWork": "Tahsilat takibi",
     "cashScenarios": "Nakit senaryoları",
     "portalAccess": "Portal erişimleri",
-    "notifications": "Bildirimler"
+    "notifications": "Bildirimler",
+    "constructionCenter": "İnşaat kontrol merkezi",
+    "operationsSettings": "İşletim ve güvenlik",
+    "activityReport": "Faaliyet raporu",
+    "backups": "Yedekleme",
+    "recurring": "Tekrarlayan işler",
+    "insights": "Rapor panom",
+    "campaigns": "Kampanya ve promosyon"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -675,6 +684,8 @@
       "source": {
         "invoice": "Fatura",
         "stock_document": "Stok belgesi",
+        "asset_depreciation": "Amortisman",
+        "expense_entry": "Gider fişi",
         "treasury": "Kasa/banka hareketi"
       },
       "sourceOpen": "{{label}}",
@@ -4632,7 +4643,7 @@
   "foreign": {
     "title": "Yabancı işçi belge ve teminat takibi",
     "subtitle": "Personel kartındaki uyruğa göre belge (çalışma/ikamet izni, pasaport, sağlık raporu vb.), son kullanma takibi ve teminat kaydı.",
-    "notice": "Tüm süre, uyarı günü, teminat tutarı ve makam bilgileri sizin girdiğiniz kullanıcı verisidir; sistemde yasal değer yoktur ve hiçbiri doğrulanmadı. Belge numaraları şifreli saklanır ve maskeli gösterilir. Dosya yükleme yoktur: ek belge için metin atfı yazılır. Süre uyarıları Bildirimler'e yalnızca sayı olarak düşer (tercihlerden değiştirilebilir); ayrıntıyı bu listeden izleyin.",
+    "notice": "Tüm süre, uyarı günü, teminat tutarı ve makam bilgileri sizin girdiğiniz kullanıcı verisidir; sistemde yasal değer yoktur ve hiçbiri doğrulanmadı. Belge numaraları şifreli saklanır ve maskeli gösterilir. Ek dosyalar, belge satırındaki arşiv bağlantısından ayrı hassas veri yetkisiyle yüklenir. Süre uyarıları Bildirimler'e yalnızca sayı olarak düşer (tercihlerden değiştirilebilir); ayrıntıyı bu listeden izleyin.",
     "unverifiedBadge": "Doğrulanmadı",
     "tabs": {
       "documents": "Belgeler",
@@ -4823,7 +4834,7 @@
   "cheques": {
     "title": "Çek/senet portföyü ve takas",
     "subtitle": "Müşteriden alınan ve tedarikçiye verilen çek/senetler; tahsile verme, tahsil, ciro, karşılıksız ve takas",
-    "notice": "Her durum değişikliği yevmiye yazar. Hesap eşlemeleri (101, 121, 108, 103, 321) genel Tekdüzen yapıya dayalı varsayılanlardır ve DOĞRULANMAMIŞTIR; Ayarlar > Hesap eşlemesi'nden değiştirilir. Yalnızca defter para biriminde işlenir; yasal geçerlilik ve protesto/ibraz süreleri denetlenmez.",
+    "notice": "Her durum değişikliği yevmiye yazar. Hesap eşlemeleri (101, 121, 108, 103, 321) genel Tekdüzen yapıya dayalı varsayılanlardır ve DOĞRULANMAMIŞTIR; Ayarlar > Hesap eşlemesi'nden değiştirilir. Dövizli belgelerde kayıt kuru saklanır; tahsil ve ödemede kur farkı hesaplanır. Takas aynı para biriminde yapılır. Yasal geçerlilik ve protesto/ibraz süreleri denetlenmez.",
     "tabs": {
       "portfolio": "Portföy",
       "clearing": "Takas",
@@ -5594,7 +5605,7 @@
     "notice": "KDV kodları ve stopaj yüzdeleri sizin girdiğiniz kullanıcı verisidir; uygulama vergi doğruluğunu denetlemez. Yevmiye hesapları (191, 320, 360) varsayılan eşlemelerdir ve doğrulanmamıştır. Gider fişi yalnızca defter para biriminde girilir.",
     "entries": {
       "title": "Gider fişleri",
-      "subtitle": "Hızlı gider girişi: kasa/banka ya da cari karşılığıyla tek fişte gider, KDV ve stopaj yevmiyesi.",
+      "subtitle": "Gider, KDV ve stopaj; kasa/banka, cari veya personel masrafı. Açık avansı mahsup edin, kalan tutarı personele iade edin.",
       "add": "Yeni gider",
       "empty": "Henüz gider fişi yok",
       "emptyHint": "Önce gider kartı tanımlayın, sonra gideri girin.",
@@ -5634,6 +5645,14 @@
       "payment": "Ödeme şekli",
       "paymentTreasury": "Kasa / banka",
       "paymentParty": "Cari (vadeli)",
+      "paymentEmployee": "Personel masrafı / avans mahsubu",
+      "employee": "Personel",
+      "advance": "Mahsup edilecek avans",
+      "advanceHint": "Yalnızca bu personele ait açık avanslar gösterilir.",
+      "noAdvance": "Avans kullanma; tutarın tamamını iade et",
+      "advanceApplied": "Avanstan mahsup",
+      "reimbursement": "Personele iade",
+      "employeeHint": "Avansın kalan bakiyesi kullanılır. Artan tutar seçilen kasa/bankadan ödenir. Fiş iptal edilirse mahsup geri alınır ve ödeme ters kayıtla kapatılır.",
       "treasuryAccount": "Kasa / banka hesabı",
       "party": "Tedarikçi cari",
       "partyOptional": "Cari (rapor için, isteğe bağlı)",
@@ -5739,7 +5758,8 @@
       "salary_payment": "Maaş ödemesi",
       "advance": "Avans",
       "advance_deduction": "Bordrodan avans kesintisi",
-      "advance_repayment": "Avans geri ödemesi"
+      "advance_repayment": "Avans geri ödemesi",
+      "advance_expense": "Masrafla avans mahsubu"
     },
     "buckets": {
       "notDue": "Bugün",

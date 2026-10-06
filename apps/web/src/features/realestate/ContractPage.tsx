@@ -55,11 +55,12 @@ export function SalesContractPage() {
   const status = isNew ? 'draft' : c?.status ?? 'draft';
   const editable = status === 'draft' && can('realestate.manage');
 
-  const { data: unitData } = useCQuery<{ units: UnitRow[] }>(['units', 'available'], '/api/real-estate/units?status=available', { enabled: isNew });
+  const reservationLeadId=params.get('reservationLeadId')??'';
+  const { data: unitData } = useCQuery<{ units: UnitRow[] }>(['units', 'contract-selection',reservationLeadId], reservationLeadId?`/api/real-estate/units?status=reserved&projectId=${params.get('projectId')??''}`:'/api/real-estate/units?status=available', { enabled: isNew });
   const { options: buyers } = usePartyOptions('customer');
 
   const [unitId, setUnitId] = useState(params.get('unitId') ?? '');
-  const [partyId, setPartyId] = useState('');
+  const [partyId, setPartyId] = useState(params.get('partyId')??'');
   const [currencyCode, setCurrencyCode] = useState('GBP');
   const [contractDate, setContractDate] = useState(todayIso());
   const [plannedHandover, setPlannedHandover] = useState('');
@@ -125,7 +126,7 @@ export function SalesContractPage() {
   const valid = (!!unitId || !isNew) && (!!partyId || !isNew) && Number(num(price)) > 0 && rows.length > 0 && totals.ok && rows.every((r) => r.dueDate && Number(num(r.amount)) > 0);
 
   const save = useCMutation(
-    (_: void, call) => (isNew ? call<SalesContractDetail>('/api/sales-contracts', { method: 'POST', body: { unitId, partyId, currencyCode, ...body() } }) : call<SalesContractDetail>(`/api/sales-contracts/${id}`, { method: 'PUT', body: body() })),
+    (_: void, call) => (isNew ? call<SalesContractDetail>('/api/sales-contracts', { method: 'POST', body: { unitId, partyId, currencyCode, ...(reservationLeadId?{reservationLeadId}:{}), ...body() } }) : call<SalesContractDetail>(`/api/sales-contracts/${id}`, { method: 'PUT', body: body() })),
     REAL_ESTATE_INVALIDATE,
   );
   const act = useCMutation(

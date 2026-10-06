@@ -88,10 +88,14 @@ export async function getAgendaItem(tx: Tx, id: string, ctx?: AgendaCtx) {
   return { item: rows.rows[0] };
 }
 
-export async function createAgendaItem(tx: Tx, ctx: AgendaCtx, input: CreateAgendaInput, sourceNoteId?: string) {
+export async function validateAgendaInput(tx: Tx, ctx: AgendaCtx, input: CreateAgendaInput) {
   await assertRefs(tx, input);
   await assertContactOpen(tx, input.contactId);
-  const ownerId = await resolveOwner(tx, ctx, input.ownerId);
+  return resolveOwner(tx, ctx, input.ownerId);
+}
+
+export async function createAgendaItem(tx: Tx, ctx: AgendaCtx, input: CreateAgendaInput, sourceNoteId?: string) {
+  const ownerId = await validateAgendaInput(tx, ctx, input);
   const [row] = await tx
     .insert(agendaItems)
     .values({

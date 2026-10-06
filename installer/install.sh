@@ -503,6 +503,14 @@ install_prod_docker() {
   (( KIT )) && install_updater docker "$ROOT/$envf"
   [[ -n "$RESTORE_DB" ]] && restore_db_docker "$RESTORE_DB"
   local profile=()
+  local construction_files
+  construction_files="$(sed -n 's/^CONSTRUCTION_FILES_DIR=//p' "$envf")"
+  construction_files="${construction_files:-construction-data}"
+  [[ "$construction_files" = /* ]] || construction_files="$ROOT/deploy/$construction_files"
+  as_root mkdir -p "$construction_files"
+  # API imajındaki node kullanıcısının UID/GID'si; yeni dosyalar özel kalır.
+  as_root chown 1000:1000 "$construction_files"
+  as_root chmod 700 "$construction_files"
   grep -q '^ERP_DOMAIN=.\+' "$envf" && profile=(--profile tls)
   info "Hizmetler başlatılıyor (docker compose up -d)…"
   docker compose -f deploy/docker-compose.prod.yml --env-file "$envf" "${profile[@]}" up -d "${build_flag[@]}"
@@ -612,11 +620,13 @@ mkdir -p "\$DIR"
 out="\$DIR/erp-\$(date +%Y%m%d-%H%M%S).dump"
 trap 'rm -f "\$out.partial"' EXIT
 /usr/lib/postgresql/$PG_MAJOR/bin/pg_dump -Fc -f "\$out.partial"
+FILES_DIR="\$(sed -n 's/^CONSTRUCTION_STORAGE_DIR=//p' $(printf '%q' "$ETC/erp.env"))"
+$(printf '%q' "$PREFIX/current/app/runtime/node") $(printf '%q' "$PREFIX/current/app/dist/construction-files.mjs") --mode=backup --root="\${FILES_DIR:-$VARDIR/construction}" --archive="\$out.files.gz"
 mv -f "\$out.partial" "\$out"
 chmod 600 "\$out"
 # Temizlik: yalnızca bu betiğin adlandırdığı dosyalar (erp-YYYYMMDD-HHMMSS.dump); en az 1 (yeni alınan) kalır
 find "\$DIR" -maxdepth 1 -type f -regextype posix-extended -regex '.*/erp-[0-9]{8}-[0-9]{6}\.dump' -printf '%f\n' | sort -r | tail -n +\$((KEEP + 1)) \\
-  | while IFS= read -r old; do rm -f -- "\$DIR/\$old"; done
+  | while IFS= read -r old; do rm -f -- "\$DIR/\$old" "\$DIR/\$old.files.gz" "\$DIR/\$old.files.gz.sha256"; done
 echo "Yedek: \$out"
 BK
   as_root chmod 700 "$PREFIX/bin/erp-backup"
@@ -706,6 +716,7 @@ install_prod_native() {
       echo "DATABASE_URL=postgres://erp_app:$app_pw@127.0.0.1:$pgp/$DB_NAME"
       echo "JWT_SECRET=$jwt"
       echo "WEB_DIST_DIR=$PREFIX/current/app/web"
+      echo "CONSTRUCTION_STORAGE_DIR=$VARDIR/construction"
       echo "LICENSE_HOST_ID_FILE=/etc/machine-id"
       echo "APP_VERSION=$ver"
     } > "$WIZARD_TMP"
@@ -723,6 +734,10 @@ EOF
   fi
   rm -f "$WIZARD_TMP"
   as_root sed -i "s/^APP_VERSION=.*/APP_VERSION=$ver/" "$ETC/erp.env"
+  ensure_env_secret "$ETC/erp.env" CONSTRUCTION_STORAGE_DIR "$VARDIR/construction"
+  as_root mkdir -p "$VARDIR/construction"
+  as_root chown "$SVC_USER:$SVC_USER" "$VARDIR/construction"
+  as_root chmod 700 "$VARDIR/construction"
   [[ -n "$RESTORE_DB" ]] && restore_db_native "$RESTORE_DB"
 
   # current'ı yeni sürüme çevir → migration → başlat
@@ -911,6 +926,12 @@ restore_db_native() { # yedekten geri yükleme (güncelleyicinin geri dönüşü
     -c "revoke all on database $DB_NAME from public" -c "grant connect on database $DB_NAME to erp_app" >/dev/null
   with_pg_url "$url" "/usr/lib/postgresql/$PG_MAJOR/bin/pg_restore" --exit-on-error --single-transaction --no-owner --role=erp -d "$DB_NAME" "$file" \
     || die "Geri yükleme başarısız ($file)"
+  if [[ -f "$file.files.gz" ]]; then
+    local files_dir
+    files_dir="$(as_root sed -n 's/^CONSTRUCTION_STORAGE_DIR=//p' "$ETC/erp.env")"
+    as_root "$ROOT/app/runtime/node" "$ROOT/installer/tools/construction-files.mjs" --mode=restore --root="${files_dir:-$VARDIR/construction}" --archive="$file.files.gz"
+    as_root chown -R "$SVC_USER:$SVC_USER" "${files_dir:-$VARDIR/construction}"
+  else warn "Eski yedekte çizim/model arşivi yok; dosya deposu ayrıca geri yüklenmeli."; fi
   okm "Veritabanı geri yüklendi"
 }
 
@@ -924,6 +945,13 @@ restore_db_docker() {
   "${dc[@]}" exec -T db psql -U postgres -v ON_ERROR_STOP=1 -q -c "drop database if exists $DB_NAME with (force)" -c "create database $DB_NAME owner erp" \
     -c "revoke all on database $DB_NAME from public" -c "grant connect on database $DB_NAME to erp_app" >/dev/null
   "${dc[@]}" exec -T db pg_restore -U postgres --exit-on-error --single-transaction --no-owner --role=erp -d "$DB_NAME" < "$file"
+  if [[ -f "$file.files.gz" ]]; then
+    local files_dir files_node
+    files_dir="$(sed -n 's/^CONSTRUCTION_FILES_DIR=//p' "$ROOT/deploy/.env")"; files_dir="${files_dir:-construction-data}"
+    [[ "$files_dir" = /* ]] || files_dir="$ROOT/deploy/$files_dir"
+    files_node="$ROOT/app/runtime/node"; [[ -x "$files_node" ]] || files_node=node
+    "$files_node" "$ROOT/installer/tools/construction-files.mjs" --mode=restore --root="$files_dir" --archive="$file.files.gz"
+  else warn "Eski yedekte çizim/model arşivi yok; dosya deposu ayrıca geri yüklenmeli."; fi
   okm "Veritabanı geri yüklendi"
 }
 
@@ -993,6 +1021,16 @@ migrate_docker_state() {
     if [[ -f "$from/deploy/$f" && ! -f "$ROOT/deploy/$f" ]]; then cp -p "$from/deploy/$f" "$ROOT/deploy/$f"; fi
   done
   [[ -f "$ROOT/deploy/.env" ]] && chmod 600 "$ROOT/deploy/.env"
+  # Özel depo yerinde kalır; çalışan konteynerle dosya kopyalama yarışına girilmez.
+  local old_files
+  old_files="$(sed -n 's/^CONSTRUCTION_FILES_DIR=//p' "$from/deploy/.env")"
+  old_files="${old_files:-construction-data}"
+  [[ "$old_files" = /* ]] || old_files="$from/deploy/$old_files"
+  if [[ -d "$old_files" ]]; then
+    old_files="$(cd -- "$old_files" && pwd -P)"
+    set_env_line "$ROOT/deploy/.env" CONSTRUCTION_FILES_DIR "$old_files"
+    warn "Kalıcı çizim/model deposu yerinde korunuyor: $old_files. Bu klasörü silmeyin; yeni kurulum ve yedekler aynı depoyu kullanır."
+  fi
   if [[ -d "$from/deploy/certs" && ! -d "$ROOT/deploy/certs" ]]; then cp -a "$from/deploy/certs" "$ROOT/deploy/certs"; fi
   # Varsayılan yedek klasörü eski kurulum klasörünün içindeyse yeni klasördeki karşılığına geçilir (eski yedekler yerinde kalır)
   if [[ -f "$ROOT/deploy/wizard.conf" ]] && grep -qxF "BACKUP_DIR=$from/backups" "$ROOT/deploy/wizard.conf"; then

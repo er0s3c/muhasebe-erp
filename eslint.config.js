@@ -14,11 +14,16 @@ export default tseslint.config(
       'release/**',
       'reference-materials/**',
       'video/**',
+      '.claude/**',
+      '.codex/**',
+      '.cache/**',
+      '.runtime/**',
     ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    languageOptions: { parserOptions: { tsconfigRootDir: import.meta.dirname } },
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },

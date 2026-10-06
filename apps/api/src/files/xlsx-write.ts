@@ -1,4 +1,5 @@
-import { strToU8, zipSync } from 'fflate';
+import { strToU8, zipSync, Zip, ZipDeflate } from 'fflate';
+import { Readable } from 'node:stream';
 import { CURRENCY_SYMBOLS } from '@erp/shared';
 import { DEFAULT_WIDTH, TOTAL_LABEL, type CellValue, type ColumnKind, type ReportTable, type TableColumn } from './table';
 
@@ -258,15 +259,23 @@ function fitWidth(c: TableColumn, rows: readonly Record<string, CellValue>[]): n
 
 const escapeHf = (s: string) => xmlEscape(s.replace(/&/g, '&&'));
 
-function sheetXml(table: ReportTable, book: StyleBook): string {
+function* sheetXmlChunks(table: ReportTable, book: StyleBook): Generator<string> {
   const plain = !!table.plain;
   const HEADER_ROW = headerRowOf(table);
   const cols = table.columns;
   const lastIdx = Math.max(cols.length - 1, 0);
   const lastCol = columnName(lastIdx);
-  const rows: string[] = [];
   const merges: string[] = [];
   const fallback = book.xf({ role: 'body' });
+  const finalRow=HEADER_ROW+table.rows.length+(table.totals?1:0);
+  const widths = cols.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${fitWidth(c, table.rows)}" customWidth="1"/>`).join('');
+  const totalWidth = cols.reduce((s, c) => s + fitWidth(c, table.rows), 0);
+  const landscape = totalWidth > 95;
+  yield XML_HEAD + `<worksheet xmlns="${NS_MAIN}" xmlns:r="${NS_REL}">` +
+    `<sheetPr>${plain ? '' : `<tabColor rgb="${C.accent}"/>`}<pageSetUpPr fitToPage="1"/></sheetPr>` +
+    `<dimension ref="A1:${lastCol}${finalRow}"/>` +
+    `<sheetViews><sheetView${plain ? '' : ' showGridLines="0"'} workbookViewId="0"><pane ySplit="${HEADER_ROW}" topLeftCell="A${HEADER_ROW + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` +
+    '<sheetFormatPr defaultRowHeight="15"/>' + `<cols>${widths}</cols><sheetData>`;
 
   if (!plain) {
     const titleStyle = book.xf({ role: 'title' });
@@ -275,13 +284,13 @@ function sheetXml(table: ReportTable, book: StyleBook): string {
       `<row r="${r}" ht="${ht}" customHeight="1">` +
       cols.map((_, i) => (i === 0 && text ? textCell(`A${r}`, style, text) : `<c r="${columnName(i)}${r}" s="${style}"/>`)).join('') +
       '</row>';
-    rows.push(bar(1, titleStyle, table.title, 30));
-    rows.push(bar(2, subStyle, table.subtitle ?? '', 20));
-    rows.push('<row r="3" ht="8" customHeight="1"/>');
+    yield bar(1, titleStyle, table.title, 30);
+    yield bar(2, subStyle, table.subtitle ?? '', 20);
+    yield '<row r="3" ht="8" customHeight="1"/>';
     if (cols.length > 1) merges.push(`<mergeCell ref="A1:${lastCol}1"/>`, `<mergeCell ref="A2:${lastCol}2"/>`);
   }
 
-  rows.push(
+  yield (
     `<row r="${HEADER_ROW}" ht="${plain ? 30 : 32}" customHeight="1">` +
       cols
         .map((c, i) => {
@@ -290,12 +299,12 @@ function sheetXml(table: ReportTable, book: StyleBook): string {
           return textCell(`${columnName(i)}${HEADER_ROW}`, book.xf({ role, kind: c.kind }), c.label);
         })
         .join('') +
-      '</row>',
+      '</row>'
   );
 
   const styleOf = (c: TableColumn, role: Role) => book.xf({ role, kind: c.kind, ...(c.kind === 'money' && c.currency ? { currency: c.currency } : {}) });
   let r = HEADER_ROW;
-  table.rows.forEach((row, n) => {
+  for (const [n,row] of table.rows.entries()) {
     r++;
     const role: Role = plain || n % 2 === 0 ? 'body' : 'band';
     const cells = cols
@@ -306,8 +315,8 @@ function sheetXml(table: ReportTable, book: StyleBook): string {
         return valueCell(`${columnName(i)}${r}`, c.kind, st, fallback, v) ?? (plain ? null : `<c r="${columnName(i)}${r}" s="${st}"/>`);
       })
       .filter((x): x is string => x !== null);
-    rows.push(`<row r="${r}">${cells.join('')}</row>`);
-  });
+    yield `<row r="${r}">${cells.join('')}</row>`;
+  }
   const lastDataRow = r;
 
   if (table.totals) {
@@ -324,22 +333,11 @@ function sheetXml(table: ReportTable, book: StyleBook): string {
       // Boş toplam hücresi de çizgiyi ve dolguyu taşısın; ilk metin sütununa etiket yazılır
       return i === firstText ? textCell(ref, book.xf({ role: 'total' }), TOTAL_LABEL) : `<c r="${ref}" s="${st}"/>`;
     });
-    rows.push(`<row r="${r}" ht="20" customHeight="1">${cells.join('')}</row>`);
+    yield `<row r="${r}" ht="20" customHeight="1">${cells.join('')}</row>`;
   }
 
-  const widths = cols.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${fitWidth(c, table.rows)}" customWidth="1"/>`).join('');
-  const totalWidth = cols.reduce((s, c) => s + fitWidth(c, table.rows), 0);
-  const landscape = totalWidth > 95;
-
-  return (
-    XML_HEAD +
-    `<worksheet xmlns="${NS_MAIN}" xmlns:r="${NS_REL}">` +
-    `<sheetPr>${plain ? '' : `<tabColor rgb="${C.accent}"/>`}<pageSetUpPr fitToPage="1"/></sheetPr>` +
-    `<dimension ref="A1:${lastCol}${Math.max(r, HEADER_ROW)}"/>` +
-    `<sheetViews><sheetView${plain ? '' : ' showGridLines="0"'} workbookViewId="0"><pane ySplit="${HEADER_ROW}" topLeftCell="A${HEADER_ROW + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` +
-    '<sheetFormatPr defaultRowHeight="15"/>' +
-    `<cols>${widths}</cols>` +
-    `<sheetData>${rows.join('')}</sheetData>` +
+  yield (
+    '</sheetData>' +
     (table.rows.length > 0 ? `<autoFilter ref="A${HEADER_ROW}:${lastCol}${lastDataRow}"/>` : '') +
     (merges.length ? `<mergeCells count="${merges.length}">${merges.join('')}</mergeCells>` : '') +
     '<printOptions horizontalCentered="1"/>' +
@@ -351,7 +349,7 @@ function sheetXml(table: ReportTable, book: StyleBook): string {
 }
 
 /** Tabloları tek çalışma kitabında (her tablo bir sayfa) XLSX olarak yazar. */
-export function writeXlsx(tables: readonly ReportTable[]): Uint8Array {
+function workbookParts(tables: readonly ReportTable[]) {
   if (tables.length === 0) throw new Error('En az bir tablo gerekli');
   const names = sheetNames(tables.map((t) => t.sheet ?? t.title));
   const book = new StyleBook();
@@ -402,12 +400,43 @@ export function writeXlsx(tables: readonly ReportTable[]): Uint8Array {
       `<Relationship Id="rId${tables.length + 1}" Type="${NS_REL}/styles" Target="styles.xml"/>` +
       '</Relationships>',
   );
-  tables.forEach((t, i) => {
-    files[`xl/worksheets/sheet${i + 1}.xml`] = strToU8(sheetXml(t, book));
-  });
-  files['xl/styles.xml'] = strToU8(book.toXml());
+  return {files,book};
+}
 
+export function writeXlsx(tables: readonly ReportTable[]): Uint8Array {
+  const {files,book}=workbookParts(tables);
+  tables.forEach((t,i)=>{files[`xl/worksheets/sheet${i+1}.xml`]=strToU8([...sheetXmlChunks(t,book)].join(''));});
+  files['xl/styles.xml'] = strToU8(book.toXml());
   return zipSync(files, { level: 6 });
+}
+
+/** Incremental OOXML + ZIP output. Readable backpressure bounds the output queue;
+ * report queries still materialize their existing rows before this writer starts. */
+export function writeXlsxStream(tables: readonly ReportTable[]): Readable {
+  const {files,book}=workbookParts(tables);
+  async function* archive() {
+    const output:Uint8Array[]=[];
+    let failure:Error|null=null;
+    const zip=new Zip((error,data)=>{if(error)failure=error;else output.push(data);});
+    const drain=function*(){if(failure)throw failure;while(output.length)yield Buffer.from(output.shift()!);};
+    try {
+      for(const [name,data] of Object.entries(files)) {
+        const entry=new ZipDeflate(name,{level:6});zip.add(entry);entry.push(data,true);yield* drain();
+      }
+      for(const [i,table] of tables.entries()) {
+        const entry=new ZipDeflate(`xl/worksheets/sheet${i+1}.xml`,{level:6});zip.add(entry);
+        let chunk='';
+        for(const part of sheetXmlChunks(table,book)) {
+          chunk+=part;
+          if(chunk.length>=65536){entry.push(strToU8(chunk),false);chunk='';yield* drain();}
+        }
+        entry.push(strToU8(chunk),true);yield* drain();
+      }
+      const styles=new ZipDeflate('xl/styles.xml',{level:6});zip.add(styles);styles.push(strToU8(book.toXml()),true);yield* drain();
+      zip.end();yield* drain();
+    }finally{zip.terminate();}
+  }
+  return Readable.from(archive(),{objectMode:false,highWaterMark:65536});
 }
 
 export const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

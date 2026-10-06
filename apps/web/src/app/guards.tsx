@@ -6,6 +6,7 @@ import { EmptyState, PageLoading } from '../components/ui/Feedback';
 import { useNavigation } from '../lib/queries';
 import { useSession } from '../lib/session';
 import { Button } from '../components/ui/Button';
+import { ApiError } from '../lib/api';
 
 /** Girişten sonra dönülecek adres (sorgu ve çapa dahil: /invoices/new?type=purchase gibi derin bağlantılar korunur, UI-12). */
 type FromState = { from?: string } | null;
@@ -108,7 +109,9 @@ export function ForbiddenPage({ permission }: { permission?: Permission | null }
  */
 export function RequireRoutePermission() {
   const matches = useMatches();
-  const { data, isPending } = useNavigation();
+  const location=useLocation();
+  const { data, isPending,error } = useNavigation();
+  if(error instanceof ApiError && error.code==='MFA_SETUP_REQUIRED' && location.pathname!=='/account/security') return <Navigate to="/account/security" replace />;
   const handle = [...matches].reverse().find((m) => m.handle && typeof m.handle === 'object' && 'permission' in m.handle)?.handle as RouteHandle | undefined;
   const permission = handle?.permission ?? null;
   if (!permission) return <Outlet />;

@@ -191,6 +191,8 @@ const SOURCES: Record<string, { labelKey: string; module: string; to: (id: strin
   invoice: { labelKey: 'ledger.journal.source.invoice', module: 'core.invoices', to: (id) => `/invoices/${id}` },
   stock_document: { labelKey: 'ledger.journal.source.stock_document', module: 'core.inventory', to: (id) => `/inventory/movements?open=${id}` },
   treasury: { labelKey: 'ledger.journal.source.treasury', module: 'core.treasury', to: (id) => `/treasury/transactions?open=${id}` },
+  asset_depreciation: { labelKey: 'ledger.journal.source.asset_depreciation', module: 'core.ledger', to: () => '/accounting/fixed-assets' },
+  expense_entry: { labelKey: 'ledger.journal.source.expense_entry', module: 'treasury.expenses', to: () => '/treasury/expenses' },
 };
 
 function sourceLabel(type: string, t: (k: never) => string): string {
@@ -245,7 +247,7 @@ function JournalDetail({
     setRevDate(todayIso());
   }, [id]);
 
-  const inval = [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger'], ['parties'], ['party'], ['party-aging']];
+  const inval = [['journal'], ['journal-entry'], ['dashboard'], ['trial-balance'], ['account-ledger'], ['parties'], ['party'], ['party-aging'], ['fixed-assets'], ['company-budget-report']];
   const post = useCMutation((_: void, call) => call<{ entry: JournalEntry }>(`/api/journal-entries/${id}/post`, { method: 'POST' }), inval);
   const remove = useCMutation((_: void, call) => call(`/api/journal-entries/${id}`, { method: 'DELETE' }), inval);
   const reverse = useCMutation(
@@ -267,6 +269,7 @@ function JournalDetail({
           entry && canPost ? (
             entry.status === 'draft' ? (
               <>
+                {entry.sourceType !== 'asset_depreciation' && <>
                 <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
                   <Trash2 className="size-4 text-danger" aria-hidden />
                   {t('ledger.journal.deleteDraft')}
@@ -275,6 +278,7 @@ function JournalDetail({
                   <Pencil className="size-4" aria-hidden />
                   {t('common.edit')}
                 </Button>
+                </>}
                 <Button
                   variant="primary"
                   loading={post.isPending}

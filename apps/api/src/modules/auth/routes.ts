@@ -168,8 +168,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const ipEmailKey = `login-fail:${req.ip}|${input.email}`;
     const emailKey = `login-fail:${input.email}`;
     const wait = Math.max(
-      app.limiter.blocked(ipEmailKey, LOGIN_MAX_PER_IP_EMAIL),
-      app.limiter.blocked(emailKey, LOGIN_MAX_PER_EMAIL),
+      await app.limiter.blocked(ipEmailKey, LOGIN_MAX_PER_IP_EMAIL),
+      await app.limiter.blocked(emailKey, LOGIN_MAX_PER_EMAIL),
     );
     if (wait > 0) {
       void reply.header('retry-after', String(wait));
@@ -180,12 +180,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     const ok = await verify(user?.passwordHash ?? (await getDummyHash()), input.password);
     if (!user || !ok || !user.isActive) {
-      app.limiter.hit(ipEmailKey, LOGIN_WINDOW_MS);
-      app.limiter.hit(emailKey, LOGIN_WINDOW_MS);
+      await app.limiter.hit(ipEmailKey, LOGIN_WINDOW_MS);
+      await app.limiter.hit(emailKey, LOGIN_WINDOW_MS);
       await recordSecurityEvent(app.db, app.log, req, { event: 'login_failed', organizationId: user?.organizationId, userId: user?.id, email: input.email });
       throw new AppError(401, 'INVALID_CREDENTIALS', 'E-posta veya şifre hatalı');
     }
-    app.limiter.reset(ipEmailKey);
+    await app.limiter.reset(ipEmailKey);
 
     // İki adımlı doğrulama açıksa oturum VERİLMEZ; kısa ömürlü, yalnızca /api/auth/mfa/verify için geçerli belirteç döner.
     if (await mfaEnabled(app.db, user.id)) {
@@ -216,7 +216,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
     if (payload.purpose !== 'mfa') throw new AppError(401, 'MFA_TOKEN_INVALID', 'Doğrulama süresi doldu; yeniden giriş yapın');
     const failKey = `mfa-fail:${payload.sub}`;
-    const wait = app.limiter.blocked(failKey, MFA_MAX_FAILS);
+    const wait = await app.limiter.blocked(failKey, MFA_MAX_FAILS);
     if (wait > 0) {
       void reply.header('retry-after', String(wait));
       throw new AppError(429, 'RATE_LIMITED', 'Çok fazla hatalı doğrulama kodu; lütfen biraz sonra tekrar deneyin');
@@ -225,11 +225,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!user?.isActive) throw unauthorized();
     const used = await checkMfaCode(app.db, app.config.JWT_SECRET, user.id, input.code);
     if (!used) {
-      app.limiter.hit(failKey, MFA_WINDOW_MS);
+      await app.limiter.hit(failKey, MFA_WINDOW_MS);
       await recordSecurityEvent(app.db, app.log, req, { event: 'mfa_failed', organizationId: user.organizationId, userId: user.id, email: user.email });
       throw new AppError(401, 'MFA_CODE_INVALID', 'Doğrulama kodu hatalı');
     }
-    app.limiter.reset(failKey);
+    await app.limiter.reset(failKey);
     if (used === 'recovery') {
       await recordSecurityEvent(app.db, app.log, req, { event: 'mfa_recovery_used', organizationId: user.organizationId, userId: user.id, email: user.email });
     }

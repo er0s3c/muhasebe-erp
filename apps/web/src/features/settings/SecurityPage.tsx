@@ -25,7 +25,7 @@ export function SecurityPage() {
   const toast = useToast();
   const qc = useQueryClient();
   const status = useQuery({ queryKey: ['mfa'], queryFn: () => api<MfaStatus>('/api/auth/mfa') });
-  const refresh = () => qc.invalidateQueries({ queryKey: ['mfa'] });
+  const refresh = async () => {await qc.invalidateQueries({ queryKey: ['mfa'] });await qc.invalidateQueries({predicate:q=>q.queryKey.includes('navigation')});};
 
   const [setup, setSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
   const [code, setCode] = useState('');

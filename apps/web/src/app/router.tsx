@@ -37,7 +37,8 @@ function page<K extends string>(
 }
 
 export const router = createBrowserRouter([
-  { path: '/portal', ...page(() => import('../features/workspace/PortalPage'), 'PortalPage', null), errorElement: <RouteError /> },
+  { path:'/field-offline', ...page(()=>import('../features/construction-control/OfflineFieldPage'),'OfflineFieldPage',null), errorElement:<RouteError/>, hydrateFallbackElement:<PageLoading/> },
+  { path: '/portal', ...page(() => import('../features/workspace/PortalPage'), 'PortalPage', null), errorElement: <RouteError />, hydrateFallbackElement: <PageLoading /> },
   {
     element: <PublicOnly />,
     errorElement: <RouteError />,
@@ -78,13 +79,18 @@ export const router = createBrowserRouter([
                   { index: true, ...page(() => import('../features/dashboard/DashboardPage'), 'DashboardPage', null) },
                   { path: 'workspace', ...page(() => import('../features/workspace/WorkPage'), 'WorkPage', null) },
                   { path: 'workspace/portal', ...page(() => import('../features/workspace/PortalAdminPage'), 'PortalAdminPage', 'members.manage') },
+                  { path: 'workspace/project-control', element:<RequireModule module="construction.projects"/>, children:[{index:true,...page(()=>import('../features/construction-control/ProjectControlPage'),'ProjectControlPage','projects.read')}] },
+                  { path: 'workspace/construction', element: <RequireModule module="construction.projects" />, children: [{ index: true, ...page(() => import('../features/workspace/ConstructionPage'), 'ConstructionPage', 'projects.read') }] },
                   { path: 'workspace/operations', ...page(() => import('../features/workspace/OperationsPage'), 'OperationsPage', null) },
+                  { path: 'workspace/handover', ...page(() => import('../features/workspace/HandoverPage'), 'HandoverPage', 'realestate.read') },
                   { path: 'workspace/scenarios', element: <RequireModule module="core.treasury" />, children: [{ index: true, ...page(() => import('../features/workspace/ScenariosPage'), 'ScenariosPage', 'treasury.read') }] },
                   { path: 'workspace/documents', ...page(() => import('../features/workspace/DocumentsPage'), 'DocumentsPage', null) },
                   {
                     element: <RequireModule module="core.ledger" />,
                     children: [
                       { path: 'accounting/journal', ...page(() => import('../features/ledger/JournalPage'), 'JournalPage', 'ledger.read') },
+                      { path: 'accounting/fixed-assets', ...page(() => import('../features/ledger/FixedAssetsPage'), 'FixedAssetsPage', 'ledger.read') },
+                      { path: 'accounting/budgets', ...page(() => import('../features/ledger/CompanyBudgetsPage'), 'CompanyBudgetsPage', 'ledger.read') },
                       { path: 'accounting/openings', ...page(() => import('../features/imports/OpeningBalancesPage'), 'OpeningBalancesPage', 'ledger.post') },
                       { path: 'accounting/accounts', ...page(() => import('../features/ledger/AccountsPage'), 'AccountsPage', 'ledger.read') },
                       { path: 'accounting/trial-balance', ...page(() => import('../features/ledger/TrialBalancePage'), 'TrialBalancePage', 'reports.read') },
@@ -106,6 +112,7 @@ export const router = createBrowserRouter([
                     element: <RequireModule module="core.invoices" />,
                     children: [
                       { path: 'invoices/sales', ...page(() => import('../features/invoices/InvoicesPage'), 'SalesInvoicesPage', 'invoices.read') },
+                      { path: 'sales/campaigns', ...page(() => import('../features/sales/CampaignsPage'), 'CampaignsPage', 'invoices.read') },
                       { path: 'invoices/purchases', ...page(() => import('../features/invoices/InvoicesPage'), 'PurchaseInvoicesPage', 'invoices.read') },
                       { path: 'invoices/vat-summary', ...page(() => import('../features/invoices/VatSummaryPage'), 'VatSummaryPage', 'reports.read') },
                       { path: 'reports/sales', ...page(() => import('../features/reports/SalesReportPage'), 'SalesReportPage', 'reports.read') },
@@ -307,6 +314,11 @@ export const router = createBrowserRouter([
                     element: <RequireModule module="core.settings" />,
                     children: [
                       { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage', 'settings.read') },
+                      { path: 'settings/operations', ...page(() => import('../features/settings/OperationsSettingsPage'), 'OperationsSettingsPage', 'settings.manage') },
+                      { path: 'settings/backups', ...page(() => import('../features/settings/BackupsPage'), 'BackupsPage', 'company.manage') },
+                      { path: 'settings/recurring', ...page(() => import('../features/settings/RecurringPage'), 'RecurringPage', 'settings.manage') },
+                      { path: 'reports/insights', ...page(() => import('../features/reports/InsightsPage'), 'InsightsPage', 'workspace.use') },
+                      { path: 'reports/activity', ...page(() => import('../features/reports/ActivityPage'), 'ActivityPage', 'members.manage') },
                       { path: 'settings/members', ...page(() => import('../features/settings/MembersPage'), 'MembersPage', 'members.manage') },
                       { path: 'settings/currencies', ...page(() => import('../features/settings/CurrenciesPage'), 'CurrenciesPage', 'settings.read') },
                       { path: 'settings/tax-rates', ...page(() => import('../features/settings/TaxRatesPage'), 'TaxRatesPage', 'settings.read') },

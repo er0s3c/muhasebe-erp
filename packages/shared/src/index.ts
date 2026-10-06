@@ -60,3 +60,13 @@ export * from './cash-scenario';
 export * from './notifications';
 export * from './schemas/notifications';
 export * from './schemas/module-access';
+
+export * from './construction-control';
+
+export * from './construction-workflows';
+export * from './administration';
+export * from './recurring';
+export * from './insights';
+export * from './campaigns';
+export * from './fixed-assets';
+export * from './company-budgets';

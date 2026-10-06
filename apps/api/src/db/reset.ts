@@ -11,6 +11,13 @@ export async function resetSchema(ownerUrl: string): Promise<void> {
   await client.connect();
   try {
     await client.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
+    // Each drop commits separately. Dropping every table/constraint in one statement
+    // can exhaust PostgreSQL's default shared lock pool as the ERP schema grows.
+    const tables=await client.query<{tablename:string}>("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename");
+    for(const {tablename} of tables.rows){
+      const quoted='"'+tablename.replaceAll('"','""')+'"';
+      await client.query(`DROP TABLE IF EXISTS public.${quoted} CASCADE`);
+    }
     await client.query('DROP SCHEMA IF EXISTS public CASCADE');
     await client.query('CREATE SCHEMA public');
   } finally {

@@ -24,3 +24,8 @@ deploy/Caddyfile.local
 deploy/certs/
 deploy/wizard.conf
 deploy/.env.bak-*
+
+.cache/
+.runtime/
+**/data/construction/
+**/data/construction-runtime/

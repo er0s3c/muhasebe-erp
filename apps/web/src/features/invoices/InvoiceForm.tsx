@@ -1,4 +1,4 @@
-import { ArrowLeft, ClipboardList, Plus, Trash2, Truck, X } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Plus, Trash2, Truck, X, Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
@@ -476,6 +476,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <h1 className="text-heading">{initial ? t('invoices.form.editTitle', { type: t(`invoices.types.${type}`) }) : t('invoices.form.newTitle', { type: t(`invoices.types.${type}`) })}</h1>
+        {initial&&<Link to={`/workspace/documents?kind=invoice&id=${initial.invoice.id}`} className="link inline-flex items-center gap-2 text-sm"><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>}
+        {initial&&type==='sales'&&<Link to="/sales/campaigns" className="link text-sm">Kampanya uygula</Link>}
       </div>
 
       <div className="flex flex-col gap-5">

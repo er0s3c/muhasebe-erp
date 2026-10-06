@@ -3,3 +3,6 @@
 *.sh text eol=lf
 *.cmd text eol=crlf
 *.ps1 -text
+
+# PDF test belgelerinin baytlarını satır sonu dönüşümünden koru.
+*.pdf binary

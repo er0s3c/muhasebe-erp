@@ -75,7 +75,7 @@ function licenseAdminRoute<T>(
     return handler({ req, reply, actor: user });
   });
   const route: RouteHandlerMethod = async function (req, reply) {
-    const r = app.limiter.consume(`${opts.limit.name}:${req.ip}`, opts.limit.max, opts.limit.windowMs);
+    const r = await app.limiter.consume(`${opts.limit.name}:${req.ip}`, opts.limit.max, opts.limit.windowMs);
     if (!r.ok) {
       void reply.header('retry-after', String(r.retryAfterSec));
       throw new AppError(429, 'RATE_LIMITED', 'Çok fazla istek; lütfen biraz sonra tekrar deneyin');

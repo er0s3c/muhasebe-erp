@@ -1129,10 +1129,11 @@ export async function employeeBalancesTable(ctx: BuildCtx, q: { asOf?: string })
         col('advanceGiven', `Verilen avans (${b})`, 'money'),
         col('advanceDeducted', `Bordrodan kesilen (${b})`, 'money'),
         col('advanceRepaid', `Geri ödenen (${b})`, 'money'),
+        col('advanceExpensed', `Masrafla mahsup (${b})`, 'money'),
         col('openAdvance', `Açık avans (${b})`, 'money'),
         col('net', `Net bakiye (${b})`, 'money'),
       ],
-      rows: d.rows.map((r) => ({ code: r.code, name: r.fullName, dept: r.department, salaryNet: r.salaryNet, salaryPaid: r.salaryPaid, advanceGiven: r.advanceGiven, advanceDeducted: r.advanceDeducted, advanceRepaid: r.advanceRepaid, openAdvance: r.openAdvance, net: r.net })),
+      rows: d.rows.map((r) => ({ code: r.code, name: r.fullName, dept: r.department, salaryNet: r.salaryNet, salaryPaid: r.salaryPaid, advanceGiven: r.advanceGiven, advanceDeducted: r.advanceDeducted, advanceRepaid: r.advanceRepaid, advanceExpensed: r.advanceExpensed, openAdvance: r.openAdvance, net: r.net })),
       totals: { net: sum(d.rows.map((r) => r.net)).toFixed(2), openAdvance: sum(d.rows.map((r) => r.openAdvance)).toFixed(2) },
     },
   ];
@@ -1757,6 +1758,7 @@ const chequeColumns = (b: string) => [
   col('due', 'Vade', 'date'),
   col('amount', `Tutar (${b})`, 'money'),
   col('status', 'Durum', 'text', 14),
+  col('documentAmount','Belge tutarı','money'),col('currency','Belge para birimi','text',10),
 ];
 
 export async function chequesTable(ctx: BuildCtx, q: ChequeListQuery): Promise<ReportTable[]> {
@@ -1769,8 +1771,8 @@ export async function chequesTable(ctx: BuildCtx, q: ChequeListQuery): Promise<R
       sheet: 'Portföy',
       subtitle: sub(ctx, `Değerlendirme günü ${formatDateTR(d.asOf)}`),
       columns: chequeColumns(b),
-      rows: d.cheques.map((c) => ({ direction: CHEQUE_DIR_LABEL[c.direction], type: CHEQUE_TYPE_LABEL[c.docType], no: c.docNo, bank: c.bankName, party: c.partyName, issue: c.issueDate, due: c.dueDate, amount: c.amount, status: CHEQUE_STATUS_LABEL[c.status] ?? c.status })),
-      totals: { amount: sum(d.cheques.map((c) => c.amount)).toFixed(2) },
+      rows: d.cheques.map((c) => ({ direction: CHEQUE_DIR_LABEL[c.direction], type: CHEQUE_TYPE_LABEL[c.docType], no: c.docNo, bank: c.bankName, party: c.partyName, issue: c.issueDate, due: c.dueDate, amount: c.amountBase,documentAmount:c.amount,currency:c.currencyCode, status: CHEQUE_STATUS_LABEL[c.status] ?? c.status })),
+      totals: { amount: sum(d.cheques.map((c) => c.amountBase)).toFixed(2) },
     },
   ];
 }

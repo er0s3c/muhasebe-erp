@@ -33,6 +33,10 @@ const cash = accounts.find((a) => a.code === '100')!.id;
 const range = `from=${year}-01-01&to=${year}-12-31`;
 
 const scenarios: { name: string; path: string }[] = [
+  { name: 'workspace-tasks', path: '/api/workspace/tasks' },
+  { name: 'workspace-search', path: '/api/workspace/search?q=metal' },
+  { name: 'workspace-alerts', path: '/api/workspace/alerts' },
+  { name: 'workspace-site-reports', path: '/api/workspace/operations?kind=site_report' },
   { name: 'navigation', path: '/api/navigation' },
   { name: 'party-list', path: '/api/parties?limit=50' },
   { name: 'party-search', path: '/api/parties?limit=50&query=metal' },

@@ -6,3 +6,7 @@ playwright-report
 test-results
 release
 video
+.claude
+.codex
+.cache
+.runtime

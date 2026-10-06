@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BANK_GUARANTEE_STATUSES, CHEQUE_ACTIONS, CHEQUE_DIRECTIONS, CHEQUE_DOC_TYPES, CHEQUE_STATUSES, GUARANTEE_DIRECTIONS } from '../cheque-calc';
 import { decCheck, tryDec } from '../money';
-import { isoDate, moneyString, uuid, pageParams } from './common';
+import { isoDate, moneyString, uuid, pageParams, currencyCode, rateString } from './common';
 import { treasuryItemSchema } from './treasury';
 
 const text = (max: number) => z.string().trim().max(max);
@@ -21,6 +21,8 @@ export const createChequeSchema = z
     /** Alınanda keşideci (müşteri), verilende lehtar (tedarikçi) cari. */
     partyId: uuid,
     amount: positive,
+    currency: currencyCode.optional(),
+    fxRate: rateString.refine(decCheck(d=>d.gt(0)),'Kur sıfırdan büyük olmalı').optional(),
     issueDate: isoDate,
     dueDate: isoDate,
     /** Defter kaydı (alınış/veriliş) tarihi; boşsa bugün. */
@@ -53,6 +55,7 @@ export const chequeActionSchema = z
     action: z.enum(CHEQUE_ACTIONS),
     chequeIds: z.array(uuid).min(1, 'En az bir belge seçin').max(200),
     date: isoDate,
+    fxRate: rateString.refine(decCheck(d=>d.gt(0)),'Kur sıfırdan büyük olmalı').optional(),
     /** deposit/pay: banka hesabı (aynı para biriminde, banka türü). */
     bankAccountId: uuid.optional(),
     /** endorse: ciro edilen tedarikçi cari. */
@@ -63,6 +66,7 @@ export const chequeActionSchema = z
   .superRefine((v, ctx) => {
     const issue = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
     if (new Set(v.chequeIds).size !== v.chequeIds.length) issue('chequeIds', 'Aynı belge iki kez seçilemez');
+    if(v.fxRate && v.action!=='collect' && v.action!=='pay') issue('fxRate','İşlem kuru yalnızca tahsil veya ödemede girilir.');
     const needsBank = v.action === 'deposit' || v.action === 'pay';
     if (needsBank && !v.bankAccountId) issue('bankAccountId', 'Banka hesabı seçilmeli');
     if (!needsBank && v.bankAccountId) issue('bankAccountId', 'Banka hesabı yalnızca tahsile verme ve ödemede kullanılır');

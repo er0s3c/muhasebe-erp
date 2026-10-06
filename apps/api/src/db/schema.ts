@@ -4193,6 +4193,8 @@ export const cheques = pgTable(
     /** Alınanda keşideci (müşteri), verilende lehtar (tedarikçi). */
     partyId: uuid().notNull(),
     amount: money().notNull(),
+    amountBase: money().notNull(),
+    fxRate: numeric({ precision: 20, scale: 8 }),
     currencyCode: text()
       .notNull()
       .references(() => currencies.code),
@@ -4245,6 +4247,8 @@ export const chequeBatches = pgTable(
     bankAccountId: uuid(),
     partyId: uuid(),
     total: money().notNull(),
+    currencyCode: text().notNull().references(()=>currencies.code),
+    totalBase: money().notNull(),
     docCount: integer().notNull(),
     entryId: uuid().notNull(),
     note: text(),
@@ -5040,8 +5044,11 @@ export const expenseEntries = pgTable(
     description: text().notNull(),
     /** Ödenen/borçlanılan cari (cari ödemede zorunlu; kasa/banka ödemesinde isteğe bağlı rapor boyutu). */
     partyId: uuid(),
-    /** treasury | party */
+    /** treasury | party | employee */
     paymentKind: text().notNull(),
+    employeeId:uuid(),
+    advanceId:uuid(),
+    advanceAppliedAmount:numeric({precision:19,scale:2}).notNull().default('0'),
     treasuryAccountId: uuid(),
     dueDate: date({ mode: 'string' }),
     net: money().notNull(),
@@ -5069,6 +5076,9 @@ export const expenseEntries = pgTable(
   },
   (t) => [
     unique('expense_entries_no_uq').on(t.companyId, t.entryNo),
+    unique('expense_entries_id_company').on(t.id,t.companyId),
+    foreignKey({name:'expense_entries_employee_fk',columns:[t.employeeId,t.companyId],foreignColumns:[employees.id,employees.companyId]}),
+    foreignKey({name:'expense_entries_advance_fk',columns:[t.advanceId,t.companyId],foreignColumns:[employeeAdvances.id,employeeAdvances.companyId]}),
     foreignKey({ name: 'expense_entries_card_fk', columns: [t.cardId, t.companyId], foreignColumns: [expenseCards.id, expenseCards.companyId] }),
     foreignKey({ name: 'expense_entries_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
     foreignKey({ name: 'expense_entries_treasury_fk', columns: [t.treasuryAccountId, t.companyId], foreignColumns: [treasuryAccounts.id, treasuryAccounts.companyId] }),
@@ -5080,7 +5090,8 @@ export const expenseEntries = pgTable(
     index('expense_entries_date_idx').on(t.companyId, t.entryDate),
     index('expense_entries_card_idx').on(t.companyId, t.cardId),
     check('expense_entries_status_ck', sql`${t.status} in ('posted','cancelled')`),
-    check('expense_entries_payment_ck', sql`(${t.paymentKind} = 'treasury' and ${t.treasuryAccountId} is not null) or (${t.paymentKind} = 'party' and ${t.partyId} is not null and ${t.treasuryAccountId} is null)`),
+    check('expense_entries_payment_ck', sql`(${t.paymentKind} = 'treasury' and ${t.treasuryAccountId} is not null) or (${t.paymentKind} = 'party' and ${t.partyId} is not null and ${t.treasuryAccountId} is null) or (${t.paymentKind}='employee' and ${t.employeeId} is not null and (${t.advanceAppliedAmount}=${t.payable} or ${t.treasuryAccountId} is not null))`),
+    check('expense_entries_advance_ck',sql`${t.advanceAppliedAmount}>=0 and ${t.advanceAppliedAmount}<=${t.payable} and (${t.advanceAppliedAmount}=0 or ${t.advanceId} is not null) and (${t.paymentKind}='employee' or (${t.employeeId} is null and ${t.advanceId} is null and ${t.advanceAppliedAmount}=0))`),
     check('expense_entries_amounts_ck', sql`${t.net} > 0 and ${t.vat} >= 0 and ${t.withholding} >= 0 and ${t.gross} = ${t.net} + ${t.vat} and ${t.payable} = ${t.gross} - ${t.withholding} and ${t.payable} >= 0`),
     check('expense_entries_cancel_ck', sql`(${t.status} = 'cancelled') = (${t.cancelledAt} is not null and ${t.cancelJournalEntryId} is not null)`),
   ],
@@ -5172,12 +5183,13 @@ export const employeeAdvanceSettlements = pgTable(
       .notNull()
       .references(() => companies.id),
     advanceId: uuid().notNull(),
-    /** payroll | repayment */
+    /** payroll | repayment | expense */
     kind: text().notNull(),
     amount: numeric({ precision: 19, scale: 2 }).notNull(),
     settledDate: date({ mode: 'string' }).notNull(),
     payrollRunId: uuid(),
     treasuryTxnId: uuid(),
+    expenseEntryId:uuid(),
     note: text(),
     createdBy: uuid().references(() => users.id),
     createdAt: createdAt(),
@@ -5189,12 +5201,14 @@ export const employeeAdvanceSettlements = pgTable(
     foreignKey({ name: 'employee_advance_settlements_advance_fk', columns: [t.advanceId, t.companyId], foreignColumns: [employeeAdvances.id, employeeAdvances.companyId] }),
     foreignKey({ name: 'employee_advance_settlements_run_fk', columns: [t.payrollRunId, t.companyId], foreignColumns: [payrollRuns.id, payrollRuns.companyId] }),
     foreignKey({ name: 'employee_advance_settlements_txn_fk', columns: [t.treasuryTxnId, t.companyId], foreignColumns: [treasuryTransactions.id, treasuryTransactions.companyId] }),
+    foreignKey({name:'employee_advance_settlements_expense_fk',columns:[t.expenseEntryId,t.companyId],foreignColumns:[expenseEntries.id,expenseEntries.companyId]}),
+    uniqueIndex('employee_advance_settlements_expense_uq').on(t.expenseEntryId).where(sql`${t.expenseEntryId} is not null`),
     index('employee_advance_settlements_advance_idx').on(t.advanceId),
     uniqueIndex('employee_advance_settlements_run_uq').on(t.advanceId, t.payrollRunId).where(sql`${t.payrollRunId} is not null`),
     uniqueIndex('employee_advance_settlements_txn_uq').on(t.treasuryTxnId).where(sql`${t.treasuryTxnId} is not null`),
-    check('employee_advance_settlements_kind_ck', sql`${t.kind} in ('payroll','repayment')`),
+    check('employee_advance_settlements_kind_ck', sql`${t.kind} in ('payroll','repayment','expense')`),
     check('employee_advance_settlements_amount_ck', sql`${t.amount} > 0`),
-    check('employee_advance_settlements_source_ck', sql`(${t.kind} = 'payroll' and ${t.payrollRunId} is not null and ${t.treasuryTxnId} is null) or (${t.kind} = 'repayment' and ${t.treasuryTxnId} is not null and ${t.payrollRunId} is null)`),
+    check('employee_advance_settlements_source_ck', sql`(${t.kind} = 'payroll' and ${t.payrollRunId} is not null and ${t.treasuryTxnId} is null and ${t.expenseEntryId} is null) or (${t.kind} = 'repayment' and ${t.treasuryTxnId} is not null and ${t.payrollRunId} is null and ${t.expenseEntryId} is null) or (${t.kind}='expense' and ${t.expenseEntryId} is not null and ${t.payrollRunId} is null and ${t.treasuryTxnId} is null)`),
     check('employee_advance_settlements_reverse_ck', sql`(${t.reversedAt} is null) = (${t.reverseReason} is null)`),
   ],
 );
@@ -5627,11 +5641,11 @@ export const workItems = pgTable('work_items', {
   dueDate:date({mode:'string'}).notNull(),ownerId:uuid().notNull().references(()=>users.id),createdBy:uuid().notNull().references(()=>users.id),
   priority:text().notNull().default('normal'),status:text().notNull().default('open'),recordKind:text(),recordId:uuid(),version:integer().notNull().default(1),
   createdAt:createdAt(),updatedAt:timestamp({withTimezone:true}).notNull().defaultNow(),
-},t=>[index('work_items_due_idx').on(t.companyId,t.ownerId,t.status,t.dueDate),check('work_items_title_ck',sql`length(btrim(${t.title})) between 2 and 200`),check('work_items_priority_ck',sql`${t.priority} in ('normal','high')`),check('work_items_status_ck',sql`${t.status} in ('open','done','cancelled')`),check('work_items_version_ck',sql`${t.version} > 0`),check('work_items_ref_ck',sql`(${t.recordKind} is null) = (${t.recordId} is null)`)]);
+},t=>[unique('work_items_id_company').on(t.id,t.companyId),index('work_items_due_idx').on(t.companyId,t.ownerId,t.status,t.dueDate),check('work_items_title_ck',sql`length(btrim(${t.title})) between 2 and 200`),check('work_items_priority_ck',sql`${t.priority} in ('normal','high')`),check('work_items_status_ck',sql`${t.status} in ('open','done','cancelled')`),check('work_items_version_ck',sql`${t.version} > 0`),check('work_items_ref_ck',sql`(${t.recordKind} is null) = (${t.recordId} is null)`)]);
 
 export const recordDocuments = pgTable('record_documents', {
  id:id(),companyId:uuid().notNull().references(()=>companies.id),recordKind:text().notNull(),recordId:uuid().notNull(),filename:text().notNull(),mime:text().notNull(),size:integer().notNull(),sha256:text().notNull(),previousId:uuid(),createdBy:uuid().notNull().references(()=>users.id),createdAt:createdAt(),
-},t=>[unique('record_documents_id_company_uq').on(t.id,t.companyId),unique('record_documents_previous_uq').on(t.previousId),foreignKey({name:'record_documents_previous_fk',columns:[t.previousId,t.companyId],foreignColumns:[t.id,t.companyId]}),index('record_documents_record_idx').on(t.companyId,t.recordKind,t.recordId,t.createdAt),check('record_documents_size_ck',sql`${t.size} between 1 and 5242880`),check('record_documents_mime_ck',sql`${t.mime} in ('application/pdf','image/jpeg','image/png')`)]);
+},t=>[unique('record_documents_id_company_uq').on(t.id,t.companyId),unique('record_documents_previous_uq').on(t.previousId),foreignKey({name:'record_documents_previous_fk',columns:[t.previousId,t.companyId],foreignColumns:[t.id,t.companyId]}),index('record_documents_record_idx').on(t.companyId,t.recordKind,t.recordId,t.createdAt),check('record_documents_size_ck',sql`${t.size} between 1 and 104857600`),check('record_documents_mime_ck',sql`${t.mime} in ('application/pdf','image/jpeg','image/png')`)]);
 export const recordDocumentContent = pgTable('record_document_content', {
  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),content:text().notNull(),
 },t=>[foreignKey({name:'record_document_content_document_fk',columns:[t.id,t.companyId],foreignColumns:[recordDocuments.id,recordDocuments.companyId]})]);
@@ -5640,7 +5654,7 @@ export const workAlertStates=pgTable('work_alert_states',{
 },t=>[primaryKey({columns:[t.companyId,t.userId,t.key]})]);
 export const operationEntries=pgTable('operation_entries',{
  id:id(),companyId:uuid().notNull().references(()=>companies.id),kind:text().notNull(),title:text().notNull(),projectId:uuid(),partyId:uuid(),ownerId:uuid().notNull().references(()=>users.id),eventDate:date({mode:'string'}).notNull(),dueDate:date({mode:'string'}).notNull(),payload:jsonb().notNull(),status:text().notNull().default('open'),version:integer().notNull().default(1),createdBy:uuid().notNull().references(()=>users.id),createdAt:createdAt(),updatedAt:timestamp({withTimezone:true}).notNull().defaultNow(),
-},t=>[index('operation_entries_list_idx').on(t.companyId,t.kind,t.status,t.dueDate),index('operation_entries_project_idx').on(t.companyId,t.projectId,t.kind),foreignKey({name:'operation_entries_project_fk',columns:[t.projectId,t.companyId],foreignColumns:[projects.id,projects.companyId]}),foreignKey({name:'operation_entries_party_fk',columns:[t.partyId,t.companyId],foreignColumns:[parties.id,parties.companyId]}),check('operation_entries_kind_ck',sql`${t.kind} in ('collection','site_report','schedule','equipment','equipment_log','defect')`),check('operation_entries_status_ck',sql`${t.status} in ('open','done','cancelled')`),check('operation_entries_title_ck',sql`length(btrim(${t.title})) between 2 and 200`),check('operation_entries_version_ck',sql`${t.version}>0`),check('operation_entries_ref_ck',sql`(${t.kind}='collection' and ${t.partyId} is not null) or (${t.kind}<>'collection' and ${t.projectId} is not null)`)]);
+},t=>[index('operation_entries_list_idx').on(t.companyId,t.kind,t.status,t.dueDate),index('operation_entries_project_idx').on(t.companyId,t.projectId,t.kind),foreignKey({name:'operation_entries_project_fk',columns:[t.projectId,t.companyId],foreignColumns:[projects.id,projects.companyId]}),foreignKey({name:'operation_entries_party_fk',columns:[t.partyId,t.companyId],foreignColumns:[parties.id,parties.companyId]}),check('operation_entries_kind_ck',sql`${t.kind} in ('collection','site_report','schedule','equipment','equipment_log','defect','rfi','site_instruction','quality_check','safety')`),check('operation_entries_status_ck',sql`${t.status} in ('open','done','cancelled')`),check('operation_entries_title_ck',sql`length(btrim(${t.title})) between 2 and 200`),check('operation_entries_version_ck',sql`${t.version}>0`),check('operation_entries_ref_ck',sql`(${t.kind}='collection' and ${t.partyId} is not null) or (${t.kind}<>'collection' and ${t.projectId} is not null)`)]);
 export const cashScenarios=pgTable('cash_scenarios',{
  id:id(),companyId:uuid().notNull().references(()=>companies.id),name:text().notNull(),assumptions:jsonb().notNull(),createdBy:uuid().notNull().references(()=>users.id),createdAt:createdAt(),
 });
@@ -5742,3 +5756,7 @@ export const notificationDigests = pgTable(
   },
   (t) => [primaryKey({ columns: [t.companyId, t.userId, t.digestDate] }), check('notification_digests_count_ck', sql`${t.itemCount} >= 1`)],
 );
+
+export * from './construction-schema';
+
+export * from './administration-schema';

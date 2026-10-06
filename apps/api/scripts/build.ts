@@ -97,4 +97,6 @@ await build({
 });
 
 cpSync(join(root, 'drizzle'), join(outdir, 'drizzle'), { recursive: true });
+cpSync(join(root,'src/modules/construction-control/construction-worker.py'),join(outdir,'construction-worker.py'));
+cpSync(join(root,'../../installer/tools/construction-files.mjs'),join(outdir,'construction-files.mjs'));
 console.log(`API derlemesi tamam: ${outdir} (server.js, migrate.js, demo.js, admin.js, updater.js, drizzle/)`);

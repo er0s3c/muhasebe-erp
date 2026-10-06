@@ -67,6 +67,7 @@ export function ItemPicker({
   total,
   items,
   onChange,
+  currency,
 }: {
   partyId: string;
   control: 'receivable' | 'payable';
@@ -75,9 +76,11 @@ export function ItemPicker({
   total: string;
   items: PickedItems;
   onChange: (items: PickedItems) => void;
+  currency?:string;
 }) {
   const { t } = useTranslation();
-  const base = useCompany().baseCurrency;
+  const companyBase = useCompany().baseCurrency;
+  const base=currency??companyBase;
   const valid = !!partyId && /^\d{4}-\d{2}-\d{2}$/.test(date);
   const q = useCQuery<OpenItemsData>(['party', partyId, 'open-items', date, control], valid ? `/api/parties/${partyId}/open-items?${new URLSearchParams({ asOf: date, type: control })}` : null);
   const open = q.data?.[control]?.items ?? [];

@@ -311,7 +311,7 @@ describe('cari (müşteri / tedarikçi)', async () => {
 
     const nav = async (cl: typeof sales) =>
       (await cl.get('/api/navigation')).json().groups.map((g: any) => g.key);
-    expect(await nav(sales)).toEqual(['overview', 'parties', 'invoices', 'stock', 'directory', 'settings']);
+    expect(await nav(sales)).toEqual(['overview', 'parties', 'invoices', 'stock', 'directory', 'reports', 'settings']);
     expect(await nav(site)).toContain('parties');
   });
 });

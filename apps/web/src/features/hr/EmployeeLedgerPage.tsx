@@ -109,7 +109,7 @@ function BalancesTab() {
                     <Td num>{money(r.salaryNet)}</Td>
                     <Td num>{money(r.salaryPaid)}</Td>
                     <Td num>{money(r.advanceGiven)}</Td>
-                    <Td num>{money((Number(r.advanceDeducted) + Number(r.advanceRepaid)).toFixed(2))}</Td>
+                    <Td num>{money((Number(r.advanceDeducted) + Number(r.advanceRepaid) + Number(r.advanceExpensed)).toFixed(2))}</Td>
                     <Td num>{money(r.openAdvance)}</Td>
                     <Td num className={net < 0 ? 'text-danger' : undefined}>
                       {money(r.net)}
@@ -335,8 +335,9 @@ function AdvanceDetailModal({ row, onClose }: { row: AdvanceRegisterRow; onClose
                 {data.settlements.map((s) => (
                   <li key={s.id} className={`flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5 ${s.reversedAt ? 'opacity-60' : ''}`}>
                     <span>
-                      {formatDateTR(s.settledDate)} — {t(`employeeLedger.kinds.${s.kind === 'payroll' ? 'advance_deduction' : 'advance_repayment'}`)}
+                      {formatDateTR(s.settledDate)} — {t(`employeeLedger.kinds.${s.kind === 'payroll' ? 'advance_deduction' : s.kind === 'expense' ? 'advance_expense' : 'advance_repayment'}`)}
                       {s.runNumber ? ` (${s.runNumber})` : s.txnNo ? ` (${s.txnNo})` : ''}
+                      {s.expenseEntryNo && <Link to="/treasury/expenses" className="link ml-1">({s.expenseEntryNo})</Link>}
                       {s.reversedAt && <Badge tone="danger" className="ml-2">{t('employeeLedger.detail.reversed')}</Badge>}
                     </span>
                     <span className="num">{money(s.amount)}</span>

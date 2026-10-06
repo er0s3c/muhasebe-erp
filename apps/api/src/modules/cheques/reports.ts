@@ -13,12 +13,12 @@ type Row = { direction: 'received' | 'issued'; docType: string; partyId: string;
 
 /**
  * Vade analizi: açık belgeler (portföyde/tahsilde olan alınan, ödenmemiş verilen) vade kovalarına ve cariye göre.
- * Alınan = beklenen tahsilat, verilen = beklenen ödeme. Tutarlar defter para birimindedir (belgeler yalnızca defter para biriminde).
+ * Alınan = beklenen tahsilat, verilen = beklenen ödeme. Toplamlar sabit kayıt değeriyle defter para birimindedir.
  */
 export async function chequeMaturity(tx: Tx, q: ChequeMaturityQuery) {
   const asOf = q.asOf ?? todayIso();
   const res = await tx.execute<Row>(sql`
-    select c.direction, c.doc_type as "docType", c.party_id as "partyId", p.name as "partyName", c.due_date::text as "dueDate", c.amount::text as amount
+    select c.direction, c.doc_type as "docType", c.party_id as "partyId", p.name as "partyName", c.due_date::text as "dueDate", c.amount_base::text as amount
       from cheques c join parties p on p.id = c.party_id and p.company_id = c.company_id
      where ${OPEN_SQL} ${q.direction ? sql`and c.direction = ${q.direction}` : sql``}
      order by c.due_date`);
@@ -62,7 +62,7 @@ export async function chequesDue(tx: Tx, q: ChequeDueQuery) {
   const to = addDays(today, q.days);
   const res = await tx.execute<Row & { id: string; docNo: string; bankName: string; status: string }>(sql`
     select c.id, c.direction, c.doc_type as "docType", c.doc_no as "docNo", c.bank_name as "bankName", c.status, c.party_id as "partyId", p.name as "partyName",
-           c.due_date::text as "dueDate", c.amount::text as amount
+           c.due_date::text as "dueDate", c.amount_base::text as amount,c.amount::text as "documentAmount",c.currency_code as "currencyCode"
       from cheques c join parties p on p.id = c.party_id and p.company_id = c.company_id
      where ${OPEN_SQL} and c.due_date <= ${to}::date ${q.direction ? sql`and c.direction = ${q.direction}` : sql``}
      order by c.due_date, c.doc_no`);
@@ -79,7 +79,7 @@ export async function chequesBounced(tx: Tx, q: { direction?: 'received' | 'issu
   const today = todayIso();
   const res = await tx.execute<ChequeView & { bouncedDate: string | null }>(sql`
     select c.id, c.direction, c.doc_type as "docType", c.doc_no as "docNo", c.bank_name as "bankName", c.party_id as "partyId", p.name as "partyName",
-           c.amount::text as amount, c.due_date::text as "dueDate", c.status,
+           c.amount_base::text as amount,c.amount::text as "documentAmount",c.currency_code as "currencyCode", c.due_date::text as "dueDate", c.status,
            (select max(e.event_date)::text from cheque_events e where e.cheque_id = c.id and e.to_status = 'bounced') as "bouncedDate"
       from cheques c join parties p on p.id = c.party_id and p.company_id = c.company_id
      where c.status = 'bounced' ${q.direction ? sql`and c.direction = ${q.direction}` : sql``}

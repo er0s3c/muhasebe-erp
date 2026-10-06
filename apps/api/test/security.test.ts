@@ -398,7 +398,7 @@ describe('sözleşme testleri', async () => {
          order by 1`);
       // consolidation_*: kullanıcıya ait konsolidasyon grubu/eliminasyon tabloları (X7) — şirket verisi taşımaz, RLS `owner_user_id = app_user_id()` ile sahibine bağlıdır (aşağıda ayrıca doğrulanır)
       expect(global.rows.map((r) => r.relname)).toEqual([
-        'app_updates', 'companies', 'consolidation_elimination_lines', 'consolidation_eliminations', 'consolidation_groups', 'consolidation_members', 'currencies', 'devices', 'license_state', 'organizations', 'refresh_tokens', 'security_events', 'user_mfa', 'user_tokens', 'users',
+        'app_updates', 'companies', 'consolidation_elimination_lines', 'consolidation_eliminations', 'consolidation_groups', 'consolidation_members', 'currencies', 'devices', 'license_state', 'organizations', 'rate_limit_buckets', 'refresh_tokens', 'security_events', 'user_mfa', 'user_tokens', 'users',
       ]);
       const own = await q(`
         select c.relname, c.relrowsecurity, (select count(*)::int from pg_policy p where p.polrelid = c.oid) as policies
@@ -425,7 +425,7 @@ describe('sözleşme testleri', async () => {
       // notification_scan_targets: bildirim zamanlayıcısı için yalnızca şirket/kuruluş kimliklerini listeler; notification_prune: yalnızca app_company_id() şirketinin KAPANMIŞ eski bildirimlerini siler
       expect(definers.rows.map((r) => r.proname)).toEqual([
         'audit_row_change', 'can_manage_user', 'claim_installation_owner', 'company_has_members', 'directory_anonymize_contact', 'directory_mark_merged',
-        'directory_repoint_notes', 'directory_subject_notes', 'installation_owner_org', 'license_company_count', 'member_module_access_cleanup', 'notification_prune', 'notification_scan_targets',
+        'directory_repoint_notes', 'directory_subject_notes', 'installation_owner_org', 'license_company_count', 'member_module_access_cleanup', 'notification_prune', 'notification_scan_targets', 'rate_limit_step', 'user_company_mfa_required',
       ]);
       const role = await q(`select rolsuper, rolbypassrls from pg_roles where rolname = 'erp_app'`);
       expect(role.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });

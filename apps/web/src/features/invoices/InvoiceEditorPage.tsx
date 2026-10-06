@@ -1,4 +1,4 @@
-import { ArrowLeft, Ban, Printer, Undo2 } from 'lucide-react';
+import { ArrowLeft, Ban, Printer, Undo2, Paperclip } from 'lucide-react';
 import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -110,6 +110,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 print:hidden">
+          <Link className="link inline-flex items-center gap-2 text-sm" to={`/workspace/documents?kind=invoice&id=${inv.id}`}><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>
           <Button onClick={() => window.print()}>
             <Printer className="size-4" aria-hidden />
             {t('invoices.view.print')}

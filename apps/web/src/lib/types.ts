@@ -2522,6 +2522,8 @@ export interface ChequeRow {
   partyName: string;
   amount: string;
   currencyCode: string;
+  amountBase:string;
+  fxRate:string|null;
   issueDate: string;
   dueDate: string;
   status: ChequeStatus;
@@ -2566,6 +2568,8 @@ export interface ChequeBatchRow {
   action: ChequeAction;
   eventDate: string;
   total: string;
+  totalBase:string;
+  currencyCode:string;
   docCount: number;
   bankAccountName: string | null;
   partyName: string | null;
@@ -2888,7 +2892,12 @@ export interface ExpenseEntry {
   accountCode: string;
   partyId: string | null;
   partyName: string | null;
-  paymentKind: 'treasury' | 'party';
+  paymentKind: 'treasury' | 'party' | 'employee';
+  employeeId: string | null;
+  employeeName: string | null;
+  advanceId: string | null;
+  advanceNumber: string | null;
+  advanceAppliedAmount: string;
   treasuryAccountId: string | null;
   treasuryAccountName: string | null;
   dueDate: string | null;
@@ -2942,6 +2951,7 @@ export interface EmployeeBalanceRow {
   advanceGiven: string;
   advanceDeducted: string;
   advanceRepaid: string;
+  advanceExpensed: string;
   /** Alacak − borç: pozitif ise şirket personele borçlu, negatif ise personel şirkete borçlu. */
   net: string;
   openAdvance: string;
@@ -2994,7 +3004,7 @@ export interface AdvanceDetail {
     txnNo: string;
     cancelReason: string | null;
   };
-  settlements: { id: string; kind: 'payroll' | 'repayment'; amount: string; settledDate: string; note: string | null; reversedAt: string | null; reverseReason: string | null; runNumber: string | null; txnNo: string | null }[];
+  settlements: { id: string; kind: 'payroll' | 'repayment' | 'expense'; expenseEntryId: string | null; expenseEntryNo: string | null; amount: string; settledDate: string; note: string | null; reversedAt: string | null; reverseReason: string | null; runNumber: string | null; txnNo: string | null }[];
   events: { fromStatus: AdvanceStatus | null; toStatus: AdvanceStatus; settledAmount: string; at: string; by: string | null }[];
 }
 

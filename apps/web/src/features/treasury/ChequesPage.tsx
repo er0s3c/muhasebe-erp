@@ -11,6 +11,7 @@ import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { Modal, Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { SegmentedTabs } from '../../components/ui/Tabs';
@@ -28,7 +29,7 @@ type Tab = 'portfolio' | 'clearing' | 'reports';
 
 /**
  * Çek/senet portföyü ve takas (Faz X1). Her durum değişikliği yevmiye yazar; hesap eşlemeleri (101/121/108/103/321) doğrulanmamış
- * varsayılanlardır ve Ayarlar > Hesap eşlemesi'nden değiştirilir. Yalnızca defter para biriminde (döviz çek/senet yok).
+ * varsayılanlardır ve Ayarlar > Hesap eşlemesi'nden değiştirilir. Belge para birimi ve defter karşılığı ayrı saklanır.
  */
 export function ChequesPage() {
   const { t } = useTranslation();
@@ -205,7 +206,7 @@ function ChequeSheet({ direction, onClose }: { direction: ChequeDirection | null
   const open = direction !== null;
   const received = direction === 'received';
   const { options } = usePartyOptions(received ? 'customer' : 'supplier', open);
-  const [f, setF] = useState({ docType: 'cheque' as ChequeDocType, docNo: '', bankName: '', branch: '', partyId: '', amount: '', issueDate: todayIso(), dueDate: '', registerDate: todayIso(), description: '' });
+  const [f, setF] = useState({ docType: 'cheque' as ChequeDocType, docNo: '', bankName: '', branch: '', partyId: '', amount: '',currency:base,fxRate:'', issueDate: todayIso(), dueDate: '', registerDate: todayIso(), description: '' });
   const [items, setItems] = useState<PickedItems>({});
   const [error, setError] = useState<Error | null>(null);
   const [seen, setSeen] = useState<ChequeDirection | null>(null);
@@ -213,7 +214,7 @@ function ChequeSheet({ direction, onClose }: { direction: ChequeDirection | null
     // Form her açılışta sıfırlanır (render sırasında durum eşitleme)
     setSeen(direction);
     if (direction) {
-      setF({ docType: 'cheque', docNo: '', bankName: '', branch: '', partyId: '', amount: '', issueDate: todayIso(), dueDate: '', registerDate: todayIso(), description: '' });
+      setF({ docType: 'cheque', docNo: '', bankName: '', branch: '', partyId: '', amount: '',currency:base,fxRate:'', issueDate: todayIso(), dueDate: '', registerDate: todayIso(), description: '' });
       setItems({});
       setError(null);
     }
@@ -230,6 +231,7 @@ function ChequeSheet({ direction, onClose }: { direction: ChequeDirection | null
           ...(f.branch.trim() ? { branch: f.branch.trim() } : {}),
           partyId: f.partyId,
           amount: f.amount,
+          currency:f.currency,...(f.currency!==base && f.fxRate?{fxRate:f.fxRate}:{}),
           issueDate: f.issueDate,
           dueDate: f.dueDate,
           registerDate: f.registerDate,
@@ -280,13 +282,15 @@ function ChequeSheet({ direction, onClose }: { direction: ChequeDirection | null
           <Field label={received ? t('cheques.form.drawer') : t('cheques.form.payee')} required className="sm:col-span-2">
             {(id) => <Combobox id={id} options={options} value={f.partyId || null} onChange={(v) => { setF({ ...f, partyId: v }); setItems({}); }} placeholder={t('cheques.form.pickParty')} />}
           </Field>
-          <Field label={t('cheques.form.amount', { cur: base })} required>{(id) => <MoneyInput id={id} value={f.amount} onChange={(v) => setF({ ...f, amount: v })} />}</Field>
+          <Field label="Para birimi">{id=><Select id={id} value={f.currency} onChange={e=>{setF({...f,currency:e.target.value as typeof base,fxRate:''});setItems({});}}><CurrencyOptions /></Select>}</Field>
+          <Field label={t('cheques.form.amount', { cur: f.currency })} required>{(id) => <MoneyInput id={id} value={f.amount} onChange={(v) => setF({ ...f, amount: v })} />}</Field>
+          {f.currency!==base && <Field label={`Kayıt kuru: 1 ${f.currency} = ${base}`} hint="Boş bırakılırsa kayıt tarihindeki geçerli kur kullanılır.">{id=><MoneyInput id={id} value={f.fxRate} decimals={8} onChange={v=>setF({...f,fxRate:v})} />}</Field>}
           <DateField label={t('cheques.form.registerDate')} value={f.registerDate} onChange={(v) => { setF({ ...f, registerDate: v }); setItems({}); }} required />
           <DateField label={t('cheques.form.issueDate')} value={f.issueDate} onChange={(v) => setF({ ...f, issueDate: v })} required />
           <DateField label={t('cheques.form.dueDate')} value={f.dueDate} onChange={(v) => setF({ ...f, dueDate: v })} required />
           <Field label={t('cheques.form.description')} className="sm:col-span-2">{(id) => <Input id={id} maxLength={300} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />}</Field>
         </div>
-        <ItemPicker partyId={f.partyId} control={received ? 'receivable' : 'payable'} date={f.registerDate} total={f.amount} items={items} onChange={setItems} />
+        <ItemPicker currency={f.currency} partyId={f.partyId} control={received ? 'receivable' : 'payable'} date={f.registerDate} total={f.amount} items={items} onChange={setItems} />
         <UnverifiedNotice>{received ? t('cheques.form.receivedNote') : t('cheques.form.issuedNote')}</UnverifiedNotice>
       </div>
     </Sheet>
@@ -303,6 +307,7 @@ function ActionModal({ target, onClose }: { target: { action: ChequeAction; cheq
   const needsBank = action === 'deposit' || action === 'pay';
   const [date, setDate] = useState(todayIso());
   const [bankId, setBankId] = useState('');
+  const [fxRate,setFxRate]=useState('');
   const [partyId, setPartyId] = useState('');
   const [note, setNote] = useState('');
   const [items, setItems] = useState<PickedItems>({});
@@ -314,6 +319,7 @@ function ActionModal({ target, onClose }: { target: { action: ChequeAction; cheq
     if (key) {
       setDate(todayIso());
       setBankId('');
+      setFxRate('');
       setPartyId('');
       setNote('');
       setItems({});
@@ -322,7 +328,7 @@ function ActionModal({ target, onClose }: { target: { action: ChequeAction; cheq
   }
   const { data: acc } = useTreasuryAccounts(needsBank);
   const base = useCompany().baseCurrency;
-  const banks = (acc?.accounts ?? []).filter((a) => a.kind === 'bank' && a.isActive && a.currencyCode === base);
+  const banks = (acc?.accounts ?? []).filter((a) => a.kind === 'bank' && a.isActive && a.currencyCode === cheque?.currencyCode);
   const { options } = usePartyOptions('supplier', action === 'endorse');
   const run = useCMutation(
     (_: void, call) =>
@@ -332,6 +338,7 @@ function ActionModal({ target, onClose }: { target: { action: ChequeAction; cheq
           action,
           chequeIds: [cheque!.id],
           date,
+          ...((action==='collect'||action==='pay')&&cheque?.currencyCode!==base&&fxRate?{fxRate}:{}),
           ...(needsBank ? { bankAccountId: bankId } : {}),
           ...(action === 'endorse' ? { partyId, items: pickedPayload(items) } : {}),
           ...(note.trim() ? { note: note.trim() } : {}),
@@ -359,6 +366,7 @@ function ActionModal({ target, onClose }: { target: { action: ChequeAction; cheq
         {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
         {cheque && <p className="text-sm text-muted">{cheque.partyName} · {moneyIn(cheque.amount, cheque.currencyCode)} · {t('cheques.cols.due')} {formatDateTR(cheque.dueDate)}</p>}
         <DateField label={t('cheques.form.actionDate')} value={date} onChange={(v) => { setDate(v); setItems({}); }} required />
+        {(action==='collect'||action==='pay')&&cheque?.currencyCode!==base&&<Field label={`İşlem kuru: 1 ${cheque?.currencyCode} = ${base}`} hint="Boş bırakılırsa işlem tarihindeki geçerli kur kullanılır.">{id=><MoneyInput id={id} value={fxRate} decimals={4} maxDecimals={8} onChange={setFxRate} />}</Field>}
         {needsBank && (
           <Field label={t('cheques.form.bankAccount')} required>
             {(id) => (
@@ -374,7 +382,7 @@ function ActionModal({ target, onClose }: { target: { action: ChequeAction; cheq
             <Field label={t('cheques.form.endorsee')} required>
               {(id) => <Combobox id={id} options={options} value={partyId || null} onChange={(v) => { setPartyId(v); setItems({}); }} placeholder={t('cheques.form.pickSupplier')} />}
             </Field>
-            <ItemPicker partyId={partyId} control="payable" date={date} total={cheque?.amount ?? '0'} items={items} onChange={setItems} />
+            <ItemPicker currency={cheque?.currencyCode} partyId={partyId} control="payable" date={date} total={cheque?.amount ?? '0'} items={items} onChange={setItems} />
           </>
         )}
         <Field label={t('cheques.form.note')}>{(id) => <Input id={id} maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
@@ -386,6 +394,7 @@ function ActionModal({ target, onClose }: { target: { action: ChequeAction; cheq
 
 function DetailSheet({ cheque, onClose }: { cheque: ChequeRow | null; onClose: () => void }) {
   const { t } = useTranslation();
+  const base=useCompany().baseCurrency;
   const { data } = useCQuery<ChequeDetail>(['cheques', 'detail', cheque?.id ?? ''], cheque ? `/api/cheques/${cheque.id}` : null);
   return (
     <Sheet open={!!cheque} onOpenChange={(o) => !o && onClose()} title={cheque ? `${t(`cheques.docType.${cheque.docType}`)} ${cheque.docNo}` : ''} description={t('cheques.history.title')}>
@@ -396,6 +405,8 @@ function DetailSheet({ cheque, onClose }: { cheque: ChequeRow | null; onClose: (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted">{t('cheques.cols.party')}</dt><dd>{data.cheque.partyName}</dd>
             <dt className="text-muted">{t('cheques.cols.amount')}</dt><dd>{moneyIn(data.cheque.amount, data.cheque.currencyCode)}</dd>
+            <dt className="text-muted">Kayıt defter karşılığı</dt><dd>{moneyIn(data.cheque.amountBase,base)}</dd>
+            {data.cheque.currencyCode!==base&&<><dt className="text-muted">Kayıt kuru</dt><dd>1 {data.cheque.currencyCode} = {data.cheque.fxRate} {base}</dd></>}
             <dt className="text-muted">{t('cheques.form.issueDate')}</dt><dd>{formatDateTR(data.cheque.issueDate)}</dd>
             <dt className="text-muted">{t('cheques.cols.due')}</dt><dd>{formatDateTR(data.cheque.dueDate)}</dd>
             <dt className="text-muted">{t('cheques.cols.status')}</dt><dd><ChequeStatusBadge status={data.cheque.status} /></dd>
@@ -438,12 +449,13 @@ function ClearingTab() {
   const toast = useToast();
   const can = useCan();
   const base = useCompany().baseCurrency;
+  const [currency,setCurrency]=useState<string>(base),[fxRate,setFxRate]=useState('');
   const [action, setAction] = useState<ClearingAction>('deposit');
   const { direction, status } = CLEARING[action];
   const { data, isPending } = useCQuery<ChequeList>(['cheques', 'clearing', action], `/api/cheques?${new URLSearchParams({ direction, status })}`);
   const { data: acc } = useTreasuryAccounts();
   const { data: batches } = useCQuery<{ batches: ChequeBatchRow[] }>(['cheques', 'batches'], '/api/cheques/batches');
-  const banks = (acc?.accounts ?? []).filter((a) => a.kind === 'bank' && a.isActive && a.currencyCode === base);
+  const banks = (acc?.accounts ?? []).filter((a) => a.kind === 'bank' && a.isActive && a.currencyCode === currency);
   const [sel, setSel] = useState<Record<string, boolean>>({});
   const [bankId, setBankId] = useState('');
   const [date, setDate] = useState(todayIso());
@@ -453,7 +465,7 @@ function ClearingTab() {
 
   const all = useMemo(() => data?.cheques ?? [], [data]);
   // Tahsil: yalnızca aynı banka hesabına tahsile verilenler birlikte seçilir
-  const rows = useMemo(() => (action === 'collect' && filterBank ? all.filter((c) => c.bankAccountId === filterBank) : all), [all, action, filterBank]);
+  const rows = useMemo(() => all.filter(c=>c.currencyCode===currency&&(action!=='collect'||!filterBank||c.bankAccountId===filterBank)), [all, action, filterBank,currency]);
   const chosen = rows.filter((c) => sel[c.id]);
   const total = chosen.reduce((s, c) => s + Number(c.amount), 0);
   const needsBank = action !== 'collect';
@@ -461,7 +473,7 @@ function ClearingTab() {
     (_: void, call) =>
       call<ChequeActionResult>('/api/cheques/actions', {
         method: 'POST',
-        body: { action, chequeIds: chosen.map((c) => c.id), date, ...(needsBank ? { bankAccountId: bankId } : {}), ...(note.trim() ? { note: note.trim() } : {}) },
+        body: { action, chequeIds: chosen.map((c) => c.id), date, ...(needsBank ? { bankAccountId: bankId } : {}), ...((action==='collect'||action==='pay')&&currency!==base&&fxRate?{fxRate}:{}),...(note.trim() ? { note: note.trim() } : {}) },
       }),
     CHEQUE_INVALIDATE,
   );
@@ -485,6 +497,8 @@ function ClearingTab() {
           />
           {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
           <div className="flex flex-wrap items-end gap-3">
+            <Field label="Para birimi" className="w-36">{id=><Select id={id} value={currency} onChange={e=>{setCurrency(e.target.value);setSel({});setBankId('');setFilterBank('');setFxRate('');}}><CurrencyOptions /></Select>}</Field>
+            {(action==='collect'||action==='pay')&&currency!==base&&<Field label={`1 ${currency} = ${base}`} hint="Boş: kayıtlı güncel kur" className="w-44">{id=><MoneyInput id={id} value={fxRate} decimals={4} maxDecimals={8} onChange={setFxRate} />}</Field>}
             <DateField label={t('cheques.form.actionDate')} value={date} onChange={setDate} />
             {needsBank && (
               <Field label={t('cheques.form.bankAccount')} className="w-56">
@@ -545,7 +559,7 @@ function ClearingTab() {
             </TableWrap>
           )}
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted">{t('cheques.clearing.selected', { n: chosen.length, total: moneyIn(String(total), base) })}</span>
+            <span className="text-sm text-muted">{t('cheques.clearing.selected', { n: chosen.length, total: moneyIn(String(total), currency) })}</span>
             {can('treasury.post') && (
               <Button
                 variant="primary"
@@ -585,7 +599,7 @@ function ClearingTab() {
                       <Td>{t(`cheques.actions.${b.action}`)}{b.partyName ? ` · ${b.partyName}` : ''}</Td>
                       <Td>{formatDateTR(b.eventDate)}</Td>
                       <Td num>{b.docCount}</Td>
-                      <Td num>{moneyIn(b.total, base)}</Td>
+                      <Td num>{moneyIn(b.total, b.currencyCode)}</Td>
                       <Td className="text-muted">{b.bankAccountName ?? '—'}</Td>
                       <Td>{b.entryNo ? <Link className="underline" to={`/accounting/journal?open=${b.entryId}`}>{b.entryNo}</Link> : '—'}</Td>
                     </Tr>

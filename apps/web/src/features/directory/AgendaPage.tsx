@@ -1,7 +1,9 @@
 import { CalendarCheck, Check, Plus, RotateCcw, X } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { isoDate } from '@erp/shared';
+import { Input } from '../../components/ui/Field';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
@@ -61,11 +63,14 @@ export function AgendaRow({ item, compact, onEdit }: { item: AgendaItem; compact
 export function AgendaPage() {
   const { t } = useTranslation();
   const can = useCan();
-  const [scope, setScope] = useState<Scope>('mine');
+  const [params] = useSearchParams();
+  const [scope, setScope] = useState<Scope>(params.get('scope') === 'all' ? 'all' : 'mine');
+  const [from, setFrom] = useState(isoDate.safeParse(params.get('from')).success ? params.get('from')! : '');
+  const [to, setTo] = useState(isoDate.safeParse(params.get('to')).success ? params.get('to')! : '');
   const [showClosed, setShowClosed] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<AgendaItem | null>(null);
-  const { data, isPending, error } = useCQuery<{ asOf: string; items: AgendaItem[] }>(['agenda', 'list', scope], `/api/agenda?scope=${scope}`);
+  const { data, isPending, error } = useCQuery<{ asOf: string; items: AgendaItem[] }>(['agenda', 'list', scope, from, to], `/api/agenda?scope=${scope}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`);
   const items = data?.items ?? [];
   const by = (b: AgendaBucketKey) => items.filter((i) => i.bucket === b);
   const addButton = (
@@ -89,6 +94,10 @@ export function AgendaPage() {
           ]}
         />
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />{t('agenda.showClosed')}</label>
+        <label className="text-xs text-muted">Başlangıç<Input type="date" value={from} onChange={e=>setFrom(e.target.value)} /></label>
+        <label className="text-xs text-muted">Bitiş<Input type="date" value={to} onChange={e=>setTo(e.target.value)} /></label>
+        {(from || to) && <Button size="sm" onClick={()=>{setFrom('');setTo('');}}>Tarih filtresini temizle</Button>}
+        {can('settings.manage') && <Link className="link text-sm" to="/settings/recurring">Tekrar planları</Link>}
       </div>
       {error ? (
         <Callout tone="danger">{errorMessage(error)}</Callout>

@@ -84,7 +84,7 @@ const contractBody = {
   penaltyNote: z.string().trim().max(1000).nullable().optional(),
   installments: z.array(installmentInputSchema).min(1, 'En az bir taksit gerekli').max(240),
 };
-export const createSalesContractSchema = z.object({ unitId: uuid, partyId: uuid, currencyCode, ...contractBody });
+export const createSalesContractSchema = z.object({ unitId: uuid, partyId: uuid, reservationLeadId: uuid.optional(), currencyCode, ...contractBody });
 export type CreateSalesContractInput = z.infer<typeof createSalesContractSchema>;
 export const updateSalesContractSchema = z.object(contractBody);
 export type UpdateSalesContractInput = z.infer<typeof updateSalesContractSchema>;

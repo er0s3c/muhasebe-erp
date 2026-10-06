@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { CreateCompanyInput, LoginInput, RegisterInput, Role, Sector } from '@erp/shared';
+import { clearFieldPackage } from '../features/construction-control/offline';
 import { api, refreshSession, setAccessToken, setSessionLostHandler } from './api';
 
 export interface SessionUser {
@@ -61,6 +62,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clear = useCallback(() => {
+    void clearFieldPackage();
     setAccessToken(null);
     setUser(null);
     setCompanies([]);
@@ -86,6 +88,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [clear, loadMe]);
 
   const setActiveCompanyId = useCallback((id: string) => {
+    void clearFieldPackage();
     setActiveId(id);
     try {
       localStorage.setItem(ACTIVE_KEY, id);

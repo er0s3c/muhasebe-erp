@@ -7,7 +7,7 @@ import { generateTotpSecret, otpauthUri, verifyTotp } from '@erp/license-core';
 import type { Queryable } from '../../db/client';
 import { userMfa, users } from '../../db/schema';
 import { authedRoute } from '../../http/context';
-import { AppError, unprocessable } from '../../http/errors';
+import { AppError, unprocessable, forbidden } from '../../http/errors';
 import { assertSameOrigin } from '../../http/origin';
 import { recordSecurityEvent } from './events';
 
@@ -88,8 +88,8 @@ const disableSchema = z.object({ password: z.string().min(1).max(200), code: z.s
 export const mfaRoutes: FastifyPluginAsync = async (app) => {
   const limit = { rateLimit: { max: 10, timeWindow: '1 minute' } };
   const failKey = (userId: string) => `mfa-fail:${userId}`;
-  const guardFails = (userId: string) => {
-    const wait = app.limiter.blocked(failKey(userId), MFA_MAX_FAILS);
+  const guardFails = async (userId: string) => {
+    const wait = await app.limiter.blocked(failKey(userId), MFA_MAX_FAILS);
     if (wait > 0) throw new AppError(429, 'RATE_LIMITED', 'Çok fazla hatalı doğrulama kodu; lütfen biraz sonra tekrar deneyin');
   };
 
@@ -131,13 +131,13 @@ export const mfaRoutes: FastifyPluginAsync = async (app) => {
     authedRoute(app, async ({ tx, user, req }) => {
       assertSameOrigin(req, app.config);
       const { code } = codeSchema.parse(req.body);
-      guardFails(user.id);
+      await guardFails(user.id);
       const row = await getMfa(tx, user.id);
       if (!row) throw unprocessable('Önce kurulumu başlatın', 'MFA_NOT_SETUP');
       if (row.enabledAt) throw unprocessable('İki adımlı doğrulama zaten etkin', 'MFA_ALREADY_ENABLED');
       const counter = verifyTotp(decryptMfaSecret(row.secretEnc, app.config.JWT_SECRET), code, Date.now());
       if (counter === null) {
-        app.limiter.hit(failKey(user.id), MFA_WINDOW_MS);
+        await app.limiter.hit(failKey(user.id), MFA_WINDOW_MS);
         throw new AppError(400, 'MFA_CODE_INVALID', 'Doğrulama kodu hatalı');
       }
       const codes = Array.from({ length: RECOVERY_CODE_COUNT }, newRecoveryCode);
@@ -157,14 +157,16 @@ export const mfaRoutes: FastifyPluginAsync = async (app) => {
     authedRoute(app, async ({ tx, user, req }) => {
       assertSameOrigin(req, app.config);
       const input = disableSchema.parse(req.body);
-      guardFails(user.id);
+      const policy=(await tx.execute<{required:boolean}>(sql`select user_company_mfa_required() as required`)).rows[0];
+      if(policy?.required) throw forbidden('Üyesi olduğunuz bir şirkette MFA zorunlu olduğu için kapatılamaz.','MFA_REQUIRED');
+      await guardFails(user.id);
       const [row] = await tx.select().from(users).where(eq(users.id, user.id));
       if (!row || !(await verify(row.passwordHash, input.password))) {
-        app.limiter.hit(failKey(user.id), MFA_WINDOW_MS);
+        await app.limiter.hit(failKey(user.id), MFA_WINDOW_MS);
         throw new AppError(401, 'INVALID_CREDENTIALS', 'Mevcut şifre hatalı');
       }
       if (!(await checkMfaCode(tx, app.config.JWT_SECRET, user.id, input.code))) {
-        app.limiter.hit(failKey(user.id), MFA_WINDOW_MS);
+        await app.limiter.hit(failKey(user.id), MFA_WINDOW_MS);
         throw new AppError(400, 'MFA_CODE_INVALID', 'Doğrulama kodu hatalı');
       }
       await tx.delete(userMfa).where(eq(userMfa.userId, user.id));
@@ -180,9 +182,9 @@ export const mfaRoutes: FastifyPluginAsync = async (app) => {
     authedRoute(app, async ({ tx, user, req }) => {
       assertSameOrigin(req, app.config);
       const { code } = codeSchema.parse(req.body);
-      guardFails(user.id);
+      await guardFails(user.id);
       if (!(await checkMfaCode(tx, app.config.JWT_SECRET, user.id, code))) {
-        app.limiter.hit(failKey(user.id), MFA_WINDOW_MS);
+        await app.limiter.hit(failKey(user.id), MFA_WINDOW_MS);
         throw new AppError(400, 'MFA_CODE_INVALID', 'Doğrulama kodu hatalı');
       }
       const codes = Array.from({ length: RECOVERY_CODE_COUNT }, newRecoveryCode);

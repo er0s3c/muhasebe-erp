@@ -67,7 +67,7 @@ export const ACCESS_AREA_KEYS = Object.keys(ACCESS_AREAS) as AccessAreaKey[];
  * Hiçbir alana ait olmayan, YALNIZCA rolle verilen izinler: şirket/üye yönetimi, ayarlar (her rolde temel okuma dahil) ve veri dışa
  * aktarma. Kullanıcı istisnası bunları ne verir ne alır. (Dışa aktarma kaydı kendi modül iznini de ister; alan kapalıysa dışa aktarma da kapanır.)
  */
-export const ROLE_BOUND_PERMISSIONS = ['company.manage', 'members.manage', 'settings.read', 'settings.manage', 'data.export'] as const satisfies readonly Permission[];
+export const ROLE_BOUND_PERMISSIONS = ['workspace.use', 'company.manage', 'members.manage', 'settings.read', 'settings.manage', 'data.export'] as const satisfies readonly Permission[];
 
 /** Her kayıt modülünün bağlı olduğu alan; `null` = yönetilmeyen (kilitli çekirdek ya da henüz açılmamış) modül. */
 export const MODULE_AREA: Record<string, AccessAreaKey | null> = {

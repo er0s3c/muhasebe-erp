@@ -275,6 +275,7 @@ export async function updateDraftEntry(
   if (existing.status !== 'draft') {
     throw unprocessable('Yalnızca taslak yevmiye düzenlenebilir', 'ENTRY_NOT_DRAFT');
   }
+  if (existing.sourceType === 'asset_depreciation') throw unprocessable('Amortismanın hesaplanan satırları değiştirilmez; Demirbaş ve amortisman ekranından dönemi iptal edin.', 'ASSET_DEPRECIATION_IMMUTABLE');
   const period = await requireOpenPeriod(tx, input.entryDate);
   const lines = await prepareLines(tx, ctx, input.entryDate, input.lines);
 
@@ -300,6 +301,7 @@ export async function deleteDraftEntry(tx: Tx, id: string) {
   if (existing.status !== 'draft') {
     throw unprocessable('Kaydedilmiş yevmiye silinemez; ters kayıt oluşturun', 'ENTRY_NOT_DRAFT');
   }
+  if (existing.sourceType === 'asset_depreciation') throw unprocessable('Amortisman geçmişi silinmez; Demirbaş ve amortisman ekranından dönemi iptal edin.', 'ASSET_DEPRECIATION_IMMUTABLE');
   // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
   const deleted = await tx.delete(journalEntries).where(eq(journalEntries.id, id)).returning({ id: journalEntries.id });
   if (deleted.length === 0) throw notFound('Yevmiye');

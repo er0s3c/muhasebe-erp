@@ -428,6 +428,7 @@ export async function updateInvoiceDraft(tx: Tx, ctx: InvoiceCtx, id: string, in
 
 export async function deleteInvoiceDraft(tx: Tx, id: string) {
   await getDraftRow(tx, id, 'silinebilir');
+  if((await tx.execute(sql`select id from campaign_applications where invoice_id=${id}::uuid`)).rows.length)throw conflict('Kampanya uygulama geçmişi olan taslak silinemez. Fatura satırlarını düzenleyebilirsiniz.');
   // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
   const deleted = await tx.delete(invoices).where(eq(invoices.id, id)).returning({ id: invoices.id });
   if (deleted.length === 0) throw notFound('Fatura');

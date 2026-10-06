@@ -24,6 +24,7 @@ import { qtyText, useWarehouses } from '../inventory/common';
 import { useProjectOptions } from '../projects/common';
 import { emptyLine, LinesEditor, lineValid, num, OrderStatusBadge, PROCUREMENT_INVALIDATE, type LineDraft } from './common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { OrderSubmittals } from '../construction-control/OrderSubmittals';
 
 export function PurchaseOrderEditorPage() {
   const { t } = useTranslation();
@@ -134,6 +135,7 @@ export function PurchaseOrderEditorPage() {
 
       {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
       {order?.status === 'cancelled' && <Callout tone="danger" title={t('procurement.orders.cancelledTitle')}>{order.cancelReason}</Callout>}
+      {order && <OrderSubmittals orderId={order.id} />}
       {status === 'draft' && <Callout tone="info">{t('procurement.orders.draftNote')}</Callout>}
 
       <Card>

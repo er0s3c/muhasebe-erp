@@ -267,9 +267,12 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
 export const NAV_ITEMS: readonly NavItemDef[] = [
   { key: 'portal-access', labelKey: 'nav.portalAccess', path: '/workspace/portal', icon: 'users', group: 'settings', module: 'core.parties', permission: 'members.manage' },
   { key: 'cash-scenarios', labelKey: 'nav.cashScenarios', path: '/workspace/scenarios', icon: 'chart-no-axes-combined', group: 'treasury', module: 'core.treasury', permission: 'treasury.read' },
+  { key: 'construction-center', labelKey: 'nav.constructionCenter', path: '/workspace/construction', icon: 'hard-hat', group: 'construction', module: 'construction.projects', permission: 'projects.read' },
   { key: 'site-operations', labelKey: 'nav.siteOperations', path: '/workspace/operations?kind=site_report', icon: 'hard-hat', group: 'construction', module: 'construction.projects', permission: 'projects.read' },
   { key: 'collection-work', labelKey: 'nav.collectionWork', path: '/workspace/operations?kind=collection', icon: 'wallet', group: 'parties', module: 'core.parties', permission: 'parties.read' },
   { key: 'workspace', labelKey: 'nav.workspace', path: '/workspace', icon: 'calendar-check', group: 'overview', module: 'core.dashboard' },
+  { key: 'fixed-assets', labelKey: 'nav.fixedAssets', path: '/accounting/fixed-assets', icon: 'package', group: 'accounting', module: 'core.ledger', permission: 'ledger.read' },
+  { key: 'company-budgets', labelKey: 'nav.companyBudgets', path: '/accounting/budgets', icon: 'bar-chart', group: 'accounting', module: 'core.ledger', permission: 'ledger.read' },
   { key: 'documents', labelKey: 'nav.documents', path: '/workspace/documents', icon: 'files', group: 'overview', module: 'core.dashboard' },
   {
     key: 'dashboard',
@@ -954,6 +957,12 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     module: 'core.settings',
     permission: 'settings.read',
   },
+  {key:'operations-settings',labelKey:'nav.operationsSettings',path:'/settings/operations',icon:'settings',group:'settings',module:'core.settings',permission:'settings.manage'},
+  {key:'backups',labelKey:'nav.backups',path:'/settings/backups',icon:'database',group:'settings',module:'core.settings',permission:'company.manage'},
+  {key:'recurring',labelKey:'nav.recurring',path:'/settings/recurring',icon:'calendar-days',group:'settings',module:'core.settings',permission:'settings.manage'},
+  {key:'activity-report',labelKey:'nav.activityReport',path:'/reports/activity',icon:'chart-no-axes-combined',group:'reports',module:'core.settings',permission:'members.manage'},
+  {key:'insights',labelKey:'nav.insights',path:'/reports/insights',icon:'chart-no-axes-combined',group:'reports',module:'core.dashboard',permission:'workspace.use'},
+  {key:'campaigns',labelKey:'nav.campaigns',path:'/sales/campaigns',icon:'tag',group:'invoices',module:'core.invoices',permission:'invoices.read'},
   {
     key: 'members',
     labelKey: 'nav.members',

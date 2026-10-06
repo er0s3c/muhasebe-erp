@@ -85,8 +85,8 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
   // Çek/senet portföyü (Faz X1): portföyde/tahsildeki alınan belgeler beklenen giriş, ödenmemiş verilen belgeler beklenen çıkıştır.
   // Cari kalemleri kayıtta kapandığı için (B portföy / A 120) bu tutarlar başka türlü projeksiyonda görünmez. Yalnızca defter para birimi.
   if (!q.projectId) {
-    const docs = await tx.execute<{ direction: string; doc_type: string; doc_no: string; due_date: string; amount: string; party_name: string }>(sql`
-      select c.direction, c.doc_type, c.doc_no, c.due_date::text, c.amount::text, p.name as party_name
+    const docs = await tx.execute<{ direction: string; doc_type: string; doc_no: string; due_date: string; amount: string;amount_base:string;currency_code:string; party_name: string }>(sql`
+      select c.direction, c.doc_type, c.doc_no, c.due_date::text, c.amount::text,c.amount_base::text,c.currency_code, p.name as party_name
         from cheques c join parties p on p.id = c.party_id and p.company_id = c.company_id
        where ((c.direction = 'received' and c.status in ('portfolio','in_collection')) or (c.direction = 'issued' and c.status = 'issued'))
        order by c.due_date, c.doc_no`);
@@ -99,9 +99,9 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
         direction: received ? 'in' : 'out',
         description: `${d.doc_type === 'cheque' ? 'Çek' : 'Senet'} ${d.doc_no}`,
         partyName: d.party_name,
-        currencyCode: base,
+        currencyCode: d.currency_code,
         amount: dec(d.amount).toFixed(2),
-        amountBase: dec(d.amount).toFixed(2),
+        amountBase: (await toBase(dec(d.amount),d.currency_code,dec(d.amount_base))).toFixed(2),
         overdue: d.due_date < from,
         cheque: true,
       });

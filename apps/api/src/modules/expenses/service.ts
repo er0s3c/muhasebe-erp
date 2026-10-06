@@ -18,10 +18,24 @@ import {
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { trContains } from '../../db/search';
-import { accounts, expenseCards, expenseEntries, parties, taxRates } from '../../db/schema';
+import {
+  accounts,
+  expenseCards,
+  expenseEntries,
+  parties,
+  taxRates,
+  employees,
+  employeeAdvances,
+  employeeAdvanceSettlements,
+} from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { resolveVat } from '../invoices/service';
-import { createJournalEntry, reverseJournalEntry, type AutoJournalLine, type LedgerCtx } from '../ledger/journal';
+import {
+  createJournalEntry,
+  reverseJournalEntry,
+  type AutoJournalLine,
+  type LedgerCtx,
+} from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
 import { validateDimensions } from '../projects/dimension';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
@@ -40,19 +54,44 @@ const addDays = (iso: string, days: number) => {
 
 // --- Gider kartları ----------------------------------------------------------------------------------------------------------
 
-async function validateCard(tx: Tx, companyId: string, c: { accountId?: string; taxCode?: string | null; projectId?: string | null; wbsId?: string | null; costCodeId?: string | null }) {
+async function validateCard(
+  tx: Tx,
+  companyId: string,
+  c: {
+    accountId?: string;
+    taxCode?: string | null;
+    projectId?: string | null;
+    wbsId?: string | null;
+    costCodeId?: string | null;
+  },
+) {
   if (c.accountId) {
     const [a] = await tx.select().from(accounts).where(eq(accounts.id, c.accountId));
     if (!a) throw unprocessable('Hesap bulunamadı', 'ACCOUNT_NOT_FOUND');
-    if (!a.isPostable || !a.isActive) throw unprocessable(`${a.code} hesabına kayıt atılamaz`, 'ACCOUNT_NOT_POSTABLE');
-    if (a.type !== 'income' && a.type !== 'expense' && a.type !== 'cost') throw unprocessable(`${a.code} bir gelir tablosu (gider/maliyet) hesabı değil`, 'EXPENSE_ACCOUNT_INVALID');
-    if (a.partyControl || a.currencyCode) throw unprocessable(`${a.code} cari kontrol ya da dövizli hesaptır; gider kartı için uygun değil`, 'EXPENSE_ACCOUNT_INVALID');
+    if (!a.isPostable || !a.isActive)
+      throw unprocessable(`${a.code} hesabına kayıt atılamaz`, 'ACCOUNT_NOT_POSTABLE');
+    if (a.type !== 'income' && a.type !== 'expense' && a.type !== 'cost')
+      throw unprocessable(
+        `${a.code} bir gelir tablosu (gider/maliyet) hesabı değil`,
+        'EXPENSE_ACCOUNT_INVALID',
+      );
+    if (a.partyControl || a.currencyCode)
+      throw unprocessable(
+        `${a.code} cari kontrol ya da dövizli hesaptır; gider kartı için uygun değil`,
+        'EXPENSE_ACCOUNT_INVALID',
+      );
   }
   if (c.taxCode) {
-    const [t] = await tx.select({ id: taxRates.id }).from(taxRates).where(eq(taxRates.code, c.taxCode)).limit(1);
+    const [t] = await tx
+      .select({ id: taxRates.id })
+      .from(taxRates)
+      .where(eq(taxRates.code, c.taxCode))
+      .limit(1);
     if (!t) throw unprocessable(`${c.taxCode} KDV kodu bulunamadı`, 'TAX_CODE_NOT_FOUND');
   }
-  await validateDimensions(tx, companyId, [{ label: 'Gider kartı', projectId: c.projectId, wbsId: c.wbsId, costCodeId: c.costCodeId }]);
+  await validateDimensions(tx, companyId, [
+    { label: 'Gider kartı', projectId: c.projectId, wbsId: c.wbsId, costCodeId: c.costCodeId },
+  ]);
 }
 
 export async function listExpenseCards(tx: Tx, opts: { all?: boolean } = {}, page?: PageQuery) {
@@ -91,7 +130,12 @@ export async function createExpenseCard(tx: Tx, companyId: string, input: Create
   return row!;
 }
 
-export async function updateExpenseCard(tx: Tx, companyId: string, id: string, input: UpdateExpenseCardInput) {
+export async function updateExpenseCard(
+  tx: Tx,
+  companyId: string,
+  id: string,
+  input: UpdateExpenseCardInput,
+) {
   const [cur] = await tx.select().from(expenseCards).where(eq(expenseCards.id, id));
   if (!cur) throw notFound('Gider kartı');
   const next = {
@@ -106,7 +150,13 @@ export async function updateExpenseCard(tx: Tx, companyId: string, id: string, i
     if (input.wbsId === undefined) next.wbsId = null;
     if (input.costCodeId === undefined) next.costCodeId = null;
   }
-  await validateCard(tx, companyId, { accountId: input.accountId ? next.accountId : undefined, taxCode: next.taxCode, projectId: next.projectId, wbsId: next.wbsId, costCodeId: next.costCodeId });
+  await validateCard(tx, companyId, {
+    accountId: input.accountId ? next.accountId : undefined,
+    taxCode: next.taxCode,
+    projectId: next.projectId,
+    wbsId: next.wbsId,
+    costCodeId: next.costCodeId,
+  });
   const [row] = await tx
     .update(expenseCards)
     .set({
@@ -127,14 +177,21 @@ export async function updateExpenseCard(tx: Tx, companyId: string, id: string, i
 }
 
 export async function deleteExpenseCard(tx: Tx, id: string) {
-  const res = await tx.delete(expenseCards).where(eq(expenseCards.id, id)).returning({ id: expenseCards.id });
+  const res = await tx
+    .delete(expenseCards)
+    .where(eq(expenseCards.id, id))
+    .returning({ id: expenseCards.id });
   if (res.length === 0) throw notFound('Gider kartı');
 }
 
 // --- Gider fişi ----------------------------------------------------------------------------------------------------------------
 
 /** KDV, stopaj ve brüt/ödenecek tutarlar (saf; kullanıcının girdiği oranlar üzerinde aritmetik). */
-export function computeExpenseAmounts(net: MoneyValue, vatRate: MoneyValue, withholdingRate: MoneyValue) {
+export function computeExpenseAmounts(
+  net: MoneyValue,
+  vatRate: MoneyValue,
+  withholdingRate: MoneyValue,
+) {
   const vat = roundMoney(net.times(vatRate).div(100));
   const withholding = roundMoney(net.times(withholdingRate).div(100));
   const gross = net.plus(vat);
@@ -144,30 +201,51 @@ export function computeExpenseAmounts(net: MoneyValue, vatRate: MoneyValue, with
 export async function createExpenseEntry(tx: Tx, ctx: LedgerCtx, input: CreateExpenseEntryInput) {
   const [card] = await tx.select().from(expenseCards).where(eq(expenseCards.id, input.cardId));
   if (!card) throw notFound('Gider kartı');
-  if (!card.isActive) throw unprocessable(`${card.code} gider kartı pasif`, 'EXPENSE_CARD_INACTIVE');
+  if (!card.isActive)
+    throw unprocessable(`${card.code} gider kartı pasif`, 'EXPENSE_CARD_INACTIVE');
   const date = input.entryDate;
+  if (input.paymentKind === 'employee' && date > todayIso())
+    throw unprocessable('Personel masraf tarihi gelecekte olamaz', 'EMPLOYEE_EXPENSE_FUTURE');
   await requireOpenPeriod(tx, date);
 
   const net = dec(input.net);
-  if (net.decimalPlaces() > 2) throw unprocessable('Tutar en çok 2 ondalık basamak içerebilir', 'AMOUNT_PRECISION');
+  if (net.decimalPlaces() > 2)
+    throw unprocessable('Tutar en çok 2 ondalık basamak içerebilir', 'AMOUNT_PRECISION');
 
   // KDV: kodun gider tarihindeki oranı; kod gönderilmezse kartın varsayılanı, null ise KDV yok
   const taxCode = input.taxCode === undefined ? card.taxCode : input.taxCode || null;
   let vatRate = dec(0);
   if (taxCode) {
     const rate = (await resolveVat(tx, [taxCode], date)).get(taxCode);
-    if (rate === undefined) throw unprocessable(`${taxCode} KDV kodunun ${date} tarihinde geçerli oranı yok`, 'EXPENSE_TAX_RATE_MISSING');
+    if (rate === undefined)
+      throw unprocessable(
+        `${taxCode} KDV kodunun ${date} tarihinde geçerli oranı yok`,
+        'EXPENSE_TAX_RATE_MISSING',
+      );
     vatRate = dec(rate);
   }
-  const withholdingRate = dec(input.withholdingRate === undefined ? (card.withholdingRate ?? 0) : (input.withholdingRate ?? 0));
+  const withholdingRate = dec(
+    input.withholdingRate === undefined
+      ? (card.withholdingRate ?? 0)
+      : (input.withholdingRate ?? 0),
+  );
   const amounts = computeExpenseAmounts(net, vatRate, withholdingRate);
-  if (amounts.payable.isNegative()) throw unprocessable('Stopaj brüt tutarı aşamaz', 'EXPENSE_WITHHOLDING_EXCEEDS');
+  if (amounts.payable.isNegative())
+    throw unprocessable('Stopaj brüt tutarı aşamaz', 'EXPENSE_WITHHOLDING_EXCEEDS');
 
   // Proje boyutu: gönderilmezse kartın varsayılanı; proje gönderilirse iş kalemi/maliyet kodu da gönderilene göre
   const dims =
     input.projectId !== undefined
-      ? { projectId: input.projectId ?? null, wbsId: input.wbsId ?? null, costCodeId: input.costCodeId ?? null }
-      : { projectId: card.projectId, wbsId: input.wbsId !== undefined ? (input.wbsId ?? null) : card.wbsId, costCodeId: input.costCodeId !== undefined ? (input.costCodeId ?? null) : card.costCodeId };
+      ? {
+          projectId: input.projectId ?? null,
+          wbsId: input.wbsId ?? null,
+          costCodeId: input.costCodeId ?? null,
+        }
+      : {
+          projectId: card.projectId,
+          wbsId: input.wbsId !== undefined ? (input.wbsId ?? null) : card.wbsId,
+          costCodeId: input.costCodeId !== undefined ? (input.costCodeId ?? null) : card.costCodeId,
+        };
 
   // Cari ve ödeme kaynağı
   let party: typeof parties.$inferSelect | null = null;
@@ -176,22 +254,62 @@ export async function createExpenseEntry(tx: Tx, ctx: LedgerCtx, input: CreateEx
     if (!party) throw unprocessable('Cari bulunamadı', 'PARTY_NOT_FOUND');
     if (!party.isActive) throw unprocessable(`${party.name} carisi pasif`, 'PARTY_INACTIVE');
     if (input.paymentKind === 'party' && !partyKindFits(party.kind as PartyKind, 'payable')) {
-      throw unprocessable(`${party.name} tedarikçi değil; cari ödemede tedarikçi seçilmeli`, 'PARTY_KIND_MISMATCH');
+      throw unprocessable(
+        `${party.name} tedarikçi değil; cari ödemede tedarikçi seçilmeli`,
+        'PARTY_KIND_MISMATCH',
+      );
     }
   }
   let glAccountId: string | null = null;
-  if (input.paymentKind === 'treasury') {
+  let advanceApplied = dec(0);
+  if (input.paymentKind === 'employee') {
+    const [employee] = await tx
+      .select()
+      .from(employees)
+      .where(eq(employees.id, input.employeeId!))
+      .for('update');
+    if (!employee) throw notFound('Personel');
+    if (input.advanceId) {
+      const [advance] = await tx
+        .select()
+        .from(employeeAdvances)
+        .where(eq(employeeAdvances.id, input.advanceId))
+        .for('update');
+      if (!advance || advance.employeeId !== employee.id)
+        throw unprocessable('Avans seçilen personele ait değil', 'EXPENSE_ADVANCE_EMPLOYEE');
+      if (!['open', 'partial'].includes(advance.status))
+        throw unprocessable('Seçilen avans açık değil', 'EXPENSE_ADVANCE_CLOSED');
+      if (date < advance.advanceDate)
+        throw unprocessable('Masraf tarihi avans tarihinden önce olamaz', 'EXPENSE_ADVANCE_DATE');
+      advanceApplied = dec(advance.amount).minus(advance.settledAmount);
+      if (advanceApplied.gt(amounts.payable)) advanceApplied = amounts.payable;
+    }
+  }
+  const treasuryPayment = amounts.payable.minus(advanceApplied);
+  if (
+    input.paymentKind === 'treasury' ||
+    (input.paymentKind === 'employee' && treasuryPayment.gt(0))
+  ) {
+    if (!input.treasuryAccountId)
+      throw unprocessable(
+        'Avansı aşan masrafın iadesi için kasa/banka seçin',
+        'EXPENSE_REIMBURSEMENT_ACCOUNT',
+      );
     const locked = await lockTreasuryAccounts(tx, [input.treasuryAccountId!]);
     const ta = locked.get(input.treasuryAccountId!)!;
     if (!ta.isActive) throw unprocessable(`${ta.name} hesabı pasif`, 'TREASURY_ACCOUNT_INACTIVE');
     if (ta.currencyCode !== ctx.baseCurrency) {
-      throw unprocessable(`Gider fişi yalnızca ${ctx.baseCurrency} cinsinden kasa/banka hesabından ödenebilir`, 'EXPENSE_TREASURY_CURRENCY');
+      throw unprocessable(
+        `Gider fişi yalnızca ${ctx.baseCurrency} cinsinden kasa/banka hesabından ödenebilir`,
+        'EXPENSE_TREASURY_CURRENCY',
+      );
     }
-    await assertCashOk(tx, ta, date, amounts.payable);
+    await assertCashOk(tx, ta, date, treasuryPayment);
     glAccountId = ta.accountId;
   }
 
   const keys = [
+    ...(advanceApplied.gt(0) ? (['employee_advance'] as const) : []),
     ...(input.paymentKind === 'party' && amounts.payable.gt(0) ? (['payable'] as const) : []),
     ...(amounts.vat.gt(0) ? (['vat_input'] as const) : []),
     ...(amounts.withholding.gt(0) ? (['withholding_payable'] as const) : []),
@@ -203,7 +321,12 @@ export async function createExpenseEntry(tx: Tx, ctx: LedgerCtx, input: CreateEx
   const seq = await nextNumber(tx, ctx.companyId, EXPENSE_NUMBER_KEY, year);
   const entryNo = formatDocumentNumber(EXPENSE_PREFIX, year, seq);
   const text = `Gider ${entryNo} — ${card.name}: ${input.description}`.slice(0, 300);
-  const line = (accountId: string, side: 'debit' | 'credit', amount: MoneyValue, extra: Partial<AutoJournalLine> = {}): AutoJournalLine => ({
+  const line = (
+    accountId: string,
+    side: 'debit' | 'credit',
+    amount: MoneyValue,
+    extra: Partial<AutoJournalLine> = {},
+  ): AutoJournalLine => ({
     accountId,
     currency: ctx.baseCurrency as CurrencyCode,
     debit: side === 'debit' ? toDbAmount(amount) : '0',
@@ -220,12 +343,28 @@ export async function createExpenseEntry(tx: Tx, ctx: LedgerCtx, input: CreateEx
   ];
   if (amounts.vat.gt(0)) lines.push(line(map.vat_input!, 'debit', amounts.vat));
   if (amounts.payable.gt(0)) {
-    if (input.paymentKind === 'treasury') lines.push(line(glAccountId!, 'credit', amounts.payable));
-    else lines.push(line(map.payable!, 'credit', amounts.payable, { partyId: party!.id, dueDate: input.dueDate ?? addDays(date, party!.paymentTermDays) }));
+    if (input.paymentKind === 'employee') {
+      if (advanceApplied.gt(0)) lines.push(line(map.employee_advance!, 'credit', advanceApplied));
+      if (treasuryPayment.gt(0)) lines.push(line(glAccountId!, 'credit', treasuryPayment));
+    } else if (input.paymentKind === 'treasury')
+      lines.push(line(glAccountId!, 'credit', amounts.payable));
+    else
+      lines.push(
+        line(map.payable!, 'credit', amounts.payable, {
+          partyId: party!.id,
+          dueDate: input.dueDate ?? addDays(date, party!.paymentTermDays),
+        }),
+      );
   }
-  if (amounts.withholding.gt(0)) lines.push(line(map.withholding_payable!, 'credit', amounts.withholding));
+  if (amounts.withholding.gt(0))
+    lines.push(line(map.withholding_payable!, 'credit', amounts.withholding));
 
-  const entry = await createJournalEntry(tx, ctx, { entryDate: date, description: text, lines, post: true }, { source: { type: 'expense_entry', id } });
+  const entry = await createJournalEntry(
+    tx,
+    ctx,
+    { entryDate: date, description: text, lines, post: true },
+    { source: { type: 'expense_entry', id } },
+  );
   await tx.insert(expenseEntries).values({
     id,
     companyId: ctx.companyId,
@@ -235,8 +374,18 @@ export async function createExpenseEntry(tx: Tx, ctx: LedgerCtx, input: CreateEx
     description: input.description,
     partyId: party?.id ?? null,
     paymentKind: input.paymentKind,
-    treasuryAccountId: input.paymentKind === 'treasury' ? input.treasuryAccountId! : null,
-    dueDate: input.paymentKind === 'party' ? (input.dueDate ?? addDays(date, party!.paymentTermDays)) : null,
+    employeeId: input.paymentKind === 'employee' ? input.employeeId! : null,
+    advanceId: input.paymentKind === 'employee' ? (input.advanceId ?? null) : null,
+    advanceAppliedAmount: advanceApplied.toFixed(2),
+    treasuryAccountId:
+      input.paymentKind === 'treasury' ||
+      (input.paymentKind === 'employee' && treasuryPayment.gt(0))
+        ? input.treasuryAccountId!
+        : null,
+    dueDate:
+      input.paymentKind === 'party'
+        ? (input.dueDate ?? addDays(date, party!.paymentTermDays))
+        : null,
     net: toDbAmount(net),
     vatCode: taxCode,
     vatRate: vatRate.toFixed(4),
@@ -252,15 +401,35 @@ export async function createExpenseEntry(tx: Tx, ctx: LedgerCtx, input: CreateEx
     journalEntryId: entry.id,
     createdBy: ctx.userId,
   });
+  if (advanceApplied.gt(0))
+    await tx
+      .insert(employeeAdvanceSettlements)
+      .values({
+        companyId: ctx.companyId,
+        advanceId: input.advanceId!,
+        kind: 'expense',
+        expenseEntryId: id,
+        settledDate: date,
+        amount: advanceApplied.toFixed(2),
+        note: input.description,
+        createdBy: ctx.userId,
+      });
   return getExpenseEntry(tx, id);
 }
 
-export async function cancelExpenseEntry(tx: Tx, ctx: LedgerCtx, id: string, input: CancelExpenseEntryInput) {
+export async function cancelExpenseEntry(
+  tx: Tx,
+  ctx: LedgerCtx,
+  id: string,
+  input: CancelExpenseEntryInput,
+) {
   const [e] = await tx.select().from(expenseEntries).where(eq(expenseEntries.id, id)).for('update');
   if (!e) throw notFound('Gider fişi');
-  if (e.status === 'cancelled') throw unprocessable('Gider fişi zaten iptal edilmiş', 'EXPENSE_ALREADY_CANCELLED');
+  if (e.status === 'cancelled')
+    throw unprocessable('Gider fişi zaten iptal edilmiş', 'EXPENSE_ALREADY_CANCELLED');
   const date = input.date ?? todayIso();
-  if (date < e.entryDate) throw unprocessable('İptal tarihi fiş tarihinden önce olamaz', 'CANCEL_DATE_BEFORE_ENTRY');
+  if (date < e.entryDate)
+    throw unprocessable('İptal tarihi fiş tarihinden önce olamaz', 'CANCEL_DATE_BEFORE_ENTRY');
   await requireOpenPeriod(tx, date);
   const reversal = await reverseJournalEntry(tx, ctx, e.journalEntryId, {
     entryDate: date,
@@ -269,13 +438,20 @@ export async function cancelExpenseEntry(tx: Tx, ctx: LedgerCtx, id: string, inp
   });
   await tx
     .update(expenseEntries)
-    .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, cancelReason: input.reason, cancelJournalEntryId: reversal.id })
+    .set({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      cancelledBy: ctx.userId,
+      cancelReason: input.reason,
+      cancelJournalEntryId: reversal.id,
+    })
     .where(eq(expenseEntries.id, id));
   return getExpenseEntry(tx, id);
 }
 
 const ENTRY_SELECT = sql`
   select e.id, e.entry_no as "entryNo", e.entry_date::text as "entryDate", e.status, e.description,
+         e.employee_id as "employeeId",e.advance_id as "advanceId",e.advance_applied_amount::text as "advanceAppliedAmount",emp.full_name as "employeeName",adv.number as "advanceNumber",
          e.card_id as "cardId", c.code as "cardCode", c.name as "cardName", a.code as "accountCode",
          e.party_id as "partyId", p.name as "partyName", e.payment_kind as "paymentKind",
          e.treasury_account_id as "treasuryAccountId", ta.name as "treasuryAccountName", e.due_date::text as "dueDate",
@@ -289,6 +465,8 @@ const ENTRY_SELECT = sql`
     join accounts a on a.id = c.account_id
     left join parties p on p.id = e.party_id
     left join treasury_accounts ta on ta.id = e.treasury_account_id
+    left join employees emp on emp.id=e.employee_id
+    left join employee_advances adv on adv.id=e.advance_id
     left join projects pr on pr.id = e.project_id
     left join journal_entries je on je.id = e.journal_entry_id`;
 
@@ -298,7 +476,12 @@ export async function getExpenseEntry(tx: Tx, id: string) {
   return rows.rows[0];
 }
 
-export function expenseEntryConds(q: Pick<ListExpenseEntriesQuery, 'from' | 'to' | 'cardId' | 'partyId' | 'projectId' | 'status' | 'q'>) {
+export function expenseEntryConds(
+  q: Pick<
+    ListExpenseEntriesQuery,
+    'from' | 'to' | 'cardId' | 'partyId' | 'projectId' | 'status' | 'q'
+  >,
+) {
   const conds = [];
   if (q.from) conds.push(sql`e.entry_date >= ${q.from}::date`);
   if (q.to) conds.push(sql`e.entry_date <= ${q.to}::date`);
@@ -306,16 +489,34 @@ export function expenseEntryConds(q: Pick<ListExpenseEntriesQuery, 'from' | 'to'
   if (q.partyId) conds.push(sql`e.party_id = ${q.partyId}::uuid`);
   if (q.projectId) conds.push(sql`e.project_id = ${q.projectId}::uuid`);
   if (q.status) conds.push(sql`e.status = ${q.status}`);
-  if (q.q) conds.push(trContains(['e.entry_no', 'e.description', "coalesce(e.document_ref, '')", 'c.name', "coalesce(p.name, '')"], q.q));
+  if (q.q)
+    conds.push(
+      trContains(
+        [
+          'e.entry_no',
+          'e.description',
+          "coalesce(e.document_ref, '')",
+          'c.name',
+          "coalesce(p.name, '')",
+        ],
+        q.q,
+      ),
+    );
   return conds;
 }
 
 export async function listExpenseEntries(tx: Tx, q: ListExpenseEntriesQuery) {
   const conds = expenseEntryConds(q);
   const where = conds.length ? sql`where ${sql.join(conds, sql` and `)}` : sql``;
-  const rows = await tx.execute<Record<string, unknown>>(sql`${ENTRY_SELECT} ${where} order by e.entry_date desc, e.entry_no desc limit ${q.limit} offset ${q.offset}`);
+  const rows = await tx.execute<Record<string, unknown>>(
+    sql`${ENTRY_SELECT} ${where} order by e.entry_date desc, e.entry_no desc limit ${q.limit} offset ${q.offset}`,
+  );
   const total = await tx.execute<{ n: number; net: string; gross: string }>(sql`
     select count(*)::int as n, coalesce(sum(e.net) filter (where e.status = 'posted'), 0)::text as net, coalesce(sum(e.gross) filter (where e.status = 'posted'), 0)::text as gross
       from expense_entries e join expense_cards c on c.id = e.card_id left join parties p on p.id = e.party_id ${where}`);
-  return { entries: rows.rows, total: total.rows[0]?.n ?? 0, totals: { net: total.rows[0]?.net ?? '0', gross: total.rows[0]?.gross ?? '0' } };
+  return {
+    entries: rows.rows,
+    total: total.rows[0]?.n ?? 0,
+    totals: { net: total.rows[0]?.net ?? '0', gross: total.rows[0]?.gross ?? '0' },
+  };
 }

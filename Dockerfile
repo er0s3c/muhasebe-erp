@@ -47,6 +47,19 @@ ENV NODE_ENV=production \
     LICENSE_HOST_ID_FILE=/etc/host-machine-id
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=postgres:16-bookworm /usr/lib/postgresql/16/bin/pg_dump /usr/local/bin/pg_dump
+COPY --from=postgres:16-bookworm /usr/lib/postgresql/16/bin/pg_restore /usr/local/bin/pg_restore
+COPY installer/runtime /opt/construction-setup
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv libpq5 liblz4-1 libzstd1 \
+    && python3 -m venv /opt/construction \
+    && /opt/construction/bin/pip install --no-cache-dir -r /opt/construction-setup/requirements.txt \
+    && /opt/construction/bin/python /opt/construction-setup/install-languages.py /opt/construction-tessdata \
+    && mkdir -p /var/lib/erp-construction /var/lib/erp-backups && chown node:node /var/lib/erp-construction /var/lib/erp-backups \
+    && rm -rf /var/lib/apt/lists/*
+ENV CONSTRUCTION_PYTHON=/opt/construction/bin/python \
+    CONSTRUCTION_TESSDATA_DIR=/opt/construction-tessdata \
+    CONSTRUCTION_STORAGE_DIR=/var/lib/erp-construction
+ENV BACKUP_DIRECTORY=/var/lib/erp-backups
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/web/dist ./web
 # Bildirim hem imajın kökünde hem de web kökünde (arayüz /THIRD-PARTY-NOTICES.md olarak sunar)

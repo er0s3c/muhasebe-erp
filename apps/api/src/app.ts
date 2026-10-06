@@ -48,6 +48,11 @@ import { expenseRoutes } from './modules/expenses/routes';
 import { employeeLedgerRoutes } from './modules/employee-ledger/routes';
 import { directoryRoutes } from './modules/directory/routes';
 import { workspaceRoutes } from './modules/workspace/routes';
+import { constructionAnalyticsRoutes } from './modules/construction-control/analytics';
+import { constructionJobRoutes } from './modules/construction-control/jobs';
+import { constructionAssistantRoutes } from './modules/construction-control/assistant';
+import { constructionWorkflowRoutes } from './modules/construction-control/workflows';
+import { constructionControlRoutes } from './modules/construction-control/routes';
 import { operationRoutes } from './modules/workspace/operations';
 import { scenarioRoutes } from './modules/workspace/scenarios';
 import { portalRoutes } from './modules/workspace/portal';
@@ -58,6 +63,15 @@ import { yearEndRoutes } from './modules/yearend/routes';
 import { partyRoutes } from './modules/parties/routes';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
 import { settingsRoutes } from './modules/settings/routes';
+import { PostgresLimiter, postgresFastifyStore } from './http/postgres-limiter';
+import type { RateLimiter } from './http/postgres-limiter';
+import { backupRoutes } from './modules/administration/backups';
+import { recurringRoutes } from './modules/administration/recurring';
+import { administrationRoutes } from './modules/administration/routes';
+import { insightRoutes } from './modules/administration/insights';
+import { campaignRoutes } from './modules/administration/campaigns';
+import { fixedAssetRoutes } from './modules/administration/fixed-assets';
+import { companyBudgetRoutes } from './modules/administration/company-budgets';
 import { accessRoutes } from './modules/access/routes';
 import { memberRoutes } from './modules/tenancy/members';
 import { tenancyRoutes } from './modules/tenancy/routes';
@@ -113,7 +127,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.decorate('db', opts.db);
   app.decorate('config', config);
   app.decorate('rateFetcher', opts.rateFetcher ?? fetchKktcmbXml);
-  app.decorate('limiter', new MemoryLimiter(config.RATE_LIMIT_ENABLED));
+  const limiter:RateLimiter=config.RATE_LIMIT_STORE==='postgres' ? new PostgresLimiter(opts.db,config.RATE_LIMIT_ENABLED) : new MemoryLimiter(config.RATE_LIMIT_ENABLED);
+  app.decorate('limiter',limiter);
   app.decorate('exportGate', new Semaphore(config.EXPORT_CONCURRENCY));
   app.decorate('mailer', opts.mailer ?? createMailer(config, app.log));
   app.decorate('license', createLicenseService({ db: opts.db, config, log: app.log, setup: opts.license }));
@@ -157,7 +172,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(cookie);
   await app.register(jwt, { secret: config.JWT_SECRET });
   if (config.RATE_LIMIT_ENABLED) {
-    await app.register(rateLimit, { global: false });
+    const store=config.RATE_LIMIT_STORE==='postgres' ? postgresFastifyStore(opts.db) : undefined;
+    await app.register(rateLimit, { global: false,...(store ? {store:class extends store {constructor(){super();}}} : {}) });
   }
 
   app.setErrorHandler(errorHandler);
@@ -229,6 +245,13 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(memberRoutes);
   await app.register(accessRoutes);
   await app.register(settingsRoutes);
+  await app.register(administrationRoutes);
+  await app.register(backupRoutes);
+  await app.register(recurringRoutes);
+  await app.register(insightRoutes);
+  await app.register(campaignRoutes);
+  await app.register(fixedAssetRoutes);
+  await app.register(companyBudgetRoutes);
   await app.register(ledgerRoutes);
   await app.register(yearEndRoutes);
   await app.register(partyRoutes);
@@ -244,6 +267,11 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(directoryRoutes);
   await app.register(workspaceRoutes);
   await app.register(operationRoutes);
+  await app.register(constructionControlRoutes);
+  await app.register(constructionWorkflowRoutes);
+  await app.register(constructionAnalyticsRoutes);
+  await app.register(constructionJobRoutes);
+  await app.register(constructionAssistantRoutes);
   await app.register(scenarioRoutes);
   await app.register(portalRoutes);
   await app.register(notificationRoutes);

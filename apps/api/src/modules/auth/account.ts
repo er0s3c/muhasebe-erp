@@ -34,7 +34,7 @@ export const accountRoutes: FastifyPluginAsync = async (app) => {
     assertSameOrigin(req, app.config);
     if (!app.mailer.enabled) throw mailOff();
     const { email } = forgotPasswordSchema.parse(req.body);
-    if (app.limiter.consume(`forgot:${email}`, 3, HOUR_MS).ok) {
+    if ((await app.limiter.consume(`forgot:${email}`, 3, HOUR_MS)).ok) {
       const [user] = await app.db.select().from(users).where(eq(users.email, email));
       if (user?.isActive) {
         const token = await issueUserToken(app.db, user.id, 'reset_password', req.ip);
@@ -110,7 +110,7 @@ export const accountRoutes: FastifyPluginAsync = async (app) => {
         const [u] = await app.db.select().from(users).where(eq(users.id, user.id));
         if (!u) throw new AppError(404, 'NOT_FOUND', 'Kullanıcı bulunamadı');
         if (u.emailVerifiedAt) return { ok: true, alreadyVerified: true };
-        const gate = app.limiter.consume(`resend:${u.id}`, 1, 60_000);
+        const gate = await app.limiter.consume(`resend:${u.id}`, 1, 60_000);
         if (!gate.ok) throw new AppError(429, 'RATE_LIMITED', 'Doğrulama e-postası az önce gönderildi; bir dakika sonra tekrar deneyin');
         const token = await issueUserToken(app.db, u.id, 'verify_email', req.ip);
         queueMail(app, verifyEmailMail(u.email, u.fullName, linkTo('/verify-email', token)));

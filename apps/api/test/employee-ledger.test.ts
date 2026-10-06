@@ -96,6 +96,60 @@ describe('personel cari ve avans takibi (Faz X5)', async () => {
     expect((await other.c.post(`/api/employee-ledger/employees/${e.id}/open-party`, {})).statusCode).toBe(404);
   });
 
+  it('gider fişi avansa mahsup edilir, kalan masraf iade edilir; iptal hem avansı hem ödemeyi geri alır', async () => {
+    const w = await world('MasrafMahsup');
+    const employee = await w.mkEmp({ fullName: 'Masraf Alan Usta' });
+    const bank = await w.bank();
+    const adv = await w.advance(employee.id, bank.id, '1000');
+    const account = (await ok(w.c.get('/api/accounts'))).accounts.find((a: any) => a.code === '632');
+    const card = (await ok(w.c.post('/api/expense-cards', { code: 'SAHA', name: 'Personel saha masrafı', accountId: account.id }), 201)).card;
+    const body = { cardId: card.id, entryDate: TODAY, description: 'Ustanın ödediği malzeme', net: '1200', paymentKind: 'employee', employeeId: employee.id, advanceId: adv.advance.id, treasuryAccountId: bank.id };
+    const expense = (await ok(w.c.post('/api/expense-entries', body), 201)).entry;
+    expect(expense).toMatchObject({ employeeId: employee.id, advanceId: adv.advance.id, advanceAppliedAmount: '1000.00', payable: '1200.0000' });
+    const journal = await w.entryOf(expense.journalEntryId);
+    expect(w.sumLines(journal.lines, '196', 'creditBase')).toBe(1000);
+    expect(journal.lines.reduce((sum, l) => sum + Number(l.debitBase) - Number(l.creditBase), 0)).toBe(0);
+    expect(journal.lines.filter(l => l.accountId === bank.accountId).reduce((sum, l) => sum + Number(l.creditBase), 0)).toBe(200);
+    const closed = await w.getAdvance(adv.advance.id);
+    expect(closed.advance).toMatchObject({ status: 'settled', openAmount: '0.00' });
+    expect(closed.settlements[0]).toMatchObject({ kind: 'expense', expenseEntryId: expense.id, expenseEntryNo: expense.entryNo });
+    expect((await w.balances()).find(r => r.employeeId === employee.id)).toMatchObject({ advanceExpensed: '1000.00', openAdvance: '0.00', net: '0.00' });
+    await asOwner(async q => {
+      expect((await expectDbError(q, `update expense_entries set employee_id=null where id=$1`, [expense.id])).code).toBe('ERP19');
+      expect((await expectDbError(q, `update employee_advance_settlements set reversed_at=now(),reverse_reason='Elle geri alma' where expense_entry_id=$1`, [expense.id])).code).toBe('ERP20');
+    });
+    expect((await w.c.post('/api/expense-entries', body)).json().error.code).toBe('EXPENSE_ADVANCE_CLOSED');
+    await ok(w.c.post(`/api/expense-entries/${expense.id}/cancel`, { date: TODAY, reason: 'Fiş hatalı girildi' }));
+    const reopened = await w.getAdvance(adv.advance.id);
+    expect(reopened.advance).toMatchObject({ status: 'open', settledAmount: '0.00', openAmount: '1000.00' });
+    expect(reopened.settlements[0].reversedAt).toBeTruthy();
+    expect((await w.balances()).find(r => r.employeeId === employee.id)).toMatchObject({ advanceExpensed: '0.00', openAdvance: '1000.00' });
+    const direct = (await ok(w.c.post('/api/expense-entries', { ...body, advanceId: null, net: '150' }), 201)).entry;
+    expect(direct).toMatchObject({ advanceId: null, advanceAppliedAmount: '0.00', payable: '150.0000' });
+    const viewer = await addMember(app, w.c, w.company.id, 'viewer');
+    expect((await viewer.client.post('/api/expense-entries', body)).statusCode).toBe(403);
+  });
+
+  it('aynı avansa eşzamanlı masraf yazımı bakiyeyi aşmaz; yanlış personel, eksik ödeme ve şirket dışı avans reddedilir', async () => {
+    const w = await world('MasrafEszamanli');
+    const employee = await w.mkEmp();
+    const otherEmployee = await w.mkEmp({ fullName: 'Başka Personel' });
+    const bank = await w.bank();
+    const adv = await w.advance(employee.id, bank.id, '1000');
+    const account = (await ok(w.c.get('/api/accounts'))).accounts.find((a: any) => a.code === '632');
+    const card = (await ok(w.c.post('/api/expense-cards', { code: 'YOL', name: 'Yol masrafı', accountId: account.id }), 201)).card;
+    const body = { cardId: card.id, entryDate: TODAY, description: 'Yol masrafı', net: '700', paymentKind: 'employee', employeeId: employee.id, advanceId: adv.advance.id };
+    expect((await w.c.post('/api/expense-entries', { ...body, employeeId: otherEmployee.id })).json().error.code).toBe('EXPENSE_ADVANCE_EMPLOYEE');
+    const results = await Promise.all([w.c.post('/api/expense-entries', body), w.c.post('/api/expense-entries', body)]);
+    expect(results.map(r => r.statusCode).sort()).toEqual([201, 422]);
+    expect(results.find(r => r.statusCode === 422)!.json().error.code).toBe('EXPENSE_REIMBURSEMENT_ACCOUNT');
+    expect((await w.getAdvance(adv.advance.id)).advance).toMatchObject({ settledAmount: '700.00', openAmount: '300.00' });
+    const other = await world('MasrafIzolasyon');
+    expect((await other.c.post('/api/expense-entries', body)).statusCode).toBe(404);
+    const future = `${Number(TODAY.slice(0, 4)) + 1}-01-01`;
+    expect((await w.c.post('/api/expense-entries', { ...body, entryDate: future })).json().error.code).toBe('EMPLOYEE_EXPENSE_FUTURE');
+  });
+
   it('avans verme: kasa/banka ödemesi + yevmiye (borç personel avansları), bakiye, sicil, ekstre; döviz hesabı ve geleceğe tarih reddedilir; iptal ters kayıt yazar', async () => {
     const w = await world('XcAvans');
     const e = await w.mkEmp({ fullName: 'Avans Alan' });

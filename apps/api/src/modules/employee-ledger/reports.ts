@@ -44,13 +44,14 @@ const LEDGER_SQL = sql`
     from employee_advances a where a.status <> 'cancelled'
   union all
   select a.employee_id, s.settled_date,
-         case s.kind when 'payroll' then 'advance_deduction' else 'advance_repayment' end,
+         case s.kind when 'payroll' then 'advance_deduction' when 'expense' then 'advance_expense' else 'advance_repayment' end,
          a.number,
-         case s.kind when 'payroll' then 'Bordrodan avans kesintisi ' || coalesce(r.number, '') else 'Avans geri ödemesi' end,
+         case s.kind when 'payroll' then 'Bordrodan avans kesintisi ' || coalesce(r.number, '') when 'expense' then 'Gider fişiyle avans mahsubu ' || coalesce(ex.entry_no,'') else 'Avans geri ödemesi' end,
          s.amount
     from employee_advance_settlements s
     join employee_advances a on a.id = s.advance_id
     left join payroll_runs r on r.id = s.payroll_run_id
+    left join expense_entries ex on ex.id = s.expense_entry_id
    where s.reversed_at is null
   union all
   select p.employee_id, p.pay_date, 'salary_payment', t.txn_no, coalesce(p.note, 'Net maaş ödemesi'), p.amount
@@ -68,6 +69,7 @@ interface BalRow extends Record<string, unknown> {
   advanceGiven: string;
   advanceDeducted: string;
   advanceRepaid: string;
+  advanceExpensed: string;
 }
 
 /** Personel bakiye listesi: kim kime borçlu. Hareketi ya da carisi olan personel listelenir. */
@@ -84,7 +86,8 @@ export async function employeeBalances(tx: Tx, q: { asOf?: string; query?: strin
            coalesce(sum(led.amount) filter (where led.kind = 'salary_payment'), 0)::text as "salaryPaid",
            coalesce(sum(led.amount) filter (where led.kind = 'advance'), 0)::text as "advanceGiven",
            coalesce(sum(led.amount) filter (where led.kind = 'advance_deduction'), 0)::text as "advanceDeducted",
-           coalesce(sum(led.amount) filter (where led.kind = 'advance_repayment'), 0)::text as "advanceRepaid"
+           coalesce(sum(led.amount) filter (where led.kind = 'advance_repayment'), 0)::text as "advanceRepaid",
+           coalesce(sum(led.amount) filter (where led.kind = 'advance_expense'), 0)::text as "advanceExpensed"
       from employees e
       left join led on led.employee_id = e.id and led.d <= ${asOf}::date
      where true ${where}
@@ -97,10 +100,30 @@ export async function employeeBalances(tx: Tx, q: { asOf?: string; query?: strin
     const b = employeeBalance(r);
     if (dec(b.net).gt(0)) owedToEmployees = owedToEmployees.plus(b.net);
     if (dec(b.net).lt(0)) owedByEmployees = owedByEmployees.plus(dec(b.net).abs());
-    return { ...r, salaryNet: dec(r.salaryNet).toFixed(2), salaryPaid: dec(r.salaryPaid).toFixed(2), advanceGiven: dec(r.advanceGiven).toFixed(2), advanceDeducted: dec(r.advanceDeducted).toFixed(2), advanceRepaid: dec(r.advanceRepaid).toFixed(2), ...b };
+    return {
+      ...r,
+      salaryNet: dec(r.salaryNet).toFixed(2),
+      salaryPaid: dec(r.salaryPaid).toFixed(2),
+      advanceGiven: dec(r.advanceGiven).toFixed(2),
+      advanceDeducted: dec(r.advanceDeducted).toFixed(2),
+      advanceRepaid: dec(r.advanceRepaid).toFixed(2),
+      advanceExpensed: dec(r.advanceExpensed).toFixed(2),
+      ...b,
+    };
   });
-  await logLedgerAccess(tx, rows.map((r) => r.employeeId), 'Personel bakiye listesi görüntüleme');
-  return { asOf: q.asOf ?? null, rows, totals: { owedToEmployees: owedToEmployees.toFixed(2), owedByEmployees: owedByEmployees.toFixed(2) } };
+  await logLedgerAccess(
+    tx,
+    rows.map((r) => r.employeeId),
+    'Personel bakiye listesi görüntüleme',
+  );
+  return {
+    asOf: q.asOf ?? null,
+    rows,
+    totals: {
+      owedToEmployees: owedToEmployees.toFixed(2),
+      owedByEmployees: owedByEmployees.toFixed(2),
+    },
+  };
 }
 
 interface AdvRow extends Record<string, unknown> {
@@ -118,7 +141,10 @@ interface AdvRow extends Record<string, unknown> {
 }
 
 /** Avans sicili: tarih itibarıyla kalan tutar ve yaşlandırma (avans tarihinden bu yana gün). */
-export async function advanceRegister(tx: Tx, q: { status?: string; employeeId?: string; asOf?: string }) {
+export async function advanceRegister(
+  tx: Tx,
+  q: { status?: string; employeeId?: string; asOf?: string },
+) {
   // Tarih verilmezse güncel durum (tüm kapamalar); yaş bugüne göre hesaplanır
   const asOf = q.asOf ?? '9999-12-31';
   const ageRef = q.asOf ?? todayIso();
@@ -138,7 +164,10 @@ export async function advanceRegister(tx: Tx, q: { status?: string; employeeId?:
      order by a.advance_date desc, a.number desc
      limit ${maxReportRows() + 1}`);
   assertReportSize(res.rows.length);
-  const buckets = Object.fromEntries(AGING_BUCKETS.map((b) => [b, dec(0)])) as Record<AgingBucket, ReturnType<typeof dec>>;
+  const buckets = Object.fromEntries(AGING_BUCKETS.map((b) => [b, dec(0)])) as Record<
+    AgingBucket,
+    ReturnType<typeof dec>
+  >;
   let openTotal = dec(0);
   const rows = res.rows.map((r) => {
     const open = r.status === 'cancelled' ? dec(0) : dec(r.amount).minus(r.settled);
@@ -148,19 +177,46 @@ export async function advanceRegister(tx: Tx, q: { status?: string; employeeId?:
       buckets[bucket] = buckets[bucket].plus(open);
       openTotal = openTotal.plus(open);
     }
-    return { ...r, amount: dec(r.amount).toFixed(2), settled: dec(r.settled).toFixed(2), open: open.toFixed(2), ageDays, bucket };
+    return {
+      ...r,
+      amount: dec(r.amount).toFixed(2),
+      settled: dec(r.settled).toFixed(2),
+      open: open.toFixed(2),
+      ageDays,
+      bucket,
+    };
   });
-  await logLedgerAccess(tx, rows.map((r) => r.employeeId), 'Avans sicili görüntüleme');
+  await logLedgerAccess(
+    tx,
+    rows.map((r) => r.employeeId),
+    'Avans sicili görüntüleme',
+  );
   return {
     asOf: ageRef,
     rows,
-    totals: { open: openTotal.toFixed(2), buckets: Object.fromEntries(AGING_BUCKETS.map((b) => [b, buckets[b].toFixed(2)])) as Record<AgingBucket, string> },
+    totals: {
+      open: openTotal.toFixed(2),
+      buckets: Object.fromEntries(AGING_BUCKETS.map((b) => [b, buckets[b].toFixed(2)])) as Record<
+        AgingBucket,
+        string
+      >,
+    },
   };
 }
 
 /** Bir personelin cari ekstresi (açılış bakiyesi + hareketler). */
-export async function employeeStatement(tx: Tx, employeeId: string, q: { from: string; to: string }) {
-  const emp = await tx.execute<{ id: string; code: string; fullName: string; partyId: string | null; partyCode: string | null }>(sql`
+export async function employeeStatement(
+  tx: Tx,
+  employeeId: string,
+  q: { from: string; to: string },
+) {
+  const emp = await tx.execute<{
+    id: string;
+    code: string;
+    fullName: string;
+    partyId: string | null;
+    partyCode: string | null;
+  }>(sql`
     select e.id, e.code, e.full_name as "fullName", e.party_id as "partyId", p.code as "partyCode"
       from employees e left join parties p on p.id = e.party_id where e.id = ${employeeId}`);
   const employee = emp.rows[0];
@@ -170,15 +226,29 @@ export async function employeeStatement(tx: Tx, employeeId: string, q: { from: s
     select coalesce(sum(amount) filter (where kind in ('salary_net','advance_deduction','advance_repayment')), 0)::text as credit,
            coalesce(sum(amount) filter (where kind in ('salary_payment','advance')), 0)::text as debit
       from led where employee_id = ${employeeId} and d < ${q.from}::date`);
-  const lines = await tx.execute<{ d: string; kind: LedgerKind; ref: string; description: string; amount: string }>(sql`
+  const lines = await tx.execute<{
+    d: string;
+    kind: LedgerKind;
+    ref: string;
+    description: string;
+    amount: string;
+  }>(sql`
     with led as (${LEDGER_SQL})
     select d::text as d, kind, ref, description, amount::text as amount
       from led where employee_id = ${employeeId} and d between ${q.from}::date and ${q.to}::date
      order by d, ref
      limit ${maxReportRows() + 1}`);
   assertReportSize(lines.rows.length);
-  const openingNet = dec(opening.rows[0]?.credit ?? 0).minus(opening.rows[0]?.debit ?? 0).toFixed(2);
-  const rows: LedgerRowInput[] = lines.rows.map((r) => ({ date: r.d, kind: r.kind, ref: r.ref, description: r.description, amount: dec(r.amount).toFixed(2) }));
+  const openingNet = dec(opening.rows[0]?.credit ?? 0)
+    .minus(opening.rows[0]?.debit ?? 0)
+    .toFixed(2);
+  const rows: LedgerRowInput[] = lines.rows.map((r) => ({
+    date: r.d,
+    kind: r.kind,
+    ref: r.ref,
+    description: r.description,
+    amount: dec(r.amount).toFixed(2),
+  }));
   const st = buildEmployeeStatement(openingNet, rows);
   const open = await advanceRegister(tx, { employeeId, status: 'outstanding', asOf: q.to });
   await logLedgerAccess(tx, [employeeId], 'Personel cari ekstresi görüntüleme');

@@ -9,6 +9,8 @@ import {
   sum,
   todayIso,
   toDbAmount,
+  toDbRate,
+  applyRate,
   type AccountMappingKey,
   type ChequeActionInput,
   type ChequeListQuery,
@@ -27,12 +29,13 @@ import { assertAllocatable, openItemsFor } from '../parties/service';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { lockTreasuryAccounts, type TreasuryAccountRow } from '../treasury/accounts';
-import { buildSettlementJournal, planSettlement, type SettleItemInput } from '../treasury/journal';
+import { buildExchangeJournal,buildSettlementJournal, planSettlement, type SettleItemInput } from '../treasury/journal';
+import { requireRate } from '../settings/rates';
 import { trContains } from '../../db/search';
 import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 /**
- * Çek/senet yaşam döngüsü ve yevmiyeleri (Faz X1). Tek para birimi: defter para birimi (döviz çek/senet yoktur: belgelenmiş sınır).
+ * Çek/senet yaşam döngüsü: belge para birimi, sabit kayıt değeri ve tahsil/ödeme kur farkı.
  * Kayıt, tahsilat/ödeme gibi cariyi kapatır: alınan çek B portföy / A 120, verilen çek B 320 / A 103 (ya da senet hesapları).
  * Sonraki her durum değişikliği YENİ bir yevmiyedir (ters kayıt yok): karşılıksız/iade/ciro iadesi cariye yeni bir açık kalem yazar.
  * Hesap eşlemeleri doğrulanmamış varsayılanlardır (LEGAL-NOTES).
@@ -53,16 +56,17 @@ const BATCH_PREFIX = 'CTK';
 
 type ChequeRow = typeof cheques.$inferSelect;
 
-/** Defter para birimindeki tek satır (alınan/verilen çek yalnızca defter para biriminde). */
-function line(ctx: LedgerCtx, side: 'debit' | 'credit', accountId: string, amount: MoneyValue, extra: Partial<AutoJournalLine> = {}): AutoJournalLine {
+/** Belge tutarı ve defter karşılığı ayrı korunur. */
+function line(ctx: LedgerCtx, side: 'debit' | 'credit', accountId: string, amount: MoneyValue, extra: Partial<AutoJournalLine> = {},currency=ctx.baseCurrency,base:MoneyValue=amount): AutoJournalLine {
   const a = toDbAmount(amount);
   return {
     accountId,
-    currency: ctx.baseCurrency as AutoJournalLine['currency'],
+    currency: currency as AutoJournalLine['currency'],
+    ...(currency!==ctx.baseCurrency?{fxRate:toDbRate(base.div(amount))}:{}),
     debit: side === 'debit' ? a : '0',
     credit: side === 'credit' ? a : '0',
-    debitBase: side === 'debit' ? a : '0',
-    creditBase: side === 'credit' ? a : '0',
+    debitBase: side === 'debit' ? toDbAmount(base) : '0',
+    creditBase: side === 'credit' ? toDbAmount(base) : '0',
     ...extra,
   };
 }
@@ -72,11 +76,11 @@ function docKey(direction: string, docType: string): AccountMappingKey {
   return docType === 'cheque' ? 'cheque_issued' : 'note_payable';
 }
 
-function requireBankAccount(ctx: LedgerCtx, ta: TreasuryAccountRow) {
+function requireBankAccount(currency: string, ta: TreasuryAccountRow) {
   if (ta.kind !== 'bank') throw unprocessable('Çek/senet işlemi için banka hesabı seçilmeli (kasa değil)', 'CHEQUE_BANK_KIND');
   if (!ta.isActive) throw unprocessable(`${ta.name} hesabı pasif`, 'TREASURY_ACCOUNT_INACTIVE');
-  if (ta.currencyCode !== ctx.baseCurrency) {
-    throw unprocessable(`${ta.name} hesabı ${ta.currencyCode} cinsindendir; çek/senet yalnızca ${ctx.baseCurrency} banka hesabıyla işlenir`, 'CHEQUE_BANK_CURRENCY');
+  if (ta.currencyCode !== currency) {
+    throw unprocessable(`${ta.name} hesabı ${ta.currencyCode} cinsindendir; ${currency} banka hesabı seçin.`, 'CHEQUE_BANK_CURRENCY');
   }
 }
 
@@ -84,7 +88,7 @@ function requireBankAccount(ctx: LedgerCtx, ta: TreasuryAccountRow) {
 
 const COLS = sql`c.id, c.direction, c.doc_type as "docType", c.doc_no as "docNo", c.bank_name as "bankName", c.branch,
   c.party_id as "partyId", p.code as "partyCode", p.name as "partyName", c.amount::text as amount, c.currency_code as "currencyCode",
-  c.issue_date::text as "issueDate", c.due_date::text as "dueDate", c.status, c.holder_party_id as "holderPartyId", hp.name as "holderName",
+  c.amount_base::text as "amountBase",c.fx_rate::text as "fxRate",c.issue_date::text as "issueDate", c.due_date::text as "dueDate", c.status, c.holder_party_id as "holderPartyId", hp.name as "holderName",
   c.bank_account_id as "bankAccountId", ta.name as "bankAccountName", c.description, c.entry_id as "entryId", je.entry_no as "entryNo",
   (select max(e.event_date)::text from cheque_events e where e.cheque_id = c.id) as "lastEventDate"`;
 const FROM = sql`from cheques c
@@ -105,6 +109,8 @@ export type ChequeView = {
   partyName: string;
   amount: string;
   currencyCode: string;
+  amountBase: string;
+  fxRate: string|null;
   issueDate: string;
   dueDate: string;
   status: string;
@@ -135,7 +141,7 @@ export async function listCheques(tx: Tx, q: Omit<ChequeListQuery, 'limit' | 'of
      order by c.due_date, c.doc_no ${pageSql(page)}`);
   const pg = paged(res.rows, page);
   const summary = await tx.execute<{ direction: string; status: string; count: number; amount: string }>(sql`
-    select c.direction, c.status, count(*)::int as count, sum(c.amount)::numeric(19,2)::text as amount
+    select c.direction, c.status, count(*)::int as count, sum(c.amount_base)::numeric(19,2)::text as amount
       from cheques c group by c.direction, c.status order by c.direction, c.status`);
   return { cheques: pg.rows, truncated: pg.truncated, summary: summary.rows, asOf: todayIso() };
 }
@@ -166,6 +172,8 @@ export async function createCheque(tx: Tx, ctx: LedgerCtx, input: CreateChequeIn
   const received = input.direction === 'received';
   const control: PartyControlType = received ? 'receivable' : 'payable';
   const amount = dec(input.amount);
+  const currency=input.currency??ctx.baseCurrency;
+  const rate=currency===ctx.baseCurrency?dec(1):input.fxRate?dec(input.fxRate):await requireRate(tx,currency,ctx.baseCurrency,date,ctx.baseCurrency);
 
   const [party] = await tx.select().from(parties).where(eq(parties.id, input.partyId)).for('update');
   if (!party) throw unprocessable('Cari bulunamadı', 'PARTY_NOT_FOUND');
@@ -194,7 +202,7 @@ export async function createCheque(tx: Tx, ctx: LedgerCtx, input: CreateChequeIn
     return { lineId: it.lineId, currency: o.currencyCode, remainingDoc: dec(o.remaining), remainingBase: dec(o.remainingBase), amount: dec(it.amount), settleAmount: dec(it.settleAmount) };
   });
   await assertAllocatable(tx, control, input.items);
-  const plan = planSettlement({ kind: received ? 'receipt' : 'payment', amount, rate: dec(1), currency: ctx.baseCurrency, items });
+  const plan = planSettlement({ kind: received ? 'receipt' : 'payment', amount, rate, currency, items });
   const key = docKey(input.direction, input.docType);
   const fxKeys: AccountMappingKey[] = [...(plan.fxGain.gt(0) ? (['fx_gain'] as const) : []), ...(plan.fxLoss.gt(0) ? (['fx_loss'] as const) : [])];
   const map = await requireMappings(tx, [key, control, ...fxKeys] as AccountMappingKey[]);
@@ -205,7 +213,7 @@ export async function createCheque(tx: Tx, ctx: LedgerCtx, input: CreateChequeIn
     baseCurrency: ctx.baseCurrency,
     plan,
     items: items.map((it) => ({ ...it, description: text })),
-    treasury: { accountId: map[key], currency: ctx.baseCurrency, amount, rate: dec(1) },
+    treasury: { accountId: map[key], currency, amount, rate },
     partyId: party.id,
     controlAccountId: map[control],
     fxGainAccountId: (map as Record<string, string>).fx_gain,
@@ -229,7 +237,8 @@ export async function createCheque(tx: Tx, ctx: LedgerCtx, input: CreateChequeIn
     branch: input.branch?.trim() || null,
     partyId: party.id,
     amount: toDbAmount(amount),
-    currencyCode: ctx.baseCurrency,
+    currencyCode: currency,
+    amountBase:toDbAmount(plan.treasuryBase),fxRate:currency===ctx.baseCurrency?null:toDbRate(rate),
     issueDate: input.issueDate,
     dueDate: input.dueDate,
     status: CHEQUE_INITIAL_STATUS[input.direction],
@@ -301,6 +310,8 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
   const pre = await tx.select().from(cheques).where(inArray(cheques.id, ids));
   if (pre.length !== ids.length) throw notFound('Çek/senet');
   const direction = pre[0]!.direction as 'received' | 'issued';
+  const currency=pre[0]!.currencyCode;
+  if(pre.some(c=>c.currencyCode!==currency))throw unprocessable('Takas işlemi için aynı para birimindeki belgeleri seçin.','CHEQUE_MIXED_CURRENCY');
   if (pre.some((c) => c.direction !== direction)) throw unprocessable('Alınan ve verilen belgeler aynı işlemde yapılamaz', 'CHEQUE_MIXED_DIRECTION');
   const tr = chequeTransition(direction, input.action);
   if (!tr) throw unprocessable(`${direction === 'received' ? 'Alınan' : 'Verilen'} belgeler için "${ACTION_LABEL[input.action]}" eylemi yoktur`, 'CHEQUE_ACTION_INVALID');
@@ -316,7 +327,7 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
   let bank: TreasuryAccountRow | null = null;
   if (bankId) {
     bank = (await lockTreasuryAccounts(tx, [bankId])).get(bankId)!;
-    requireBankAccount(ctx, bank);
+    requireBankAccount(currency, bank);
   }
 
   let endorsee: typeof parties.$inferSelect | null = null;
@@ -344,11 +355,16 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
   }
 
   const total = sum(rows.map((c) => c.amount));
+  const totalBase=sum(rows.map(c=>c.amountBase));
+  const carryingRate=totalBase.div(total);
+  const bankRate=input.action==='collect'||input.action==='pay'?(currency===ctx.baseCurrency?dec(1):input.fxRate?dec(input.fxRate):await requireRate(tx,currency,ctx.baseCurrency,date,ctx.baseCurrency)):carryingRate;
+  const bankBase=applyRate(total,bankRate);
   const year = isoYear(date);
   const text = (c?: ChequeRow) => (c ? `${ACTION_LABEL[input.action]}: ${DOC_LABEL[c.docType as 'cheque' | 'note']} ${c.docNo}` : `${ACTION_LABEL[input.action]}`);
 
   // Gerekli hesap eşlemeleri
   const keys = new Set<AccountMappingKey>();
+  if((input.action==='collect'||input.action==='pay')&&!bankBase.eq(totalBase)){keys.add('fx_gain');keys.add('fx_loss');}
   const usesDocAccount = !(input.action === 'collect' || (input.action === 'bounce' && direction === 'received'));
   if (usesDocAccount) for (const c of rows) keys.add(docKey(direction, c.docType));
   if (input.action === 'deposit' || input.action === 'collect' || (input.action === 'bounce' && direction === 'received')) keys.add('docs_in_collection');
@@ -372,7 +388,10 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
     const used = settleItems.reduce((s, i) => s.plus(i.settleAmount), dec(0));
     if (used.gt(total)) throw unprocessable('Kalemlere ayrılan tutar belge toplamını aşıyor', 'ALLOCATION_EXCEEDS_AMOUNT');
     await assertAllocatable(tx, 'payable', input.items);
-    plan = planSettlement({ kind: 'payment', amount: total, rate: dec(1), currency: ctx.baseCurrency, items: settleItems });
+    plan = planSettlement({ kind: 'payment', amount: total, rate: carryingRate, currency, items: settleItems });
+    const delta=totalBase.minus(plan.treasuryBase);
+    if(delta.gt(0))plan.fxLoss=plan.fxLoss.plus(delta);else plan.fxGain=plan.fxGain.plus(delta.abs());
+    plan.treasuryBase=totalBase;
     if (plan.fxGain.gt(0)) keys.add('fx_gain');
     if (plan.fxLoss.gt(0)) keys.add('fx_loss');
   }
@@ -387,28 +406,28 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
 
   // Hesap bazında toplanan (cari olmayan) tutarlar
   const byAccount = (rs: ChequeRow[]) => {
-    const m = new Map<string, MoneyValue>();
-    for (const c of rs) m.set(acct(c), (m.get(acct(c)) ?? dec(0)).plus(c.amount));
+    const m = new Map<string, {amount:MoneyValue;base:MoneyValue}>();
+    for (const c of rs) {const prior=m.get(acct(c))??{amount:dec(0),base:dec(0)};m.set(acct(c),{amount:prior.amount.plus(c.amount),base:prior.base.plus(c.amountBase)});}
     return m;
   };
   const accountLines = (side: 'debit' | 'credit', rs: ChequeRow[], description: string) =>
-    [...byAccount(rs)].map(([accountId, amt]) => line(ctx, side, accountId, amt, { description }));
+    [...byAccount(rs)].map(([accountId, amt]) => line(ctx, side, accountId, amt.amount, { description },currency,amt.base));
   const partyLines = (rs: ChequeRow[], side: 'debit' | 'credit', accountId: string, partyOf: (c: ChequeRow) => string) =>
-    rs.map((c) => line(ctx, side, accountId, dec(c.amount), { partyId: partyOf(c), dueDate: date, description: text(c).slice(0, 300) }));
+    rs.map((c) => line(ctx, side, accountId, dec(c.amount), { partyId: partyOf(c), dueDate: date, description: text(c).slice(0, 300) },currency,dec(c.amountBase)));
 
   let lines: AutoJournalLine[] = [];
   let itemLineIndex: number[] = [];
   switch (input.action) {
     case 'deposit':
-      lines = [line(ctx, 'debit', map.docs_in_collection!, total, { description: heading }), ...accountLines('credit', rows, heading)];
+      lines = [line(ctx, 'debit', map.docs_in_collection!, total, { description: heading },currency,totalBase), ...accountLines('credit', rows, heading)];
       break;
     case 'collect':
-      lines = [line(ctx, 'debit', bank!.accountId, total, { description: heading }), line(ctx, 'credit', map.docs_in_collection!, total, { description: heading })];
+      lines = buildExchangeJournal({baseCurrency:ctx.baseCurrency,from:{accountId:map.docs_in_collection!,currency,amount:total,baseValue:totalBase},to:{accountId:bank!.accountId,currency,amount:total,baseValue:bankBase},fxGainAccountId:map.fx_gain,fxLossAccountId:map.fx_loss,text:heading});
       break;
     case 'bounce':
       lines =
         direction === 'received'
-          ? [...partyLines(rows, 'debit', map.receivable!, (c) => c.partyId), line(ctx, 'credit', map.docs_in_collection!, total, { description: heading })]
+          ? [...partyLines(rows, 'debit', map.receivable!, (c) => c.partyId), line(ctx, 'credit', map.docs_in_collection!, total, { description: heading },currency,totalBase)]
           : [...accountLines('debit', rows, heading), ...partyLines(rows, 'credit', map.payable!, (c) => c.partyId)];
       break;
     case 'return':
@@ -418,7 +437,7 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
       lines = [...accountLines('debit', rows, heading), ...partyLines(rows, 'credit', map.payable!, (c) => c.holderPartyId!)];
       break;
     case 'pay':
-      lines = [...accountLines('debit', rows, heading), line(ctx, 'credit', bank!.accountId, total, { description: heading })];
+      {const j=buildExchangeJournal({baseCurrency:ctx.baseCurrency,from:{accountId:bank!.accountId,currency,amount:total,baseValue:bankBase},to:{accountId:acct(rows[0]!),currency,amount:total,baseValue:totalBase},fxGainAccountId:map.fx_gain,fxLossAccountId:map.fx_loss,text:heading});lines=[...accountLines('debit',rows,heading),j[0]!,...j.slice(2)];}
       break;
     case 'cancel':
       lines = [...accountLines('debit', rows, heading), ...partyLines(rows, 'credit', map.payable!, (c) => c.partyId)];
@@ -429,7 +448,7 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
         baseCurrency: ctx.baseCurrency,
         plan: plan!,
         items: settleItems.map((it) => ({ ...it, description: heading })),
-        treasury: { accountId: acct(rows[0]!), currency: ctx.baseCurrency, amount: total, rate: dec(1) },
+        treasury: { accountId: acct(rows[0]!), currency, amount: total, rate: carryingRate },
         partyId: endorsee!.id,
         controlAccountId: map.payable!,
         fxGainAccountId: map.fx_gain,
@@ -455,6 +474,7 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
     bankAccountId: bank?.id ?? null,
     partyId: endorsee?.id ?? null,
     total: toDbAmount(total),
+    totalBase:toDbAmount(totalBase),currencyCode:currency,
     docCount: rows.length,
     entryId: entry.id,
     note: input.note?.trim() || null,
@@ -495,13 +515,13 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
   }
 
   const detail = await tx.execute<ChequeView>(sql`select ${COLS} ${FROM} where c.id in (${uuidList(ids)}) order by c.due_date, c.doc_no`);
-  return { batch: { id: batchId, batchNo, action: input.action, eventDate: date, total: dec(total).toFixed(2), docCount: rows.length, entryId: entry.id }, cheques: detail.rows };
+  return { batch: { id: batchId, batchNo, action: input.action, eventDate: date, total: dec(total).toFixed(2),totalBase:toDbAmount(totalBase),currencyCode:currency, docCount: rows.length, entryId: entry.id }, cheques: detail.rows };
 }
 
 /** Toplu işlem (takas) geçmişi: son N işlem. */
 export async function listBatches(tx: Tx, limit = 100) {
   const res = await tx.execute<Record<string, unknown>>(sql`
-    select b.id, b.batch_no as "batchNo", b.action, b.event_date::text as "eventDate", b.total::text as total, b.doc_count as "docCount",
+    select b.id, b.batch_no as "batchNo", b.action, b.event_date::text as "eventDate", b.total::text as total,b.total_base::text as "totalBase",b.currency_code as "currencyCode", b.doc_count as "docCount",
            ta.name as "bankAccountName", p.name as "partyName", je.entry_no as "entryNo", b.entry_id as "entryId", b.note
       from cheque_batches b
       left join treasury_accounts ta on ta.id = b.bank_account_id and ta.company_id = b.company_id

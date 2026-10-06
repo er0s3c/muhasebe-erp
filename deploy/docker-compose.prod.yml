@@ -85,10 +85,22 @@ services:
       # Uzaktan güncelleme (kurulum sihirbazı yazar): ana makinedeki güncelleyiciyle paylaşılan belirteç ve kit hedefi
       ERP_UPDATER_TOKEN: ${ERP_UPDATER_TOKEN:-}
       ERP_KIT_TARGET: ${ERP_KIT_TARGET:-}
+      CONSTRUCTION_STORAGE_DIR: /var/lib/erp-construction
+      BACKUP_DATABASE_URL: ${BACKUP_DATABASE_URL:-}
+      BACKUP_SIGNING_KEY: ${BACKUP_SIGNING_KEY:-}
+      BACKUP_DIRECTORY: /var/lib/erp-backups
+      CONSTRUCTION_PYTHON: ${CONSTRUCTION_PYTHON:-/opt/construction/bin/python}
+      CONSTRUCTION_TESSDATA_DIR: ${CONSTRUCTION_TESSDATA_DIR:-/opt/construction-tessdata}
+      CONSTRUCTION_JOBS_ENABLED: ${CONSTRUCTION_JOBS_ENABLED:-true}
+      CONSTRUCTION_AI_URL: ${CONSTRUCTION_AI_URL:-}
+      CONSTRUCTION_AI_KEY: ${CONSTRUCTION_AI_KEY:-}
+      CONSTRUCTION_AI_MODEL: ${CONSTRUCTION_AI_MODEL:-}
     extra_hosts:
       # Ana makinedeki hizmetlere (örn. yerel lisans sunucusu, SMTP geçidi) host.docker.internal adıyla erişim
       - 'host.docker.internal:host-gateway'
     volumes:
+      - ${CONSTRUCTION_FILES_DIR:-./construction-data}:/var/lib/erp-construction
+      - ${BACKUP_FILES_DIR:-./backups}:/var/lib/erp-backups
       # Lisans parmak izi: ana makinenin kimliği (yalnızca okuma). Dosya yoksa compose başlamayı reddeder (ana makinede oluşturun:
       # systemd-machine-id-setup). Bu kimlik olmadan lisans yalnızca veritabanı kümesine bağlanır (klon koruması zayıf).
       - type: bind

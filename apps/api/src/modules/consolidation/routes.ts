@@ -40,8 +40,8 @@ const exportParam = z.object({ id: uuid, key: z.enum(EXPORT_KEYS) });
  */
 export const consolidationRoutes: FastifyPluginAsync = async (app) => {
   /** Ağır uçlar: kullanıcı başına dakikada en çok 30 (RATE_LIMIT_ENABLED iken). */
-  const limit = (ctx: AuthCtx, name: string) => {
-    const r = app.limiter.consume(`${name}:${ctx.user.id}`, 30, 60_000);
+  const limit = async (ctx: AuthCtx, name: string) => {
+    const r = await app.limiter.consume(`${name}:${ctx.user.id}`, 30, 60_000);
     if (!r.ok) {
       void ctx.reply.header('retry-after', String(r.retryAfterSec));
       throw new AppError(429, 'RATE_LIMITED', 'Çok fazla istek; lütfen biraz sonra tekrar deneyin');
@@ -110,28 +110,28 @@ export const consolidationRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     '/api/consolidation/groups/:id/report',
     authedRoute(app, async (ctx) => {
-      limit(ctx, 'consolidation');
+      await limit(ctx, 'consolidation');
       return { report: await consolidatedReport(app, ctx, idParam.parse(ctx.req.params).id, consolidationReportQuerySchema.parse(ctx.req.query)) };
     }),
   );
   app.get(
     '/api/consolidation/groups/:id/fx-position',
     authedRoute(app, async (ctx) => {
-      limit(ctx, 'consolidation');
+      await limit(ctx, 'consolidation');
       return { report: await groupFxPosition(app, ctx, idParam.parse(ctx.req.params).id, fxPositionQuerySchema.parse(ctx.req.query)) };
     }),
   );
   app.get(
     '/api/consolidation/groups/:id/executive-summary',
     authedRoute(app, async (ctx) => {
-      limit(ctx, 'consolidation');
+      await limit(ctx, 'consolidation');
       return { report: await groupExecutive(app, ctx, idParam.parse(ctx.req.params).id, executiveSummaryQuerySchema.parse(ctx.req.query)) };
     }),
   );
   app.get(
     '/api/consolidation/groups/:id/intercompany-hints',
     authedRoute(app, async (ctx) => {
-      limit(ctx, 'consolidation');
+      await limit(ctx, 'consolidation');
       return intercompanyHints(app, ctx, idParam.parse(ctx.req.params).id, intercompanyHintsQuerySchema.parse(ctx.req.query).asOf);
     }),
   );
@@ -140,7 +140,7 @@ export const consolidationRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     '/api/consolidation/groups/:id/export/:key',
     authedRoute(app, async (ctx) => {
-      limit(ctx, 'consolidation-export');
+      await limit(ctx, 'consolidation-export');
       const { id, key } = exportParam.parse(ctx.req.params);
       const { format } = formatSchema.parse(ctx.req.query);
       if (!app.exportGate.tryAcquire()) {

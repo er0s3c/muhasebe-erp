@@ -38,6 +38,12 @@ const envSchema = z
     HOST: z.string().default('0.0.0.0'),
     /** Çalışma zamanı bağlantısı (RLS'e tabi rol). Sahip rolünün bağlantısı buraya konmaz. */
     DATABASE_URL: z.string().min(1),
+    BACKUP_DATABASE_URL: z.string().optional(),
+    BACKUP_DIRECTORY: z.string().default('data/backups'),
+    BACKUP_PG_BIN: z.string().default(''),
+    BACKUP_SIGNING_KEY: z.preprocess(v=>v===''?undefined:v,z.string().min(32).optional()),
+    /** Local development only; production uses native PostgreSQL clients. */
+    BACKUP_DOCKER_CONTAINER: z.string().regex(/^[a-zA-Z0-9_.-]+$/).optional(),
     JWT_SECRET: z.string().min(32, 'JWT_SECRET en az 32 karakter olmalı'),
     /**
      * İzinli tarayıcı kökenleri (virgülle). Üretimde web arayüzü API ile aynı kökenden sunulduğundan
@@ -50,6 +56,7 @@ const envSchema = z
     SESSION_MAX_DAYS: z.coerce.number().int().min(1).default(90),
     /** Testlerde kapatılır. */
     RATE_LIMIT_ENABLED: flag(true),
+    RATE_LIMIT_STORE: z.enum(['memory','postgres']).optional(),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
     TRUST_PROXY: z.string().default('false').transform(parseTrustProxy),
     /** Yenileme çerezi `Secure` bayrağı; varsayılan yalnızca production'da açık (düz http'de tarayıcı çerezi atar). */
@@ -80,6 +87,13 @@ const envSchema = z
     APP_BASE_URL: z.string().url().optional(),
     /** Derlenmiş web arayüzü klasörü (apps/web/dist); verilirse API aynı kökenden arayüzü de sunar. */
     WEB_DIST_DIR: z.string().optional(),
+    CONSTRUCTION_STORAGE_DIR: z.string().default('data/construction'),
+    CONSTRUCTION_PYTHON: z.string().default('python'),
+    CONSTRUCTION_TESSDATA_DIR: z.string().default('data/construction-runtime/tessdata'),
+    CONSTRUCTION_JOBS_ENABLED: flag(true),
+    CONSTRUCTION_AI_URL: z.url().startsWith('https://').optional(),
+    CONSTRUCTION_AI_KEY: z.string().optional(),
+    CONSTRUCTION_AI_MODEL: z.string().default(''),
     /**
      * Lisans sunucusu (satıcı) adresi; verilmezse derlemede gömülen adres kullanılır. Sahte bir sunucu kira üretemez
      * (kiralar derlemeye gömülü satıcı anahtarıyla doğrulanır); yine de üretimde https zorunludur.
@@ -146,6 +160,7 @@ const envSchema = z
   })
   .transform((env) => ({
     ...env,
+    RATE_LIMIT_STORE: env.RATE_LIMIT_STORE ?? (env.NODE_ENV==='production'?'postgres':'memory'),
     MAIL_MODE: (env.MAIL_TRANSPORT === 'log' ? 'log' : env.SMTP_URL ? 'smtp' : 'off') as 'smtp' | 'log' | 'off',
     APP_BASE_URL: (env.APP_BASE_URL ?? 'http://localhost:5173').replace(/\/+$/, ''),
     COOKIE_SECURE: env.COOKIE_SECURE ?? env.NODE_ENV === 'production',

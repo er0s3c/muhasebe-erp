@@ -39,6 +39,7 @@ export const setSessionLostHandler = (fn: (() => void) | null) => {
 };
 
 interface RequestOptions {
+  anonymous?: boolean;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   companyId?: string | null;
@@ -48,12 +49,12 @@ interface RequestOptions {
 async function raw(path: string, opts: RequestOptions): Promise<Response> {
   const headers: Record<string, string> = {};
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  if (accessToken && !opts.anonymous) headers.Authorization = `Bearer ${accessToken}`;
   if (opts.companyId) headers['X-Company-Id'] = opts.companyId;
   return fetch(path, {
     method: opts.method ?? 'GET',
     headers,
-    credentials: 'same-origin',
+    credentials: opts.anonymous ? 'omit' : 'same-origin',
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     signal: opts.signal,
   });
@@ -107,7 +108,7 @@ async function parseError(res: Response): Promise<ApiError> {
 /** İsteği gönderir; 401 alırsa oturumu bir kez yeniler ve yeniden dener. */
 async function send(path: string, opts: RequestOptions): Promise<Response> {
   let res = await raw(path, opts);
-  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+  if (res.status === 401 && !opts.anonymous && !path.startsWith('/api/auth/')) {
     if (await refreshSession()) {
       res = await raw(path, opts);
     } else {

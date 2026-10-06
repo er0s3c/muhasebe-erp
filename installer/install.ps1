@@ -705,9 +705,24 @@ if (`$url -notmatch '^postgres(ql)?://([^:@/]+):([^@]*)@([^:/]+):([0-9]+)/([^?]+
 if (`$LASTEXITCODE -ne 0) { Remove-Item -LiteralPath `$part -ErrorAction SilentlyContinue; throw 'pg_dump başarısız' }
 "@
   }
+  $filesRoot = Join-Path $DataDir 'construction'
+  $configuredStorage = Get-EnvValue (Join-Path $DataDir 'erp.env') 'CONSTRUCTION_STORAGE_DIR'
+  if ($configuredStorage) { $filesRoot = $configuredStorage }
+  $filesTool = Join-Path $ProgDir 'current\app\dist\construction-files.mjs'
+  $filesNode = Join-Path $ProgDir 'current\app\runtime\node.exe'
+  if ($script:Path -eq 'docker') {
+    $filesRoot = Join-Path $Root 'deploy\construction-data'
+    $configured = Get-EnvValue (Join-Path $Root 'deploy\.env') 'CONSTRUCTION_FILES_DIR'
+    if ($configured) { if ([IO.Path]::IsPathRooted($configured)) { $filesRoot = $configured } else { $filesRoot = Join-Path (Join-Path $Root 'deploy') $configured } }
+    $filesTool = Join-Path $Root 'installer\tools\construction-files.mjs'
+    $filesNode = Join-Path $Root 'app\runtime\node.exe'
+    if (-not (Test-Path -LiteralPath $filesNode)) { $filesNode = 'node' }
+  }
   $tail = @"
-Move-Item -Force -LiteralPath `$part -Destination `$out
-Get-ChildItem -LiteralPath `$dir -File | Where-Object { `$_.Name -match '^erp-[0-9]{8}-[0-9]{6}\.dump$' } | Sort-Object Name -Descending | Select-Object -Skip `$keep | ForEach-Object { Remove-Item -LiteralPath `$_.FullName -Force }
+& $(ConvertTo-PsLiteral $filesNode) $(ConvertTo-PsLiteral $filesTool) --mode=backup $(ConvertTo-PsLiteral ("--root=$filesRoot")) "--archive=`$out.files.gz"
+if (`$LASTEXITCODE -ne 0) { Remove-Item -LiteralPath `$part -ErrorAction SilentlyContinue; throw 'Çizim ve model dosyaları yedeklenemedi' }
+Move-Item -LiteralPath `$part -Destination `$out
+Get-ChildItem -LiteralPath `$dir -File | Where-Object { `$_.Name -match '^erp-[0-9]{8}-[0-9]{6}\.dump$' } | Sort-Object Name -Descending | Select-Object -Skip `$keep | ForEach-Object { Remove-Item -LiteralPath `$_.FullName -Force; Remove-Item -LiteralPath ("`$(`$_.FullName).files.gz"), ("`$(`$_.FullName).files.gz.sha256") -Force -ErrorAction SilentlyContinue }
 Write-Host "Yedek: `$out"
 "@
   [IO.File]::WriteAllText($file, ($head + "`r`n" + $body + "`r`n" + $tail), (New-Object System.Text.UTF8Encoding $true))
@@ -743,8 +758,9 @@ function Install-ProdNative {
   if (-not (Test-Path (Join-Path $Root 'app\runtime\node.exe'))) { Die 'Kitte çalışma zamanı yok (app\runtime\node.exe); kit bozuk olabilir' }
   if (-not (Test-Path (Join-Path $Root 'winsw\MuhasebeERP.exe'))) { Die 'Kitte hizmet sarmalayıcısı yok (winsw\MuhasebeERP.exe)' }
   Protect-DataDir
-  foreach ($d in @('logs', 'backups')) { $p = Join-Path $DataDir $d; if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p | Out-Null } }
+  foreach ($d in @('logs', 'backups', 'construction')) { $p = Join-Path $DataDir $d; if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p | Out-Null } }
   & icacls (Join-Path $DataDir 'logs') /grant "${SidLocalService}:(OI)(CI)M" | Out-Null
+  & icacls (Join-Path $DataDir 'construction') /grant "${SidLocalService}:(OI)(CI)M" | Out-Null
 
   # Çalışan hizmet durdurulur (aynı sürüm klasörü yeniden yazılabilir; migration eski kod çalışırken uygulanmaz)
   $winsw = Get-WinswExe
@@ -791,6 +807,7 @@ function Install-ProdNative {
       "DATABASE_URL=postgres://erp_app:$appPw@127.0.0.1:$pgPort/$DbName",
       "JWT_SECRET=$(New-RandomB64 48)",
       "WEB_DIST_DIR=$ProgDir\current\app\web",
+      "CONSTRUCTION_STORAGE_DIR=$DataDir\construction",
       "LICENSE_HOST_ID_FILE=$hostId",
       "APP_VERSION=$ver"
     )
@@ -804,6 +821,7 @@ function Install-ProdNative {
     Write-WizardConf
   }
   Set-EnvLine $erpEnv 'APP_VERSION' $ver
+  if (-not (Get-EnvValue $erpEnv 'CONSTRUCTION_STORAGE_DIR')) { Set-EnvLine $erpEnv 'CONSTRUCTION_STORAGE_DIR' (Join-Path $DataDir 'construction') }
   if ($RestoreDb) { Restore-DbNative $RestoreDb }
 
   $current = Join-Path $ProgDir 'current'
@@ -911,6 +929,7 @@ function Restore-DbNative([string]$file) {
   $restoreDb = $Matches[6]
   try { Invoke-Native (Join-Path $script:PgInfo.Bin 'pg_restore.exe') @('--exit-on-error', '--single-transaction', '--no-owner', '--role=erp', '-d', $restoreDb, $file) 'Geri yükleme' }
   finally { foreach ($v in @('PGUSER', 'PGPASSWORD', 'PGHOST', 'PGPORT')) { Remove-Item "Env:\$v" -ErrorAction SilentlyContinue } }
+  Restore-ConstructionFiles $file 'native'
   Ok 'Veritabanı geri yüklendi'
 }
 
@@ -926,7 +945,17 @@ function Restore-DbDocker([string]$file) {
   $argLine = ($dc + @('exec', '-T', 'db', 'pg_restore', '-U', 'postgres', '--exit-on-error', '--single-transaction', '--no-owner', '--role=erp', '-d', $DbName)) -join ' '
   & cmd.exe /c "docker $argLine < `"$file`""
   if ($LASTEXITCODE -ne 0) { Die 'Geri yükleme başarısız' }
+  Restore-ConstructionFiles $file 'docker'
   Ok 'Veritabanı geri yüklendi'
+}
+function Restore-ConstructionFiles([string]$file,[string]$mode) {
+  if (-not (Test-Path -LiteralPath "$file.files.gz")) { Warn 'Eski yedekte çizim/model dosyası arşivi yok; dosya deposu ayrıca geri yüklenmeli.'; return }
+  $node = Join-Path $Root 'app\runtime\node.exe'
+  if (-not (Test-Path -LiteralPath $node)) { $node = 'node' }
+  $folder = Join-Path $DataDir 'construction'
+  if ($mode -eq 'native') { $configured = Get-EnvValue (Join-Path $DataDir 'erp.env') 'CONSTRUCTION_STORAGE_DIR'; if ($configured) { $folder = $configured } }
+  else { $folder = Join-Path $Root 'deploy\construction-data'; $configured = Get-EnvValue (Join-Path $Root 'deploy\.env') 'CONSTRUCTION_FILES_DIR'; if ($configured) { if ([IO.Path]::IsPathRooted($configured)) { $folder = $configured } else { $folder = Join-Path (Join-Path $Root 'deploy') $configured } } }
+  Invoke-Native $node @((Join-Path $Root 'installer\tools\construction-files.mjs'), '--mode=restore', "--root=$folder", "--archive=$file.files.gz") 'Çizim ve model dosyaları geri yükleme'
 }
 
 function Complete-Prod([int]$p) {
@@ -976,6 +1005,14 @@ function Assert-InstallLocation {
     if ((Test-Path -LiteralPath $src) -and -not (Test-Path -LiteralPath (Join-Path $dst $f))) { Copy-Item -LiteralPath $src -Destination (Join-Path $dst $f) }
   }
   if (Test-Path (Join-Path $dst '.env')) { Set-SecureAcl (Join-Path $dst '.env') $false }
+  $oldFiles = Get-EnvValue (Join-Path (Join-Path $live 'deploy') '.env') 'CONSTRUCTION_FILES_DIR'
+  if (-not $oldFiles) { $oldFiles = 'construction-data' }
+  if (-not [IO.Path]::IsPathRooted($oldFiles)) { $oldFiles = Join-Path (Join-Path $live 'deploy') $oldFiles }
+  if (Test-Path -LiteralPath $oldFiles -PathType Container) {
+    $oldFiles = (Resolve-Path -LiteralPath $oldFiles).Path
+    Set-EnvLine (Join-Path $dst '.env') 'CONSTRUCTION_FILES_DIR' $oldFiles
+    Warn "Kalıcı çizim/model deposu yerinde korunuyor: $oldFiles. Bu klasörü silmeyin; yeni kurulum ve yedekler aynı depoyu kullanır."
+  }
   $certs = Join-Path (Join-Path $live 'deploy') 'certs'
   if ((Test-Path -LiteralPath $certs) -and -not (Test-Path -LiteralPath (Join-Path $dst 'certs'))) { Copy-Item -Recurse -LiteralPath $certs -Destination (Join-Path $dst 'certs') }
   $wc = Join-Path $dst 'wizard.conf'

@@ -1,0 +1,54 @@
+import { beforeAll,describe,it,expect } from 'vitest';
+import type { FastifyInstance } from 'fastify';
+import { sql } from 'drizzle-orm';
+import { todayIso,addDaysIso } from '@erp/shared';
+import { makeApp,registerUser,createCompany,client,addMember,accountIds } from './helpers';
+import { withContext,type Db } from '../src/db/client';
+import { processRecurringAll } from '../src/modules/administration/recurring';
+let app:FastifyInstance,db:Db;
+beforeAll(async()=>{const built=await makeApp();app=built.app;db=built.handle.db;});
+describe('Tekrarlayan ajanda ve fatura',()=>{
+  it('geçmiş dönemler eşzamanlı çalışmada bir kez oluşur; bitiş, duraklatma ve izolasyon korunur',async()=>{
+    const user=await registerUser(app,'RepeatCalendar'),company=await createCompany(app,user.token),c=client(app,user.token,company.id);
+    const start=addDaysIso(todayIso(),-2);
+    const created=await c.post('/api/settings/recurring',{kind:'agenda',title:'Günlük toplantı',recurrence:{startDate:start,endDate:todayIso(),frequency:'daily'},agenda:{title:'Şantiye toplantısı',dueDate:start,allDay:false,startTime:'09:00',remindBeforeMinutes:60}});
+    expect(created.statusCode,created.body).toBe(201);const id=created.json().id;
+    const runs=await Promise.all([c.post(`/api/settings/recurring/${id}/run`),c.post(`/api/settings/recurring/${id}/run`)]);
+    expect(runs.map(r=>r.statusCode).sort()).toEqual([200,409]);
+    expect((await c.get(`/api/settings/recurring/${id}/history`)).json().items).toHaveLength(3);
+    const agenda=(await c.get('/api/agenda?scope=mine')).json().items;expect(agenda).toHaveLength(3);expect(agenda.every((a:{remindBeforeMinutes:number})=>a.remindBeforeMinutes===60)).toBe(true);
+    const row=(await c.get('/api/settings/recurring')).json().items[0];expect(row.status).toBe('finished');
+    expect((await c.patch(`/api/settings/recurring/${id}`,{version:row.version,status:'active'})).statusCode).toBe(409);
+    const other=await createCompany(app,user.token),outside=client(app,user.token,other.id);
+    expect((await outside.get(`/api/settings/recurring/${id}/history`)).statusCode).toBe(404);
+    expect((await outside.get('/api/settings/recurring')).json().items).toHaveLength(0);
+    const viewer=await addMember(app,c,company.id,'viewer');expect((await viewer.client.post(`/api/settings/recurring/${id}/run`)).statusCode).toBe(403);
+    const invalid=await c.post('/api/settings/recurring',{kind:'agenda',title:'Hatalı kaynak',recurrence:{startDate:start},agenda:{title:'Test',dueDate:start,projectId:'00000000-0000-4000-8000-000000000001'}});expect(invalid.statusCode,invalid.body).toBe(404);
+  });
+  it('fiyat anlık görüntüsü değişmez; dövizli taslak eski kuru taşımaz, otomatik yevmiye oluşturmaz',async()=>{
+    const user=await registerUser(app,'RepeatInvoice'),company=await createCompany(app,user.token),c=client(app,user.token,company.id),accounts=await accountIds(app,user.token,company.id);
+    const party=(await c.post('/api/parties',{name:'Kira şirketi',kind:'supplier'})).json().party;
+    const source=await c.post('/api/invoices',{type:'expense',partyId:party.id,invoiceDate:todayIso(),currency:'GBP',fxRate:'40',lines:[{description:'Ofis kirası',quantity:'1',unitPrice:'100',accountId:accounts['770']}],post:false});
+    expect(source.statusCode,source.body).toBe(201);const sourceId=source.json().invoice.id;
+    const created=await c.post('/api/settings/recurring',{kind:'invoice',title:'Aylık kira',sourceInvoiceId:sourceId,dueDays:15,recurrence:{startDate:todayIso()}});expect(created.statusCode,created.body).toBe(201);const id=created.json().id;
+    const changed=await c.put(`/api/invoices/${sourceId}`,{partyId:party.id,invoiceDate:todayIso(),currency:'GBP',lines:[{description:'Değişmiş fiyat',quantity:'1',unitPrice:'900',accountId:accounts['770']}]});expect(changed.statusCode,changed.body).toBe(200);
+    const run=await c.post(`/api/settings/recurring/${id}/run`);expect(run.statusCode,run.body).toBe(200);expect(run.json().created).toHaveLength(1);
+    const generated=(await c.get(`/api/invoices/${run.json().created[0].targetId}`)).json();
+    expect(generated.invoice).toMatchObject({status:'draft',currencyCode:'GBP',fxRate:null,grossTotal:'100.0000',journalEntryId:null,dueDate:addDaysIso(todayIso(),15)});
+    expect(generated.lines[0].description).toBe('Ofis kirası');
+    expect((await c.post(`/api/invoices/${generated.invoice.id}/post`)).statusCode).toBe(422);
+    expect((await c.post(`/api/settings/recurring/${id}/run`)).json().created).toHaveLength(0);
+    const row=(await c.get('/api/settings/recurring')).json().items[0];expect((await c.patch(`/api/settings/recurring/${id}`,{version:row.version,status:'paused'})).statusCode).toBe(200);
+    expect((await c.patch(`/api/settings/recurring/${id}`,{version:row.version,status:'active'})).statusCode).toBe(409);
+    expect((await c.post(`/api/settings/recurring/${id}/run`)).statusCode).toBe(409);
+  });
+  it('zamanlayıcı şablon sahibinin güncel yetkisini tekrar kontrol eder ve hatalı seriyi duraklatır',async()=>{
+    const user=await registerUser(app,'RepeatRights'),company=await createCompany(app,user.token),c=client(app,user.token,company.id),admin=await addMember(app,c,company.id,'admin');
+    const start=todayIso();
+    const created=await admin.client.post('/api/settings/recurring',{kind:'agenda',title:'Yetkili seri',recurrence:{startDate:start},agenda:{title:'Kontrol',dueDate:start}});expect(created.statusCode,created.body).toBe(201);
+    await c.patch(`/api/company/members/${admin.userId}`,{role:'viewer'});
+    await processRecurringAll(app);
+    const row=(await c.get('/api/settings/recurring')).json().items[0];expect(row.status).toBe('paused');expect(row.error).toContain('yetkisi');
+    await withContext(db,{companyId:company.id,orgId:app.jwt.verify<{org:string}>(user.token).org,userId:user.userId},async tx=>expect((await tx.execute(sql`select 1 from recurring_occurrences where template_id=${created.json().id}::uuid`)).rows).toHaveLength(0));
+  });
+});

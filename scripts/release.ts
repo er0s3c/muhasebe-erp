@@ -82,10 +82,17 @@ if (!licenseServerUrl && !allowNoLicenseServer) {
       'ya da yalnızca çevrimdışı etkinleştirme için bilerek --allow-no-license-server ekleyin.',
   );
 }
-if (licenseServerUrl && !/^https:\/\/[^/\s]+(\/\S*)?$/.test(licenseServerUrl) && process.env.LICENSE_ALLOW_INSECURE_URL !== 'true') {
+if (
+  licenseServerUrl &&
+  !/^https:\/\/[^/\s]+(\/\S*)?$/.test(licenseServerUrl) &&
+  process.env.LICENSE_ALLOW_INSECURE_URL !== 'true'
+) {
   fail(`LICENSE_SERVER_URL https:// ile başlamalı (verilen: ${licenseServerUrl})`);
 }
-if (!licenseServerUrl) console.warn('! UYARI: lisans sunucusu adresi YOK (--allow-no-license-server): kit yalnızca çevrimdışı etkinleştirilebilir.');
+if (!licenseServerUrl)
+  console.warn(
+    '! UYARI: lisans sunucusu adresi YOK (--allow-no-license-server): kit yalnızca çevrimdışı etkinleştirilebilir.',
+  );
 
 // --out göreli ya da mutlak olabilir (mutlak yol depo altına eklenmez)
 const outBase = resolve(root, args.out ?? 'release');
@@ -120,8 +127,14 @@ const webDist = join(root, 'apps/web/dist');
 const notices = join(root, 'THIRD-PARTY-NOTICES.md');
 // --skip-build: önceden derlenmiş paketin aynı lisans sunucusu adresiyle derlendiğini doğrula (derlemeye gömülüdür)
 if (args['skip-build'] === 'true' && licenseServerUrl && existsSync(join(apiDist, 'server.js'))) {
-  if (!readFileSync(join(apiDist, 'server.js'), 'utf8').includes(JSON.stringify(licenseServerUrl).slice(1, -1))) {
-    fail(`apps/api/dist bu lisans sunucusu adresiyle (${licenseServerUrl}) derlenmemiş: --skip-build olmadan yeniden derleyin`);
+  if (
+    !readFileSync(join(apiDist, 'server.js'), 'utf8').includes(
+      JSON.stringify(licenseServerUrl).slice(1, -1),
+    )
+  ) {
+    fail(
+      `apps/api/dist bu lisans sunucusu adresiyle (${licenseServerUrl}) derlenmemiş: --skip-build olmadan yeniden derleyin`,
+    );
   }
 }
 for (const p of [
@@ -275,6 +288,9 @@ async function stage(target: Target): Promise<string> {
     'infra/postgres/init-prod.sh',
     'scripts/backup.sh',
     'scripts/restore.sh',
+    'scripts/construction-runtime.sh',
+    'scripts/construction-runtime.ps1',
+    'docs/CONSTRUCTION-360.md',
     'docs/OPERATIONS.md',
   ]) {
     mkdirSync(join(dir, f, '..'), { recursive: true });

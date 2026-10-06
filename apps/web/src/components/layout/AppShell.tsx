@@ -1,8 +1,24 @@
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
-import { Bell, Check, ChevronsUpDown, KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, ShieldCheck, Sun, X, SlidersHorizontal } from 'lucide-react';
+import {
+  Bell,
+  Check,
+  ChevronsUpDown,
+  KeyRound,
+  LogOut,
+  Menu,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Search,
+  ShieldCheck,
+  Sun,
+  X,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { api } from '../../lib/api';
@@ -39,7 +55,8 @@ const subscribeDesktop = (cb: () => void) => {
   mq.addEventListener('change', cb);
   return () => mq.removeEventListener('change', cb);
 };
-const useIsDesktop = () => useSyncExternalStore(subscribeDesktop, () => window.matchMedia(DESKTOP_QUERY).matches);
+const useIsDesktop = () =>
+  useSyncExternalStore(subscribeDesktop, () => window.matchMedia(DESKTOP_QUERY).matches);
 
 const menuContent =
   'z-50 min-w-56 rounded-xl border border-border bg-surface p-1.5 [animation:pop-in_0.12s_ease-out]';
@@ -104,12 +121,19 @@ export function AppShell() {
 
   return (
     <div className="flex h-full print:block print:h-auto">
-      <a href="#main" className="sr-only z-[70] rounded-md bg-surface px-3 py-2 focus:not-sr-only focus:fixed focus:left-3 focus:top-3">
+      <a
+        href="#main"
+        className="sr-only z-[70] rounded-md bg-surface px-3 py-2 focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+      >
         {t('shell.skipToContent')}
       </a>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-30 bg-inverted/50 backdrop-blur-[8px] lg:hidden" onClick={() => setMobileOpen(false)} aria-hidden />
+        <div
+          className="fixed inset-0 z-30 bg-inverted/50 backdrop-blur-[8px] lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
       )}
       <aside
         ref={asideRef}
@@ -123,12 +147,22 @@ export function AppShell() {
           collapsed && 'lg:w-[68px]',
         )}
       >
-        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} onClose={() => setMobileOpen(false)} />
+        <Sidebar
+          collapsed={collapsed}
+          onToggle={toggleCollapsed}
+          onClose={() => setMobileOpen(false)}
+        />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col" inert={drawerOpen}>
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur [box-shadow:var(--shadow-subtle)] print:hidden sm:px-6">
-          <button ref={menuButtonRef} className="rounded-md p-2 text-muted hover:bg-surface-2 lg:hidden" onClick={() => setMobileOpen(true)} aria-label={t('shell.openMenu')} aria-expanded={mobileOpen}>
+          <button
+            ref={menuButtonRef}
+            className="rounded-md p-2 text-muted hover:bg-surface-2 lg:hidden"
+            onClick={() => setMobileOpen(true)}
+            aria-label={t('shell.openMenu')}
+            aria-expanded={mobileOpen}
+          >
             <Menu className="size-5" />
           </button>
           <button
@@ -139,12 +173,17 @@ export function AppShell() {
             <Search className="size-4" aria-hidden />
             <span className="hidden flex-1 text-left sm:inline">{t('shell.search')}</span>
             <span className="flex-1 text-left sm:hidden">{t('shell.searchShort')}</span>
-            <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[11px] sm:inline">Ctrl K</kbd>
+            <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[11px] sm:inline">
+              Ctrl K
+            </kbd>
           </button>
           <div className="ml-auto flex items-center gap-1">
             <NotificationBell />
             <ThemeButton />
-            <UserMenu onChangePassword={() => setPasswordOpen(true)} onLogout={() => navigate('/login')} />
+            <UserMenu
+              onChangePassword={() => setPasswordOpen(true)}
+              onLogout={() => navigate('/login')}
+            />
           </div>
         </header>
 
@@ -165,19 +204,42 @@ export function AppShell() {
   );
 }
 
-function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggle: () => void; onClose: () => void }) {
+function Sidebar({
+  collapsed,
+  onToggle,
+  onClose,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const { data: nav } = useNavigation();
+  const location = useLocation();
 
   return (
     <>
-      <div className={cn('flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4', collapsed && 'lg:justify-center lg:px-0')}>
+      <div
+        className={cn(
+          'flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4',
+          collapsed && 'lg:justify-center lg:px-0',
+        )}
+      >
         {/* Logo ve ad ana sayfaya götürür (dar ekranda menüyü de kapatır) */}
-        <Link to="/" onClick={onClose} className="flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand" aria-label={t('shell.home')}>
+        <Link
+          to="/"
+          onClick={onClose}
+          className="flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          aria-label={t('shell.home')}
+        >
           <BrandLogo mark className={cn('h-8', !collapsed && 'lg:hidden')} />
           <BrandLogo className={cn('h-8', collapsed && 'lg:hidden', 'max-lg:hidden')} />
         </Link>
-        <button className="ml-auto rounded-md p-1.5 text-muted hover:bg-surface-2 lg:hidden" onClick={onClose} aria-label={t('common.close')}>
+        <button
+          className="ml-auto rounded-md p-1.5 text-muted hover:bg-surface-2 lg:hidden"
+          onClick={onClose}
+          aria-label={t('common.close')}
+        >
           <X className="size-5" />
         </button>
       </div>
@@ -196,23 +258,32 @@ function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggl
               {group.items.map((item) => {
                 const Icon = navIcon(item.icon);
                 const label = t(item.labelKey as never);
+                const [path, query] = item.path.split('?');
+                const queryMatches = Array.from(new URLSearchParams(query)).every(
+                  ([key, value]) => new URLSearchParams(location.search).get(key) === value,
+                );
+                const isActive =
+                  queryMatches &&
+                  (location.pathname === path ||
+                    (path !== '/' &&
+                      path !== '/workspace' &&
+                      location.pathname.startsWith(`${path}/`)));
                 return (
                   <li key={item.key}>
-                    <NavLink
+                    <Link
                       to={item.path}
-                      end={item.path === '/'}
+                      aria-current={isActive ? 'page' : undefined}
                       title={collapsed ? label : undefined}
-                      className={({ isActive }) =>
-                        cn(
-                          'group flex h-9 items-center gap-3 rounded-md px-3 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-text',
-                          isActive && 'bg-brand text-brand-contrast hover:bg-brand hover:text-brand-contrast',
-                          collapsed && 'lg:justify-center lg:px-0',
-                        )
-                      }
+                      className={cn(
+                        'group flex h-9 items-center gap-3 rounded-md px-3 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-text',
+                        isActive &&
+                          'bg-brand text-brand-contrast hover:bg-brand hover:text-brand-contrast',
+                        collapsed && 'lg:justify-center lg:px-0',
+                      )}
                     >
                       <Icon className="size-[18px] shrink-0" aria-hidden />
                       <span className={cn('truncate', collapsed && 'lg:sr-only')}>{label}</span>
-                    </NavLink>
+                    </Link>
                   </li>
                 );
               })}
@@ -224,10 +295,17 @@ function Sidebar({ collapsed, onToggle, onClose }: { collapsed: boolean; onToggl
       <div className="hidden border-t border-border p-3 lg:block">
         <button
           onClick={onToggle}
-          className={cn('flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm text-muted hover:bg-surface-2 hover:text-text', collapsed && 'justify-center px-0')}
+          className={cn(
+            'flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm text-muted hover:bg-surface-2 hover:text-text',
+            collapsed && 'justify-center px-0',
+          )}
           aria-label={collapsed ? t('shell.expand') : t('shell.collapse')}
         >
-          {collapsed ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
+          {collapsed ? (
+            <PanelLeftOpen className="size-[18px]" />
+          ) : (
+            <PanelLeftClose className="size-[18px]" />
+          )}
           {!collapsed && <span>{t('shell.collapse')}</span>}
         </button>
       </div>
@@ -255,12 +333,19 @@ function CompanySwitcher({ collapsed }: { collapsed: boolean }) {
         )}
         aria-label={t('shell.switchCompany')}
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-inverted text-xs text-on-inverted">{initials}</span>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-inverted text-xs text-on-inverted">
+          {initials}
+        </span>
         <span className={cn('min-w-0 flex-1', collapsed && 'lg:hidden')}>
           <span className="block truncate text-sm">{activeCompany.name}</span>
-          <span className="block truncate text-xs text-muted">{t(`sectors.${activeCompany.sector}`)}</span>
+          <span className="block truncate text-xs text-muted">
+            {t(`sectors.${activeCompany.sector}`)}
+          </span>
         </span>
-        <ChevronsUpDown className={cn('size-4 shrink-0 text-muted', collapsed && 'lg:hidden')} aria-hidden />
+        <ChevronsUpDown
+          className={cn('size-4 shrink-0 text-muted', collapsed && 'lg:hidden')}
+          aria-hidden
+        />
       </Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content align="start" sideOffset={6} className={menuContent}>
@@ -297,13 +382,24 @@ function ThemeButton() {
   const { t } = useTranslation();
   const { theme, toggle } = useTheme();
   return (
-    <button onClick={toggle} className="rounded-md p-2 text-muted hover:bg-surface-2 hover:text-text" aria-label={t('shell.theme')} title={theme === 'dark' ? t('shell.themeLight') : t('shell.themeDark')}>
+    <button
+      onClick={toggle}
+      className="rounded-md p-2 text-muted hover:bg-surface-2 hover:text-text"
+      aria-label={t('shell.theme')}
+      title={theme === 'dark' ? t('shell.themeLight') : t('shell.themeDark')}
+    >
       {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
     </button>
   );
 }
 
-function UserMenu({ onChangePassword, onLogout }: { onChangePassword: () => void; onLogout: () => void }) {
+function UserMenu({
+  onChangePassword,
+  onLogout,
+}: {
+  onChangePassword: () => void;
+  onLogout: () => void;
+}) {
   const { t } = useTranslation();
   const { user, logout } = useSession();
   const navigate = useNavigate();
@@ -315,7 +411,10 @@ function UserMenu({ onChangePassword, onLogout }: { onChangePassword: () => void
     .join('');
   return (
     <Dropdown.Root>
-      <Dropdown.Trigger className="flex size-9 items-center justify-center rounded-md bg-inverted text-xs text-on-inverted" aria-label={user.fullName}>
+      <Dropdown.Trigger
+        className="flex size-9 items-center justify-center rounded-md bg-inverted text-xs text-on-inverted"
+        aria-label={user.fullName}
+      >
         {initials}
       </Dropdown.Trigger>
       <Dropdown.Portal>
@@ -357,7 +456,13 @@ function UserMenu({ onChangePassword, onLogout }: { onChangePassword: () => void
   );
 }
 
-function ChangePasswordModal({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+function ChangePasswordModal({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const [current, setCurrent] = useState('');
@@ -376,7 +481,10 @@ function ChangePasswordModal({ open, onOpenChange }: { open: boolean; onOpenChan
     setBusy(true);
     setError(null);
     try {
-      await api('/api/auth/change-password', { method: 'POST', body: { currentPassword: current, newPassword: next } });
+      await api('/api/auth/change-password', {
+        method: 'POST',
+        body: { currentPassword: current, newPassword: next },
+      });
       toast.success(t('auth.passwordChanged'));
       onOpenChange(false);
     } catch (e) {
@@ -394,7 +502,12 @@ function ChangePasswordModal({ open, onOpenChange }: { open: boolean; onOpenChan
       footer={
         <>
           <Button onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
-          <Button variant="primary" loading={busy} disabled={!current || next.length < 10} onClick={submit}>
+          <Button
+            variant="primary"
+            loading={busy}
+            disabled={!current || next.length < 10}
+            onClick={submit}
+          >
             {t('common.save')}
           </Button>
         </>
@@ -408,10 +521,30 @@ function ChangePasswordModal({ open, onOpenChange }: { open: boolean; onOpenChan
         }}
       >
         <Field label={t('auth.currentPassword')}>
-          {(id) => <Input id={id} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />}
+          {(id) => (
+            <Input
+              id={id}
+              type="password"
+              autoComplete="current-password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+            />
+          )}
         </Field>
-        <Field label={t('auth.newPassword')} hint={t('auth.passwordHint')} error={error ?? undefined}>
-          {(id) => <Input id={id} type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />}
+        <Field
+          label={t('auth.newPassword')}
+          hint={t('auth.passwordHint')}
+          error={error ?? undefined}
+        >
+          {(id) => (
+            <Input
+              id={id}
+              type="password"
+              autoComplete="new-password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+            />
+          )}
         </Field>
       </form>
     </Modal>
@@ -501,9 +634,16 @@ function LicenseBanner() {
   } else if (data.state === 'active' && data.expiresSoon && data.daysUntilExpiry !== null) {
     banner = (
       <Callout tone="warning" title={t('license.banner.expiringTitle')} action={manage}>
-        {t('license.banner.expiringBody', { count: Math.max(0, data.daysUntilExpiry), date: fmtDate(data.license?.validUntil) })}
+        {t('license.banner.expiringBody', {
+          count: Math.max(0, data.daysUntilExpiry),
+          date: fmtDate(data.license?.validUntil),
+        })}
       </Callout>
     );
   }
-  return banner ? <div className="mb-6 print:hidden" data-testid="license-banner">{banner}</div> : null;
+  return banner ? (
+    <div className="mb-6 print:hidden" data-testid="license-banner">
+      {banner}
+    </div>
+  ) : null;
 }

@@ -1,5 +1,5 @@
 import { todayIso } from '@erp/shared';
-import { Eye, EyeOff, History, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, History, Plus, RefreshCw, Trash2, Paperclip } from 'lucide-react';
 import { useState } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
@@ -225,6 +225,7 @@ function DocumentsTab() {
                     <Td className="text-muted">{d.referenceNote ?? '—'}</Td>
                     <Td>
                       <div className="flex gap-1">
+                        {can('hr.sensitive') && <Link to={`/workspace/documents?kind=foreign_worker_doc&id=${d.id}`} className="rounded p-1.5 text-muted hover:bg-surface-2" aria-label={`Belge ekleri: ${d.employeeName}`}><Paperclip className="size-4" aria-hidden /></Link>}
                         <button type="button" className="rounded p-1.5 text-muted hover:bg-surface-2" aria-label={`${t('foreign.history.action')}: ${d.employeeName}`} onClick={() => setHistory(d)}>
                           <History className="size-4" aria-hidden />
                         </button>

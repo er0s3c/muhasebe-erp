@@ -14,6 +14,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { CURRENCY_CODES, dec, toDbRate } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { exchangeRates } from '../../db/schema';
+import { and, eq } from 'drizzle-orm';
 import { AppError, unprocessable } from '../../http/errors';
 
 const BASE_URL = 'https://www.mb.gov.ct.tr/kur';
@@ -156,6 +157,7 @@ export async function importKktcmbRates(
   tx: Tx,
   ctx: { companyId: string; userId: string },
   day: KktcmbDay,
+  preserveManual = false,
 ): Promise<ImportResult> {
   const supported = new Set<string>(CURRENCY_CODES.filter((c) => c !== 'TRY'));
   const source = `KKTCMB${day.announcementNo ? ` ${day.announcementNo}` : ''}`;
@@ -166,6 +168,13 @@ export async function importKktcmbRates(
     if (!supported.has(r.symbol)) {
       skipped.push(r.symbol);
       continue;
+    }
+    if (preserveManual) {
+      const existing = await tx.select({source: exchangeRates.source}).from(exchangeRates).where(and(eq(exchangeRates.companyId, ctx.companyId),eq(exchangeRates.rateDate,day.date),eq(exchangeRates.currencyCode,r.symbol),eq(exchangeRates.quoteCode,'TRY')));
+      if (existing.length && !existing[0]!.source?.startsWith('KKTCMB')) {
+        skipped.push(r.symbol + ' (elle girilen kur korundu)');
+        continue;
+      }
     }
     await tx
       .insert(exchangeRates)
@@ -185,7 +194,7 @@ export async function importKktcmbRates(
       });
     imported.push({ currency: r.symbol, buy: r.buy, sell: r.sell });
   }
-  if (imported.length === 0) {
+  if (!day.rates.some(r=>supported.has(r.symbol))) {
     throw unprocessable('Dosyada desteklenen para birimi yok (GBP, EUR, USD)', 'RATE_XML_NO_SUPPORTED');
   }
   return { date: day.date, announcementNo: day.announcementNo, imported, skipped };

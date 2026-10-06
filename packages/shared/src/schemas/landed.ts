@@ -112,7 +112,7 @@ export type CreateExpenseCardInput = z.infer<typeof createExpenseCardSchema>;
 export const updateExpenseCardSchema = createExpenseCardSchema.partial().extend({ isActive: z.boolean().optional() });
 export type UpdateExpenseCardInput = z.infer<typeof updateExpenseCardSchema>;
 
-export const EXPENSE_PAYMENT_KINDS = ['treasury', 'party'] as const;
+export const EXPENSE_PAYMENT_KINDS = ['treasury', 'party','employee'] as const;
 
 /**
  * Hızlı gider girişi. `net` KDV hariç tutardır; KDV kodu/stopaj/proje alanları gönderilmezse kartın varsayılanı kullanılır,
@@ -124,6 +124,8 @@ export const createExpenseEntrySchema = z
     cardId: uuid,
     description: text(300).min(1, 'Açıklama gerekli'),
     paymentKind: z.enum(EXPENSE_PAYMENT_KINDS),
+    employeeId:uuid.nullable().optional(),
+    advanceId:uuid.nullable().optional(),
     treasuryAccountId: uuid.nullable().optional(),
     partyId: uuid.nullable().optional(),
     dueDate: isoDate.nullable().optional(),
@@ -141,6 +143,9 @@ export const createExpenseEntrySchema = z
     if (v.paymentKind === 'treasury' && !v.treasuryAccountId) issue('treasuryAccountId', 'Kasa/banka hesabı seçin');
     if (v.paymentKind === 'party' && !v.partyId) issue('partyId', 'Cari seçin');
     if (v.paymentKind === 'party' && v.treasuryAccountId) issue('treasuryAccountId', 'Cari ödemede kasa/banka hesabı seçilmez');
+    if(v.paymentKind==='employee'&&!v.employeeId)issue('employeeId','Masrafı yapan personeli seçin');
+    if(v.paymentKind==='employee'&&!v.advanceId&&!v.treasuryAccountId)issue('treasuryAccountId','Masraf iadesi için kasa/banka seçin');
+    if(v.paymentKind!=='employee'&&(v.employeeId||v.advanceId))issue('employeeId','Personel ve avans yalnızca personel masrafında seçilir');
     if (v.dueDate && v.dueDate < v.entryDate) issue('dueDate', 'Vade gider tarihinden önce olamaz');
   });
 export type CreateExpenseEntryInput = z.infer<typeof createExpenseEntrySchema>;

@@ -4,6 +4,8 @@ import { checkRuntimeRole } from './db/preflight';
 import { buildApp } from './app';
 import { BUILD_ENFORCED } from './licensing';
 import { startNotificationScheduler } from './modules/notifications/scheduler';
+import { startConstructionScheduler } from './modules/construction-control/jobs';
+import { startAdministrationScheduler } from './modules/administration/scheduler';
 
 const config = loadConfig();
 
@@ -51,6 +53,8 @@ if (app.license.enforced) {
 
 // Bildirimler: zamanlayıcı yalnızca bu giriş noktasında başlar (testler buildApp kullanır, zamanlayıcı çalışmaz).
 const stopNotificationScheduler = startNotificationScheduler(app);
+const stopConstructionScheduler = startConstructionScheduler(app);
+const stopAdministrationScheduler = startAdministrationScheduler(app);
 
 let closing = false;
 const shutdown = async (signal: string) => {
@@ -65,6 +69,8 @@ const shutdown = async (signal: string) => {
   try {
     stopLicenseScheduler();
     stopNotificationScheduler();
+    stopConstructionScheduler();
+    stopAdministrationScheduler();
     await app.close();
     await handle.close();
     process.exit(0);
