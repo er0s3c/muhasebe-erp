@@ -5,7 +5,10 @@
   "type": "module",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "lisans-server/server",
+    "lisans-server/panel",
+    "lisans-server/core"
   ],
   "engines": {
     "node": ">=22.9"

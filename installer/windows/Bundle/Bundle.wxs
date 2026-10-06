@@ -1,0 +1,6 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle Name="Muhasebe ERP" Manufacturer="Muhasebe ERP" Version="$(var.ProductVersion)" UpgradeCode="02E01AD2-888A-48A4-A0F3-26FA49A8D00E">
+    <BootstrapperApplication><bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense" LicenseUrl="" /></BootstrapperApplication>
+    <Chain><ExePackage Id="CustomerWizard" SourceFile="$(var.WizardExe)" DetectCondition="0" PerMachine="yes" Permanent="yes" Vital="yes" /></Chain>
+  </Bundle>
+</Wix>

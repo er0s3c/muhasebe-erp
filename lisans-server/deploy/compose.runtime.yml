@@ -1,0 +1,57 @@
+name: muhasebe-lisans
+x-logging: &logging
+  driver: json-file
+  options: { max-size: '10m', max-file: '5' }
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      ERP_DB_NAME: erp_license
+      ERP_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:?}
+      ERP_APP_PASSWORD: ${DB_APP_PASSWORD:?}
+    volumes: ['licensedata:/var/lib/postgresql/data', './init-prod.sh:/docker-entrypoint-initdb.d/10-init-prod.sh:ro']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U erp -d erp_license']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  migrate:
+    image: ${LICENSE_IMAGE:?}
+    logging: *logging
+    command: ['node', 'dist/migrate.js']
+    environment:
+      MIGRATION_DATABASE_URL: postgres://erp:${DB_OWNER_PASSWORD}@db:5432/erp_license
+    depends_on: { db: { condition: service_healthy } }
+  license:
+    image: ${LICENSE_IMAGE:?}
+    restart: unless-stopped
+    init: true
+    logging: *logging
+    environment:
+      DATABASE_URL: postgres://erp_app:${DB_APP_PASSWORD}@db:5432/erp_license
+      LICENSE_DATA_KEY: ${LICENSE_DATA_KEY:?}
+      LICENSE_SIGNING_KEY_FILE: /run/keys/signing-key.json
+      LICENSE_SIGNING_KEY_PASSPHRASE: ${LICENSE_SIGNING_KEY_PASSPHRASE:?}
+      TRUST_PROXY: loopback,uniquelocal
+      ADMIN_COOKIE_SECURE: 'true'
+      LICENSE_ADMIN_ORIGIN: https://${LICENSE_DOMAIN:?}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-}
+      GITHUB_REPOSITORY_ID: ${GITHUB_REPOSITORY_ID:-}
+    volumes: ['./keys:/run/keys:ro', 'releases:/var/lib/erp-license/releases']
+    depends_on: { db: { condition: service_healthy }, migrate: { condition: service_completed_successfully } }
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      LICENSE_DOMAIN: ${LICENSE_DOMAIN:?}
+      LICENSE_ADMIN_ALLOW: ${LICENSE_ADMIN_ALLOW:-0.0.0.0/0 ::/0}
+    volumes: ['./Caddyfile:/etc/caddy/Caddyfile:ro','caddy_data:/data','caddy_config:/config']
+volumes:
+  licensedata:
+  releases:
+  caddy_data:
+  caddy_config:

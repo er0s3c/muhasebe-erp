@@ -58,6 +58,8 @@ param(
   [switch]$AllowDowngrade,
   [string]$RestoreDb = '',
   [switch]$Elevated
+  ,[switch]$DedicatedPostgres
+  ,[string]$SetupOwnerFile = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -253,6 +255,12 @@ function Get-NodeVersion {
   try { return [version]((& node -v).TrimStart('v')) } catch { return $null }
 }
 function Get-PgInstall {
+  $erpInfoFile = Join-Path $DataDir 'postgres-install.json'
+  if (Test-Path -LiteralPath $erpInfoFile) {
+    $erpInfo = Get-Content -Raw -LiteralPath $erpInfoFile | ConvertFrom-Json
+    if (Test-Path -LiteralPath (Join-Path $erpInfo.Bin 'psql.exe')) { return @{ Version = [version]$erpInfo.Version; Bin = $erpInfo.Bin; Port = [int]$erpInfo.Port; Service = $erpInfo.Service } }
+  }
+  if ($DedicatedPostgres) { return $null }
   # EDB kurulumu kayıt defterine yazar: HKLM\SOFTWARE\PostgreSQL\Installations\* ve \Services\*
   $best = $null
   foreach ($k in @(Get-ChildItem 'HKLM:\SOFTWARE\PostgreSQL\Installations' -ErrorAction SilentlyContinue)) {
@@ -449,10 +457,17 @@ function Install-Postgres {
   # Süper kullanıcı parolası kurulum programına komut satırıyla değil seçenek dosyasıyla (--optionfile) verilir; dosya yalnızca
   # SYSTEM/Yöneticiler okuyabilen veri klasöründedir ve kurulumdan sonra silinir.
   $optFile = Join-Path $DataDir 'pg-install.opt'
-  Write-TextFile $optFile "mode=unattended`nunattendedmodeui=none`nsuperpassword=$superPw`nserverport=5432`nservicename=postgresql-x64-$PgMajor`nenable-components=server,commandlinetools`n"
+  $pgPort = 5432; $pgService = "postgresql-x64-$PgMajor"; $pgExtra = ''
+  if ($DedicatedPostgres) {
+    $pgPort = 54320; while (Test-PortBusy $pgPort) { $pgPort++; if ($pgPort -gt 54420) { Die 'Ayrı veritabanı için boş port bulunamadı' } }
+    $pgService = 'MuhasebeERP-PostgreSQL'
+    $pgPrefix = Join-Path $ProgDir 'postgresql'; $pgData = Join-Path $DataDir 'postgresql'
+    $pgExtra = "prefix=$pgPrefix`ndatadir=$pgData`n"
+  }
+  Write-TextFile $optFile "mode=unattended`nunattendedmodeui=none`nsuperpassword=$superPw`nserverport=$pgPort`nservicename=$pgService`nenable-components=server,commandlinetools`n$pgExtra"
   $installArgs = "--optionfile `"$optFile`""
   $installed = $false
-  if (Get-Command winget -ErrorAction SilentlyContinue) {
+  if (-not $DedicatedPostgres -and (Get-Command winget -ErrorAction SilentlyContinue)) {
     Info "PostgreSQL $PgMajor winget ile kuruluyor…"
     & winget install --id "PostgreSQL.PostgreSQL.$PgMajor" -e --silent --accept-package-agreements --accept-source-agreements --override $installArgs
     $installed = ($LASTEXITCODE -eq 0)
@@ -469,6 +484,7 @@ function Install-Postgres {
     Remove-Item -Force $exe
   }
   Remove-Item -LiteralPath $optFile -Force -ErrorAction SilentlyContinue
+  if ($DedicatedPostgres) { Write-TextFile (Join-Path $DataDir 'postgres-install.json') (@{ Version = ($PgEdbVersion -split '-')[0]; Bin = (Join-Path $pgPrefix 'bin'); Port = $pgPort; Service = $pgService } | ConvertTo-Json) }
   $script:PgInfo = Get-PgInstall
   if (-not $script:PgInfo) { Die 'PostgreSQL kuruldu ama kayıt defterinde bulunamadı' }
   Ok "PostgreSQL $($script:PgInfo.Version) kuruldu (port $($script:PgInfo.Port))"
@@ -624,7 +640,11 @@ function Add-FirewallRule([int]$p) {
   }
 }
 
-function Remove-Junction([string]$p) { if (Test-Path $p) { & cmd.exe /c rmdir "`"$p`"" | Out-Null } }
+function Remove-Junction([string]$p) {
+  $absolute = [IO.Path]::GetFullPath($p)
+  if ($absolute -ine [IO.Path]::GetFullPath((Join-Path $ProgDir 'current'))) { Die 'Program bağlantısı beklenen klasörde değil' }
+  if (Test-Path -LiteralPath $absolute) { $item = Get-Item -LiteralPath $absolute; if ($item.LinkType -ne 'Junction') { Die 'Program current klasörü bir junction olmalı' }; [IO.Directory]::Delete($absolute) }
+}
 
 function Get-WinswExe { return (Join-Path $ProgDir 'service\MuhasebeERP.exe') }
 
@@ -644,6 +664,7 @@ function Write-ServiceFiles([string]$pgService) {
   <workingdirectory>$cur</workingdirectory>
   <startmode>Automatic</startmode>
   <delayedAutoStart>true</delayedAutoStart>
+  <serviceaccount><username>NT AUTHORITY\LocalService</username></serviceaccount>
   <depend>$pgService</depend>
   <onfailure action="restart" delay="10 sec"/>
   <onfailure action="restart" delay="30 sec"/>
@@ -718,11 +739,34 @@ if (`$LASTEXITCODE -ne 0) { Remove-Item -LiteralPath `$part -ErrorAction Silentl
     $filesNode = Join-Path $Root 'app\runtime\node.exe'
     if (-not (Test-Path -LiteralPath $filesNode)) { $filesNode = 'node' }
   }
+  $verifyDump = ''
+  if ($script:Path -eq 'docker') {
+    $verifyDump = @"
+`$verifyInfo = New-Object Diagnostics.ProcessStartInfo 'docker'
+`$verifyInfo.Arguments = 'compose -f deploy/docker-compose.prod.yml --env-file deploy/.env exec -T db pg_restore --list'
+`$verifyInfo.WorkingDirectory = $(ConvertTo-PsLiteral $Root)
+`$verifyInfo.UseShellExecute = `$false; `$verifyInfo.RedirectStandardInput = `$true; `$verifyInfo.CreateNoWindow = `$true
+`$verifyProcess = [Diagnostics.Process]::Start(`$verifyInfo)
+`$verifyStream = [IO.File]::OpenRead(`$part)
+try { `$verifyStream.CopyTo(`$verifyProcess.StandardInput.BaseStream); `$verifyProcess.StandardInput.Close() } finally { `$verifyStream.Close() }
+`$verifyProcess.WaitForExit(); `$global:LASTEXITCODE = `$verifyProcess.ExitCode
+"@
+  }
+  else { $verifyDump = "& $(ConvertTo-PsLiteral (Join-Path $script:PgInfo.Bin 'pg_restore.exe')) --list `$part | Out-Null" }
   $tail = @"
 & $(ConvertTo-PsLiteral $filesNode) $(ConvertTo-PsLiteral $filesTool) --mode=backup $(ConvertTo-PsLiteral ("--root=$filesRoot")) "--archive=`$out.files.gz"
 if (`$LASTEXITCODE -ne 0) { Remove-Item -LiteralPath `$part -ErrorAction SilentlyContinue; throw 'Çizim ve model dosyaları yedeklenemedi' }
+`$settings = @{}
+foreach (`$name in @('erp.env','migrate.env','wizard.conf','host-machine-id')) { `$source = Join-Path $(ConvertTo-PsLiteral $DataDir) `$name; if (Test-Path -LiteralPath `$source) { `$settings[`$name] = [IO.File]::ReadAllText(`$source) } }
+[IO.File]::WriteAllText("`$out.settings.json", (`$settings | ConvertTo-Json), (New-Object Text.UTF8Encoding `$false))
+& icacls "`$out.settings.json" /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' | Out-Null
+if (`$LASTEXITCODE -ne 0) { throw 'Ayar yedeği izinleri korunamadı' }
+$verifyDump
+if (`$LASTEXITCODE -ne 0) { throw 'Veritabanı yedeği doğrulanamadı' }
+foreach (`$archive in @(`$part, "`$out.settings.json")) { `$hashFile = "`$archive.sha256"; if (`$archive -eq `$part) { `$hashFile = "`$out.sha256" }; [IO.File]::WriteAllText(`$hashFile, (Get-FileHash -LiteralPath `$archive -Algorithm SHA256).Hash.ToLower()) }
 Move-Item -LiteralPath `$part -Destination `$out
-Get-ChildItem -LiteralPath `$dir -File | Where-Object { `$_.Name -match '^erp-[0-9]{8}-[0-9]{6}\.dump$' } | Sort-Object Name -Descending | Select-Object -Skip `$keep | ForEach-Object { Remove-Item -LiteralPath `$_.FullName -Force; Remove-Item -LiteralPath ("`$(`$_.FullName).files.gz"), ("`$(`$_.FullName).files.gz.sha256") -Force -ErrorAction SilentlyContinue }
+foreach (`$secured in @(`$out,"`$out.sha256","`$out.files.gz","`$out.files.gz.sha256","`$out.settings.json","`$out.settings.json.sha256")) { & icacls `$secured /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' | Out-Null; if (`$LASTEXITCODE -ne 0) { throw 'Yedek dosyası izinleri korunamadı' } }
+Get-ChildItem -LiteralPath `$dir -File | Where-Object { `$_.Name -match '^erp-[0-9]{8}-[0-9]{6}\.dump$' } | Sort-Object Name -Descending | Select-Object -Skip `$keep | ForEach-Object { `$old = `$_.FullName; foreach (`$suffix in @('', '.sha256','.files.gz','.files.gz.sha256','.settings.json','.settings.json.sha256')) { Remove-Item -LiteralPath "`$old`$suffix" -Force -ErrorAction SilentlyContinue } }
 Write-Host "Yedek: `$out"
 "@
   [IO.File]::WriteAllText($file, ($head + "`r`n" + $body + "`r`n" + $tail), (New-Object System.Text.UTF8Encoding $true))
@@ -758,7 +802,8 @@ function Install-ProdNative {
   if (-not (Test-Path (Join-Path $Root 'app\runtime\node.exe'))) { Die 'Kitte çalışma zamanı yok (app\runtime\node.exe); kit bozuk olabilir' }
   if (-not (Test-Path (Join-Path $Root 'winsw\MuhasebeERP.exe'))) { Die 'Kitte hizmet sarmalayıcısı yok (winsw\MuhasebeERP.exe)' }
   Protect-DataDir
-  foreach ($d in @('logs', 'backups', 'construction')) { $p = Join-Path $DataDir $d; if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p | Out-Null } }
+  foreach ($d in @('logs', 'backups', 'construction', 'license-clock')) { $p = Join-Path $DataDir $d; if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p | Out-Null } }
+  & icacls (Join-Path $DataDir 'license-clock') /grant "${SidLocalService}:(OI)(CI)M" | Out-Null
   & icacls (Join-Path $DataDir 'logs') /grant "${SidLocalService}:(OI)(CI)M" | Out-Null
   & icacls (Join-Path $DataDir 'construction') /grant "${SidLocalService}:(OI)(CI)M" | Out-Null
 
@@ -821,6 +866,9 @@ function Install-ProdNative {
     Write-WizardConf
   }
   Set-EnvLine $erpEnv 'APP_VERSION' $ver
+  Set-EnvLine $erpEnv 'LICENSE_CLOCK_FILE' (Join-Path $DataDir 'license-clock\state.json')
+  if (Test-Path (Join-Path $ProgDir "versions\$ver\app\tessdata")) { Set-EnvLine $erpEnv 'CONSTRUCTION_TESSDATA_DIR' (Join-Path $ProgDir 'current\app\tessdata') }
+  if (Test-Path (Join-Path $ProgDir "versions\$ver\app\worker\construction-worker.exe")) { Set-EnvLine $erpEnv 'CONSTRUCTION_WORKER_EXECUTABLE' (Join-Path $ProgDir 'current\app\worker\construction-worker.exe') }
   if (-not (Get-EnvValue $erpEnv 'CONSTRUCTION_STORAGE_DIR')) { Set-EnvLine $erpEnv 'CONSTRUCTION_STORAGE_DIR' (Join-Path $DataDir 'construction') }
   if ($RestoreDb) { Restore-DbNative $RestoreDb }
 
@@ -1151,4 +1199,17 @@ Invoke-Prerequisites
 if ($Mode -eq 'dev') { Install-Dev }
 elseif ($script:Path -eq 'docker') { Install-ProdDocker }
 else { Install-ProdNative }
+if ($SetupOwnerFile) {
+  if ($script:LicState -notin @('active', 'grace')) { Die 'Lisans etkinleştirilmeden ilk yönetici oluşturulamaz. İnternet bağlantısını ve lisans kodunu kontrol edip yeniden deneyin.' }
+  $owner = Get-Content -Raw -LiteralPath $SetupOwnerFile | ConvertFrom-Json
+  $envFile = Join-Path $DataDir 'erp.env'
+  $token = Get-EnvValue $envFile 'INSTALLATION_SETUP_TOKEN'
+  if (-not $token) { $token = New-RandomB64 48; Set-EnvLine $envFile 'INSTALLATION_SETUP_TOKEN' $token; Restart-Service -Name $SvcId; if (-not (Wait-Ready "http://127.0.0.1:$Port/api/health/ready" 90)) { Die 'İlk yönetici kurulumu için hizmet hazır olmadı' } }
+  try {
+    $body = @{ organizationName = [string]$owner.organizationName; fullName = [string]$owner.fullName; email = [string]$owner.email; password = [string]$owner.password } | ConvertTo-Json
+    try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/api/auth/register" -Headers @{ 'x-installation-setup' = $token } -ContentType 'application/json' -Body ([Text.Encoding]::UTF8.GetBytes($body)) | Out-Null }
+    catch { if ($_.ErrorDetails.Message -notmatch 'SETUP_COMPLETED|EMAIL_TAKEN') { throw }; Info 'İlk yönetici zaten mevcut; hesap değiştirilmedi.' }
+    Ok 'İlk yönetici oluşturuldu; açık kayıt kapalı'
+  } finally { Remove-Item -LiteralPath $SetupOwnerFile -Force -ErrorAction SilentlyContinue; Set-EnvLine $envFile 'INSTALLATION_SETUP_TOKEN' ''; Restart-Service -Name $SvcId }
+}
 if ($Elevated) { Read-Host 'Kapatmak için Enter' | Out-Null }

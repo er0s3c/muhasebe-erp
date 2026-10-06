@@ -58,7 +58,7 @@ pg_env_from_url() {
 
 if [ "$MODE" = compose ]; then
   [ -f "$ENV_FILE" ] || { echo "$ENV_FILE yok" >&2; exit 1; }
-  # Lisans sunucusu compose'u için: ENV_FILE=deploy/license/.env COMPOSE_FILE=deploy/license/docker-compose.yml ERP_DB_NAME=erp_license
+  # Lisans sunucusu compose'u için: ENV_FILE=lisans-server/deploy/.env COMPOSE_FILE=lisans-server/deploy/docker-compose.yml ERP_DB_NAME=erp_license
   DB="${ERP_DB_NAME:-$(envval ERP_DB_NAME)}"; DB="${DB:-erp}"
   DC=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
   # Kap içindeki yerel soket bağlantısı (postgres imajında yerel bağlantı güvenilir): parola gerekmez, komut satırında görünmez

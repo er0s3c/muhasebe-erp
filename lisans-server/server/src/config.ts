@@ -1,0 +1,87 @@
+import { z } from 'zod';
+
+/**
+ * Fastify `trustProxy` değeri (bkz. apps/api/src/config.ts): varsayılan false; vekil (Caddy/cloudflared) arkasında vekilin adresini
+ * kapsayan liste (`loopback,uniquelocal`). Sayısal atlama değeri (`1`) `loadConfig` tarafından reddedilir: Fastify ≥ 5.12 onu
+ * hiçbir adrese güvenmeyen bir işleve çevirir (tüm istekler vekil adresinden görünür, oran sınırı tek kovaya düşer).
+ */
+export function parseTrustProxy(value: string): boolean | number | string[] {
+  const v = value.trim();
+  if (v === '' || v === 'false') return false;
+  if (v === 'true') return true;
+  if (/^\d+$/.test(v)) return Number(v);
+  return v
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const flag = (fallback: boolean) =>
+  z
+    .enum(['true', 'false'])
+    .default(fallback ? 'true' : 'false')
+    .transform((v) => v === 'true');
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+  HOST: z.string().default('0.0.0.0'),
+  /** Çalışma zamanı rolü (erp_app). */
+  DATABASE_URL: z.string().min(1),
+  /** Parola ile mühürlenmiş imza anahtarı dosyası (`cli keygen` üretir). */
+  LICENSE_SIGNING_KEY_FILE: z.string().min(1).optional(),
+  LICENSE_SIGNING_KEY_PASSPHRASE: z.string().min(12).optional(),
+  /** Yönetici TOTP sırlarını diskte şifrelemek için ana sır (≥ 32 karakter, rastgele). Kaybolursa TOTP'ler yeniden kurulur. */
+  LICENSE_DATA_KEY: z.string().min(32),
+  TRUST_PROXY: z.string().default('false').transform(parseTrustProxy),
+  /** Yönetim paneli çerezi `Secure` bayrağı; varsayılan yalnızca production'da açık. */
+  ADMIN_COOKIE_SECURE: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === 'true')),
+  /**
+   * Yönetim panelinin tarayıcıdaki kökeni (ör. https://lisans.ornek.com): giriş anahtarları (WebAuthn) bu köken ve alan adına
+   * bağlanır. Verilmezse istekteki protokol + Host kullanılır (yalnızca geliştirme için).
+   */
+  LICENSE_ADMIN_ORIGIN: z
+    .url({ protocol: /^https?$/ })
+    .optional()
+    .transform((v) => (v === undefined ? undefined : new URL(v).origin)),
+  RATE_LIMIT_ENABLED: flag(true),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  /** Derlenmiş yönetim paneli (lisans-server/panel/dist); verilirse aynı kökenden sunulur. */
+  PANEL_DIST_DIR: z.string().optional(),
+  SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().min(1000).default(15_000),
+  APP_VERSION: z.string().default('dev'),
+  /** Uzaktan güncelleme kit arşivlerinin saklandığı klasör (kalıcı birim; compose: releases birimi). */
+  RELEASES_DIR: z.string().default('releases'),
+  GITHUB_REPOSITORY_ID: z.string().regex(/^\d+$/).optional(),
+  GITHUB_REPOSITORY: z.string().regex(/^[\w.-]+\/[\w.-]+$/).optional(),
+  GITHUB_OIDC_AUDIENCE: z.string().default('muhasebe-erp-release'),
+});
+
+export type Config = Omit<z.infer<typeof envSchema>, 'ADMIN_COOKIE_SECURE'> & { ADMIN_COOKIE_SECURE: boolean };
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const present = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== ''));
+  const parsed = envSchema.safeParse(present);
+  if (!parsed.success) throw new Error(`Geçersiz ortam değişkenleri:\n${z.prettifyError(parsed.error)}`);
+  const c = parsed.data;
+  if (typeof c.TRUST_PROXY === 'number') {
+    throw new Error(
+      "Sayısal TRUST_PROXY (atlama sayısı) Fastify 5'te yok sayılır; vekilin adresini kapsayan bir liste verin (ör. loopback,uniquelocal) ya da vekil yoksa false",
+    );
+  }
+  if (c.NODE_ENV === 'production') {
+    // WebAuthn (giriş anahtarları) köken ve alan adına bağlanır; istekteki Host başlığına güvenilmez.
+    if (!c.LICENSE_ADMIN_ORIGIN) throw new Error('Üretimde LICENSE_ADMIN_ORIGIN (panelin https kökeni, ör. https://lisans.ornek.com) gerekli: giriş anahtarları bu köke bağlanır');
+    if (!c.LICENSE_ADMIN_ORIGIN.startsWith('https://')) throw new Error('Üretimde LICENSE_ADMIN_ORIGIN https olmalı (WebAuthn güvenli bağlam ister)');
+  }
+  if (c.NODE_ENV === 'production' && !c.LICENSE_SIGNING_KEY_FILE) {
+    throw new Error('Üretimde LICENSE_SIGNING_KEY_FILE ve LICENSE_SIGNING_KEY_PASSPHRASE gerekli');
+  }
+  if (c.LICENSE_SIGNING_KEY_FILE && !c.LICENSE_SIGNING_KEY_PASSPHRASE) {
+    throw new Error('LICENSE_SIGNING_KEY_FILE verildi ama LICENSE_SIGNING_KEY_PASSPHRASE yok');
+  }
+  return { ...c, ADMIN_COOKIE_SECURE: c.ADMIN_COOKIE_SECURE ?? c.NODE_ENV === 'production' };
+}

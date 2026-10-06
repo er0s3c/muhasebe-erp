@@ -55,6 +55,7 @@ export function createLicenseService(opts: { db: Db; config: Config; log?: Licen
     transport,
     appVersion: config.APP_VERSION,
     hostIdFile: config.LICENSE_HOST_ID_FILE,
+    clockFile: config.LICENSE_CLOCK_FILE ?? (config.NODE_ENV === 'production' ? 'data/licensing/clock.json' : undefined),
     now: setup?.now,
     reloadMs: setup?.reloadMs,
     log: opts.log,

@@ -302,7 +302,7 @@ export const constructionJobRoutes: FastifyPluginAsync = async (app) => {
 async function python(app: FastifyInstance, kind: string, source: string, output: string) {
   const script = fileURLToPath(new URL('./construction-worker.py', import.meta.url));
   await new Promise<void>((resolvePromise, reject) => {
-    const p = spawn(app.config.CONSTRUCTION_PYTHON, [script, kind, source, output], {
+    const p = spawn(app.config.CONSTRUCTION_WORKER_EXECUTABLE ?? app.config.CONSTRUCTION_PYTHON, app.config.CONSTRUCTION_WORKER_EXECUTABLE ? [kind, source, output] : [script, kind, source, output], {
       windowsHide: true,
       stdio: ['ignore', 'ignore', 'pipe'],
     });
@@ -347,6 +347,8 @@ export async function processConstructionJobs(app: FastifyInstance) {
   for (const target of targets) {
     const context = { companyId: target.company_id, orgId: target.organization_id };
     const claimed = await withContext(app.db, context, async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtext('erp-maintenance-write'))`);
+      if ((await tx.execute(sql`select id from app_updates where status='applying' limit 1`)).rows[0]) return null;
       const candidate = (
         await tx.execute<{ id: string; createdBy: string }>(
           sql`select id,created_by as "createdBy" from construction_jobs where status='queued' or(status='running' and lease_until<now()) order by created_at for update skip locked limit 1`,

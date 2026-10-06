@@ -1,0 +1,4 @@
+# A cloudflared service running on the HOST connects here. Never bind to 0.0.0.0.
+services:
+  caddy:
+    ports: ['127.0.0.1:4080:80']

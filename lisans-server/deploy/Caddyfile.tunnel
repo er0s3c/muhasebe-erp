@@ -1,0 +1,39 @@
+# Cloudflare Tunnel arkasında iç ters vekil (TLS Cloudflare'de biter; bu Caddy yalnızca ağ içinden, cloudflared'den erişilir).
+# İstemci adresi Cf-Connecting-IP başlığından alınır; başlığa yalnızca iç ağdaki vekiller (cloudflared) için güvenilir.
+# Lisans/zaman, CI ve imzalı indirme uçları kendi yetkilerini denetler; panel zorunlu MFA kullanır.
+{
+	auto_https off
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers Cf-Connecting-IP
+	}
+}
+
+:80 {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		Cache-Control "no-store"
+	}
+	route {
+		@wrongHost not host {$LICENSE_DOMAIN}
+		respond @wrongHost "Bilinmeyen alan adı" 421
+
+		@public path /v1/* /v2/time /ci/api/* /downloads/* /healthz
+		handle @public {
+			reverse_proxy license:4000 {
+				header_up X-Forwarded-For {client_ip}
+				header_up X-Forwarded-Proto https
+			}
+		}
+
+		handle {
+			@denied not client_ip {$LICENSE_ADMIN_ALLOW:0.0.0.0/0 ::/0}
+			respond @denied "Erişim reddedildi" 403
+			reverse_proxy license:4000 {
+				header_up X-Forwarded-For {client_ip}
+				header_up X-Forwarded-Proto https
+			}
+		}
+	}
+}

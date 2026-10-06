@@ -72,7 +72,7 @@ EMPTY_SQL="select count(*) from pg_class c join pg_namespace n on n.oid = c.reln
 
 if [ "$MODE" = compose ]; then
   [ -f "$ENV_FILE" ] || { echo "$ENV_FILE yok" >&2; exit 1; }
-  # Lisans sunucusu compose'u için: ENV_FILE=deploy/license/.env COMPOSE_FILE=deploy/license/docker-compose.yml ERP_DB_NAME=erp_license (DB_OWNER_PASSWORD de kabul edilir)
+  # Lisans sunucusu compose'u için: ENV_FILE=lisans-server/deploy/.env COMPOSE_FILE=lisans-server/deploy/docker-compose.yml ERP_DB_NAME=erp_license (DB_OWNER_PASSWORD de kabul edilir)
   DB="${TARGET:-${ERP_DB_NAME:-$(envval ERP_DB_NAME)}}"; DB="${DB:-erp}"
   DC=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
   # Kap içi yerel soket (postgres imajında yerel bağlantı güvenilir): sahip rolüyle, parolasız

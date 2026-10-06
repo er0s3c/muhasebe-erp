@@ -23,6 +23,7 @@ import {
   closeSync,
   cpSync,
   createWriteStream,
+  createReadStream,
   existsSync,
   lchownSync,
   lstatSync,
@@ -60,7 +61,7 @@ export interface UpdaterConfig {
   backupCommand?: string[];
   dbName?: string;
   /** HTTPS (Caddy) yapılandırılmışsa: güncellemeden sonra https://127.0.0.1:<port> (SNI: host) üzerinden sağlık denetimi. */
-  httpsCheck?: { port: number; host: string };
+  httpsCheck?: { port: number; host: string; caFile?: string };
   /** Aynı güncellemenin en çok kaç kez deneneceği (varsayılan 3). */
   maxAttempts?: number;
   /** Docker yolunda güncelleme öncesi dökümlerden kaç tanesi saklanır (varsayılan 3). */
@@ -87,8 +88,8 @@ export interface UpdaterIO {
   run: (cmd: string, args: string[], opts?: { cwd?: string; timeoutMs?: number; stdoutFile?: string }) => Promise<{ code: number; output: string }>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
-  /** HTTPS sağlık denetimi: durum kodu (bağlantı hatası 0). Sertifika güveni denetlenmez (kendi imzalı olabilir); el sıkışma ve vekil denetlenir. */
-  httpsStatus?: (port: number, host: string, path: string) => Promise<number>;
+  /** HTTPS sağlık denetimi: güvenilir CA ve sunucu adı doğrulanır. */
+  httpsStatus?: (port: number, host: string, path: string, caFile?: string) => Promise<number>;
   /** Sürecin yaşayıp yaşamadığı (kilit bayatlığı). */
   pidAlive?: (pid: number) => boolean;
 }
@@ -111,10 +112,10 @@ export function pidAlive(pid: number): boolean {
   }
 }
 
-function httpsStatus(port: number, host: string, path: string): Promise<number> {
+function httpsStatus(port: number, host: string, path: string, caFile?: string): Promise<number> {
   return new Promise((resolve) => {
     const req = httpsRequest(
-      { host: '127.0.0.1', port, path, method: 'GET', servername: /^[\d.]+$/.test(host) ? undefined : host, headers: { host }, rejectUnauthorized: false, timeout: 5000 },
+      { host: '127.0.0.1', port, path, method: 'GET', servername: /^[\d.]+$/.test(host) ? undefined : host, headers: { host }, rejectUnauthorized: true, ...(caFile ? { ca: readFileSync(caFile) } : {}), timeout: 5000 },
       (res) => {
         res.resume();
         resolve(res.statusCode ?? 0);
@@ -219,11 +220,12 @@ export class Updater {
     return json;
   }
 
-  private async report(id: string, status: string, message?: string) {
+  private async report(id: string, status: string, message?: string, required = false) {
     try {
       await this.api('POST', '/api/system/updater/report', { id, status, ...(message ? { message: message.slice(0, 2000) } : {}), log: this.logText.slice(-REPORT_LOG_MAX) });
     } catch (err) {
       await this.log(`durum bildirilemedi (${status}): ${(err as Error).message}`);
+      if (required) throw new Error('Güncelleme bakım kilidi doğrulanamadı; kurulum başlamadı', { cause: err });
     }
   }
 
@@ -293,7 +295,7 @@ export class Updater {
     const dir = join(this.cfg.workDir, 'downloads');
     mkdirSync(dir, { recursive: true });
     const dest = join(dir, entry.name);
-    if (existsSync(dest) && statSync(dest).size === entry.size && sha256File(dest) === entry.sha256) {
+    if (existsSync(dest) && statSync(dest).size === entry.size && await sha256File(dest) === entry.sha256) {
       await this.log(`indirme önbellekte: ${entry.name}`);
       return dest;
     }
@@ -303,7 +305,7 @@ export class Updater {
     const part = `${dest}.part`;
     await pipeline(Readable.fromWeb(res.body as never), createWriteStream(part));
     const size = statSync(part).size;
-    const sum = sha256File(part);
+    const sum = await sha256File(part);
     if (size !== entry.size || sum !== entry.sha256) {
       rmSync(part, { force: true });
       throw new Error('İndirilen dosyanın SHA-256 özeti ya da boyutu manifestoyla uyuşmuyor (bozuk ya da değiştirilmiş)');
@@ -408,7 +410,7 @@ export class Updater {
     if (!h) return true;
     const probe = this.io.httpsStatus ?? httpsStatus;
     for (let i = 0; i < 45; i++) {
-      if ((await probe(h.port, h.host, '/api/health/ready')) === 200) return true;
+      if ((await probe(h.port, h.host, '/api/health/ready', h.caFile)) === 200) return true;
       await this.io.sleep(2000);
     }
     return false;
@@ -495,6 +497,7 @@ export class Updater {
       const docker = this.cfg.mode === 'docker';
       const stash = join(this.cfg.workDir, 'kits', `${fromVersion || 'onceki'}-onceki`);
       try {
+        await this.report(p.id, 'applying', undefined, true);
         backup = await this.backup();
         await this.log(`yedek alındı: ${backup}`);
         kitDir = await this.extract(archive, p.version);
@@ -511,7 +514,6 @@ export class Updater {
         return { outcome: 'failed', message: (err as Error).message };
       }
 
-      await this.report(p.id, 'applying');
       await this.log(`sihirbaz çalışıyor: ${kitDir}`);
       const r = await this.installer(kitDir);
       await this.log(`sihirbaz çıkış kodu ${r.code}\n${r.output.slice(-20_000)}`);
@@ -594,6 +596,6 @@ export class Updater {
   }
 }
 
-export function sha256File(path: string): string {
-  return createHash('sha256').update(readFileSync(path)).digest('hex');
+export async function sha256File(path: string): Promise<string> {
+  const hash = createHash('sha256'); for await (const chunk of createReadStream(path)) hash.update(chunk); return hash.digest('hex');
 }

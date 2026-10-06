@@ -471,7 +471,7 @@ install_prod_docker() {
     fi
   else
     image="muhasebe-erp:local"; build_flag=(--build)
-    info "Depodan kurulum: imaj kaynak koddan derlenecek (lisans anahtarı derlemeye gömülür; docs/LICENSING.md)"
+    info "Depodan kurulum: imaj kaynak koddan derlenecek (lisans anahtarı derlemeye gömülür; lisans-server/docs/LICENSING.md)"
   fi
 
   local fresh=0
@@ -735,6 +735,10 @@ EOF
   rm -f "$WIZARD_TMP"
   as_root sed -i "s/^APP_VERSION=.*/APP_VERSION=$ver/" "$ETC/erp.env"
   ensure_env_secret "$ETC/erp.env" CONSTRUCTION_STORAGE_DIR "$VARDIR/construction"
+  if [[ -x "$PREFIX/versions/$KIT_VERSION/app/worker/construction-worker" ]]; then set_env_line "$ETC/erp.env" CONSTRUCTION_WORKER_EXECUTABLE "$PREFIX/current/app/worker/construction-worker"; fi
+  if [[ -d "$PREFIX/versions/$KIT_VERSION/app/tessdata" ]]; then set_env_line "$ETC/erp.env" CONSTRUCTION_TESSDATA_DIR "$PREFIX/current/app/tessdata"; fi
+  as_root mkdir -p "$VARDIR/license-clock"; as_root chown "$SVC_USER:$SVC_USER" "$VARDIR/license-clock"; as_root chmod 700 "$VARDIR/license-clock"
+  ensure_env_secret "$ETC/erp.env" LICENSE_CLOCK_FILE "$VARDIR/license-clock/state.json"
   as_root mkdir -p "$VARDIR/construction"
   as_root chown "$SVC_USER:$SVC_USER" "$VARDIR/construction"
   as_root chmod 700 "$VARDIR/construction"

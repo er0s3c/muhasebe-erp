@@ -1,0 +1,16 @@
+# Dashboard-managed Tunnel: route admin.er0s3c.com to http://caddy:80.
+# No inbound host port is published. The token is not an environment variable or CLI value.
+services:
+  cloudflared:
+    image: ${CLOUDFLARED_IMAGE:?Use a verified cloudflare/cloudflared image digest}
+    restart: unless-stopped
+    user: '65532:65532'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    command: ['tunnel', '--no-autoupdate', 'run', '--token-file', '/run/secrets/tunnel-token']
+    volumes: ['./tunnel-token:/run/secrets/tunnel-token:ro']
+    depends_on: [caddy]
+    logging:
+      driver: json-file
+      options: { max-size: '10m', max-file: '5' }

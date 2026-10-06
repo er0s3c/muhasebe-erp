@@ -379,7 +379,7 @@ describe('betikler: sözdizimi ve statik denetim', () => {
     expect(r.stdout, r.stdout).toBe('');
   });
   it('compose dosyalarında günlük döndürme (json-file, boyut sınırı) var (OPS-23)', () => {
-    for (const f of ['deploy/docker-compose.prod.yml', 'deploy/docker-compose.demo.yml', 'deploy/license/docker-compose.yml']) {
+    for (const f of ['deploy/docker-compose.prod.yml', 'deploy/docker-compose.demo.yml', 'lisans-server/deploy/docker-compose.yml']) {
       const y = readFileSync(join(ROOT, f), 'utf8');
       expect(y, f).toMatch(/x-logging: &default-logging\r?\n {2}driver: json-file\r?\n {2}options:\r?\n {4}max-size: '10m'\r?\n {4}max-file: '5'/);
       const services = y.split(/\r?\nvolumes:/)[0]!.split(/\r?\nservices:\r?\n/)[1]!;

@@ -89,6 +89,7 @@ const envSchema = z
     WEB_DIST_DIR: z.string().optional(),
     CONSTRUCTION_STORAGE_DIR: z.string().default('data/construction'),
     CONSTRUCTION_PYTHON: z.string().default('python'),
+    CONSTRUCTION_WORKER_EXECUTABLE: z.string().optional(),
     CONSTRUCTION_TESSDATA_DIR: z.string().default('data/construction-runtime/tessdata'),
     CONSTRUCTION_JOBS_ENABLED: flag(true),
     CONSTRUCTION_AI_URL: z.url().startsWith('https://').optional(),
@@ -103,6 +104,8 @@ const envSchema = z
     LICENSE_ALLOW_INSECURE_URL: flag(false),
     /** Ana makine kimliği dosyası (compose, ana makinenin /etc/machine-id dosyasını salt-okunur bağlar). */
     LICENSE_HOST_ID_FILE: z.string().optional(),
+    LICENSE_CLOCK_FILE: z.string().optional(),
+    INSTALLATION_SETUP_TOKEN: z.string().min(32).optional(),
     /** Kurulum kitinin hedefi (sihirbaz yazar): uzaktan güncellemede hangi arşivin teklif edileceğini belirler. */
     ERP_KIT_TARGET: z.enum(['linux-x64', 'win-x64']).optional(),
     /** Ana makinedeki güncelleyicinin uygulamayla konuştuğu paylaşılan gizli belirteç (sihirbaz üretir); yoksa uzaktan güncelleme kapalı. */

@@ -27,5 +27,7 @@ deploy/.env.bak-*
 
 .cache/
 .runtime/
+installer/windows/**/bin/
+installer/windows/**/obj/
 **/data/construction/
 **/data/construction-runtime/

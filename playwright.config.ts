@@ -10,7 +10,8 @@ import { defineConfig, devices } from '@playwright/test';
 const bundle = process.env.E2E_TARGET === 'bundle';
 
 export default defineConfig({
-  testDir: 'e2e',
+  testDir: '.',
+  testMatch: ['e2e/**/*.spec.ts', 'lisans-server/e2e/**/*.spec.ts'],
   globalSetup: './e2e/global-setup.ts',
   outputDir: 'test-results',
   // CI çalıştırıcıları yerel makineden yavaştır; en uzun senaryo (kasa/banka) orada 60 sn'yi aşıyordu.

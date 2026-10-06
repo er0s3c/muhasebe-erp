@@ -21,6 +21,7 @@ import { AppError } from '../http/errors';
 import { serverFingerprint, type ServerFingerprint } from './fingerprint';
 import { LicenseServerError, LicenseUnreachableError, type LicenseTransport } from './transport';
 import { LicenseStore, type LicenseRow } from './store';
+import { TrustedLicenseClock } from './trusted-clock';
 
 /** `evaluateLease` nedenlerine ek olarak: veritabanındaki kira imzası/biçimi doğrulanamadı (kurcalanmış ya da bozuk). */
 export type LicenseReason = RestrictedReason | 'invalid_lease';
@@ -59,6 +60,8 @@ export interface LicenseServiceOptions {
   appVersion: string;
   hostIdFile?: string;
   now?: () => number;
+  clockFile?: string;
+  monotonic?: () => number;
   log?: LicenseLogger;
   /** Veritabanı durumunun bellekteki kopyasının en çok ne kadar eski kalabileceği (ms). */
   reloadMs?: number;
@@ -92,6 +95,7 @@ const consoleLog: LicenseLogger = {
  * her okunuşta (en geç `reloadMs` aralıkla) imza yeniden doğrulanır, bu yüzden veritabanında kira düzenlemek işe yaramaz.
  */
 export class LicenseService {
+  private readonly trustedClock: TrustedLicenseClock;
   readonly enforced: boolean;
   private readonly store: LicenseStore;
   private readonly keyring: PublicKeyring;
@@ -116,6 +120,7 @@ export class LicenseService {
   private initPromise: Promise<void> | null = null;
   private refreshing: Promise<void> | null = null;
   private queue: Promise<unknown> = Promise.resolve();
+  private heartbeatAttemptMono: number | null = null;
 
   constructor(opts: LicenseServiceOptions) {
     this.enforced = opts.enforced;
@@ -123,6 +128,7 @@ export class LicenseService {
     this.keyring = opts.keyring;
     this.transport = opts.transport;
     this.now = opts.now ?? Date.now;
+    this.trustedClock = new TrustedLicenseClock(opts.clockFile, this.now, opts.monotonic);
     this.log = opts.log ?? consoleLog;
     this.reloadMs = opts.reloadMs ?? 60_000;
     this.heartbeatIntervalMs = opts.heartbeatIntervalMs ?? Math.round(HEARTBEAT_INTERVAL_MS * (0.9 + Math.random() * 0.2));
@@ -175,6 +181,7 @@ export class LicenseService {
     this.row = row;
     this.fp = fp;
     this.lease = lease;
+    if (lease?.v === 2) this.trustedClock.restore(row.installationId, row.privateKeyPem, lease.serverTime);
     this.leaseInvalid = invalid;
     this.highWater = Math.max(this.highWater, row.highWater, lease?.serverTime ?? 0);
     this.persistedHighWater = Math.max(this.persistedHighWater, row.highWater);
@@ -197,10 +204,16 @@ export class LicenseService {
   private snapshot(): LicenseSnapshot {
     const row = this.row!;
     const fp = this.fp!;
-    const now = this.now();
+    const now = this.lease?.v === 2 ? this.trustedClock.now() : this.now();
     const ev: Omit<LeaseEvaluation, 'reason'> & { reason?: LicenseReason } = this.leaseInvalid
       ? { state: 'restricted', reason: 'invalid_lease', expiresSoon: false }
-      : evaluateLease(this.lease, { now, highWater: this.highWater, installationId: row.installationId, fingerprint: fp.fingerprint });
+      : this.lease?.v === 2 && this.trustedClock.uncertain
+        ? { state: 'restricted', reason: 'clock_rollback', expiresSoon: false }
+        : evaluateLease(this.lease, { now, highWater: this.lease?.v === 2 ? now : this.highWater, installationId: row.installationId, fingerprint: fp.fingerprint });
+    if (this.lease?.v === 2) {
+      try { this.trustedClock.checkpoint(row.installationId, row.privateKeyPem); }
+      catch { this.trustedClock.uncertain = true; return { ...this.snapshot(), state: 'restricted', reason: 'clock_rollback' }; }
+    }
 
     // En yüksek görülen zaman yalnızca ileri gider; belirli aralıklarla kalıcı hale getirilir (yeniden başlatmada sıfırlanmasın).
     this.highWater = nextHighWater(this.highWater, now, this.lease?.serverTime);
@@ -323,12 +336,13 @@ export class LicenseService {
     }
     const now = this.now();
     const skewMsg = 'Sunucu saatiniz lisans sunucusunun saatinden çok farklı; saati düzeltip yeniden deneyin';
-    if (lease.serverTime > now + CLOCK_SKEW_MS) throw new AppError(422, 'CLOCK_SKEW', skewMsg);
-    if (expect.typ === 'lease' && lease.serverTime < now - CLOCK_SKEW_MS) throw new AppError(422, 'CLOCK_SKEW', skewMsg);
+    if (lease.v === 1 && lease.serverTime > now + CLOCK_SKEW_MS) throw new AppError(422, 'CLOCK_SKEW', skewMsg);
+    if (lease.v === 1 && expect.typ === 'lease' && lease.serverTime < now - CLOCK_SKEW_MS) throw new AppError(422, 'CLOCK_SKEW', skewMsg);
     if (this.lease && lease.issuedAt < this.lease.issuedAt) {
       throw new AppError(422, 'LICENSE_STALE', 'Bu lisans, sunucudaki mevcut lisanstan daha eski');
     }
-    await this.store.saveLease(token, nextHighWater(this.highWater, now, lease.serverTime), now);
+    if (lease.v === 2) this.trustedClock.anchor(lease.serverTime, row.installationId, row.privateKeyPem);
+    await this.store.saveLease(token, nextHighWater(this.highWater, lease.v === 2 ? lease.serverTime : now, lease.serverTime), now);
     await this.reload();
   }
 
@@ -338,9 +352,10 @@ export class LicenseService {
       const transport = this.requireTransport();
       const { row, fp, key } = await this.fresh();
       const nonce = newNonce();
+      const time = transport.time ? await transport.time(row.installationId, newNonce(), this.keyring) : null;
       const env = signEnvelope(
         'activate',
-        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, code, nonce, ts: this.now() },
+        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, code, nonce, ts: time?.serverTime ?? this.now(), ...(time ? { protocolVersion: 2, timeNonce: time.nonce } : {}) },
         key,
       );
       const res = await this.call(() => transport.activate({ ...env, pub: row.publicKey }));
@@ -352,14 +367,16 @@ export class LicenseService {
   /** Kalp atışı: satıcıdan yeni kira (ya da imzalı iptal/askı bildirimi) alır. */
   heartbeat(): Promise<LicenseSnapshot> {
     return this.exclusive(async () => {
+      this.heartbeatAttemptMono = Number(process.hrtime.bigint() / 1_000_000n);
       const transport = this.requireTransport();
       const { row, fp, key } = await this.fresh();
       if (!row.leaseToken) throw new AppError(409, 'NOT_ACTIVATED', 'Bu kurulum henüz etkinleştirilmemiş');
       const nonce = newNonce();
       const stats = await this.statsProvider();
+      const time = transport.time ? await transport.time(row.installationId, newNonce(), this.keyring) : null;
       const env = signEnvelope(
         'heartbeat',
-        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, nonce, ts: this.now(), stats, ...(this.platform ? { platform: this.platform } : {}) },
+        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, nonce, ts: time?.serverTime ?? this.now(), ...(time ? { protocolVersion: 2, timeNonce: time.nonce } : {}), stats, ...(this.platform ? { platform: this.platform } : {}) },
         key,
       );
       const res = await this.call(() => transport.heartbeat(env));
@@ -429,6 +446,7 @@ export class LicenseService {
     await this.reload();
     const row = this.row!;
     if (!row.leaseToken) return false;
+    if (this.lease?.v === 2 && this.trustedClock.uncertain) return this.heartbeatAttemptMono === null || Number(process.hrtime.bigint() / 1_000_000n) - this.heartbeatAttemptMono >= RETRY_AFTER_CHECK_MS;
     const now = this.now();
     if (now - (row.lastCheckAt?.getTime() ?? 0) < RETRY_AFTER_CHECK_MS) return false;
     if (this.leaseInvalid) return true;
@@ -439,6 +457,7 @@ export class LicenseService {
   startScheduler(): () => void {
     const tick = async () => {
       try {
+        if (this.lease?.v === 2 && this.row) this.trustedClock.checkpoint(this.row.installationId, this.row.privateKeyPem);
         if (await this.shouldHeartbeat()) {
           const snap = await this.heartbeat();
           this.log.info({ state: snap.state }, 'lisans kalp atışı tamam');

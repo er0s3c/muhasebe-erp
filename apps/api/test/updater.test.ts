@@ -200,25 +200,25 @@ describe('ana makine güncelleyicisi', () => {
     expect(w.installs).toHaveLength(0);
   });
 
-  it('bildirim gidemese de aynı güncelleme artan beklemeyle en çok 3 kez denenir', async () => {
+  it('bakım kilidi bildirilemezse kurulum başlamaz; artan beklemeyle en çok 3 kez denenir', async () => {
     const w = world({ installer: () => 1 });
     w.reportFails = true;
     const u = () => new Updater(w.cfg, ring, w.io).runOnce();
     expect((await u()).outcome).toBe('failed');
-    expect(w.installs).toHaveLength(1);
+    expect(w.installs).toHaveLength(0);
     expect((await u()).outcome).toBe('idle'); // bekleme süresi dolmadı
-    expect(w.installs).toHaveLength(1);
+    expect(w.installs).toHaveLength(0);
     w.clock.t += 16 * 60_000;
     await u();
-    expect(w.installs).toHaveLength(2);
+    expect(w.installs).toHaveLength(0);
     w.clock.t += 61 * 60_000;
     await u();
-    expect(w.installs).toHaveLength(3);
+    expect(w.installs).toHaveLength(0);
     w.clock.t += 5 * 60 * 60_000;
     const last = await u();
     expect(last.outcome).toBe('failed');
     expect(last.message).toMatch(/3 kez denendi/);
-    expect(w.installs).toHaveLength(3);
+    expect(w.installs).toHaveLength(0);
   });
 
   it('kilit: sahibi ölmüş süreçse bayat sayılır; yaşayan süreçse beklenir', async () => {

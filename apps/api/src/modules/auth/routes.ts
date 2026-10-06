@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
@@ -119,7 +119,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/api/auth/register', { config: limit }, async (req, reply) => {
     assertSameOrigin(req, app.config);
-    if (!app.config.REGISTRATION_ENABLED) {
+    const provided = req.headers['x-installation-setup'];
+    const setupToken = app.config.INSTALLATION_SETUP_TOKEN;
+    const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.raw.socket.remoteAddress ?? '');
+    const bootstrap = local && typeof provided === 'string' && !!setupToken && provided.length <= 256 && timingSafeEqual(Buffer.from(sha256(provided)), Buffer.from(sha256(setupToken)));
+    if (!app.config.REGISTRATION_ENABLED && !bootstrap) {
       throw new AppError(403, 'REGISTRATION_DISABLED', 'Yeni kayıt bu kurulumda kapalı');
     }
     const input = registerSchema.parse(req.body);
@@ -135,6 +139,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const device = await app.devices.ensureForRequest(req, reply);
 
     const user = await app.db.transaction(async (tx) => {
+      if (bootstrap) {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext('installation-first-owner'))`);
+        const [count] = await tx.select({ n: sql<number>`count(*)::int` }).from(users);
+        if (count!.n > 0) throw new AppError(409, 'SETUP_COMPLETED', 'İlk yönetici zaten oluşturulmuş');
+      }
       const orgId = await insertOrganization(tx, input.organizationName);
       const [u] = await tx
         .insert(users)

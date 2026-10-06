@@ -343,6 +343,7 @@ describe('sözleşme testleri', async () => {
     // Ana makinedeki güncelleyici: kullanıcı oturumu yok; ERP_UPDATER_TOKEN paylaşılan belirteciyle (yoksa her istek 401)
     'GET /api/system/updater/pending',
     'POST /api/system/updater/report',
+    'POST /api/system/updater/offline',
   ].sort();
 
   it('her /api rotası kamuya açık listede ya da tenantRoute/authedRoute kapısındadır (liste birebir)', () => {

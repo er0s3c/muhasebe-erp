@@ -8,7 +8,7 @@ import {
 } from '@erp/shared';
 import type { Config } from '../config';
 import { setContext, withContext, type Db, type Tx } from '../db/client';
-import { companies, companyModules, memberships, users } from '../db/schema';
+import { appUpdates, companies, companyModules, memberships, users } from '../db/schema';
 import { AppError, forbidden, unauthorized, badRequest } from './errors';
 import { denialFor, isModuleDenied, loadMemberAccess, moduleAccessDenied, requirePermission, type MemberAccess } from '../modules/access/effective';
 import type { Semaphore } from './limits';
@@ -104,6 +104,13 @@ export interface TenantCtx extends AuthCtx {
 const passwordChangeRequired = () =>
   forbidden('Devam etmeden önce şifrenizi değiştirmelisiniz', 'PASSWORD_CHANGE_REQUIRED');
 
+async function maintenanceWriteGuard(tx: Tx, req: FastifyRequest) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.routeOptions.url?.startsWith('/api/auth/') || req.routeOptions.url === '/api/settings/backups') return;
+  await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtext('erp-maintenance-write'))`);
+  const [running] = await tx.select({ id: appUpdates.id }).from(appUpdates).where(eq(appUpdates.status, 'applying')).limit(1);
+  if (running) throw new AppError(503, 'UPDATE_MAINTENANCE', 'Güncelleme ve yedekleme sürüyor; kayıtlar görüntülenebilir. Yazma işlemini güncelleme bitince tekrar deneyin.');
+}
+
 async function authenticate(app: FastifyInstance, req: FastifyRequest): Promise<AuthUser> {
   try {
     await req.jwtVerify();
@@ -149,6 +156,7 @@ export function authedRoute<T>(
         .where(eq(users.id, user.id));
       if (!row?.isActive || !row.sessionOpen) throw unauthorized();
       if (row.mustChangePassword && !opts.allowMustChange) throw passwordChangeRequired();
+      await maintenanceWriteGuard(tx, req);
       return handler({ tx, user, req, reply });
     });
   };
@@ -202,6 +210,7 @@ export function tenantRoute<T>(
       if (member && !member.sessionOpen) throw unauthorized();
       if (!member || !member.isActive) throw forbidden('Bu şirkete erişiminiz yok', 'NOT_A_MEMBER');
       if (member.mustChangePassword) throw passwordChangeRequired();
+      await maintenanceWriteGuard(tx, req);
 
       await setContext(tx, { userId: user.id, orgId: user.orgId, companyId, ip: req.ip });
       const securityPolicy = (await tx.execute<{ required: boolean; enabled: boolean }>(sql`select coalesce((select (settings->>'requireMfa')::boolean from company_operations_settings),false) as required,exists(select 1 from user_mfa where user_id=${user.id}::uuid and enabled_at is not null) as enabled`)).rows[0];

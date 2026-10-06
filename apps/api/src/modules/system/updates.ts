@@ -2,9 +2,11 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type { Tx } from '../../db/client';
+import { setContext, type Tx } from '../../db/client';
 import { appUpdates } from '../../db/schema';
 import { isNewerThanCurrent } from './update-store';
+import { parseReleaseManifest } from '@erp/license-core';
+import { resolveKeyring } from '../../licensing';
 import { authedRoute, type AuthUser } from '../../http/context';
 import { AppError, conflict, forbidden, notFound, unprocessable } from '../../http/errors';
 import { licenseServerUrl } from '../../licensing';
@@ -137,6 +139,23 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
     }
   };
 
+  app.post('/api/system/updater/offline', async (req) => {
+    assertUpdater(req);
+    if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.raw.socket.remoteAddress ?? '')) throw forbidden('Yerel bakım erişimi gerekli');
+    const { manifest } = z.object({ manifest: z.string().min(20).max(100_000), confirmed: z.literal(true) }).parse(req.body);
+    const m = parseReleaseManifest(manifest, resolveKeyring(app.config));
+    if (!isNewerThanCurrent(m.version, current) || !m.files.some((f) => f.target === platform)) throw conflict('Paket sürümü veya platformu uygun değil', 'UPDATE_NOT_NEWER');
+    return app.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('erp-installation-update'))`);
+      const [active] = await tx.select({ id: appUpdates.id }).from(appUpdates).where(sql`${appUpdates.status} in ('requested','downloading','applying')`).limit(1);
+      if (active) throw conflict('Başka bir güncelleme sürüyor', 'UPDATE_IN_PROGRESS');
+      const fields = { version: m.version, notes: m.notes, manifest, files: m.files, downloadToken: '', status: 'requested', requestedAt: new Date(), scheduledFor: new Date(), updatedAt: new Date() };
+      const [row] = await tx.insert(appUpdates).values(fields).onConflictDoUpdate({ target: appUpdates.version, set: fields }).returning({ id: appUpdates.id });
+      await recordSecurityEvent(tx, app.log, req, { event: 'update_offline_requested', meta: { version: m.version } });
+      return { id: row!.id };
+    });
+  });
+
   /** Zamanı gelmiş onaylı güncelleme: indirme adresi (lisans sunucusu + kuruluma özel belirteç) ve imzalı manifesto. */
   app.get('/api/system/updater/pending', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => {
     assertUpdater(req);
@@ -191,7 +210,16 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
     }
     const now = new Date();
     const terminal = input.status === 'done' || input.status === 'failed' || input.status === 'rolled_back';
-    await app.db
+    await app.db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('erp-maintenance-write'))`);
+    if (input.status === 'applying') {
+      const targets = (await tx.execute<{ company_id: string; organization_id: string }>(sql`select company_id,organization_id from notification_scan_targets()`)).rows;
+      for (const target of targets) {
+        await setContext(tx, { companyId: target.company_id, orgId: target.organization_id });
+        if ((await tx.execute(sql`select id from construction_jobs where status='running' limit 1`)).rows[0]) throw conflict('Sahadaki model/belge işleme tamamlanınca güncellemeyi tekrar deneyin', 'UPDATE_WORKER_BUSY');
+      }
+    }
+    await tx
       .update(appUpdates)
       .set({
         status: input.status,
@@ -202,6 +230,7 @@ export const updateRoutes: FastifyPluginAsync = async (app) => {
         updatedAt: now,
       })
       .where(eq(appUpdates.id, input.id));
+    });
     return { ok: true };
   });
 };

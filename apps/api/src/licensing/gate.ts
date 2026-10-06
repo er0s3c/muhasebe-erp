@@ -22,6 +22,7 @@ const WRITES_WHEN_RESTRICTED = new Set([
   // Yerel güncelleyicinin durum bildirimi (paylaşılan belirteçle): salt-okunurken de güncelleme sonucu yazılabilmeli,
   // yoksa başarısız güncelleme "istendi" durumunda kalır ve her dakika yeniden denenir.
   'POST /api/system/updater/report',
+  'POST /api/system/updater/offline',
 ]);
 
 const isLicenseRoute = (route: string) => route === '/api/license' || route.startsWith('/api/license/');
@@ -34,7 +35,7 @@ const REASON_MESSAGES: Record<LicenseReason, string> = {
   suspended: 'Lisansınız askıya alınmış; yalnızca görüntüleme ve dışa aktarma yapılabilir. Satıcınızla iletişime geçin.',
   fingerprint_mismatch: 'Lisans bu sunucuya ait değil (sunucu değişmiş olabilir); yalnızca görüntüleme ve dışa aktarma yapılabilir. Lisansı bu sunucuda yeniden etkinleştirin.',
   installation_mismatch: 'Lisans bu kuruluma ait değil; yalnızca görüntüleme ve dışa aktarma yapılabilir. Lisansı yeniden etkinleştirin.',
-  clock_rollback: 'Sunucu saati geri alınmış görünüyor; saati düzeltin. Bu sürede yalnızca görüntüleme ve dışa aktarma yapılabilir.',
+  clock_rollback: 'Lisans zamanı doğrulanamıyor; internete bağlanıp lisansı yeniden doğrulayın. Bu sürede görüntüleme, yedekleme ve dışa aktarma açıktır.',
   invalid_lease: 'Lisans kaydı doğrulanamadı; yalnızca görüntüleme ve dışa aktarma yapılabilir. Lisansı yenileyin ya da yeniden etkinleştirin.',
 };
 
@@ -61,6 +62,7 @@ export function checkRequest(snap: LicenseSnapshot, method: string, route: strin
   }
   // Salt-okunur (restricted): okuma serbest, yazma yalnızca kimlik doğrulama ve lisans uçlarında.
   if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return null;
+  if (key === 'POST /api/settings/backups') return null;
   if (WRITES_WHEN_RESTRICTED.has(key) || isLicenseRoute(route) || isDeviceRoute(route)) return null;
   return new AppError(402, 'LICENSE_RESTRICTED', restrictionMessage(snap.reason), { state: snap.state, reason: snap.reason });
 }

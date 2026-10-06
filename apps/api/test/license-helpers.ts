@@ -100,7 +100,7 @@ interface VendorActivation {
 }
 
 /**
- * Satıcı sunucusunun bellek içi taklidi (gerçek sunucu apps/license-server testlerinde ve CI uçtan uca testinde sınanır):
+ * Satıcı sunucusunun bellek içi taklidi (gerçek sunucu lisans-server/server testlerinde ve CI uçtan uca testinde sınanır):
  * imza/zarf/nonce/yeniden oynatma/saat kuralları aynıdır, böylece uygulama istemcisi gerçek sözleşmeye karşı sınanır.
  */
 export class FakeVendor {

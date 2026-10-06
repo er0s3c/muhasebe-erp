@@ -1,7 +1,0 @@
-# YALNIZCA CI/yerel doğrulama: lisans sunucusunu ana makineye yayınlar (uygulama kapları host.docker.internal üzerinden erişir).
-# ÜRETİMDE KULLANMAYIN: orada yalnızca Caddy (TLS) dışarı açılır.
-#   docker compose -f deploy/license/docker-compose.yml -f deploy/license/docker-compose.ci.yml --env-file deploy/license/.env up -d license
-services:
-  license:
-    ports:
-      - '4100:4000'

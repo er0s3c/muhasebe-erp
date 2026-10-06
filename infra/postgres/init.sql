@@ -20,7 +20,7 @@ SELECT 'CREATE DATABASE erp_dev OWNER erp'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'erp_dev')\gexec
 SELECT 'CREATE DATABASE erp_test OWNER erp'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'erp_test')\gexec
--- Lisans sunucusu (apps/license-server) geliştirme ve test veritabanları
+-- Lisans sunucusu (lisans-server/server) geliştirme ve test veritabanları
 SELECT 'CREATE DATABASE erp_license_dev OWNER erp'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'erp_license_dev')\gexec
 SELECT 'CREATE DATABASE erp_license_test OWNER erp'

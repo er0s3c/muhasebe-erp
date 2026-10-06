@@ -24,7 +24,7 @@ deploy
 Dockerfile
 .dockerignore
 # Satıcıya özel (müşteri imajına girmez): lisans sunucusu ve yönetim paneli kaynakları. package.json'lar npm ci (kilit dosyası) için kalır.
-apps/license-server/*
-!apps/license-server/package.json
-apps/license-admin/*
-!apps/license-admin/package.json
+lisans-server/server/*
+!lisans-server/server/package.json
+lisans-server/panel/*
+!lisans-server/panel/package.json

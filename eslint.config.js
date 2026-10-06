@@ -29,7 +29,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/web/**/*.{ts,tsx}', 'apps/license-admin/**/*.{ts,tsx}'],
+    files: ['apps/web/**/*.{ts,tsx}', 'lisans-server/panel/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     plugins: { 'react-hooks': reactHooks },
     rules: {
@@ -39,12 +39,12 @@ export default tseslint.config(
   },
   {
     // Derlemeye girmeden olduğu gibi sunulan, eski tarayıcıya uygun klasik betikler
-    files: ['apps/web/public/**/*.js', 'apps/license-admin/public/**/*.js'],
+    files: ['apps/web/public/**/*.js', 'lisans-server/panel/public/**/*.js'],
     languageOptions: { globals: globals.browser, sourceType: 'script' },
     rules: { 'no-empty': ['error', { allowEmptyCatch: true }], '@typescript-eslint/no-unused-vars': ['error', { caughtErrors: 'none' }] },
   },
   {
-    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'e2e/**/*.ts', 'installer/**/*.mjs', '*.ts', '*.js'],
+    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'lisans-server/**/*.ts', 'lisans-server/tools/**/*.mjs', 'e2e/**/*.ts', 'installer/**/*.mjs', '*.ts', '*.js'],
     languageOptions: { globals: globals.node },
   },
   {

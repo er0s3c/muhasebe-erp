@@ -17,6 +17,7 @@ export type SecurityEventName =
   | 'mfa_recovery_regenerated'
   | 'mfa_failed'
   | 'update_requested'
+  | 'update_offline_requested'
   | 'member_added'
   | 'member_role_changed'
   | 'member_removed'

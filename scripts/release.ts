@@ -23,6 +23,9 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { once } from 'node:events';
+import { finished } from 'node:stream/promises';
 import {
   chmodSync,
   cpSync,
@@ -35,7 +38,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
-import { unzipSync, zipSync, type Zippable } from 'fflate';
+import { unzipSync, Zip, ZipDeflate } from 'fflate';
 
 type Target = 'linux-x64' | 'win-x64';
 const ALL_TARGETS: Target[] = ['linux-x64', 'win-x64'];
@@ -46,13 +49,14 @@ const WINSW = {
   sha256: '05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da',
   licenseUrl: 'https://raw.githubusercontent.com/winsw/winsw/v2.12.0/LICENSE.txt',
 };
+const CADDY = { version: '2.11.7', sha256: '0a1edc0b799512051c57071ce0e798d3f2cf67dc98171366f1d2b326072e3b06' };
 const WORKSPACE_PKGS = [
   'apps/api',
   'apps/web',
-  'apps/license-server',
-  'apps/license-admin',
+  'lisans-server/server',
+  'lisans-server/panel',
   'packages/shared',
-  'packages/license-core',
+  'lisans-server/core',
 ];
 
 const root = process.cwd();
@@ -256,7 +260,14 @@ async function stage(target: Target): Promise<string> {
   rmSync(dir, { recursive: true, force: true });
   log(`kit hazırlanıyor: ${name}`);
   const app = join(dir, 'app');
-  copyFiltered(apiDist, join(app, 'dist'), (n) => n.endsWith('.map'));
+  copyFiltered(apiDist, join(app, 'dist'), (n) => n.endsWith('.map') || n === 'construction-worker.py');
+  const worker = resolve(root, args['worker-dir'] ?? `.runtime/compiled-worker/${target}/construction-worker.dist`);
+  const workerName = target === 'win-x64' ? 'construction-worker.exe' : 'construction-worker';
+  if (!existsSync(join(worker, workerName))) fail(`Derlenmiş IFC/OCR işleyicisi yok: ${worker}. Önce installer/runtime/build-worker aracını çalıştırın.`);
+  cpSync(worker, join(app, 'worker'), { recursive: true });
+  const tessdata = resolve(root, args['tessdata-dir'] ?? 'apps/api/data/construction-runtime/tessdata');
+  for (const lang of ['tur', 'eng']) if (!existsSync(join(tessdata, `${lang}.traineddata.gz`))) fail(`OCR dili eksik: ${lang}`);
+  cpSync(tessdata, join(app, 'tessdata'), { recursive: true });
   copyFiltered(webDist, join(app, 'web'), (n) => n.endsWith('.map'));
   cpSync(notices, join(app, 'THIRD-PARTY-NOTICES.md'));
   cpSync(notices, join(app, 'web', 'THIRD-PARTY-NOTICES.md'));
@@ -276,9 +287,16 @@ async function stage(target: Target): Promise<string> {
       join(dir, 'winsw', 'LICENSE.txt'),
       await download(WINSW.licenseUrl, `WinSW-${WINSW.version}-LICENSE.txt`),
     );
+    const proxy = await download(`https://github.com/caddyserver/caddy/releases/download/v${CADDY.version}/caddy_${CADDY.version}_windows_amd64.zip`, `caddy-${CADDY.version}-windows.zip`);
+    if (sha256(proxy) !== CADDY.sha256) fail('Caddy SHA-256 tutmadı');
+    const contents = unzipSync(proxy);
+    if (!contents['caddy.exe']) fail('Caddy çalıştırılabilir dosyası bulunamadı');
+    mkdirSync(join(app, 'proxy'), { recursive: true });
+    writeFileSync(join(app, 'proxy/caddy.exe'), contents['caddy.exe']);
+    if (contents['LICENSE']) writeFileSync(join(app, 'proxy/LICENSE.txt'), contents['LICENSE']);
   }
   // Kurulum sihirbazı ve Docker yolu dosyaları
-  cpSync(join(root, 'installer'), join(dir, 'installer'), { recursive: true });
+  copyFiltered(join(root, 'installer'), join(dir, 'installer'), (n) => ['bin', 'obj', 'Wizard', 'Bundle', 'build.ps1', 'build-worker.ps1', 'build-worker.sh'].includes(n) || n.endsWith('.cs') || n.endsWith('.csproj') || n.endsWith('.wxs') || n.endsWith('.wixproj'));
   if (target === 'win-x64') cpSync(join(root, 'Kur.cmd'), join(dir, 'Kur.cmd'));
   else cpSync(join(root, 'install.sh'), join(dir, 'install.sh'));
   for (const f of [
@@ -309,27 +327,41 @@ async function stage(target: Target): Promise<string> {
     join(dir, 'kit.json'),
     `${JSON.stringify({ product: 'muhasebe-erp', version, target, node: nodeVersion, builtAt: new Date().toISOString(), commit, licenseServerUrl: licenseServerUrl || null }, null, 2)}\n`,
   );
+  const inspect = (folder: string) => {
+    for (const item of readdirSync(folder, { withFileTypes: true })) {
+      const file = join(folder, item.name), path = relative(dir, file).replaceAll('\\', '/');
+      if (item.isSymbolicLink()) fail(`Paket içinde sembolik bağ: ${path}`);
+      if (/^(lisans-server|\.git|apps|packages|test|tests|e2e)(\/|$)/.test(path) || /(^|\/)(\.env|signing-key\.json|.*\.pem|.*\.key)$/.test(path)) fail(`Satıcı dosyası pakete girdi: ${path}`);
+      if (item.isDirectory()) inspect(file);
+      else if (!path.includes('/node_modules/') && !path.includes('/worker/') && /\.(ts|tsx|cs|csproj|wxs|wixproj|map)$/.test(path)) fail(`Geliştirme kaynağı pakete girdi: ${path}`);
+      else if (/construction-worker\.py$/.test(path)) fail(`Uygulama işleyicisinin kaynağı pakete girdi: ${path}`);
+    }
+  };
+  inspect(dir);
+  writeFileSync(join(dir, 'PACKAGE-CHECK.json'), JSON.stringify({ sourceLeakCheck: 'passed', version, target, checkedAt: new Date().toISOString() }));
   return dir;
 }
 
 // ---- 5) Arşiv ------------------------------------------------------------------------------------------------------------
-function zipDir(dir: string, out: string) {
-  const tree: Zippable = {};
+async function zipDir(dir: string, out: string) {
+  const output = createWriteStream(out); let blocked = false; let failure: Error | null = null;
+  output.on('error', (e) => { failure = e; });
+  const zip = new Zip((err, data, final) => { if (err) { failure = err; output.destroy(err); return; } blocked = !output.write(data) || blocked; if (final) output.end(); });
+  const flush = async () => { if (failure) throw failure; if (blocked && output.writableNeedDrain) await once(output, 'drain'); blocked = false; };
   const prefix = basename(dir);
-  const walk = (p: string) => {
+  const walk = async (p: string) => {
     for (const e of readdirSync(p)) {
       const full = join(p, e);
       const st = statSync(full);
-      if (st.isDirectory()) walk(full);
-      else
-        tree[`${prefix}/${relative(dir, full).split('\\').join('/')}`] = [
-          readFileSync(full),
-          { level: 6, mtime: st.mtime },
-        ];
+      if (st.isDirectory()) await walk(full);
+      else {
+        const entry = new ZipDeflate(`${prefix}/${relative(dir, full).split('\\').join('/')}`, { level: 6 }); entry.mtime = st.mtime; zip.add(entry);
+        for await (const chunk of createReadStream(full)) { entry.push(chunk as Buffer); await flush(); }
+        entry.push(new Uint8Array(), true); await flush();
+      }
     }
   };
-  walk(dir);
-  writeFileSync(out, zipSync(tree));
+  await walk(dir); zip.end(); await finished(output);
 }
 
 const sums: string[] = [];
@@ -339,9 +371,10 @@ for (const target of targets) {
   const archive = target === 'win-x64' ? `${name}.zip` : `${name}.tar.gz`;
   const out = join(outDir, archive);
   log(`arşivleniyor: ${archive}`);
-  if (target === 'win-x64') zipDir(dir, out);
+  if (target === 'win-x64') await zipDir(dir, out);
   else run('tar', ['-czf', out, '-C', outDir, name]);
-  sums.push(`${sha256(readFileSync(out))}  ${archive}`);
+  const digest = createHash('sha256'); for await (const chunk of createReadStream(out)) digest.update(chunk);
+  sums.push(`${digest.digest('hex')}  ${archive}`);
   if (args.keep !== 'true') rmSync(dir, { recursive: true, force: true });
 }
 // Hedefler ayrı ayrı üretilebilir: önceki satırlar korunur, aynı arşivin satırı yenilenir

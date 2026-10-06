@@ -542,7 +542,7 @@ function Invoke-LicenseActivation([string]$base) {
 function Get-LicenseText {
   switch ($script:LicState) {
     'active' { return 'etkin' }
-    'grace' { return 'etkin (tolerans süresinde: lisans sunucusuna ulaşılamıyor)' }
+    'grace' { return 'etkin (abonelik/kira bitişinden sonraki ek sürede; lisansı yenileyin)' }
     'restricted' { return 'kısıtlı (salt-okunur): lisansı yenileyin/yeniden etkinleştirin' }
     'unlicensed' { return "ETKİNLEŞTİRİLMEDİ — uygulama lisans kodu girilmeden çalışmaz (açılışta 'Lisans etkinleştirme' ekranı)" }
   }
@@ -583,7 +583,8 @@ function Show-Summary([string]$url) {
   Say ''
   Say '  İlk giriş:'
   if ($script:LicState -eq 'unlicensed') { Say "   1) Tarayıcıda adresi açın → 'Lisans etkinleştirme' ekranına satıcıdan aldığınız kodu girin." }
-  if ($script:A['DEMO'] -eq 'yes') { Say '   • Demo hesabıyla girin (yukarıda).' } else { Say "   • 'Kayıt ol' ile ilk kuruluş, şirket ve sahip hesabını oluşturun (e-posta + güçlü parola)." }
+  if ($SetupOwnerFile) { Say '   • Sihirbazda verdiğiniz yönetici bilgileriyle giriş yapın; ilk şirketinizi oluşturun.' }
+  elseif ($script:A['DEMO'] -eq 'yes') { Say '   • Demo hesabıyla girin (yukarıda).' } else { Say "   • 'Kayıt ol' ile ilk kuruluş, şirket ve sahip hesabını oluşturun (e-posta + güçlü parola)." }
   if ($script:A['REGISTRATION'] -eq 'yes') { Say "   • İlk sahip hesabı açılınca kaydı kapatın: Kur.cmd -Reconfigure (`"Yeni kayıt açık olsun mu?`" → h)." }
   if ($script:A['TLS_MODE'] -eq 'selfsigned') {
     Say ''

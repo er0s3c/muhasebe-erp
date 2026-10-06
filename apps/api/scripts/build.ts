@@ -27,7 +27,7 @@ const outdir = join(root, 'dist');
 const ring = parseKeyring(process.env.LICENSE_PUBLIC_KEYS_JSON?.trim() || readFileSync(join(root, 'src/licensing/public-keys.json'), 'utf8'));
 if (!keyringUsable(ring) && process.env.LICENSE_ALLOW_EMPTY_KEYRING !== 'true') {
   throw new Error(
-    'Güvenilir satıcı açık anahtarı yok: LICENSE_PUBLIC_KEYS_JSON verin ya da açık anahtarı apps/api/src/licensing/public-keys.json dosyasına ekleyin (docs/LICENSING.md)',
+    'Güvenilir satıcı açık anahtarı yok: LICENSE_PUBLIC_KEYS_JSON verin ya da açık anahtarı apps/api/src/licensing/public-keys.json dosyasına ekleyin (lisans-server/docs/LICENSING.md)',
   );
 }
 const licenseServerUrl = process.env.LICENSE_SERVER_URL?.trim() ?? '';
@@ -64,7 +64,7 @@ const result = await build({
 
 // 1) node_modules'tan hiçbir şey gömülmemiş olmalı (yalnızca kendi kaynağımız ve @erp/shared)
 const bundled = Object.keys(result.metafile.inputs).filter(
-  (p) => p.includes('node_modules/') && !p.includes('/@erp/shared/') && !p.includes('packages/shared') && !p.includes('/@erp/license-core/') && !p.includes('packages/license-core'),
+  (p) => p.includes('node_modules/') && !p.includes('/@erp/shared/') && !p.includes('packages/shared') && !p.includes('/@erp/license-core/') && !p.includes('lisans-server/core'),
 );
 if (bundled.length > 0) {
   throw new Error(`Pakete gömülmemesi gereken bağımlılıklar var (dependencies'e ekleyin ya da dış bırakın):\n${bundled.slice(0, 10).join('\n')}`);

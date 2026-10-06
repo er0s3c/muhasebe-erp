@@ -9,10 +9,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-COPY apps/license-server/package.json apps/license-server/
-COPY apps/license-admin/package.json apps/license-admin/
+COPY lisans-server/server/package.json lisans-server/server/
+COPY lisans-server/panel/package.json lisans-server/panel/
 COPY packages/shared/package.json packages/shared/
-COPY packages/license-core/package.json packages/license-core/
+COPY lisans-server/core/package.json lisans-server/core/
 RUN npm ci
 COPY . .
 # Satıcıya ait derleme bağımsız değişkenleri (açık bilgidir, gizli değil): güvenilir satıcı açık anahtarı halkası (JSON) ve varsayılan lisans
@@ -30,10 +30,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-COPY apps/license-server/package.json apps/license-server/
-COPY apps/license-admin/package.json apps/license-admin/
+COPY lisans-server/server/package.json lisans-server/server/
+COPY lisans-server/panel/package.json lisans-server/panel/
 COPY packages/shared/package.json packages/shared/
-COPY packages/license-core/package.json packages/license-core/
+COPY lisans-server/core/package.json lisans-server/core/
 RUN npm ci --omit=dev -w @erp/api
 
 # ---- 3) Çalışma zamanı ------------------------------------------------------------------------------------

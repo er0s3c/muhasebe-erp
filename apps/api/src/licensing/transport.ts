@@ -1,4 +1,5 @@
-import type { Envelope } from '@erp/license-core';
+import { verifyToken, type Envelope, type PublicKeyring } from '@erp/license-core';
+import { z } from 'zod';
 
 /** Lisans sunucusu hata yanıtı verdi (4xx/5xx; `code` satıcının hata kodudur). */
 export class LicenseServerError extends Error {
@@ -22,6 +23,7 @@ export class LicenseUnreachableError extends Error {
 
 /** Satıcı sunucusuyla konuşan taşıma katmanı. Testler bellek içi bir uygulamasını enjekte eder. */
 export interface LicenseTransport {
+  time?(installationId: string, nonce: string, ring: PublicKeyring): Promise<{ serverTime: number; nonce: string }>;
   activate(body: Envelope & { pub: string }): Promise<{ lease: string }>;
   /** `update`: satıcı bu kuruluma bir sürüm gönderdiyse güncelleme teklifi (doğrulanmamış ham veri). */
   heartbeat(envelope: Envelope): Promise<{ lease: string; update?: unknown }>;
@@ -80,6 +82,12 @@ export function httpTransport(baseUrl: string, opts: { fetchImpl?: typeof fetch;
   };
 
   return {
+    async time(installationId, nonce, ring) {
+      const response = await post<{ token: string }>('/v2/time', { installationId, nonce });
+      const t = z.object({ installationId: z.uuid(), nonce: z.string(), serverTime: z.number().int().nonnegative(), expiresAt: z.number().int().nonnegative() }).parse(verifyToken('server-time', response.token, ring));
+      if (t.installationId !== installationId || t.nonce !== nonce || t.expiresAt !== t.serverTime + 120_000) throw new LicenseUnreachableError('İmzalı zaman yanıtı bu isteğe ait değil');
+      return t;
+    },
     activate: async (body) => leaseOf(await post('/v1/activate', body)),
     heartbeat: async (envelope) => {
       const r = await post<{ lease?: unknown; update?: unknown }>('/v1/heartbeat', envelope);

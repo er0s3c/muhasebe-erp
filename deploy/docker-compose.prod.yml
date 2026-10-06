@@ -39,7 +39,7 @@ services:
       context: ..
       args:
         APP_VERSION: ${APP_VERSION:-dev}
-        # Yalnızca kaynaktan derleyen satıcı/CI için: müşteriler hazır imajı kullanır (docs/LICENSING.md)
+        # Yalnızca kaynaktan derleyen satıcı/CI için: müşteriler hazır imajı kullanır (lisans-server/docs/LICENSING.md)
         LICENSE_PUBLIC_KEYS_JSON: ${LICENSE_PUBLIC_KEYS_JSON:-}
         LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-}
         LICENSE_ALLOW_INSECURE_URL: ${LICENSE_ALLOW_INSECURE_URL:-}

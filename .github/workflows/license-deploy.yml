@@ -1,0 +1,95 @@
+name: Lisans sunucusunu dağıt
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_now: { description: 'İmaj üretildikten sonra mevcut VPS’e dağıt', type: boolean, default: true }
+permissions:
+  contents: read
+  packages: write
+  actions: read
+concurrency:
+  group: license-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Yapılandırma ve ilgili değişiklik kontrolü
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_HOST: ${{ secrets.LICENSE_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.LICENSE_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.LICENSE_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.LICENSE_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          deploy_ready=false
+          if [ -n "$DEPLOY_HOST" ] && [ -n "$DEPLOY_USER" ] && [ -n "$DEPLOY_KEY" ] && [ -n "$DEPLOY_KNOWN_HOSTS" ]; then deploy_ready=true; fi
+          echo "deploy_ready=$deploy_ready" >> "$GITHUB_OUTPUT"
+          test "$(gh api repos/$GITHUB_REPOSITORY --jq .private)" = true
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$RELEASE_SHA" != "$main_sha" ]; then echo 'run=false' >> "$GITHUB_OUTPUT"; exit 0; fi
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$RELEASE_SHA&event=push&status=success" --jq '.workflow_runs | length')
+          test "$passed" -gt 0 || { echo 'Bu commit için başarılı main CI çalıştırması gerekli.'; exit 1; }
+          relevant=false
+          previous=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=30" --jq ".workflow_runs | map(select(.head_sha != \"$RELEASE_SHA\")) | .[0].head_sha // empty")
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] || [ -z "$previous" ] || git diff "$previous" "$RELEASE_SHA" --name-only | grep -Eq '^(lisans-server/|packages/shared/|package-lock.json|package.json|.github/workflows/(ci|license-deploy).yml)'; then relevant=true; fi
+          echo "run=$relevant" >> "$GITHUB_OUTPUT"
+      - name: GHCR girişi
+        if: steps.gate.outputs.run == 'true'
+        env:
+          TOKEN: ${{ github.token }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: İmajı derle ve gönder
+        if: steps.gate.outputs.run == 'true'
+        id: image
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}-license"
+          docker build -f lisans-server/server/Dockerfile --build-arg "APP_VERSION=$RELEASE_SHA" -t "$image:$RELEASE_SHA" .
+          LICENSE_TEST_IMAGE="$image:$RELEASE_SHA" node lisans-server/tools/test-tunnel.mjs
+          docker push "$image:$RELEASE_SHA"
+          digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$image:$RELEASE_SHA")
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+      - name: Kaynak kodsuz VPS kurulum paketini hazırla
+        if: steps.gate.outputs.run == 'true'
+        run: node lisans-server/tools/package-vps.mjs "$RELEASE_SHA"
+      - name: VPS kurulum paketini sakla
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lisans-vps-kurulum
+          path: release/license-vps/
+          if-no-files-found: error
+      - name: Sınırlı dağıtım komutunu çalıştır
+        if: steps.gate.outputs.run == 'true' && steps.gate.outputs.deploy_ready == 'true' && (github.event_name != 'workflow_dispatch' || inputs.deploy_now)
+        env:
+          HOST: ${{ secrets.LICENSE_DEPLOY_HOST }}
+          USER: ${{ secrets.LICENSE_DEPLOY_USER }}
+          PRIVATE_KEY: ${{ secrets.LICENSE_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.LICENSE_DEPLOY_KNOWN_HOSTS }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST" && test -n "$USER" && test -n "$KNOWN_HOSTS" && test -n "$PRIVATE_KEY"
+          dir=$(mktemp -d); trap 'rm -rf "$dir"' EXIT
+          printf '%s\n' "$PRIVATE_KEY" > "$dir/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$dir/known_hosts"
+          printf '%s\n' "$DIGEST" | ssh -i "$dir/key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$dir/known_hosts" "$USER@$HOST" deploy
+      - name: İlk VPS kurulumu için bilgi
+        if: steps.gate.outputs.run == 'true' && steps.gate.outputs.deploy_ready != 'true'
+        run: echo 'VPS dağıtım ayarları henüz tamamlanmadı. İmaj ve lisans-vps-kurulum artifact hazırlandı; canlı sunucuya dağıtım yapılmadı.'

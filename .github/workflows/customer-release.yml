@@ -1,0 +1,114 @@
+name: Müşteri sürümü hazırla
+on:
+  workflow_dispatch:
+    inputs:
+      version: { description: 'Sürüm (X.Y.Z)', required: true, type: string }
+      commit: { description: 'main içindeki tam commit kimliği; boşsa main', required: false, type: string }
+      notes: { description: 'Müşterinin göreceği sürüm notu', required: true, type: string }
+permissions:
+  contents: read
+concurrency:
+  group: customer-release-${{ inputs.version }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REQUESTED_SHA: ${{ inputs.commit }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      DATABASE_URL: postgres://erp_app:erp_app@localhost:5432/erp_dev
+      MIGRATION_DATABASE_URL: postgres://erp:erp@localhost:5432/erp_dev
+      JWT_SECRET: release-test-only-secret-32characters
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { fetch-depth: 0 }
+      - id: source
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/$GITHUB_REPOSITORY --jq .private)" = true
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          sha=${REQUESTED_SHA:-$GITHUB_SHA}
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          git merge-base --is-ancestor "$sha" origin/main
+          git checkout --detach "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: PGPASSWORD=postgres psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f infra/postgres/init.sql
+      - run: npm run lint && npm run typecheck && npm test
+      - run: npm run licenses && npm audit --omit=dev --audit-level=high
+  packages:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, target: win-x64 }
+          - { os: ubuntu-latest, target: linux-x64 }
+    runs-on: ${{ matrix.os }}
+    env:
+      LICENSE_SERVER_URL: ${{ vars.LICENSE_SERVER_URL }}
+      LICENSE_PUBLIC_KEYS_JSON: ${{ vars.LICENSE_PUBLIC_KEYS_JSON }}
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: { ref: '${{ needs.validate.outputs.sha }}' }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with: { python-version: '3.12' }
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        if: runner.os == 'Windows'
+        with: { dotnet-version: '10.0.x' }
+      - run: npm ci
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./installer/runtime/build-worker.ps1
+      - if: runner.os == 'Linux'
+        run: bash installer/runtime/build-worker.sh
+      - shell: bash
+        run: |
+          mkdir -p .runtime/tessdata
+          python installer/runtime/install-languages.py .runtime/tessdata
+          npm run release -- --version="$RELEASE_VERSION" --targets=${{ matrix.target }} --tessdata-dir=.runtime/tessdata
+      - name: Windows görsel paketi
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./installer/windows/build.ps1 -Version $env:RELEASE_VERSION -KitArchive "release/$env:RELEASE_VERSION/muhasebe-erp-$env:RELEASE_VERSION-win-x64.zip"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: customer-${{ matrix.target }}
+          path: |
+            release/${{ inputs.version }}/*
+            release/windows/bundle/*.exe
+          retention-days: 30
+  draft:
+    needs: [validate, packages]
+    runs-on: ubuntu-latest
+    permissions: { contents: read, id-token: write, actions: read }
+    env:
+      LICENSE_SERVER_URL: ${{ vars.LICENSE_SERVER_URL }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_COMMIT: ${{ needs.validate.outputs.sha }}
+      RELEASE_NOTES: ${{ inputs.notes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with: { path: .runtime/release-artifacts }
+      - run: |
+          mapfile -d '' files < <(find .runtime/release-artifacts -type f \( -name 'muhasebe-erp-*-win-x64.zip' -o -name 'muhasebe-erp-*-linux-x64.tar.gz' -o -name 'MuhasebeERP-Kurulum.exe' \) -print0)
+          test "${#files[@]}" -eq 3
+          node lisans-server/tools/upload-release.mjs "${files[@]}"
