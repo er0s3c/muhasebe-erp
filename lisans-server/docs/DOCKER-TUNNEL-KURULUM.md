@@ -18,6 +18,8 @@ Bir düzeltme arşivi tam kurulum paketinin içine uygulanır; tek başına kuru
 
 İmaj indirildikten ve `/etc/muhasebe-lisans/.env` oluşturulduktan sonra kurulum kesilirse aynı tam paket klasöründe `sudo bash tools/resume-setup-vps.sh` çalıştırın. Araç mevcut parolaları, Tunnel token'ını ve imaj digest adresini kullanır; mevcut imza anahtarını değiştirmez. `.env` dosyasını silmeyin. Eksik imza anahtarı aynı kaydedilmiş parola ile üretilir; ardından veritabanı, migration, hizmetler ve günlük yedekleme hazırlanır. Mevcut yönetici kurulumu tamamlandıysa yeni kurulum kodu üretimi reddedilir; mevcut hesabınızla giriş yapın.
 
+PostgreSQL ilk kurulum betiği sır içermez ve PostgreSQL kullanıcısının okuyabilmesi için `0644` izinle kurulur. Eski `0700` izni ilk açılışta rolleri oluşturmadan kurulumu kesebilir; veri dizini oluştuğu için yeniden başlatma tek başına bu adımı tekrar çalıştırmaz. Kurtarma aracı eksik `erp`, `erp_app` ve `erp_license` kayıtlarını tamamlar; var olan veritabanını, kayıtları ve rol parolalarını silmez/değiştirmez. Parola kontrolü loopback güvenine dayanmaz; uygulamanın bağlandığı ağ arayüzünde yapılır. Mevcut rol parolası farklıysa otomatik parola sıfırlaması yapılmadan durur. Compose için mevcut kabuğun değişkenleri yerine kaydedilmiş kurulum ayarları kullanılır.
+
 Cloudflare Tunnel'ın `--token-file` desteği kullanılır. [Resmî Tunnel parametreleri](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/run-parameters/).
 
 ## Cloudflare kuralları

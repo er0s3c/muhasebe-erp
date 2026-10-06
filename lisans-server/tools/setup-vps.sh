@@ -86,7 +86,9 @@ if [[ $tunnel_mode == 1 ]]; then
 else
   install -m 600 "$HERE/../deploy/compose.host-tunnel.yml" "$BASE/compose.tunnel.yml"
 fi
-install -m 700 "$HERE/../deploy/init-prod.sh" "$BASE/init-prod.sh"
+# The PostgreSQL entrypoint runs as UID 999 and must be able to read this script.
+# It contains no secrets; passwords are supplied via the container environment.
+install -m 644 "$HERE/../deploy/init-prod.sh" "$BASE/init-prod.sh"
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 DB_OWNER_PASSWORD=$(openssl rand -hex 24)
 DB_APP_PASSWORD=$(openssl rand -hex 24)

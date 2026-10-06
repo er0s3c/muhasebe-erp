@@ -9,7 +9,9 @@ set -euo pipefail
 DB="${ERP_DB_NAME:-erp}"
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres \
-  -v owner_pw="$ERP_OWNER_PASSWORD" -v app_pw="$ERP_APP_PASSWORD" -v dbname="$DB" <<'SQL'
+  -v dbname="$DB" <<'SQL'
+\getenv owner_pw ERP_OWNER_PASSWORD
+\getenv app_pw ERP_APP_PASSWORD
 CREATE ROLE erp LOGIN PASSWORD :'owner_pw' NOSUPERUSER NOCREATEDB NOCREATEROLE;
 CREATE ROLE erp_app LOGIN PASSWORD :'app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
 CREATE DATABASE :"dbname" OWNER erp;

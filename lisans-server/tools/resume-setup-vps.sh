@@ -27,7 +27,7 @@ read_setup_value() {
 
 resume_setup() {
   [[ $EUID == 0 ]] || { echo 'sudo ile çalıştırın.' >&2; return 1; }
-  local base=/etc/muhasebe-lisans tools image domain
+  local base=/etc/muhasebe-lisans tools image domain file
   tools=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   source "$tools/setup-input.sh"
   require_setup_files "$tools/.."
@@ -36,6 +36,9 @@ resume_setup() {
   done
   exec 9> "$base/setup.lock"
   flock -n 9 || { echo 'Başka bir kurulum işlemi çalışıyor.' >&2; return 1; }
+  # Compose gives shell variables precedence over --env-file. Resume from saved settings.
+  unset POSTGRES_PASSWORD DB_OWNER_PASSWORD DB_APP_PASSWORD LICENSE_IMAGE LICENSE_DOMAIN LICENSE_DATA_KEY \
+    LICENSE_SIGNING_KEY_PASSPHRASE CLOUDFLARED_IMAGE GITHUB_REPOSITORY GITHUB_REPOSITORY_ID
   image=$(normalize_image_input "$(cat "$base/current-image")")
   [[ $image == *@sha256:* && $image == "$(read_setup_value "$base/.env" LICENSE_IMAGE)" ]] || { echo 'Kaydedilmiş imaj adresleri tutarsız; mevcut ayarlar korunuyor.' >&2; return 1; }
   domain=$(read_setup_value "$base/.env" LICENSE_DOMAIN)
@@ -49,7 +52,17 @@ resume_setup() {
   unset LICENSE_SIGNING_KEY_PASSPHRASE
   local DC=(docker compose --project-directory "$base" --env-file "$base/.env" -f "$base/compose.yml" -f "$base/compose.tunnel.yml")
   echo '2/4 · Veritabanı ve migration'
+  install -m 644 "$tools/../deploy/init-prod.sh" "$base/init-prod.sh"
   "${DC[@]}" up -d --wait db
+  echo 'İlk kurulumda eksik kalmış veritabanı ve roller kontrol ediliyor.'
+  "${DC[@]}" exec -T db psql -X -q -v ON_ERROR_STOP=1 -U postgres -d postgres < "$tools/../deploy/ensure-database.sql"
+  # Loopback can use trust authentication; the container hostname uses the same
+  # password-authenticated interface as migration and application connections.
+  if ! "${DC[@]}" exec -T db sh -c 'PGPASSWORD="$ERP_OWNER_PASSWORD" psql -X -w -h "$HOSTNAME" -U erp -d erp_license -Atc "SELECT 1" >/dev/null' || \
+     ! "${DC[@]}" exec -T db sh -c 'PGPASSWORD="$ERP_APP_PASSWORD" psql -X -w -h "$HOSTNAME" -U erp_app -d erp_license -Atc "SELECT 1" >/dev/null'; then
+    echo 'Mevcut rol parolaları kaydedilmiş ayarlarla uyuşmuyor. Parolalar ve veriler değiştirilmedi; veritabanı erişim ayarlarını kontrol edin.' >&2
+    return 1
+  fi
   "${DC[@]}" run --rm migrate
   local services=(license caddy)
   if grep -q 'cloudflared:' "$base/compose.tunnel.yml"; then services+=(cloudflared); fi
