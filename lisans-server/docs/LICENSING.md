@@ -154,10 +154,10 @@ docker compose -f lisans-server/deploy/docker-compose.yml --env-file lisans-serv
 
 Çıktıdaki **parola** ve **TOTP sırrı** yalnızca bir kez görünür: sırrı Vaultwarden'a ya da bir Authenticator uygulamasına (Aegis…) elle ekleyin.
 Giriş: e-posta + parola + 6 haneli kod. Kurallar: aynı kod iki kez kullanılamaz, 5 başarısız denemede (IP+e-posta) ve 15'te (yalnızca e-posta) kilitlenir,
-Müşteriler ekranındaki **Sil** işlemi, müşteriyle birlikte tüm lisans ve kurulum etkinleştirmelerini kalıcı olarak kaldırır. Onay penceresinde silinecek kayıtların sayısı gösterilir. Denetim kaydı korunur; veritabanı işlemi veya denetim yazımı başarısız olursa tüm silme geri alınır. Mevcut imzalı lisansı olan kurulumlar, o lisansın süresi bitene kadar çalışabilir; silinen kodlarla yeniden etkinleştirme yapılamaz. API: `DELETE /admin/api/customers/:id`, yönetici oturumu ve CSRF koruması gerekir. Yeni migration uygulanmadan bu sürüm çalıştırılmamalıdır.
-
 oturum 8 saattir, değiştiren isteklerde CSRF başlığı ve köken denetimi vardır. Parola/TOTP kaybolursa: `admin:reset --email=…` (parola ve TOTP yenilenir,
 giriş anahtarları silinir).
+
+Müşteriler ekranındaki **Sil** işlemi, müşteriyle birlikte tüm lisans ve kurulum etkinleştirmelerini kalıcı olarak kaldırır. Onay penceresinde silinecek kayıtların sayısı gösterilir. Denetim kaydı korunur; veritabanı işlemi veya denetim yazımı başarısız olursa tüm silme geri alınır. Mevcut imzalı lisansı olan kurulumlar, o lisansın süresi bitene kadar çalışabilir; silinen kodlarla yeniden etkinleştirme yapılamaz. API: `DELETE /admin/api/customers/:id`, yönetici oturumu ve CSRF koruması gerekir. Yeni migration uygulanmadan bu sürüm çalıştırılmamalıdır.
 
 ### 4.5 Komut satırı (panelin eşi; SSH ile)
 
