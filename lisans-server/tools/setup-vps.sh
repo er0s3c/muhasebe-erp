@@ -7,7 +7,9 @@ source /etc/os-release
 BASE=/etc/muhasebe-lisans
 [[ ! -e "$BASE/.env" ]] || { echo 'Kurulum zaten var; deploy/backup araçlarını kullanın.' >&2; exit 1; }
 HERE=$(cd "$(dirname "$0")" && pwd)
+[[ -f "$HERE/setup-input.sh" ]] || { echo 'setup-input.sh eksik. Tam VPS kurulum paketini aynı klasöre açın.' >&2; exit 1; }
 source "$HERE/setup-input.sh"
+require_setup_files "$HERE/.."
 repository=er0s3c/muhasebe-erp
 repository_id=1395438415
 default_image=
@@ -62,8 +64,11 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 systemctl enable --now docker
 if ! docker pull "$image"; then
+  echo 'Özel GHCR imajı için GitHub Personal access token (classic), read:packages yetkisi gerekir.'
+  echo 'Anahtar oluşturma: https://github.com/settings/tokens/new?scopes=read:packages'
+  echo 'GitHub hesabınızın parolasını veya Cloudflare tokenını bu alana girmeyin.'
   prompt_input registry_user 'GHCR kullanıcı adı: ' er0s3c
-  read -r -s -p 'Yalnız read:packages yetkili GHCR anahtarı: ' registry_token; echo
+  read -r -s -p 'GitHub token (classic, read:packages; ekranda gösterilmez): ' registry_token; echo
   printf '%s' "$registry_token" | docker login ghcr.io -u "$registry_user" --password-stdin
   unset registry_token
   docker pull "$image"

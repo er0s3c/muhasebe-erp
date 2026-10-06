@@ -12,6 +12,10 @@
 
 Token, `/etc/muhasebe-lisans/tunnel-token` dosyasında yalnız container kullanıcısının okuyabildiği izinle tutulur. Komut argümanına veya container ortam değişkenine konmaz. Kurulum klasörü root erişimindedir. Token ile anahtarları içeren yedekleri şifreli, sunucu dışı depoya taşıyın.
 
+Özel GHCR imajı için ilk indirmede `unauthorized` görülürse kurulum GitHub kullanıcı adını ve **Personal access token (classic)** ister. Anahtarı GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) üzerinden, yalnız **read:packages** yetkisiyle oluşturun. GitHub hesabı parolası, fine-grained token veya Cloudflare Tunnel token'ı bu alan için uygun değildir. Paket hesabınıza indirme yetkisi verilmiş olmalıdır. Ayrıntı: [GitHub Container registry kimlik doğrulaması](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic).
+
+Bir düzeltme arşivi tam kurulum paketinin içine uygulanır; tek başına kurulmaz. `deploy/` ve tüm bakım araçları eksikse kurulum, sistemde değişiklik yapmadan önce anlaşılır hata ile durur.
+
 Cloudflare Tunnel'ın `--token-file` desteği kullanılır. [Resmî Tunnel parametreleri](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/run-parameters/).
 
 ## Cloudflare kuralları

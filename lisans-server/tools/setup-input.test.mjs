@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, copyFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -64,4 +66,17 @@ test('fails closed on missing, mismatched or unrelated digests', () => {
 
 test('propagates inspect failures without creating an image reference', () => {
   assert.equal(run('docker() { return 1; }; if resolve_image_digest "$1"; then exit 1; fi; printf rejected', [`${repository}:v1`]), 'rejected');
+});
+
+test('rejects a standalone input patch and accepts the complete deployment kit', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'erp-vps-patch-'));
+  try {
+    mkdirSync(join(fixture, 'tools'));
+    copyFileSync(helper, join(fixture, 'tools/setup-input.sh'));
+    copyFileSync(join(dirname(helper), 'setup-vps.sh'), join(fixture, 'tools/setup-vps.sh'));
+    assert.equal(run('if require_setup_files "$1" 2>/dev/null; then exit 1; fi; printf rejected', [fixture.replaceAll('\\', '/')]), 'rejected');
+    assert.equal(run('require_setup_files "$1"; printf complete', [join(dirname(helper), '..').replaceAll('\\', '/')]), 'complete');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });

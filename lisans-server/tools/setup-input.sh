@@ -2,6 +2,22 @@
 # Input is data, never a shell command. Sourced by the VPS installer.
 LICENSE_IMAGE_REPOSITORY=ghcr.io/er0s3c/muhasebe-erp-license
 
+require_setup_files() {
+  local root=$1 file missing=0
+  for file in deploy/compose.runtime.yml deploy/compose.host-tunnel.yml deploy/compose.managed-tunnel.yml \
+    deploy/Caddyfile.tunnel deploy/init-prod.sh tools/setup-input.sh tools/backup-vps.sh \
+    tools/deploy-vps.sh tools/restore-vps.sh tools/configure-deploy.sh; do
+    if [[ ! -f "$root/$file" ]]; then
+      printf 'Eksik kurulum dosyası: %s\n' "$file" >&2
+      missing=1
+    fi
+  done
+  if [[ $missing == 1 ]]; then
+    echo 'Bu klasörde tam kurulum paketi yok. Düzeltme arşivi tek başına kurulamaz; tam lisans-vps arşivini açıp içindeki tools/setup-vps.sh dosyasını çalıştırın.' >&2
+    return 1
+  fi
+}
+
 trim_input() {
   local value=$1
   value="${value#"${value%%[![:space:]]*}"}"
