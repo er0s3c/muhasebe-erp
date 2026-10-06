@@ -5,11 +5,14 @@ set -euo pipefail
 source /etc/os-release
 [[ ${ID:-} == ubuntu || ${ID:-} == debian ]] || { echo 'Ubuntu/Debian gerekli.' >&2; exit 1; }
 BASE=/etc/muhasebe-lisans
-[[ ! -e "$BASE/.env" ]] || { echo 'Kurulum zaten var; deploy/backup araçlarını kullanın.' >&2; exit 1; }
 HERE=$(cd "$(dirname "$0")" && pwd)
 [[ -f "$HERE/setup-input.sh" ]] || { echo 'setup-input.sh eksik. Tam VPS kurulum paketini aynı klasöre açın.' >&2; exit 1; }
 source "$HERE/setup-input.sh"
 require_setup_files "$HERE/.."
+if [[ -e "$BASE/.env" ]]; then
+  echo 'Mevcut kurulum ayarları bulundu. Devam etmek için bash tools/resume-setup-vps.sh çalıştırın; .env dosyasını silmeyin.' >&2
+  exit 1
+fi
 repository=er0s3c/muhasebe-erp
 repository_id=1395438415
 default_image=$(default_image_prompt "$HERE/..")
@@ -104,35 +107,5 @@ EOF
 printf '%s\n' "$image" > "$BASE/current-image"
 printf '%s\n' "${image%@*}" > "$BASE/image-repository"
 printf '%s\n' "$backups" > "$BASE/backup-directory"
-chown 1000:1000 "$BASE/keys"
-docker run --rm --user 1000:1000 -e LICENSE_SIGNING_KEY_PASSPHRASE -v "$BASE/keys:/keys" "$image" node dist/cli.js keygen --kid=vendor1 --out=/keys/signing-key.json
 unset LICENSE_SIGNING_KEY_PASSPHRASE POSTGRES_PASSWORD DB_OWNER_PASSWORD DB_APP_PASSWORD LICENSE_DATA_KEY
-DC=(docker compose --project-directory "$BASE" --env-file "$BASE/.env" -f "$BASE/compose.yml" -f "$BASE/compose.tunnel.yml")
-"${DC[@]}" up -d --wait db
-"${DC[@]}" run --rm migrate
-services=(license caddy)
-if [[ $tunnel_mode == 1 ]]; then services+=(cloudflared); fi
-"${DC[@]}" up -d --wait --wait-timeout 120 "${services[@]}"
-for tool in backup-vps deploy-vps restore-vps; do install -m 700 "$HERE/$tool.sh" "/usr/local/sbin/erp-license-${tool%-vps}"; done
-install -m 700 "$HERE/configure-deploy.sh" /usr/local/sbin/erp-license-configure-deploy
-cat > /etc/systemd/system/erp-license-backup.service <<EOF
-[Unit]
-Description=Lisans sunucusu yedeği
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/erp-license-backup
-EOF
-cat > /etc/systemd/system/erp-license-backup.timer <<EOF
-[Unit]
-Description=Günlük lisans yedeği
-[Timer]
-OnCalendar=*-*-* 02:15:00
-Persistent=true
-[Install]
-WantedBy=timers.target
-EOF
-systemctl daemon-reload; systemctl enable --now erp-license-backup.timer
-if [[ $tunnel_mode == 1 ]]; then echo "Cloudflare yayımlanan uygulama: $domain -> HTTP http://caddy:80"; else echo "Mevcut Tunnel hedefi: $domain -> HTTP http://127.0.0.1:4080"; fi
-echo "İlk yönetici: https://$domain/setup (e-posta: $email). MFA kurulumu zorunludur."
-"${DC[@]}" exec -T license node dist/cli.js setup:token
-echo 'İmza anahtarını ve .env dosyasını ayrı, güvenli bir çevrimdışı depoya yedekleyin.'
+bash "$HERE/resume-setup-vps.sh"

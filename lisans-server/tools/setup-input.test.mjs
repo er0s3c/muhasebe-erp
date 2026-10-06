@@ -95,3 +95,51 @@ test('uses the explicitly published image and never infers it from an installer 
     rmSync(fixture, { recursive: true, force: true });
   }
 });
+
+test('key generation passes the shell password to a child environment, never command arguments', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'erp-vps-key-'));
+  try {
+    const code = [
+      'source "${SETUP_TEST_HELPER%/*}/resume-setup-vps.sh";',
+      'unset LICENSE_SIGNING_KEY_PASSPHRASE;',
+      'LICENSE_SIGNING_KEY_PASSPHRASE=test-only-secret-passphrase;',
+      'docker() {',
+      'for argument in "$@"; do [[ "$argument" != *test-only-secret-passphrase* ]] || return 1; done;',
+      "env bash -c '[[ \"$LICENSE_SIGNING_KEY_PASSPHRASE\" == test-only-secret-passphrase ]]' || return 1;",
+      'printf child-received-password;',
+      '}; ensure_signing_key "$1" test-image',
+    ].join('\n');
+    assert.equal(run(code, [fixture.replaceAll('\\', '/')]), 'child-received-password');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('resume preserves an existing signing key and rejects an empty key', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'erp-vps-key-'));
+  try {
+    const file = join(fixture, 'signing-key.json');
+    const root = fixture.replaceAll('\\', '/');
+    const code = 'source "${SETUP_TEST_HELPER%/*}/resume-setup-vps.sh"; docker() { echo unexpected-key-rotation; return 1; }; ensure_signing_key "$1" test-image';
+    writeFileSync(file, 'existing-key-sentinel');
+    assert.equal(run(code, [root]), 'Mevcut imza anahtarı korunuyor.');
+    writeFileSync(file, '');
+    assert.equal(run('source "${SETUP_TEST_HELPER%/*}/resume-setup-vps.sh"; if ensure_signing_key "$1" test-image 2>/dev/null; then exit 1; fi; printf rejected', [root]), 'rejected');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('resume reads only the requested setting without executing .env contents', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'erp-vps-env-'));
+  try {
+    const file = join(fixture, '.env');
+    const path = file.replaceAll('\\', '/');
+    writeFileSync(file, 'IGNORED=$(exit 1)\nLICENSE_DOMAIN=admin.er0s3c.com\n');
+    assert.equal(run('source "${SETUP_TEST_HELPER%/*}/resume-setup-vps.sh"; read_setup_value "$1" LICENSE_DOMAIN', [path]), 'admin.er0s3c.com');
+    writeFileSync(file, 'LICENSE_DOMAIN=one\nLICENSE_DOMAIN=two\n');
+    assert.equal(run('source "${SETUP_TEST_HELPER%/*}/resume-setup-vps.sh"; if read_setup_value "$1" LICENSE_DOMAIN 2>/dev/null; then exit 1; fi; printf rejected', [path]), 'rejected');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});

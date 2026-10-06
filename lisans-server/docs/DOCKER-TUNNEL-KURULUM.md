@@ -16,6 +16,8 @@ Token, `/etc/muhasebe-lisans/tunnel-token` dosyasında yalnız container kullan�
 
 Bir düzeltme arşivi tam kurulum paketinin içine uygulanır; tek başına kurulmaz. `deploy/` ve tüm bakım araçları eksikse kurulum, sistemde değişiklik yapmadan önce anlaşılır hata ile durur.
 
+İmaj indirildikten ve `/etc/muhasebe-lisans/.env` oluşturulduktan sonra kurulum kesilirse aynı tam paket klasöründe `sudo bash tools/resume-setup-vps.sh` çalıştırın. Araç mevcut parolaları, Tunnel token'ını ve imaj digest adresini kullanır; mevcut imza anahtarını değiştirmez. `.env` dosyasını silmeyin. Eksik imza anahtarı aynı kaydedilmiş parola ile üretilir; ardından veritabanı, migration, hizmetler ve günlük yedekleme hazırlanır. Mevcut yönetici kurulumu tamamlandıysa yeni kurulum kodu üretimi reddedilir; mevcut hesabınızla giriş yapın.
+
 Cloudflare Tunnel'ın `--token-file` desteği kullanılır. [Resmî Tunnel parametreleri](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/run-parameters/).
 
 ## Cloudflare kuralları

@@ -61,6 +61,7 @@ jobs:
           image="ghcr.io/${GITHUB_REPOSITORY,,}-license"
           docker build -f lisans-server/server/Dockerfile --build-arg "APP_VERSION=$RELEASE_SHA" -t "$image:$RELEASE_SHA" .
           LICENSE_TEST_IMAGE="$image:$RELEASE_SHA" node lisans-server/tools/test-tunnel.mjs
+          LICENSE_TEST_IMAGE="$image:$RELEASE_SHA" node lisans-server/tools/test-setup-keygen.mjs
           docker push "$image:$RELEASE_SHA"
           digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$image:$RELEASE_SHA")
           echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
