@@ -185,7 +185,7 @@ describe('şemalar, izin ve eşleme', () => {
     expect(hasPermission('admin', 'ledger.yearend')).toBe(true);
     for (const r of ['accountant', 'sales', 'site_manager', 'viewer'] as const) expect(hasPermission(r, 'ledger.yearend')).toBe(false);
     expect(hasPermission('accountant', 'ledger.read')).toBe(true);
-    expect(ACCOUNT_MAPPING_KEYS).toHaveLength(46);
+    expect(ACCOUNT_MAPPING_KEYS).toHaveLength(52);
     const d = defaultMappingCodes('CONSTRUCTION');
     expect([d.year_end_profit, d.year_end_loss, d.year_end_retained_profit, d.year_end_retained_loss]).toEqual(['590', '591', '570', '580']);
   });

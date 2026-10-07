@@ -28,6 +28,11 @@ export const NOTIFICATION_KINDS = [
   'receivable_overdue',
   'stock_below_min',
   'draft_stale',
+  'manufacturing_production_due',
+  'manufacturing_subcontract_due',
+  'leather_production_due',
+  'leather_subcontract_due',
+  'leather_custom_order_due',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -47,18 +52,23 @@ export interface NotificationKindDef {
 }
 
 export const NOTIFICATION_KIND_DEFS: readonly NotificationKindDef[] = [
+  {kind:'manufacturing_production_due',modules:['manufacturing.production'],permission:'manufacturing.production.read',lead:{unit:'ahead',default:3,min:0,max:90},link:'/manufacturing/production'},
+  {kind:'manufacturing_subcontract_due',modules:['manufacturing.subcontracting'],permission:'manufacturing.subcontracting.read',lead:{unit:'ahead',default:3,min:0,max:90},link:'/manufacturing/subcontracting'},
   { kind: 'cheque_due', modules: ['treasury.cheques'], permission: 'treasury.read', lead: { unit: 'ahead', default: 7, min: 0, max: 90 }, link: '/treasury/cheques' },
   { kind: 'guarantee_expiring', modules: ['treasury.guarantees'], permission: 'treasury.read', lead: { unit: 'ahead', default: 30, min: 0, max: 365 }, link: '/treasury/guarantees' },
   { kind: 'foreign_doc_expiring', modules: ['hr.foreign'], permission: 'hr.read', lead: { unit: 'ahead', default: 30, min: 0, max: 365 }, link: '/hr/foreign-workers' },
   { kind: 'agenda_due', modules: ['core.directory'], permission: 'directory.read', lead: { unit: 'ahead', default: 0, min: 0, max: 30 }, link: '/agenda' },
   { kind: 'agenda_reminder', modules: ['core.directory'], permission: 'directory.read', link: '/agenda' },
-  { kind: 'approval_pending', modules: ['construction.subcontracts', 'construction.procurement'], permission: 'subcontracts.read', link: '/approvals' },
+  { kind: 'approval_pending', modules: ['construction.subcontracts', 'construction.procurement', 'core.procurement'], permission: 'subcontracts.read', link: '/approvals' },
   { kind: 'license_expiring', modules: ['core.settings'], permission: 'company.manage', lead: { unit: 'ahead', default: 30, min: 1, max: 365 }, link: '/settings/license' },
   { kind: 'attendance_open', modules: ['hr.core'], permission: 'hr.manage', link: '/hr/attendance' },
   { kind: 'payroll_open', modules: ['hr.payroll'], permission: 'hr.payroll_manage', link: '/hr/payroll' },
   { kind: 'receivable_overdue', modules: ['core.parties'], permission: 'parties.read', lead: { unit: 'overdue', default: 0, min: 0, max: 365 }, link: '/parties/aging' },
   { kind: 'stock_below_min', modules: ['core.inventory'], permission: 'inventory.read', link: '/inventory/status?low=1' },
   { kind: 'draft_stale', modules: ['core.invoices', 'core.ledger'], permission: 'invoices.manage', lead: { unit: 'age', default: 14, min: 1, max: 365 }, link: '/invoices/sales' },
+  { kind: 'leather_production_due', modules: ['leather.production'], permission: 'leather.production.read', lead: { unit: 'ahead', default: 3, min: 0, max: 90 }, link: '/leather/production' },
+  { kind: 'leather_subcontract_due', modules: ['leather.subcontracting'], permission: 'leather.subcontracting.read', lead: { unit: 'ahead', default: 3, min: 0, max: 90 }, link: '/leather/subcontracts' },
+  { kind: 'leather_custom_order_due', modules: ['leather.catalog'], permission: 'leather.catalog.read', lead: { unit: 'ahead', default: 3, min: 0, max: 90 }, link: '/leather/custom-orders' },
 ];
 
 const DEFS = new Map(NOTIFICATION_KIND_DEFS.map((d) => [d.kind, d]));
@@ -67,6 +77,10 @@ export const notificationKindDef = (kind: NotificationKind): NotificationKindDef
 /** Kaynak modül açık ve rol kaynak iznine sahip mi? (Alt izinler kaynak içinde ayrıca denetlenir: ör. taslak bildirimi.) */
 export function canReceiveKind(def: NotificationKindDef, permissions: PermissionSet, enabledModules: ReadonlySet<string>): boolean {
   if (def.modules.length > 0 && !def.modules.some((m) => enabledModules.has(m))) return false;
+  if (def.kind === 'approval_pending') {
+    return (enabledModules.has('construction.subcontracts') && hasPermission(permissions, 'subcontracts.read'))
+      || (['construction.procurement', 'core.procurement'].some(m => enabledModules.has(m)) && hasPermission(permissions, 'procurement.read'));
+  }
   if (def.kind === 'draft_stale') {
     // Taslak: fatura (invoices.manage + fatura modülü) ya da yevmiye (ledger.post + muhasebe modülü) kaynağından en az biri
     return (enabledModules.has('core.invoices') && hasPermission(permissions, 'invoices.manage')) || (enabledModules.has('core.ledger') && hasPermission(permissions, 'ledger.post'));

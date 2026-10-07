@@ -103,6 +103,12 @@ export const ACCOUNT_MAPPING_KEYS = [
   'year_end_loss',
   'year_end_retained_profit',
   'year_end_retained_loss',
+  'raw_material_stock',
+  'semi_finished_stock',
+  'finished_goods_stock',
+  'production_wip',
+  'produced_cogs',
+  'goods_receipt_accrual',
 ] as const;
 export type AccountMappingKey = (typeof ACCOUNT_MAPPING_KEYS)[number];
 
@@ -168,6 +174,12 @@ export function defaultMappingCodes(sector: Sector): Record<AccountMappingKey, s
     year_end_loss: '591',
     year_end_retained_profit: '570',
     year_end_retained_loss: '580',
+    raw_material_stock: '150',
+    semi_finished_stock: '151',
+    finished_goods_stock: '152',
+    production_wip: '151',
+    produced_cogs: '620',
+    goods_receipt_accrual: '381',
   };
 }
 

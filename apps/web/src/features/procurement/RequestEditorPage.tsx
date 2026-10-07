@@ -28,12 +28,15 @@ export function PurchaseRequestEditorPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const can = useCan();
-  const base = useCompany().baseCurrency;
+  const company = useCompany();
+  const base = company.baseCurrency;
+  const projectBased = company.sector === 'CONSTRUCTION';
   const isNew = !id || id === 'new';
+  const approvalPath = projectBased ? '/api/approvals' : '/api/procurement/approvals';
   const { projects } = useProjectOptions();
 
   const detailQ = useCQuery<PurchaseRequestDetail>(['purchase-request', id], isNew ? null : `/api/purchase-requests/${id}`);
-  const { data: inbox } = useCQuery<{ requests: ApprovalRequestRow[] }>(['approvals', 'inbox'], '/api/approvals/inbox');
+  const { data: inbox } = useCQuery<{ requests: ApprovalRequestRow[] }>(['approvals', 'inbox', approvalPath], `${approvalPath}/inbox`);
   const detail = detailQ.data;
   const status = isNew ? 'draft' : detail?.request.status ?? 'draft';
   const editable = status === 'draft' && can('procurement.manage');
@@ -50,7 +53,7 @@ export function PurchaseRequestEditorPage() {
 
   useEffect(() => {
     if (!detail) return;
-    setProjectId(detail.request.projectId);
+    setProjectId(detail.request.projectId ?? '');
     setTitle(detail.request.title);
     setNeedDate(detail.request.needDate ?? '');
     setNote(detail.request.note ?? '');
@@ -58,13 +61,13 @@ export function PurchaseRequestEditorPage() {
   }, [detail]);
 
   const body = () => ({
-    ...(isNew ? { projectId } : {}),
+    ...(isNew ? { projectId: projectBased ? projectId : null } : {}),
     title: title.trim(),
     needDate: needDate || null,
     note: note.trim() || null,
     lines: lines.map((l) => ({ itemId: l.itemId || null, description: l.description.trim(), unit: l.unit.trim(), quantity: num(l.quantity), estUnitPrice: l.price.trim() ? num(l.price) : null, wbsId: l.wbsId || null })),
   });
-  const invalid = title.trim().length < 2 || (isNew && !projectId) || lines.some((l) => !lineValid(l, false));
+  const invalid = title.trim().length < 2 || (isNew && projectBased && !projectId) || lines.some((l) => !lineValid(l, false));
 
   const save = useCMutation(
     (_: void, call) => (isNew ? call<PurchaseRequestDetail>('/api/purchase-requests', { method: 'POST', body: body() }) : call<PurchaseRequestDetail>(`/api/purchase-requests/${id}`, { method: 'PUT', body: body() })),
@@ -78,7 +81,7 @@ export function PurchaseRequestEditorPage() {
   }, PROCUREMENT_INVALIDATE);
   const act = useCMutation((v: 'withdraw' | 'cancel', call) => call(`/api/purchase-requests/${id}/${v}`, { method: 'POST', body: {} }), PROCUREMENT_INVALIDATE);
   const remove = useCMutation((_: void, call) => call(`/api/purchase-requests/${id}`, { method: 'DELETE' }), PROCUREMENT_INVALIDATE);
-  const decide = useCMutation((v: { requestId: string; decision: 'approve' | 'reject' }, call) => call(`/api/approvals/${v.requestId}/decide`, { method: 'POST', body: { decision: v.decision, ...(decideNote.trim() ? { note: decideNote.trim() } : {}) } }), PROCUREMENT_INVALIDATE);
+  const decide = useCMutation((v: { requestId: string; decision: 'approve' | 'reject' }, call) => call(`${approvalPath}/${v.requestId}/decide`, { method: 'POST', body: { decision: v.decision, ...(decideNote.trim() ? { note: decideNote.trim() } : {}) } }), PROCUREMENT_INVALIDATE);
   const createRfq = useCMutation((_: void, call) => call<RfqDetail>('/api/rfqs', { method: 'POST', body: { requestId: id, dueDate: dueDate || null } }), PROCUREMENT_INVALIDATE);
 
   const fail = (e: Error) => setError(e);
@@ -111,12 +114,12 @@ export function PurchaseRequestEditorPage() {
 
       <Card>
         <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
-          <Field label={t('procurement.requests.project')} required>
+          {projectBased && <Field label={t('procurement.requests.project')} required>
             {(fid) => (
               <Combobox id={fid} disabled={!isNew} value={projectId || null} onChange={setProjectId} placeholder={t('procurement.requests.projectPlaceholder')}
                 options={projects.filter((p) => p.status !== 'completed' && p.status !== 'cancelled').map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: `${p.code} ${p.name}` }))} />
             )}
-          </Field>
+          </Field>}
           <Field label={t('procurement.requests.titleField')} required>{(fid) => <Input id={fid} value={title} onChange={(e) => setTitle(e.target.value)} disabled={!editable} maxLength={200} />}</Field>
           <Field label={t('procurement.requests.needDate')}>{(fid) => <Input id={fid} type="date" value={needDate} onChange={(e) => setNeedDate(e.target.value)} disabled={!editable} />}</Field>
           <div className="sm:col-span-3">

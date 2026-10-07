@@ -1,6 +1,7 @@
 import { Link2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useCompany } from '../../lib/session';
 import { useNavigate } from 'react-router-dom';
 import { dec } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
@@ -24,6 +25,7 @@ const TONE = { ok: 'success', uninvoiced: 'warning', excess: 'danger', open: 'ne
 export function OrderMatchingPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const projectBased = useCompany().sector === 'CONSTRUCTION';
   const toast = useToast();
   const can = useCan();
   const { data, isPending } = useCQuery<{ orders: OrderMatchRow[] }>(['procurement', 'matching'], '/api/procurement/matching');
@@ -44,7 +46,7 @@ export function OrderMatchingPage() {
               <tr>
                 <Th className="w-28">{t('procurement.match.cols.order')}</Th>
                 <Th>{t('procurement.match.cols.party')}</Th>
-                <Th className="w-28">{t('procurement.match.cols.project')}</Th>
+                {projectBased && <Th className="w-28">{t('procurement.match.cols.project')}</Th>}
                 <Th num>{t('procurement.match.cols.orderedAmount')}</Th>
                 <Th num>{t('procurement.match.cols.receivedAmount')}</Th>
                 <Th num>{t('procurement.match.cols.uninvoiced')}</Th>
@@ -58,7 +60,7 @@ export function OrderMatchingPage() {
                   <Tr key={r.id} clickable tabIndex={0} onClick={() => navigate(`/purchasing/orders/${r.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/purchasing/orders/${r.id}`)}>
                     <Td className="font-mono text-[13px]">{r.code}</Td>
                     <Td>{r.partyName}</Td>
-                    <Td className="text-muted">{r.projectCode}</Td>
+                    {projectBased && <Td className="text-muted">{r.projectCode}</Td>}
                     <Td num>{moneyIn(r.orderedAmount, r.currencyCode)}</Td>
                     <Td num>{moneyIn(r.receivedAmount, r.currencyCode)}</Td>
                     <Td num>{moneyIn(r.uninvoicedReceiptAmount, r.currencyCode)}</Td>

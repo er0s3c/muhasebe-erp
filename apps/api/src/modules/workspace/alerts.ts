@@ -5,6 +5,8 @@ import { allOpenItems } from '../parties/service';
 import { pendingForMe } from '../approvals/service';
 import { operationAccess } from './operations';
 import type { OperationKind } from '@erp/shared';
+import { RECORDS, canAccessRecord, recordScope } from './records';
+import { isModuleDenied } from '../access/effective';
 
 export interface WorkAlert {
   key: string;
@@ -60,7 +62,58 @@ export async function workAlerts(c: TenantCtx) {
       });
     }
   }
-  if (c.enabledModules.has('construction.subcontracts') && c.can('subcontracts.read')) {
+  for (const kind of [
+    'leather_production',
+    'leather_subcontract',
+    'leather_custom_order',
+    'manufacturing_production',
+    'manufacturing_subcontract',
+  ] as const) {
+    if (!canAccessRecord(c, kind)) continue;
+    const def = RECORDS[kind];
+    const subcontract = kind === 'leather_subcontract' || kind === 'manufacturing_subcontract';
+    const production = kind === 'leather_production' || kind === 'manufacturing_production';
+    const finished =
+      kind === 'leather_custom_order'
+        ? ['delivered', 'cancelled']
+        : subcontract
+          ? ['received', 'cancelled']
+          : ['completed', 'cancelled'];
+    const due = await c.tx.execute<{
+      id: string;
+      title: string;
+      due: string;
+    }>(sql`select id,${sql.raw(def.label)} as title,due_date::text as due from ${sql.identifier(def.table)} r
+      where due_date<=${today}::date and status not in (${sql.join(
+        finished.map((s) => sql`${s}`),
+        sql`, `,
+      )}) and ${recordScope(c, kind)} order by due_date,id limit 100`);
+    items.push(
+      ...due.rows.map((r) => ({
+        key: `${kind}:${r.id}:${r.due}`,
+        title: r.title,
+        dueDate: r.due,
+        path: def.path + r.id,
+        category: production
+          ? 'Üretim teslimi'
+          : subcontract
+            ? 'Fason teslimi'
+            : 'Özel sipariş teslimi',
+      })),
+    );
+  }
+  const procurementModule = c.enabledModules.has('core.procurement')
+    ? 'core.procurement'
+    : 'construction.procurement';
+  const canProcure =
+    c.enabledModules.has(procurementModule) &&
+    !isModuleDenied(c.access, procurementModule) &&
+    c.can('procurement.read');
+  const canSubcontract =
+    c.enabledModules.has('construction.subcontracts') &&
+    !isModuleDenied(c.access, 'construction.subcontracts') &&
+    c.can('subcontracts.read');
+  if (canProcure || canSubcontract) {
     const requests = await pendingForMe(c.tx, {
       companyId: c.company.id,
       userId: c.user.id,
@@ -69,16 +122,15 @@ export async function workAlerts(c: TenantCtx) {
     });
     for (const r of requests) {
       const procurement = r.docType === 'purchase_request';
-      if (
-        procurement &&
-        (!c.enabledModules.has('construction.procurement') || !c.can('procurement.read'))
-      )
-        continue;
+      if (procurement ? !canProcure : !canSubcontract) continue;
       items.push({
         key: `approval:${r.id}`,
         title: 'Kararınızı bekleyen onay',
         dueDate: today,
-        path: '/approvals',
+        path:
+          procurement && procurementModule === 'core.procurement'
+            ? `/purchasing/requests/${r.docId}`
+            : '/approvals',
         category: procurement ? 'Satın alma onayı' : 'Hakediş / sözleşme onayı',
       });
     }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { SECTORS } from '@erp/shared';
 import {
   DAY_MS,
+  clientSupportsSectors,
   LICENSE_KINDS,
   activationCodePrefix,
   formatActivationCode,
@@ -19,6 +20,12 @@ import { badRequest, conflict, notFound } from '../errors';
 export type LicenseRow = typeof licenses.$inferSelect;
 export type ActivationRow = typeof activations.$inferSelect;
 export type Actor = Pick<AuditEntry, 'actor' | 'adminId' | 'ip'>;
+
+export function requireSupportedSectors(license: Pick<LicenseRow, 'sectors'>, supportedSectors?: readonly string[]) {
+  if (!clientSupportsSectors(license.sectors, supportedSectors)) {
+    throw conflict('Bu lisansın sektörünü destekleyen ERP sürümüne güncelleyin.', 'CLIENT_UPDATE_REQUIRED');
+  }
+}
 
 const dateInput = z.union([z.iso.datetime({ offset: true }), z.iso.date()]).transform((v) => {
   // Yalnızca tarih verilirse o günün sonuna kadar geçerli sayılır (23:59:59.999 UTC).

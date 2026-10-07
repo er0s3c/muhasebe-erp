@@ -8,6 +8,7 @@ import type {
   ChequeStatus,
   GuaranteeDirection,
   GuaranteeExpiryState,
+  InventoryRole,
   LeadUnit,
   MaturityBucket,
   NotificationKind,
@@ -298,6 +299,7 @@ export interface Item {
   code: string;
   name: string;
   kind: ItemKind;
+  inventoryRole: InventoryRole;
   unit: string;
   categoryId: string | null;
   barcode: string | null;
@@ -317,6 +319,7 @@ export interface ItemListRow {
   code: string;
   name: string;
   kind: ItemKind;
+  inventoryRole: InventoryRole;
   unit: string;
   barcode: string | null;
   vatCode: string | null;
@@ -502,6 +505,7 @@ export interface StockStatusReport {
     accountsBalance: string;
     stockValue: string;
     difference: string;
+    workInProgress: string;
     /** Faturası kesilmemiş irsaliyelerin stok defterine girmiş, yevmiyeye girmemiş değeri (satış eksi, alış artı). */
     pendingDeliveries: { sales: string; purchases: string; total: string };
     /** Fark − bekleyen irsaliyeler: sıfırdan farklıysa gerçek mutabakat sorunu. */
@@ -1634,8 +1638,8 @@ export interface PurchaseRequestRow {
   title: string;
   status: PurchaseRequestStatus;
   needDate: string | null;
-  projectId: string;
-  projectCode: string;
+  projectId: string | null;
+  projectCode: string | null;
   lineCount: number;
   estimatedTotal: string;
 }
@@ -1663,9 +1667,9 @@ export interface PurchaseRequestDetail {
     needDate: string | null;
     note: string | null;
     rejectionNote: string | null;
-    projectId: string;
-    projectCode: string;
-    projectName: string;
+    projectId: string | null;
+    projectCode: string | null;
+    projectName: string | null;
     estimatedTotal: string;
   };
   lines: PurchaseRequestLine[];
@@ -1682,7 +1686,7 @@ export interface RfqListRow {
   requestId: string;
   requestCode: string;
   title: string;
-  projectCode: string;
+  projectCode: string | null;
   offerCount: number;
 }
 
@@ -1703,7 +1707,7 @@ export interface RfqOfferRow {
 }
 
 export interface RfqDetail {
-  rfq: { id: string; code: string; status: RfqStatus; dueDate: string | null; note: string | null; requestId: string; requestCode: string; requestTitle: string; projectId: string; projectCode: string; awardedOfferId: string | null };
+  rfq: { id: string; code: string; status: RfqStatus; dueDate: string | null; note: string | null; requestId: string; requestCode: string; requestTitle: string; projectId: string | null; projectCode: string | null; awardedOfferId: string | null };
   lines: { id: string; lineNo: number; description: string; unit: string; quantity: string; estUnitPrice: string | null }[];
   offers: RfqOfferRow[];
   cheapestOfferId: string | null;
@@ -1715,8 +1719,8 @@ export interface PurchaseOrderRow {
   id: string;
   code: string;
   status: PurchaseOrderStatus;
-  projectId: string;
-  projectCode: string;
+  projectId: string | null;
+  projectCode: string | null;
   partyId: string;
   partyName: string;
   currencyCode: string;
@@ -1748,9 +1752,9 @@ export interface PurchaseOrderDetail {
     id: string;
     code: string;
     status: PurchaseOrderStatus;
-    projectId: string;
-    projectCode: string;
-    projectName: string;
+    projectId: string | null;
+    projectCode: string | null;
+    projectName: string | null;
     partyId: string;
     partyName: string;
     requestId: string | null;
@@ -1793,7 +1797,7 @@ export interface InvoiceableOrderLine {
   orderId: string;
   orderCode: string;
   orderDate: string;
-  projectId: string;
+  projectId: string | null;
   lineNo: number;
   itemId: string | null;
   description: string;
@@ -1809,7 +1813,7 @@ export interface OrderMatchRow {
   id: string;
   code: string;
   status: string;
-  projectCode: string;
+  projectCode: string | null;
   partyName: string;
   currencyCode: string;
   orderedAmount: string;

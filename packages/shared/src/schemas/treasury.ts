@@ -131,7 +131,7 @@ export const createTreasuryTransactionSchema = z
       const used = amounts.slice(1).reduce((s, d) => (s && d ? s.plus(d) : null), tryDec(0));
       if (used && amounts[0] && used.gt(amounts[0])) issue('items', 'Kalemlere ayrılan tutar hareket tutarını aşıyor');
     } else {
-      if (t.partyId) issue('partyId', 'Cari yalnızca tahsilat ve ödemede kullanılır');
+      if (t.partyId && t.type !== 'other_receipt') issue('partyId', 'Cari yalnızca tahsilat, ödeme veya müşteri kaporasında kullanılır');
       if (t.items.length > 0) issue('items', 'Kalem eşleştirme yalnızca tahsilat ve ödemede kullanılır');
     }
     if (t.type === 'transfer' || t.type === 'exchange') {

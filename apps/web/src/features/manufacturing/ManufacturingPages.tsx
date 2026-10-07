@@ -1,0 +1,873 @@
+import { useState, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { todayIso } from '@erp/shared';
+import { useCQuery, useCan, useCompanyApi } from '../../lib/queries';
+import { Card, PageHeader } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { Callout } from '../../components/ui/Feedback';
+import {
+  OperationForm,
+  Records as BaseRecords,
+  textField,
+  numberField,
+  selectField,
+  options,
+} from '../leather/common';
+import { CustomValuesPanel } from './SupportPanels';
+import { ScheduleBuilder } from './ScheduleBuilder';
+export {
+  LeatherModelsPage as ManufacturingCatalogPage,
+  LeatherProductionPage as ManufacturingProductionPage,
+  LeatherQualityPage as ManufacturingQualityPage,
+  LeatherSubcontractsPage as ManufacturingSubcontractingPage,
+  LeatherOverviewPage as ManufacturingOverviewPage,
+} from '../leather/LeatherPages';
+
+type Row = {
+  id: string;
+  code?: string;
+  name?: string;
+  status?: string;
+  quantity?: string;
+  resourceId?: string;
+  start?: string;
+  end?: string;
+  operations?: { start: string; end: string; operationKey: string }[];
+  [key: string]: unknown;
+};
+function Records({
+  title,
+  rows,
+  columns,
+  actions,
+}: {
+  title: string;
+  rows: Row[];
+  columns: { key: string; label: string }[];
+  actions?: (r: Row) => ReactNode;
+}) {
+  return (
+    <>
+      <h2 className="mb-3 mt-6 font-semibold">{title}</h2>
+      <BaseRecords<Row>
+        rows={rows}
+        columns={columns.map((c) => ({
+          label: c.label,
+          render: (r: Row) => String(r[c.key] ?? '—'),
+        }))}
+        action={actions}
+      />
+    </>
+  );
+}
+const time = (v: Record<string, string>, prefix: string) =>
+  new Date(v[prefix + 'Date'] + 'T' + v[prefix + 'Time']).toISOString();
+const timeFields = (prefix: string, label: string) => [
+  {
+    name: prefix + 'Date',
+    label: label + ' tarihi',
+    type: 'date' as const,
+    value: todayIso(),
+    required: true,
+  },
+  { ...textField(prefix + 'Time', label + ' saati'), value: '08:00' },
+];
+
+export function ManufacturingMrpPage() {
+  const { call } = useCompanyApi(),
+    can = useCan();
+  const queries = useQueryClient();
+  const [needs, setNeeds] = useState<Row[]>([]),
+    [last, setLast] = useState<Record<string, string>>({});
+  const lookups = useCQuery<{ items: Row[]; warehouses: Row[] }>(
+    ['manufacturing', 'lookups'],
+    '/api/manufacturing/lookups',
+  );
+  return (
+    <>
+      <PageHeader
+        title="Malzeme ihtiyaç planlama"
+        description="Kullanılabilir stok düşülür; onaylı reçeteden üretim ve satın alma ihtiyacı hesaplanır."
+      />
+      <OperationForm
+        title="İhtiyaç hesapla"
+        fields={[
+          selectField(
+            'itemId',
+            'Ürün',
+            options(lookups.data?.items ?? [], (r) => `${r.code} · ${r.name}`),
+          ),
+          numberField('quantity', 'Talep adedi', '500'),
+          selectField(
+            'warehouseId',
+            'Depo',
+            options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
+          ),
+        ]}
+        submit={async (v) => {
+          const r = await call<{ needs: Row[] }>('/api/manufacturing/mrp', {
+            method: 'POST',
+            body: v,
+          });
+          setLast(v);
+          setNeeds(r.needs);
+        }}
+        action="Hesapla"
+      />
+      <Records
+        title="Net ihtiyaçlar"
+        rows={needs.map((n, i) => ({ ...n, id: String(i) }))}
+        columns={[
+          { key: 'name', label: 'Ürün' },
+          { key: 'gross', label: 'Brüt ihtiyaç' },
+          { key: 'available', label: 'Kullanılan stok' },
+          { key: 'net', label: 'Net ihtiyaç' },
+          { key: 'action', label: 'Karşılama' },
+        ]}
+      />
+      {needs.length > 0 && can('manufacturing.mrp.manage') && (
+        <Card>
+          <OperationForm
+            title="İhtiyacı üretime aktar"
+            fields={[
+              selectField(
+                'outputWarehouseId',
+                'Mamul deposu',
+                options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
+              ),
+            ]}
+            submit={async (v) => {
+              await call('/api/manufacturing/mrp/orders', {
+                method: 'POST',
+                body: { ...last, ...v, requestKey: v._requestKey },
+              });
+              await queries.invalidateQueries();
+            }}
+            action="Üretim emirlerini aç"
+          />
+        </Card>
+      )}
+    </>
+  );
+}
+
+export function ManufacturingOperationsPage() {
+  const path = useLocation().pathname,
+    maintenance = path.endsWith('/maintenance');
+  const area = maintenance ? 'manufacturing.maintenance' : 'manufacturing.planning';
+  const can = useCan(),
+    { call } = useCompanyApi(),
+    queries = useQueryClient();
+  const save = async (p: string, body: unknown) => {
+    await call(p, { method: 'POST', body });
+    await queries.invalidateQueries();
+  };
+  const resources = useCQuery<{ records: Row[] }>(
+    ['manufacturing', 'resources'],
+    maintenance ? '/api/manufacturing/maintenance/resources' : '/api/manufacturing/resources',
+  );
+  const records = useCQuery<{ records: Row[] }>(
+    ['manufacturing', maintenance ? 'maintenance' : 'schedules'],
+    maintenance ? '/api/manufacturing/maintenance' : '/api/manufacturing/planning/schedules',
+  );
+  const orders = useCQuery<{ orders: (Row & { operations: { key: string; name: string }[] })[] }>(
+    ['manufacturing', 'orders'],
+    '/api/manufacturing/production/orders',
+    { enabled: can('manufacturing.production.read') },
+  );
+  const resourceOptions = options(resources.data?.records ?? [], (r) => String(r.name));
+  const support = useCQuery<{ employees: Row[] }>(
+    ['manufacturing', 'planning-lookups'],
+    '/api/manufacturing/planning/lookups',
+    { enabled: !maintenance },
+  );
+  const departments = useCQuery<{ records: Row[] }>(
+    ['manufacturing', 'departments'],
+    '/api/manufacturing/departments',
+    { enabled: !maintenance },
+  );
+  const lookups = useCQuery<{ items: Row[]; warehouses: Row[] }>(
+    ['manufacturing', 'lookups', maintenance],
+    maintenance ? '/api/manufacturing/maintenance/lookups' : '/api/manufacturing/lookups',
+    {
+      enabled:
+        maintenance || can('manufacturing.production.read') || can('manufacturing.catalog.read'),
+    },
+  );
+  const metrics = useCQuery<{ metrics: Row[] }>(
+    ['manufacturing', 'metrics', todayIso()],
+    `/api/manufacturing/maintenance/metrics?from=${todayIso().slice(0, 7)}-01&to=${todayIso()}`,
+    { enabled: maintenance },
+  );
+  const report = useCQuery<{ history: Row[] }>(
+    ['manufacturing', 'reports'],
+    '/api/manufacturing/reports',
+    { enabled: can('manufacturing.production.read') },
+  );
+  return (
+    <>
+      <PageHeader
+        title={maintenance ? 'Makine bakım ve arıza' : 'Kapasite ve termin planlama'}
+        description="Vardiya, bakım ve devamsızlık takvimleri kaynak kapasitesine birlikte uygulanır."
+      />
+      <Records
+        title={maintenance ? 'Bakım kayıtları' : 'Plan senaryoları'}
+        rows={records.data?.records ?? []}
+        columns={[
+          { key: 'code', label: 'Kayıt' },
+          { key: 'status', label: 'Durum' },
+          { key: 'start', label: 'Başlangıç' },
+          { key: 'end', label: 'Bitiş' },
+        ]}
+        actions={(r) =>
+          can(
+            maintenance ? 'manufacturing.maintenance.manage' : 'manufacturing.planning.approve',
+          ) ? (
+            <OperationForm
+              title={maintenance ? 'Bakımı tamamla' : 'Planı yayımla'}
+              fields={
+                maintenance
+                  ? [{ name: 'date', label: 'Sarf tarihi', type: 'date', value: todayIso() }]
+                  : []
+              }
+              submit={(v) =>
+                save(
+                  maintenance
+                    ? `/api/manufacturing/maintenance/${r.id}/complete`
+                    : `/api/manufacturing/planning/schedules/${r.id}/publish`,
+                  {
+                    action: maintenance ? 'complete' : 'publish',
+                    date: v.date ?? todayIso(),
+                    requestKey: v._requestKey,
+                  },
+                )
+              }
+            />
+          ) : null
+        }
+      />
+      {!maintenance && (
+        <>
+          <Records
+            title="Senaryo karşılaştırması"
+            rows={(records.data?.records ?? []).flatMap((r) =>
+              (r.operations ?? []).map((o, i) => ({
+                ...o,
+                id: r.id + ':' + i,
+                scenario: r.code,
+                status: r.status,
+              })),
+            )}
+            columns={[
+              { key: 'scenario', label: 'Senaryo' },
+              { key: 'operationKey', label: 'Operasyon' },
+              { key: 'start', label: 'Başlangıç' },
+              { key: 'end', label: 'Bitiş' },
+              { key: 'status', label: 'Durum' },
+            ]}
+          />
+          {(records.data?.records ?? [])
+            .filter((r) => r.status === 'draft')
+            .map((r) =>
+              can('manufacturing.planning.manage') ? (
+                <OperationForm
+                  key={r.id}
+                  title={`${r.code} · tarihi değiştir ve hesapla`}
+                  fields={[
+                    ...timeFields('anchor', 'Yeni referans'),
+                    selectField('direction', 'Yön', [
+                      { value: 'forward', label: 'İleri' },
+                      { value: 'backward', label: 'Geri' },
+                    ]),
+                  ]}
+                  submit={async (v) => {
+                    await call(`/api/manufacturing/planning/schedules/${r.id}`, {
+                      method: 'PUT',
+                      body: { anchor: time(v, 'anchor'), direction: v.direction, jobs: r.jobs },
+                    });
+                    await queries.invalidateQueries();
+                  }}
+                />
+              ) : null,
+            )}
+          {(records.data?.records ?? [])
+            .filter((r) => r.status === 'published')
+            .map((r) =>
+              can('manufacturing.planning.approve') ? (
+                <OperationForm
+                  key={r.id}
+                  title={`${r.code} · planı iptal et`}
+                  fields={[]}
+                  action="Kapasiteyi serbest bırak"
+                  submit={() => save(`/api/manufacturing/planning/schedules/${r.id}/cancel`, {})}
+                />
+              ) : null,
+            )}
+        </>
+      )}
+      {maintenance && (
+        <Records
+          title="Bakım ve verimlilik göstergeleri"
+          rows={metrics.data?.metrics.map((r) => ({ ...r, id: String(r.resourceId) })) ?? []}
+          columns={[
+            { key: 'name', label: 'Kaynak' },
+            { key: 'plannedMinutes', label: 'Vardiya (dk)' },
+            { key: 'downtimeMinutes', label: 'Arıza (dk)' },
+            { key: 'mttrMinutes', label: 'MTTR (dk)' },
+            { key: 'mtbfMinutes', label: 'MTBF (dk)' },
+            { key: 'oee', label: 'OEE' },
+            { key: 'source', label: 'Veri kaynağı' },
+          ]}
+        />
+      )}
+      {report.data && (
+        <Records
+          title="Gerçek ve standart süreler"
+          rows={report.data.history.map((r) => ({ ...r, id: String(r.days) }))}
+          columns={[
+            { key: 'days', label: 'Son gün' },
+            { key: 'goodQty', label: 'İyi adet' },
+            { key: 'minutes', label: 'Gerçek dakika' },
+            { key: 'minutesPerUnit', label: 'Dakika/adet' },
+            { key: 'source', label: 'Tahmin kaynağı' },
+          ]}
+        />
+      )}
+      {can(area + '.manage') && (
+        <>
+          {!maintenance && (
+            <>
+              <Records
+                title="Kaynaklar"
+                rows={resources.data?.records ?? []}
+                columns={[
+                  { key: 'code', label: 'Kod' },
+                  { key: 'name', label: 'Kaynak' },
+                  { key: 'type', label: 'Tür' },
+                  { key: 'capacity', label: 'Eşzamanlı kapasite' },
+                ]}
+                actions={(r) => <CustomValuesPanel entity="resource" id={r.id} />}
+              />
+              <OperationForm
+                title="İş merkezi veya kaynak ekle"
+                fields={[
+                  textField('code', 'Kod'),
+                  textField('name', 'Ad'),
+                  selectField('type', 'Tür', [
+                    { value: 'machine', label: 'Makine' },
+                    { value: 'person', label: 'Personel' },
+                    { value: 'center', label: 'İş merkezi' },
+                  ]),
+                  numberField('capacity', 'Eşzamanlı kapasite', '1'),
+                  {
+                    ...selectField(
+                      'employeeId',
+                      'Personel',
+                      options(support.data?.employees ?? [], (r) => String(r.name)),
+                    ),
+                    required: false,
+                  },
+                  {
+                    ...selectField(
+                      'department',
+                      'Departman',
+                      (departments.data?.records ?? []).map((r) => ({
+                        value: String(r.name),
+                        label: String(r.name),
+                      })),
+                    ),
+                    required: false,
+                  },
+                ]}
+                submit={(v) =>
+                  save('/api/manufacturing/resources', {
+                    ...v,
+                    employeeId: v.employeeId || undefined,
+                    capacity: Number(v.capacity),
+                  })
+                }
+              />
+              <OperationForm
+                title="Şube ve departman ekle"
+                fields={[
+                  textField('code', 'Kod'),
+                  textField('name', 'Departman'),
+                  textField('branch', 'Şube'),
+                ]}
+                submit={(v) => save('/api/manufacturing/departments', v)}
+              />
+              <OperationForm
+                title="Özel alan tanımla"
+                fields={[
+                  textField('code', 'Alan kodu'),
+                  textField('name', 'Görünen ad'),
+                  selectField('entity', 'Kayıt türü', [
+                    { value: 'resource', label: 'Kaynak' },
+                    { value: 'production', label: 'Üretim emri' },
+                    { value: 'model', label: 'Model' },
+                    { value: 'item', label: 'Stok' },
+                  ]),
+                  selectField('type', 'Veri türü', [
+                    { value: 'text', label: 'Metin' },
+                    { value: 'number', label: 'Sayı' },
+                    { value: 'date', label: 'Tarih' },
+                    { value: 'choice', label: 'Seçim' },
+                  ]),
+                  selectField('required', 'Zorunlu', [
+                    { value: 'no', label: 'Hayır' },
+                    { value: 'yes', label: 'Evet' },
+                  ]),
+                  { ...textField('choices', 'Seçenekler (virgülle)'), required: false },
+                ]}
+                submit={(v) =>
+                  save('/api/manufacturing/custom-fields', {
+                    ...v,
+                    required: v.required === 'yes',
+                    choices: v.choices
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
+              <OperationForm
+                title="Çalışma takvimi"
+                fields={[
+                  selectField('resourceId', 'Kaynak', resourceOptions),
+                  ...timeFields('start', 'Başlangıç'),
+                  ...timeFields('end', 'Bitiş'),
+                  selectField('reason', 'Takvim türü', [
+                    { value: 'shift', label: 'Vardiya' },
+                    { value: 'absence', label: 'Devamsızlık' },
+                    { value: 'overtime', label: 'Fazla mesai' },
+                  ]),
+                ]}
+                submit={(v) =>
+                  save('/api/manufacturing/calendars', {
+                    resourceId: v.resourceId,
+                    start: time(v, 'start'),
+                    end: time(v, 'end'),
+                    reason: v.reason,
+                    available: v.reason !== 'absence',
+                  })
+                }
+              />
+              <ScheduleBuilder
+                orders={orders.data?.orders ?? []}
+                resources={resources.data?.records ?? []}
+              />
+            </>
+          )}
+          {maintenance && (
+            <OperationForm
+              title="Bakım veya arıza kaydı"
+              fields={[
+                selectField('resourceId', 'Makine', resourceOptions),
+                selectField('kind', 'Tür', [
+                  { value: 'planned', label: 'Planlı bakım' },
+                  { value: 'breakdown', label: 'Arıza' },
+                ]),
+                textField('description', 'Açıklama'),
+                ...timeFields('start', 'Başlangıç'),
+                ...timeFields('end', 'Bitiş'),
+                {
+                  ...selectField(
+                    'warehouseId',
+                    'Yedek parça deposu',
+                    options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
+                  ),
+                  required: false,
+                },
+                {
+                  ...selectField(
+                    'spareItemId',
+                    'Yedek parça',
+                    options(lookups.data?.items ?? [], (r) => String(r.name)),
+                  ),
+                  required: false,
+                },
+                { ...numberField('spareQty', 'Parça miktarı'), required: false },
+              ]}
+              submit={(v) =>
+                save('/api/manufacturing/maintenance', {
+                  resourceId: v.resourceId,
+                  kind: v.kind,
+                  description: v.description,
+                  start: time(v, 'start'),
+                  end: time(v, 'end'),
+                  warehouseId: v.warehouseId || undefined,
+                  spareParts: v.spareItemId
+                    ? [{ itemId: v.spareItemId, quantity: v.spareQty }]
+                    : [],
+                })
+              }
+            />
+          )}
+        </>
+      )}
+      {records.error && <Callout tone="danger">{records.error.message}</Callout>}
+    </>
+  );
+}
+
+export function ManufacturingWarehousePage() {
+  const can = useCan(),
+    { call } = useCompanyApi(),
+    queries = useQueryClient();
+  const [selection, setSelection] = useState('lots');
+  const lookups = useCQuery<{ items: Row[]; warehouses: Row[]; documents: Row[] }>(
+    ['wms', 'lookups'],
+    '/api/wms/lookups',
+  );
+  const bins = useCQuery<{ records: Row[] }>(['wms', 'bins'], '/api/wms/bins');
+  const lots = useCQuery<{ records: Row[] }>(['wms', 'lots'], '/api/wms/lots');
+  const placements = useCQuery<{ records: Row[] }>(['wms', 'placements'], '/api/wms/placements');
+  const save = async (p: string, body: unknown) => {
+    await call(p, { method: 'POST', body });
+    await queries.invalidateQueries();
+  };
+  return (
+    <>
+      <PageHeader
+        title="Depo ve raf yönetimi"
+        description="Partiler stok kabul belgesine bağlanır; raf yerleştirmesi yeni stok değeri yaratmaz."
+      />
+      <div className="mb-4 flex gap-2">
+        {[
+          ['lots', 'Partiler'],
+          ['bins', 'Raflar'],
+          ['placements', 'Yerleştirmeler'],
+        ].map(([k, l]) => (
+          <Button key={k} onClick={() => setSelection(k!)}>
+            {l}
+          </Button>
+        ))}
+      </div>
+      <Records
+        title="Depo kayıtları"
+        rows={
+          (selection === 'bins' ? bins : selection === 'placements' ? placements : lots).data
+            ?.records ?? []
+        }
+        columns={[
+          { key: 'code', label: 'Kod' },
+          { key: 'name', label: 'Ad' },
+          { key: 'quantity', label: 'Miktar' },
+          { key: 'status', label: 'Durum' },
+        ]}
+        actions={(r) =>
+          selection === 'lots' && can('manufacturing.quality.approve') ? (
+            <OperationForm
+              title="Kalite kararı"
+              fields={[
+                selectField('action', 'Karar', [
+                  { value: 'release', label: 'Serbest bırak' },
+                  { value: 'block', label: 'Bloke et' },
+                ]),
+              ]}
+              submit={(v) =>
+                save(`/api/wms/lots/${r.id}/actions`, { ...v, requestKey: v._requestKey })
+              }
+            />
+          ) : null
+        }
+      />
+      {can('inventory.wms.manage') && (
+        <>
+          <OperationForm
+            title="Raf ekle"
+            fields={[
+              textField('code', 'Raf kodu'),
+              textField('name', 'Raf adı'),
+              selectField(
+                'warehouseId',
+                'Depo',
+                options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
+              ),
+              numberField('capacity', 'Kapasite', '0'),
+            ]}
+            submit={(v) => save('/api/wms/bins', v)}
+          />
+          <OperationForm
+            title="Kabul partisi ekle"
+            fields={[
+              textField('code', 'Parti kodu'),
+              selectField(
+                'itemId',
+                'Stok',
+                options(lookups.data?.items ?? [], (r) => String(r.name)),
+              ),
+              selectField(
+                'warehouseId',
+                'Depo',
+                options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
+              ),
+              selectField(
+                'sourceDocumentId',
+                'Stok kabul belgesi',
+                options(lookups.data?.documents ?? [], (r) => String(r.code)),
+              ),
+              numberField('quantity', 'Miktar'),
+            ]}
+            submit={(v) => save('/api/wms/lots', v)}
+          />
+          <OperationForm
+            title="Rafa yerleştir"
+            fields={[
+              selectField(
+                'lotId',
+                'Parti',
+                options(lots.data?.records ?? [], (r) => String(r.code)),
+              ),
+              selectField(
+                'binId',
+                'Raf',
+                options(bins.data?.records ?? [], (r) => String(r.code)),
+              ),
+              numberField('quantity', 'Miktar'),
+            ]}
+            submit={(v) => save('/api/wms/placements', { ...v, requestKey: v._requestKey })}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+export function ManufacturingLogisticsPage() {
+  const can = useCan(),
+    { call } = useCompanyApi(),
+    queries = useQueryClient();
+  const records = useCQuery<{ records: Row[] }>(
+    ['logistics', 'shipments'],
+    '/api/logistics/shipments',
+  );
+  const lookups = useCQuery<{
+    notes: (Row & { warehouseId: string; lines: { itemId: string; quantity: string }[] })[];
+  }>(['logistics', 'lookups'], '/api/logistics/lookups');
+  const save = async (p: string, b: unknown) => {
+    await call(p, { method: 'POST', body: b });
+    await queries.invalidateQueries();
+  };
+  return (
+    <>
+      <PageHeader title="Paketleme ve sevkiyat" />
+      <Records
+        title="Sevkiyatlar"
+        rows={records.data?.records ?? []}
+        columns={[
+          { key: 'code', label: 'Kayıt' },
+          { key: 'carrier', label: 'Taşıyıcı' },
+          { key: 'trackingNo', label: 'Takip no' },
+          { key: 'status', label: 'Durum' },
+        ]}
+        actions={(r) =>
+          can('sales.logistics.manage') ? (
+            <OperationForm
+              title="Sevkiyat durumu"
+              fields={[
+                selectField('action', 'İşlem', [
+                  { value: 'publish', label: 'Sevk et' },
+                  { value: 'deliver', label: 'Teslim edildi' },
+                ]),
+              ]}
+              submit={(v) =>
+                save(`/api/logistics/shipments/${r.id}/actions`, {
+                  ...v,
+                  requestKey: v._requestKey,
+                })
+              }
+            />
+          ) : null
+        }
+      />
+      {can('sales.logistics.manage') && (
+        <OperationForm
+          title="İrsaliyeyi paketle"
+          fields={[
+            selectField(
+              'deliveryNoteId',
+              'Satış irsaliyesi',
+              options(lookups.data?.notes ?? [], (r) => String(r.code)),
+            ),
+            textField('carrier', 'Taşıyıcı'),
+            textField('vehicle', 'Araç'),
+            textField('trackingNo', 'Takip no'),
+            textField('packageCode', 'Koli barkodu'),
+          ]}
+          submit={(v) => {
+            const n = lookups.data?.notes.find((n) => n.id === v.deliveryNoteId);
+            return save('/api/logistics/shipments', {
+              deliveryNoteId: v.deliveryNoteId,
+              warehouseId: n?.warehouseId,
+              carrier: v.carrier,
+              vehicle: v.vehicle,
+              trackingNo: v.trackingNo,
+              packages: [{ code: v.packageCode, type: 'box', lines: n?.lines }],
+            });
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+export function ManufacturingIntegrationsPage() {
+  const can = useCan(),
+    { call } = useCompanyApi(),
+    queries = useQueryClient();
+  const records = useCQuery<{ records: Row[] }>(
+    ['integrations', 'connections'],
+    '/api/integrations/connections',
+  );
+  const events = useCQuery<{ records: Row[] }>(
+    ['integrations', 'events'],
+    '/api/integrations/events',
+  );
+  const lookups = useCQuery<{ parties: Row[]; warehouses: Row[] }>(
+    ['integrations', 'lookups'],
+    '/api/integrations/lookups',
+  );
+  const save = async (p: string, b: unknown) => {
+    await call(p, { method: 'POST', body: b });
+    await queries.invalidateQueries();
+  };
+  return (
+    <>
+      <PageHeader
+        title="Entegrasyonlar"
+        description="Bağlantı bilgileri girilene kadar kanallar bağlı değil görünür. Demo şirketi dış sistemlere veri göndermez."
+      />
+      <Records
+        title="Bağlantılar"
+        rows={records.data?.records ?? []}
+        columns={[
+          { key: 'name', label: 'Ad' },
+          { key: 'provider', label: 'Sağlayıcı' },
+          { key: 'status', label: 'Durum' },
+        ]}
+        actions={(r) =>
+          can('core.integrations.manage') ? (
+            <>
+              <OperationForm
+                title={`${r.name} · bağlantıyı düzenle`}
+                fields={[
+                  { ...textField('name', 'Ad'), value: r.name },
+                  {
+                    ...textField('shop', 'Shopify mağaza alanı'),
+                    value: String(r.shop ?? ''),
+                    required: false,
+                  },
+                  {
+                    ...textField('endpoint', 'Servis adresi'),
+                    value: String(r.endpoint ?? ''),
+                    required: false,
+                  },
+                  {
+                    ...textField('token', 'Yeni erişim anahtarı'),
+                    type: 'password',
+                    required: false,
+                    hint: 'Boş bırakıldığında mevcut anahtar korunur.',
+                  },
+                ]}
+                submit={async (v) => {
+                  await call(`/api/integrations/connections/${r.id}`, {
+                    method: 'PUT',
+                    body: {
+                      provider: r.provider,
+                      name: v.name,
+                      shop: v.shop || undefined,
+                      endpoint: v.endpoint || undefined,
+                      token: v.token || undefined,
+                    },
+                  });
+                  await queries.invalidateQueries();
+                }}
+              />
+              {['shopify', 'ticimax'].includes(String(r.provider)) && (
+                <OperationForm
+                  title={`${r.name} · siparişleri al`}
+                  fields={[
+                    selectField(
+                      'partyId',
+                      'Müşteri eşlemesi',
+                      options(lookups.data?.parties ?? [], (p) => String(p.name)),
+                    ),
+                    selectField(
+                      'warehouseId',
+                      'Depo',
+                      options(lookups.data?.warehouses ?? [], (p) => String(p.name)),
+                    ),
+                    { ...textField('cursor', 'Sonraki sayfa anahtarı'), required: false },
+                    ...(r.provider === 'ticimax'
+                      ? [
+                          textField('priceField', 'Fiyat alanı'),
+                          selectField('priceBasis', 'Fiyat türü', [
+                            { value: 'unit', label: 'Birim fiyat' },
+                            { value: 'line', label: 'Satır tutarı' },
+                          ]),
+                        ]
+                      : []),
+                  ]}
+                  submit={(v) =>
+                    save(`/api/integrations/connections/${r.id}/pull-orders`, {
+                      ...v,
+                      cursor: v.cursor || undefined,
+                    })
+                  }
+                  action="Kuyruğa al"
+                />
+              )}
+            </>
+          ) : null
+        }
+      />
+      {can('core.integrations.manage') && (
+        <OperationForm
+          title="Bağlantı ekle"
+          fields={[
+            textField('name', 'Ad'),
+            selectField('provider', 'Sağlayıcı', [
+              { value: 'shopify', label: 'Shopify' },
+              { value: 'ticimax', label: 'Ticimax' },
+              { value: 'bank', label: 'Banka' },
+              { value: 'pdks', label: 'PDKS' },
+              { value: 'edocument', label: 'E-belge' },
+            ]),
+            { ...textField('shop', 'Shopify mağaza alanı'), required: false },
+            { ...textField('endpoint', 'Servis adresi'), required: false },
+            { ...textField('token', 'Erişim anahtarı'), type: 'password', required: false },
+          ]}
+          submit={(v) =>
+            save('/api/integrations/connections', {
+              ...v,
+              shop: v.shop || undefined,
+              endpoint: v.endpoint || undefined,
+              token: v.token || undefined,
+            })
+          }
+        />
+      )}
+      <Records
+        title="İşlem kuyruğu"
+        rows={events.data?.records ?? []}
+        columns={[
+          { key: 'code', label: 'Kaynak' },
+          { key: 'status', label: 'Durum' },
+          { key: 'error', label: 'Sonuç' },
+          { key: 'attempts', label: 'Deneme' },
+        ]}
+        actions={(r) =>
+          can('core.integrations.manage') &&
+          can('invoices.manage') &&
+          ['queued', 'failed'].includes(r.status ?? '') ? (
+            <Button onClick={() => save(`/api/integrations/events/${r.id}/retry`, {})}>
+              Yeniden dene
+            </Button>
+          ) : null
+        }
+      />
+    </>
+  );
+}

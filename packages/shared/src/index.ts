@@ -70,3 +70,8 @@ export * from './insights';
 export * from './campaigns';
 export * from './fixed-assets';
 export * from './company-budgets';
+export * from './leather';
+export * from './pos';
+
+export * from './manufacturing';
+export * from './manufacturing-profiles';

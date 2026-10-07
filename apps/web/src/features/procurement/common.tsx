@@ -10,6 +10,7 @@ import type { PurchaseOrderStatus, PurchaseRequestStatus, RfqStatus } from '../.
 import { useItemOptions } from '../inventory/common';
 import { useProjectOptions } from '../projects/common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { useCompany } from '../../lib/session';
 
 /** Talep/teklif/sipariş/mal kabul değişince etkilenen sorgular (taahhüt proje raporunda, mal kabul stokta görünür). */
 export const PROCUREMENT_INVALIDATE = [
@@ -78,6 +79,7 @@ interface EditorProps {
 
 /** Talep ve sipariş satırı düzenleyici: stok kartı seçilirse açıklama/birim kartan gelir. */
 export function LinesEditor({ projectId, lines, onChange, disabled, priceLabel, wbsRequired }: EditorProps) {
+  const projectBased = useCompany().sector === 'CONSTRUCTION';
   const { t } = useTranslation();
   const { byId: projectById } = useProjectOptions();
   const { items, options: itemOptions } = useItemOptions(!disabled);
@@ -99,7 +101,7 @@ export function LinesEditor({ projectId, lines, onChange, disabled, priceLabel, 
               <Th className="w-20">{t('procurement.lines.unit')}</Th>
               <Th num className="w-28">{t('procurement.lines.quantity')}</Th>
               <Th num className="w-32">{priceLabel}</Th>
-              <Th className="w-56">{wbsRequired ? t('procurement.lines.wbsRequired') : t('procurement.lines.wbs')}</Th>
+              {projectBased && <Th className="w-56">{wbsRequired ? t('procurement.lines.wbsRequired') : t('procurement.lines.wbs')}</Th>}
               <Th className="w-10" />
             </tr>
           </thead>
@@ -114,9 +116,9 @@ export function LinesEditor({ projectId, lines, onChange, disabled, priceLabel, 
                 <Td><Input aria-label={`${t('procurement.lines.unit')} ${i + 1}`} value={l.unit} disabled={disabled || !!l.itemId} maxLength={20} onChange={(e) => set(l.key, { unit: e.target.value })} /></Td>
                 <Td><MoneyInput aria-label={`${t('procurement.lines.quantity')} ${i + 1}`} className="text-right" value={l.quantity} disabled={disabled} onChange={(v) => set(l.key, { quantity: v })} decimals={0} maxDecimals={4} /></Td>
                 <Td><MoneyInput aria-label={`${priceLabel} ${i + 1}`} className="text-right" value={l.price} disabled={disabled} onChange={(v) => set(l.key, { price: v })} maxDecimals={6} /></Td>
-                <Td>
+                {projectBased && <Td>
                   <Combobox aria-label={`${t('procurement.lines.wbs')} ${i + 1}`} options={[{ value: '', label: '—' }, ...wbsOptions]} value={l.wbsId} onChange={(v) => set(l.key, { wbsId: v })} placeholder={t('procurement.lines.wbs')} disabled={disabled || !projectId} />
-                </Td>
+                </Td>}
                 <Td>
                   {!disabled && lines.length > 1 && (
                     <button type="button" className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" aria-label={`${t('common.delete')} ${i + 1}`} onClick={() => onChange(lines.filter((x) => x.key !== l.key))}>

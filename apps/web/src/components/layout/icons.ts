@@ -53,6 +53,14 @@ import {
   Wallet,
   HandCoins,
   Warehouse,
+  Briefcase,
+  Scissors,
+  Handshake,
+  Wrench,
+  ShoppingCart,
+  ClipboardList,
+  FileSearch,
+  ListChecks,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -111,6 +119,14 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   upload: Upload,
   puzzle: Puzzle,
   ship: Ship,
+  briefcase: Briefcase,
+  scissors: Scissors,
+  handshake: Handshake,
+  wrench: Wrench,
+  'shopping-cart': ShoppingCart,
+  'clipboard-list': ClipboardList,
+  'file-search': FileSearch,
+  'list-checks': ListChecks,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

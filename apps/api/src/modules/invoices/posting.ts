@@ -22,6 +22,9 @@ import { insertDocument, loadStockableItems, reverseStockDocument, type StockCtx
 import { StockPlanner, type DraftRow } from '../inventory/planner';
 import { createJournalEntry, reverseJournalEntry, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
+import { requireItemMappings } from '../inventory/accounting';
+import { accruedDeliveryLines, cancelAccruedPurchase, effectiveReturnValue, lockLeatherCosts, recognizeDeliverySale, reverseAllocatedJournalCosts, settleAccruedPurchase, traceStockDocument, unrecognizeDeliverySale } from '../leather/costs';
+import { reverseCustomDepositForInvoice } from '../leather/advanced';
 import { describeSettlements, entrySettlements } from '../parties/service';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
@@ -83,6 +86,7 @@ async function lockInvoice(tx: Tx, id: string) {
  * fatura numarası → stok belgesi → yevmiye → fatura. Herhangi bir adım başarısız olursa tümü geri alınır.
  */
 export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const inv = await lockInvoice(tx, id);
   if (inv.status !== 'draft') throw unprocessable('Fatura zaten kaydedilmiş', 'INVOICE_NOT_DRAFT');
   const type = inv.type as InvoiceType;
@@ -147,10 +151,10 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
     throw unprocessable('Orijinal fatura artık kaydedilmiş durumda değil', 'RETURN_ORIGINAL_NOT_POSTED');
   }
   const returned = original ? await returnedTotals(tx, original.id, inv.id) : new Map<string, { qty: MoneyValue; cost: MoneyValue }>();
-  const sourceById = new Map<string, { quantity: MoneyValue; cost: MoneyValue | null }>();
+  const sourceById = new Map<string, { quantity: MoneyValue; cost: MoneyValue | null; lineNo: number }>();
   if (original) {
     const src = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, original.id));
-    for (const s of src) sourceById.set(s.id, { quantity: dec(s.quantity), cost: s.costValue === null ? null : dec(s.costValue) });
+    for (const s of src) sourceById.set(s.id, { quantity: dec(s.quantity), cost: s.costValue === null ? null : dec(s.costValue), lineNo: s.lineNo });
   }
   const usedInThis = new Map<string, { qty: MoneyValue; cost: MoneyValue }>();
   const returnValue = (l: PreparedLine): MoneyValue | null => {
@@ -182,6 +186,20 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
   // her satır için bir kez hesaplanır (aynı orijinal satıra bağlı satırlar birikir).
   const returnValueByLine = new Map<number, MoneyValue | null>();
   if (original) for (const l of lines) if (l.sourceLineId) returnValueByLine.set(l.lineNo, returnValue(l));
+  const originalTargets: Record<number, string> = {};
+  if (original && type === 'sales_return') {
+    const perTarget = new Map<string, { qty: MoneyValue; value: MoneyValue }>();
+    for (const l of lines.filter(l => l.sourceLineId)) {
+      const target = `sale:invoice:${original.id}:${sourceById.get(l.sourceLineId!)!.lineNo}`;
+      originalTargets[l.lineNo] = target;
+      const used = perTarget.get(target) ?? {qty: dec(0), value: dec(0)};
+      const cumulative = await effectiveReturnValue(tx, target, used.qty.plus(l.quantity).toFixed(4));
+      if (cumulative !== null) {
+        returnValueByLine.set(l.lineNo, dec(cumulative).minus(used.value));
+        perTarget.set(target, {qty: used.qty.plus(l.quantity), value: dec(cumulative)});
+      } else delete originalTargets[l.lineNo];
+    }
+  }
 
   // İrsaliye bağı: irsaliye satırlarını kilitle, bağları yeniden doğrula, paylaşılan değerleri dağıt
   const allocator = await DeliveryAllocator.lock(tx, type, party.id, lines, inv.id);
@@ -201,7 +219,8 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
   // mal maliyetine (621) gider; irsaliyenin eksi bakiye kapanış düzeltmesi de burada 621'e aktarılır.
   const stockLines = lines.filter((l) => l.isStock);
   const directStock = stockLines.filter((l) => !l.deliveryLineId);
-  const linkedPurchase = stockLines.filter((l) => l.deliveryLineId && type === 'purchase');
+  const accrued = type === 'purchase' ? await accruedDeliveryLines(tx, stockLines.flatMap(l => l.deliveryLineId ? [l.deliveryLineId] : [])) : new Set<string>();
+  const linkedPurchase = stockLines.filter((l) => l.deliveryLineId && type === 'purchase' && !accrued.has(l.deliveryLineId));
   const planItemIds = [...new Set([...directStock, ...linkedPurchase].map((l) => l.itemId!))];
   let planRows: DraftRow[] = [];
   const costByLine = new Map<number, MoneyValue>();
@@ -232,7 +251,12 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
         deliveryShare.set(l.lineNo, { value: share.value, adjust: share.adjust });
         // Satış, satış iadesi ve alış iadesi: stok hareketi irsaliyede yapılmıştır; maliyet irsaliye satırının payıdır
         if (type !== 'purchase') {
-          costByLine.set(l.lineNo, share.value);
+          const recognized = type === 'sales' ? await recognizeDeliverySale(tx, stockCtx(ctx), l.deliveryLineId, inv.id, l.lineNo, l.quantity, inv.invoiceDate) : null;
+          costByLine.set(l.lineNo, recognized === null ? share.value : dec(recognized));
+          continue;
+        }
+        if (accrued.has(l.deliveryLineId)) {
+          costByLine.set(l.lineNo, netBase[idx]!);
           continue;
         }
         const p = planner!;
@@ -277,6 +301,10 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
   }
 
   // --- Yevmiye satırları ---
+  const accruedSettlement = type === 'purchase'
+    ? await settleAccruedPurchase(tx, stockCtx(ctx), {invoiceId: inv.id, date: inv.invoiceDate, lines: stockLines.flatMap(l => l.deliveryLineId && accrued.has(l.deliveryLineId) ? [{lineNo:l.lineNo, deliveryLineId:l.deliveryLineId, quantity:l.quantity, netBase:netBase[l.lineNo-1]!.toFixed(2)}] : [])})
+    : {journalLines: [], handledLineNos: new Set<number>()};
+  const itemMapping = await requireItemMappings(tx, stockLines.map(l => l.itemId!));
   const mapping = await requireMappings(
     tx,
     requiredMappingKeys(type, { hasStock: stockLines.length > 0, hasStockAdjust: !stockAdjust.isZero() }),
@@ -299,11 +327,14 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       vatRate: l.vatRate,
       accountId: l.accountId,
       isStock: l.isStock,
+      ...(l.itemId ? itemMapping.get(l.itemId) : {}),
+      accruedPurchase: accruedSettlement.handledLineNos.has(l.lineNo),
       costValue: costByLine.get(l.lineNo) ?? dec(0),
       projectId: l.projectId,
       wbsId: l.wbsId,
     })),
   });
+  built.lines.push(...accruedSettlement.journalLines);
 
   // --- Yazma: fatura numarası → stok belgesi → yevmiye → satırlar → fatura ---
   const year = isoYear(inv.invoiceDate);
@@ -336,6 +367,7 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       },
     );
     stockDocumentId = doc.id;
+    await traceStockDocument(tx, stockCtx(ctx), doc, planRows, {movementKind:type, originalTargets});
   }
 
   const entry = await createJournalEntry(
@@ -411,9 +443,11 @@ async function creditLimitWarning(tx: Tx, type: InvoiceType, partyId: string, li
  * kesilmişse iptal edilemez; o durumda iade faturası kesilir.
  */
 export async function cancelInvoice(tx: Tx, ctx: InvoiceCtx, id: string, input: CancelInvoiceInput) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const inv = await lockInvoice(tx, id);
   if (inv.status === 'cancelled') throw unprocessable('Fatura zaten iptal edilmiş', 'INVOICE_ALREADY_CANCELLED');
   if (inv.status !== 'posted') throw unprocessable('Yalnızca kaydedilmiş fatura iptal edilebilir', 'INVOICE_NOT_POSTED');
+  if ((await tx.execute(sql`select id from pos_sales where invoice_id=${id}::uuid limit 1`)).rows.length) throw unprocessable('Mağaza satışının mali kayıtlarını POS iade/değişim akışından düzeltin','POS_INVOICE_PROTECTED');
 
   const active = await tx.execute<{ invoice_no: string }>(sql`
     select invoice_no from invoices where return_of_id = ${id} and status = 'posted' limit 1`);
@@ -434,6 +468,14 @@ export async function cancelInvoice(tx: Tx, ctx: InvoiceCtx, id: string, input: 
     throw unprocessable('İptal tarihi fatura tarihinden önce olamaz', 'CANCEL_DATE_BEFORE_INVOICE');
   }
   await requireOpenPeriod(tx, date);
+
+  await reverseCustomDepositForInvoice(tx, stockCtx(ctx), inv.id, date);
+  await cancelAccruedPurchase(tx, stockCtx(ctx), inv.id, date);
+  await reverseAllocatedJournalCosts(tx, stockCtx(ctx), inv.journalEntryId!, date);
+  if (inv.type === 'sales') {
+    const linked=(await tx.execute<{line_no:number;delivery_line_id:string;delivery_line_no:number;cost_value:string}>(sql`select l.line_no,l.delivery_line_id,d.line_no as delivery_line_no,l.cost_value from invoice_lines l join delivery_note_lines d on d.id=l.delivery_line_id where l.invoice_id=${id}::uuid`)).rows;
+    for(const l of linked) await unrecognizeDeliverySale(tx,stockCtx(ctx),id,l.line_no,l.delivery_line_id,l.delivery_line_no,l.cost_value,date);
+  }
 
   let cancelStockDocumentId: string | null = null;
   if (inv.stockDocumentId) {

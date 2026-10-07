@@ -1,6 +1,6 @@
 import type { Permission } from './permissions';
 
-export const SECTORS = ['CONSTRUCTION', 'RETAIL_MARKET', 'COMMERCE'] as const;
+export const SECTORS = ['CONSTRUCTION', 'RETAIL_MARKET', 'COMMERCE', 'LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'] as const;
 export type Sector = (typeof SECTORS)[number];
 
 export type ModuleStatus = 'available' | 'planned';
@@ -29,6 +29,17 @@ export interface ModuleDef {
  * 'planned' modüller henüz hiçbir şirkete açılmaz.
  */
 export const MODULES: readonly ModuleDef[] = [
+  { key: 'manufacturing.catalog', labelKey: 'modules.manufacturing.catalog', label: 'Katalog ve reçete', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["core.inventory"] },
+  { key: 'manufacturing.mrp', labelKey: 'modules.manufacturing.mrp', label: 'Malzeme ihtiyaç planlama', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["manufacturing.catalog"] },
+  { key: 'manufacturing.production', labelKey: 'modules.manufacturing.production', label: 'Üretim ve atölye', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["manufacturing.catalog","core.ledger"] },
+  { key: 'manufacturing.planning', labelKey: 'modules.manufacturing.planning', label: 'Kapasite ve termin', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["manufacturing.production"] },
+  { key: 'manufacturing.quality', labelKey: 'modules.manufacturing.quality', label: 'Kalite kontrol', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["manufacturing.production"] },
+  { key: 'manufacturing.subcontracting', labelKey: 'modules.manufacturing.subcontracting', label: 'Fason üretim', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["manufacturing.production","core.parties"] },
+  { key: 'manufacturing.maintenance', labelKey: 'modules.manufacturing.maintenance', label: 'Makine ve bakım', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["core.inventory"] },
+  { key: 'manufacturing.costs', labelKey: 'modules.manufacturing.costs', label: 'Üretim maliyetleri', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["manufacturing.production"] },
+  { key: 'inventory.wms', labelKey: 'modules.inventory.wms', label: 'Depo ve raf yönetimi', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["core.inventory"] },
+  { key: 'sales.logistics', labelKey: 'modules.sales.logistics', label: 'Paketleme ve sevkiyat', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["core.invoices"] },
+  { key: 'core.integrations', labelKey: 'modules.core.integrations', label: 'Entegrasyonlar', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: [] },
   { key: 'core.dashboard', labelKey: 'modules.dashboard', label: 'Genel bakış', sectors: 'all', status: 'available', locked: true },
   { key: 'core.ledger', labelKey: 'modules.ledger', label: 'Muhasebe', sectors: 'all', status: 'available' },
   { key: 'core.parties', labelKey: 'modules.parties', label: 'Cari hesaplar', sectors: 'all', status: 'available', requires: ['core.ledger'] },
@@ -224,6 +235,14 @@ export const MODULES: readonly ModuleDef[] = [
     sectors: ['RETAIL_MARKET'],
     status: 'planned',
   },
+  { key: 'core.procurement', labelKey: 'modules.coreProcurement', label: 'Satın alma ve tedarik', sectors: ['LEATHER_FASHION','MANUFACTURING_WHOLESALE'], status: 'available', requires: ['core.parties', 'core.inventory', 'core.invoices'] },
+  { key: 'leather.catalog', labelKey: 'modules.leatherCatalog', label: 'Model, koleksiyon ve reçete', sectors: ['LEATHER_FASHION'], status: 'available', requires: ['core.inventory'] },
+  { key: 'leather.materials', labelKey: 'modules.leatherMaterials', label: 'Deri parti ve parça takibi', sectors: ['LEATHER_FASHION'], status: 'available', requires: ['core.inventory'] },
+  { key: 'leather.production', labelKey: 'modules.leatherProduction', label: 'Kesim ve üretim', sectors: ['LEATHER_FASHION'], status: 'available', requires: ['leather.catalog', 'leather.materials', 'core.ledger'] },
+  { key: 'leather.subcontracting', labelKey: 'modules.leatherSubcontracting', label: 'Fason operasyonlar', sectors: ['LEATHER_FASHION'], status: 'available', requires: ['leather.production', 'core.parties'] },
+  { key: 'leather.quality', labelKey: 'modules.leatherQuality', label: 'Kalite ve izlenebilirlik', sectors: ['LEATHER_FASHION'], status: 'available', requires: ['leather.materials', 'leather.production'] },
+  { key: 'leather.service', labelKey: 'modules.leatherService', label: 'Garanti ve onarım', sectors: ['LEATHER_FASHION'], status: 'available', requires: ['leather.catalog', 'core.parties'] },
+  { key: 'sales.pos', labelKey: 'modules.salesPos', label: 'Mağaza kasası', sectors: ['LEATHER_FASHION','MANUFACTURING_WHOLESALE'], status: 'available', requires: ['core.invoices', 'core.treasury'] },
 ];
 
 export type NavGroupKey =
@@ -233,6 +252,9 @@ export type NavGroupKey =
   | 'treasury'
   | 'stock'
   | 'construction'
+  | 'procurement'
+  | 'leather'
+  | 'manufacturing'
   | 'directory'
   | 'hr'
   | 'accounting'
@@ -251,12 +273,15 @@ export interface NavItemDef {
 }
 
 export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
+  { key:'manufacturing',labelKey:'nav.groups.manufacturing' },
   { key: 'overview', labelKey: 'nav.groups.overview' },
   { key: 'parties', labelKey: 'nav.groups.parties' },
   { key: 'invoices', labelKey: 'nav.groups.invoices' },
   { key: 'treasury', labelKey: 'nav.groups.treasury' },
   { key: 'stock', labelKey: 'nav.groups.stock' },
   { key: 'construction', labelKey: 'nav.groups.construction' },
+  { key: 'procurement', labelKey: 'nav.groups.procurement' },
+  { key: 'leather', labelKey: 'nav.groups.leather' },
   { key: 'directory', labelKey: 'nav.groups.directory' },
   { key: 'hr', labelKey: 'nav.groups.hr' },
   { key: 'accounting', labelKey: 'nav.groups.accounting' },
@@ -265,6 +290,29 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
 ];
 
 export const NAV_ITEMS: readonly NavItemDef[] = [
+  { key:'manufacturing.catalog',labelKey:'nav.manufacturing.catalog',path:'/manufacturing/catalog',icon:'layers',group:'manufacturing',module:'manufacturing.catalog',permission:'manufacturing.catalog.read' },
+  { key:'manufacturing.mrp',labelKey:'nav.manufacturing.mrp',path:'/manufacturing/mrp',icon:'layers',group:'manufacturing',module:'manufacturing.mrp',permission:'manufacturing.mrp.read' },
+  { key:'manufacturing.production',labelKey:'nav.manufacturing.production',path:'/manufacturing/production',icon:'layers',group:'manufacturing',module:'manufacturing.production',permission:'manufacturing.production.read' },
+  { key:'manufacturing.planning',labelKey:'nav.manufacturing.planning',path:'/manufacturing/planning',icon:'layers',group:'manufacturing',module:'manufacturing.planning',permission:'manufacturing.planning.read' },
+  { key:'manufacturing.quality',labelKey:'nav.manufacturing.quality',path:'/manufacturing/quality',icon:'layers',group:'manufacturing',module:'manufacturing.quality',permission:'manufacturing.quality.read' },
+  { key:'manufacturing.subcontracting',labelKey:'nav.manufacturing.subcontracting',path:'/manufacturing/subcontracting',icon:'layers',group:'manufacturing',module:'manufacturing.subcontracting',permission:'manufacturing.subcontracting.read' },
+  { key:'manufacturing.maintenance',labelKey:'nav.manufacturing.maintenance',path:'/manufacturing/maintenance',icon:'layers',group:'manufacturing',module:'manufacturing.maintenance',permission:'manufacturing.maintenance.read' },
+  { key:'manufacturing.costs',labelKey:'nav.manufacturing.costs',path:'/manufacturing/costs',icon:'layers',group:'manufacturing',module:'manufacturing.costs',permission:'manufacturing.costs.read' },
+  { key:'inventory.wms',labelKey:'nav.inventory.wms',path:'/wms',icon:'layers',group:'manufacturing',module:'inventory.wms',permission:'inventory.wms.read' },
+  { key:'sales.logistics',labelKey:'nav.sales.logistics',path:'/logistics',icon:'layers',group:'manufacturing',module:'sales.logistics',permission:'sales.logistics.read' },
+  { key:'core.integrations',labelKey:'nav.core.integrations',path:'/integrations',icon:'layers',group:'manufacturing',module:'core.integrations',permission:'core.integrations.read' },
+  { key: 'leather-center', labelKey: 'nav.leatherCenter', path: '/leather', icon: 'briefcase', group: 'leather', module: 'leather.catalog', permission: 'leather.catalog.read' },
+  { key: 'leather-models', labelKey: 'nav.leatherModels', path: '/leather/models', icon: 'layers', group: 'leather', module: 'leather.catalog', permission: 'leather.catalog.read' },
+  { key: 'leather-materials', labelKey: 'nav.leatherMaterials', path: '/leather/materials', icon: 'package', group: 'leather', module: 'leather.materials', permission: 'leather.materials.read' },
+  { key: 'leather-production', labelKey: 'nav.leatherProduction', path: '/leather/production', icon: 'scissors', group: 'leather', module: 'leather.production', permission: 'leather.production.read' },
+  { key: 'leather-subcontracts', labelKey: 'nav.leatherSubcontracts', path: '/leather/subcontracts', icon: 'handshake', group: 'leather', module: 'leather.subcontracting', permission: 'leather.subcontracting.read' },
+  { key: 'leather-quality', labelKey: 'nav.leatherQuality', path: '/leather/quality', icon: 'clipboard-check', group: 'leather', module: 'leather.quality', permission: 'leather.quality.read' },
+  { key: 'leather-service', labelKey: 'nav.leatherService', path: '/leather/service', icon: 'wrench', group: 'leather', module: 'leather.service', permission: 'leather.service.read' },
+  { key: 'sales-pos', labelKey: 'nav.salesPos', path: '/pos', icon: 'shopping-cart', group: 'invoices', module: 'sales.pos', permission: 'pos.read' },
+  { key: 'general-purchase-requests', labelKey: 'nav.purchaseRequests', path: '/purchasing/requests', icon: 'clipboard-list', group: 'procurement', module: 'core.procurement', permission: 'procurement.read' },
+  { key: 'general-rfqs', labelKey: 'nav.rfqs', path: '/purchasing/rfqs', icon: 'file-search', group: 'procurement', module: 'core.procurement', permission: 'procurement.read' },
+  { key: 'general-purchase-orders', labelKey: 'nav.purchaseOrders', path: '/purchasing/orders', icon: 'shopping-cart', group: 'procurement', module: 'core.procurement', permission: 'procurement.read' },
+  { key: 'general-order-matching', labelKey: 'nav.orderMatching', path: '/purchasing/matching', icon: 'list-checks', group: 'procurement', module: 'core.procurement', permission: 'procurement.read' },
   { key: 'portal-access', labelKey: 'nav.portalAccess', path: '/workspace/portal', icon: 'users', group: 'settings', module: 'core.parties', permission: 'members.manage' },
   { key: 'cash-scenarios', labelKey: 'nav.cashScenarios', path: '/workspace/scenarios', icon: 'chart-no-axes-combined', group: 'treasury', module: 'core.treasury', permission: 'treasury.read' },
   { key: 'construction-center', labelKey: 'nav.constructionCenter', path: '/workspace/construction', icon: 'hard-hat', group: 'construction', module: 'construction.projects', permission: 'projects.read' },

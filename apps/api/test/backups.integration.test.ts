@@ -25,7 +25,8 @@ it.skipIf(process.env.RUN_BACKUP_INTEGRATION!=='1')('gerçek pg_dump → imzalı
     await runMigrations(ownerUrl.toString());
     const {app,handle}=await makeApp({configOverrides:{DATABASE_URL:runtime.toString(),BACKUP_DATABASE_URL:ownerUrl.toString(),BACKUP_DIRECTORY:join(root,'backups'),CONSTRUCTION_STORAGE_DIR:join(root,'files'),BACKUP_DOCKER_CONTAINER:process.env.BACKUP_TEST_DOCKER_CONTAINER}});
     cleanup=async()=>{await app.close();await handle.close();};
-    const user=await registerUser(app,'Recovery'),company=await createCompany(app,user.token),c=client(app,user.token,company.id);
+    const user=await registerUser(app,'Recovery'),company=await createCompany(app,user.token,{sector:'MANUFACTURING_WHOLESALE'}),c=client(app,user.token,company.id);
+    const machine=await c.post('/api/manufacturing/resources',{code:'RECOVERY-MACHINE',name:'Yedekten dönen üretim makinesi',type:'machine'});expect(machine.statusCode,machine.body).toBe(200);
     const data=Buffer.from('%PDF-1.4 recovery test'),fileHash=await storeAsset(join(root,'files'),company.id,data);
     const rights=await c.get('/api/settings/backups');expect(rights.statusCode,rights.body).toBe(200);expect(rights.json().available).toBe(true);expect(rights.json().canRestore).toBe(true);
     const queued=await c.post('/api/settings/backups');expect(queued.statusCode,queued.body).toBe(201);
@@ -45,7 +46,7 @@ it.skipIf(process.env.RUN_BACKUP_INTEGRATION!=='1')('gerçek pg_dump → imzalı
     expect(await readFile(join(root,'backups',staged.json().id,'recovery-files',company.id,fileHash))).toEqual(data);
     const recoveryUrl=new URL(ownerUrl);recoveryUrl.pathname='/'+recoveredName;
     const check=new pg.Pool({connectionString:recoveryUrl.toString(),max:1});
-    try{expect((await check.query('select name from companies')).rows[0].name).toBe(company.name);}finally{await check.end();}
+    try{expect((await check.query('select name from companies')).rows[0].name).toBe(company.name);expect((await check.query("select config->>'name' as name from manufacturing_records where kind='resource'")).rows[0].name).toBe('Yedekten dönen üretim makinesi');}finally{await check.end();}
     const before=(await c.get('/api/settings/operations')).json();
     expect((await c.put('/api/settings/operations',{version:before.version,settings:{...before.settings,automaticBackup:true,backupKeepCount:1}})).statusCode).toBe(200);
     const second=await c.post('/api/settings/backups');expect(second.statusCode).toBe(201);await processBackupJobs(app);

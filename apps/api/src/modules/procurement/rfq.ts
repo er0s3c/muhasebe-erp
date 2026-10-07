@@ -155,7 +155,7 @@ export async function listRfqs(tx: Tx, page?: PageQuery) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
     select q.id, q.code, q.status, q.due_date::text as "dueDate", r.id as "requestId", r.code as "requestCode", r.title, p.code as "projectCode",
            (select count(*)::int from rfq_offers o where o.rfq_id = q.id) as "offerCount", q.created_at as "createdAt"
-      from rfqs q join purchase_requests r on r.id = q.request_id join projects p on p.id = r.project_id
+      from rfqs q join purchase_requests r on r.id = q.request_id left join projects p on p.id = r.project_id
      order by q.code desc ${pageSql(page)}`);
   const pg = paged(rows.rows, page);
   return { rfqs: pg.rows, truncated: pg.truncated };

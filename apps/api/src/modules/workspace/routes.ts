@@ -16,7 +16,7 @@ import {
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { badRequest, conflict, forbidden, notFound } from '../../http/errors';
-import { RECORDS, canAccessRecord, requireRecord, searchRecords } from './records';
+import { RECORDS, canAccessRecord, recordLinkVisibility, recordScope, requireRecord, searchRecords } from './records';
 import { trContains } from '../../db/search';
 import { agendaSummary } from '../directory/agenda';
 import { workAlerts } from './alerts';
@@ -56,7 +56,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       const ref = recordRefSchema.parse(c.req.query);
       const def = await requireRecord(c, ref.kind, ref.id);
       const rows = await c.tx.execute<{ label: string }>(
-        sql`select ${sql.raw(def.label)} as label from ${sql.identifier(def.table)} where id=${ref.id}::uuid`,
+        sql`select ${sql.raw(def.label)} as label from ${sql.identifier(def.table)} r where id=${ref.id}::uuid`,
       );
       return {
         ...ref,
@@ -121,30 +121,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
           priority:z.enum(['all','normal','high']).default('all'),
         })
         .parse(c.req.query);
-      const kinds = (
-        [
-          'party',
-          'invoice',
-          'project',
-          'subcontract',
-          'sales_contract',
-          'employee',
-          'foreign_worker_doc',
-          'transaction',
-          'site_report',
-          'defect',
-          'rfi',
-          'site_instruction',
-          'quality_check',
-          'safety',
-        ] as RecordKind[]
-      ).filter((k) => canAccessRecord(c, k));
-      const visibility = kinds.length
-        ? sql`(w.record_kind is null or w.record_kind in (${sql.join(
-            kinds.map((k) => sql`${k}`),
-            sql`, `,
-          )}))`
-        : sql`w.record_kind is null`;
+      const visibility = recordLinkVisibility(c, 'w.record_kind', 'w.record_id');
       const ownership = q.scope === 'mine' ? sql`and w.owner_id=${c.user.id}::uuid` : sql``;
       const rows = await c.tx
         .execute<WorkItem>(sql`select ${taskFields} from work_items w join users u on u.id=w.owner_id
@@ -242,7 +219,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
         .filter((k) => canAccessRecord(c, k) && (!q.kind || q.kind === k))
         .map((k) => {
           const d = RECORDS[k];
-          return sql`(d.record_kind=${k} and exists(select 1 from ${sql.identifier(d.table)} r where r.id=d.record_id ${d.filter ? sql`and ${sql.raw(d.filter)}` : sql``}))`;
+          return sql`(d.record_kind=${k} and exists(select 1 from ${sql.identifier(d.table)} r where r.id=d.record_id and ${recordScope(c, k)}))`;
         });
       if (!visible.length) return { items: [], hasMore: false };
       const recordLabel = sql`case ${sql.join(
@@ -250,7 +227,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
           .filter((k) => canAccessRecord(c, k))
           .map((k) => {
             const def = RECORDS[k];
-            return sql`when d.record_kind=${k} then (select ${sql.raw(def.label)} from ${sql.identifier(def.table)} r where r.id=d.record_id)`;
+            return sql`when d.record_kind=${k} then (select ${sql.raw(def.label)} from ${sql.identifier(def.table)} r where r.id=d.record_id and ${recordScope(c, k)})`;
           }),
         sql` `,
       )} else null end`;

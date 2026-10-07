@@ -25,6 +25,7 @@ import { saveBlob } from '../../lib/download';
 import { RecordPicker } from './RecordPicker';
 import { SearchBox } from './WorkspaceUi';
 const kindLabels: Record<RecordKind, string> = {
+ manufacturing_model:'Ürün modeli',manufacturing_production:'Üretim emri',manufacturing_subcontract:'Fason işi',manufacturing_resource:'Üretim kaynağı',manufacturing_maintenance:'Makine bakımı',wms_lot:'Depo partisi',logistics_shipment:'Sevkiyat',
   party: 'Cari',
   invoice: 'Fatura',
   project: 'Proje',
@@ -39,6 +40,13 @@ const kindLabels: Record<RecordKind, string> = {
   site_instruction: 'Saha talimatı',
   quality_check: 'Kalite kontrolü',
   safety: 'İş güvenliği',
+  leather_model: 'Deri ürün modeli',
+  leather_piece: 'Deri parçası',
+  leather_production: 'Üretim emri',
+  leather_subcontract: 'Fason işi',
+  leather_custom_order: 'Özel sipariş',
+  leather_service: 'Servis kaydı',
+  pos_sale: 'POS satış / iade',
 };
 type Doc = {
   id: string;

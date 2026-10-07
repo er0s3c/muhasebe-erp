@@ -220,6 +220,14 @@ export async function postTreasuryTransaction(tx: Tx, ctx: LedgerCtx, input: Cre
       throw unprocessable(`${gl.code} bir kasa/banka hesabıdır; hesaplar arası aktarım için virman girin`, 'ACCOUNT_NOT_ALLOWED');
     }
     glAccountId = gl.id;
+    if (input.partyId) {
+      const sector=(await tx.execute<{sector:string}>(sql`select sector from companies where id=${ctx.companyId}::uuid`)).rows[0]?.sector;
+      const advance=(await requireMappings(tx,['advance_received'])).advance_received;
+      if(type!=='other_receipt'||!['LEATHER_FASHION','MANUFACTURING_WHOLESALE'].includes(sector)||gl.id!==advance)throw unprocessable('Müşterili diğer tahsilat, deri sektöründe yalnız alınan avans hesabına kapora kaydı için kullanılır','TREASURY_CUSTOMER_ADVANCE_ONLY');
+      const [customer]=await tx.select().from(parties).where(eq(parties.id,input.partyId)).for('update');
+      if(!customer||!customer.isActive||customer.kind==='supplier')throw unprocessable('Kapora için aktif müşteri carisi seçin','TREASURY_CUSTOMER_INVALID');
+      partyId=customer.id;
+    }
     const rate = await rateOf(tx, ctx, from.currencyCode, date, input.fxRate);
     effectiveRate = rate;
     const baseValue = applyRate(amount, rate);
@@ -301,6 +309,9 @@ export async function postTreasuryTransaction(tx: Tx, ctx: LedgerCtx, input: Cre
  * numara serinin parçası kalır. Kasa hesabı ters kayıtla eksiye düşecekse iptal edilemez.
  */
 export async function cancelTreasuryTransaction(tx: Tx, ctx: LedgerCtx, id: string, input: CancelTreasuryTransactionInput) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'leather-costs:'+ctx.companyId},0))`);
+  if ((await tx.execute(sql`select id from pos_sales where payments @> ${JSON.stringify([{transactionId:id}])}::jsonb limit 1`)).rows.length) throw unprocessable('Mağaza tahsilatı POS satışına bağlıdır; düzeltmeyi POS iade/değişim akışından yapın','POS_RECEIPT_PROTECTED');
+  if ((await tx.execute(sql`select d.id from leather_deposit_settlements d join journal_entries e on e.id=d.entry_id where d.deposit_transaction_id=${id}::uuid and e.reversed_by_id is null limit 1`)).rows.length) throw unprocessable('Kapora faturaya mahsup edilmiş; önce bağlı faturayı iptal ederek mahsubu geri alın','LEATHER_DEPOSIT_SETTLED');
   const [txn] = await tx.select().from(treasuryTransactions).where(eq(treasuryTransactions.id, id)).for('update');
   if (!txn) throw notFound('Kasa/banka hareketi');
   if (txn.status === 'cancelled') throw unprocessable('Hareket zaten iptal edilmiş', 'TREASURY_ALREADY_CANCELLED');

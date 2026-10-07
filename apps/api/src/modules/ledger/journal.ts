@@ -22,6 +22,7 @@ import { validateDimensions, type DimensionLine } from '../projects/dimension';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { findRate, requireRate } from '../settings/rates';
+import { lockLeatherCosts, reverseAllocatedJournalCosts } from '../leather/costs';
 
 /**
  * Otomatik yevmiyede (fatura, stok belgesi) satırın defter para birimi tutarı önceden hesaplanmış
@@ -341,6 +342,7 @@ export async function reverseJournalEntry(
   id: string,
   opts: { entryDate?: string; description?: string; source?: SourceRef },
 ) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const [original] = await tx.select().from(journalEntries).where(eq(journalEntries.id, id));
   if (!original) throw notFound('Yevmiye');
   if (original.status !== 'posted') {
@@ -371,6 +373,8 @@ export async function reverseJournalEntry(
 
   const date = opts.entryDate ?? todayIso();
   const period = await requireOpenPeriod(tx, date);
+  // Bordro, gider ve fason faturası gibi bütün kaynakların tahsisleri güncel hedeflerden geri alınır.
+  await reverseAllocatedJournalCosts(tx, { ...ctx, allowNegativeStock: false }, id, date);
   const originalLines = await tx
     .select()
     .from(journalLines)

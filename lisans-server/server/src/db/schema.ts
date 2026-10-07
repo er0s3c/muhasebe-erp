@@ -112,7 +112,7 @@ export const licenses = pgTable(
     check('licenses_kind_ck', sql`${t.kind} in ('commercial', 'trial', 'demo')`),
     check('licenses_status_ck', sql`${t.status} in ('active', 'suspended', 'revoked')`),
     check('licenses_validity_mode_ck', sql`${t.validityMode} in ('lease', 'subscription')`),
-    check('licenses_sectors_ck', sql`cardinality(${t.sectors}) >= 1 and ${t.sectors} <@ array['CONSTRUCTION', 'RETAIL_MARKET', 'COMMERCE']::text[]`),
+    check('licenses_sectors_ck', sql`cardinality(${t.sectors}) >= 1 and ${t.sectors} <@ array['CONSTRUCTION', 'RETAIL_MARKET', 'COMMERCE', 'LEATHER_FASHION', 'MANUFACTURING_WHOLESALE']::text[]`),
     check('licenses_limits_ck', sql`${t.deviceLimit} between 1 and 10000 and ${t.companyLimit} between 1 and 10000 and ${t.maxActivations} between 1 and 20`),
     check('licenses_days_ck', sql`${t.leaseDays} between 1 and 60 and ${t.graceDays} between 0 and 90 and ${t.deviceIdleDays} between 1 and 365`),
   ],

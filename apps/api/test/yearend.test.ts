@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ACCOUNT_MAPPING_KEYS } from '@erp/shared';
 import { accountIds, addMember, asDb, asOwner, client, createCompany, day, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear } from './helpers';
 
 const Y = thisYear;
@@ -95,12 +96,12 @@ describe('yıl sonu kapanışı ve devir', async () => {
     expect(list.suggestions.find((s) => s.name === String(Y))).toBeUndefined();
 
     const maps = (await ok(w.c.get('/api/account-mappings'))).mappings as { key: string; accountCode: string }[];
-    expect(maps).toHaveLength(46);
+    expect(maps).toHaveLength(ACCOUNT_MAPPING_KEYS.length);
     expect(Object.fromEntries(maps.filter((m) => m.key.startsWith('year_end_')).map((m) => [m.key, m.accountCode]))).toEqual({
       year_end_profit: '590', year_end_loss: '591', year_end_retained_profit: '570', year_end_retained_loss: '580',
     });
     const n = (await execAsOwner(`select count(*)::int as n from account_mappings where company_id = $1`, [w.company.id])).rows[0].n;
-    expect(n).toBe(46);
+    expect(n).toBe(ACCOUNT_MAPPING_KEYS.length);
     // Silinebilir (açık ve geçmişsiz)
     expect((await w.c.delete(`/api/fiscal-years/${ys.id}`)).statusCode).toBe(200);
   });

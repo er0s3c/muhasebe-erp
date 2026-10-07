@@ -58,6 +58,12 @@ export const MAPPING_LABELS: Record<AccountMappingKey, string> = {
   year_end_loss: 'Yıl sonu: dönem net zararı hesabı',
   year_end_retained_profit: 'Yıl sonu: geçmiş yıllar kârları hesabı',
   year_end_retained_loss: 'Yıl sonu: geçmiş yıllar zararları hesabı',
+  raw_material_stock: 'Üretim: hammadde stoğu',
+  semi_finished_stock: 'Üretim: fiziksel yarı mamul stoğu',
+  finished_goods_stock: 'Üretim: mamul stoğu',
+  production_wip: 'Üretim: devam eden işler',
+  produced_cogs: 'Üretim: satılan mamul maliyeti',
+  goods_receipt_accrual: 'Faturasız mal kabul tahakkuku',
 };
 
 /** Hesap kontrol türü kuralı: yalnızca cari eşlemeleri kontrol hesabı olabilir. */

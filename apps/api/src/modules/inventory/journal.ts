@@ -4,6 +4,7 @@ import { createJournalEntry, type AutoJournalLine, type LedgerCtx } from '../led
 import { requireMappings } from '../ledger/mappings';
 import type { StockCtx } from './documents';
 import type { DraftRow } from './planner';
+import { requireItemMappings } from './accounting';
 
 export const STOCK_DOC_LABEL: Record<StockDocType, string> = {
   opening: 'Stok devri',
@@ -91,10 +92,9 @@ export async function journalStockDocument(
   if (type === 'transfer') return null;
   const { inflow, outflow, adjust } = stockAmounts(rows);
   const keys = new Set<AccountMappingKey>();
-  if (inflow.gt(0)) keys.add('stock').add(OFFSET[type].in);
-  if (outflow.gt(0)) keys.add('stock').add(OFFSET[type].out);
-  if (!adjust.isZero()) keys.add('stock').add('cogs');
-  if (keys.size === 0) return null;
+  if (inflow.gt(0)) keys.add(OFFSET[type].in);
+  if (outflow.gt(0)) keys.add(OFFSET[type].out);
+  if (keys.size === 0 && adjust.isZero()) return null;
 
   const acc: Partial<Record<AccountMappingKey, string>> = await requireMappings(tx, [...keys]);
   const line = (
@@ -112,20 +112,26 @@ export async function journalStockDocument(
   });
 
   const lines: AutoJournalLine[] = [];
-  if (inflow.gt(0)) lines.push(line('stock', 'debit', inflow), line(OFFSET[type].in, 'credit', inflow));
-  if (outflow.gt(0)) {
-    // Sarf/fire: tüketim (ya da fire) tarafı proje ve iş kalemi bazında bölünür; stok tarafı toplu kalır
-    for (const g of outflowByDimension(rows)) lines.push(line(OFFSET[type].out, 'debit', g.amount, g));
-    lines.push(line('stock', 'credit', outflow));
+  const itemMappings=await requireItemMappings(tx,[...new Set(rows.map(r=>r.itemId))]);
+  const mappedLine=(accountId:string,side:'debit'|'credit',amount:MoneyValue):AutoJournalLine=>({accountId,currency:ctx.baseCurrency as CurrencyCode,debit:side==='debit'?toDbAmount(amount):'0',credit:side==='credit'?toDbAmount(amount):'0'});
+  for(const [itemId,mapping] of itemMappings) {
+    const part=rows.filter(r=>r.itemId===itemId), amounts=stockAmounts(part);
+    if(amounts.inflow.gt(0))lines.push(mappedLine(mapping.stockAccountId,'debit',amounts.inflow),line(OFFSET[type].in,'credit',amounts.inflow));
+    if(amounts.outflow.gt(0)){
+      for(const g of outflowByDimension(part))lines.push(line(OFFSET[type].out,'debit',g.amount,g));
+      lines.push(mappedLine(mapping.stockAccountId,'credit',amounts.outflow));
+    }
+    if(amounts.adjust.isNegative())lines.push(mappedLine(mapping.cogsAccountId,'debit',amounts.adjust.abs()),mappedLine(mapping.stockAccountId,'credit',amounts.adjust.abs()));
+    else if(amounts.adjust.gt(0))lines.push(mappedLine(mapping.stockAccountId,'debit',amounts.adjust),mappedLine(mapping.cogsAccountId,'credit',amounts.adjust));
   }
-  if (adjust.isNegative()) lines.push(line('cogs', 'debit', adjust.abs()), line('stock', 'credit', adjust.abs()));
-  else if (adjust.gt(0)) lines.push(line('stock', 'debit', adjust), line('cogs', 'credit', adjust));
 
+  const grouped=new Map<string,AutoJournalLine>();
+  for(const l of lines){const key=[l.accountId,l.currency,l.projectId??'',l.wbsId??'',dec(l.debit).gt(0)?'debit':'credit'].join('|');const previous=grouped.get(key);if(previous){previous.debit=toDbAmount(dec(previous.debit).plus(l.debit));previous.credit=toDbAmount(dec(previous.credit).plus(l.credit));}else grouped.set(key,{...l});}
   const text = `${STOCK_DOC_LABEL[type]} ${doc.docNo}${doc.description ? ` — ${doc.description}` : ''}`.slice(0, 300);
   const entry = await createJournalEntry(
     tx,
     ledgerCtxOf(ctx),
-    { entryDate: doc.docDate, description: text, lines, post: true },
+    { entryDate: doc.docDate, description: text, lines:[...grouped.values()], post: true },
     { source: { type: 'stock_document', id: doc.id } },
   );
   return entry.id;

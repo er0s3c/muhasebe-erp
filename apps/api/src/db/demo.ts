@@ -6,6 +6,7 @@
  *
  *   npm run db:seed      giriş: demo@ornek.local / Demo-Sifre-123
  */
+import { seedManufacturingDemo } from './demo-manufacturing';
 import { hash } from '@node-rs/argon2';
 import { eq, sql } from 'drizzle-orm';
 import {
@@ -176,7 +177,7 @@ async function seedInventory(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string
     unit: CreateItemInput['unit'],
     category: string,
     extra: Partial<CreateItemInput> = {},
-  ) => (await createItem(tx, ctx.companyId, { kind: 'goods', purchaseCurrency: 'TRY', saleCurrency: 'TRY', unit, name, categoryId: cat[category]!, vatCode: 'KDV-16', ...extra })).id;
+  ) => (await createItem(tx, ctx.companyId, { kind: 'goods', inventoryRole: 'merchandise', purchaseCurrency: 'TRY', saleCurrency: 'TRY', unit, name, categoryId: cat[category]!, vatCode: 'KDV-16', ...extra })).id;
 
   const item = {
     demir: await mk('Nervürlü inşaat demiri 12 mm', 'ton', 'İnşaat malzemesi', { minLevel: '20', purchasePrice: '7000', barcode: '8690000000012' }),
@@ -187,7 +188,7 @@ async function seedInventory(tx: Tx, ctx: LedgerCtx, partyId: Map<string, string
     kablo: await mk('NYY kablo 3x2,5 mm²', 'm', 'Elektrik', { minLevel: '500', purchasePrice: '14.5' }),
     seramik: await mk('İthal seramik 60x60', 'm2', 'Kaplama', { minLevel: '100', purchasePrice: '12', purchaseCurrency: 'EUR', salePrice: '20', saleCurrency: 'GBP' }),
   };
-  const nakliye = (await createItem(tx, ctx.companyId, { kind: 'service', unit: 'saat', name: 'Şantiye nakliye hizmeti', purchaseCurrency: 'TRY', saleCurrency: 'TRY', vatCode: 'KDV-16' })).id;
+  const nakliye = (await createItem(tx, ctx.companyId, { kind: 'service', inventoryRole: 'merchandise', unit: 'saat', name: 'Şantiye nakliye hizmeti', purchaseCurrency: 'TRY', saleCurrency: 'TRY', vatCode: 'KDV-16' })).id;
   const names: Record<string, string> = {
     [item.demir]: 'Nervürlü inşaat demiri 12 mm', [item.cimento]: 'Çimento 50 kg', [item.kum]: 'Yıkanmış kum', [item.beton]: 'Hazır beton C25',
     [item.boya]: 'Dış cephe boyası 15 lt', [item.kablo]: 'NYY kablo 3x2,5 mm²', [item.seramik]: 'İthal seramik 60x60', [nakliye]: 'Şantiye nakliye hizmeti',
@@ -767,8 +768,8 @@ async function seedBankStatement(tx: Tx, ctx: LedgerCtx, company: CompanyInfo, b
 export async function seedDemo(db: Db, log: (message: string) => void = console.log, options: { secret?: string } = {}): Promise<boolean> {
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, DEMO_EMAIL));
   if (existing) {
-    log(`Demo verisi zaten var (${DEMO_EMAIL}). Sıfırdan yüklemek için veritabanını sıfırlayın (demo:reset).`);
-    return false;
+    log(`İnşaat demosu korunuyor; üretim demo şirketi kontrol ediliyor (${DEMO_EMAIL}).`);
+    return seedManufacturingDemo(db, log);
   }
 
   const passwordHash = await hash(DEMO_PASSWORD);
@@ -950,6 +951,7 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
     log(`  Giriş:  ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
     log('  Ekip:   muhasebe@ornek.local (muhasebeci), izleyici@ornek.local (izleyici) — aynı şifre');
   });
+  await seedManufacturingDemo(db, log);
   return true;
 }
 

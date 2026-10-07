@@ -5,9 +5,10 @@ import {
   toDbAmount,
   type CreatePurchaseRequestInput,
   type UpdatePurchaseRequestInput,
+  type Sector,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { items, projectWbs, projects, purchaseRequestLines, purchaseRequests } from '../../db/schema';
+import { companies, items, projectWbs, projects, purchaseRequestLines, purchaseRequests } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { registerApprovalHandler, requestApproval, requestsForDoc, cancelRequest, type ApprovalCtx } from '../approvals/service';
 import { nextNumber } from '../settings/numbering';
@@ -17,6 +18,7 @@ export interface ProcurementCtx {
   companyId: string;
   userId: string;
   baseCurrency: string;
+  sector?: Sector;
 }
 
 export const formatRequestCode = (n: number) => `SAT-${String(n).padStart(4, '0')}`;
@@ -28,7 +30,7 @@ export async function lockRequest(tx: Tx, id: string) {
 }
 
 /** Satır girdilerini doğrular: stok kartı var, iş kalemi projeye ait. */
-export async function validateLineRefs(tx: Tx, projectId: string, lines: readonly { itemId?: string | null; wbsId?: string | null }[]) {
+export async function validateLineRefs(tx: Tx, projectId: string | null, lines: readonly { itemId?: string | null; wbsId?: string | null }[]) {
   const itemIds = [...new Set(lines.map((l) => l.itemId).filter((v): v is string => !!v))];
   if (itemIds.length > 0) {
     const found = await tx.select({ id: items.id, active: items.isActive }).from(items).where(inArray(items.id, itemIds));
@@ -37,12 +39,13 @@ export async function validateLineRefs(tx: Tx, projectId: string, lines: readonl
   }
   const wbsIds = [...new Set(lines.map((l) => l.wbsId).filter((v): v is string => !!v))];
   if (wbsIds.length > 0) {
+    if (!projectId) throw unprocessable('Genel tedarikte proje iş kalemi kullanılamaz', 'WBS_WITHOUT_PROJECT');
     const found = await tx.select({ id: projectWbs.id }).from(projectWbs).where(and(eq(projectWbs.projectId, projectId), inArray(projectWbs.id, wbsIds)));
     if (found.length !== wbsIds.length) throw unprocessable('İş kalemlerinden biri projeye ait değil', 'WBS_NOT_FOUND');
   }
 }
 
-async function writeLines(tx: Tx, companyId: string, requestId: string, projectId: string, lines: CreatePurchaseRequestInput['lines']) {
+async function writeLines(tx: Tx, companyId: string, requestId: string, projectId: string | null, lines: CreatePurchaseRequestInput['lines']) {
   await tx.delete(purchaseRequestLines).where(eq(purchaseRequestLines.requestId, requestId));
   await tx.insert(purchaseRequestLines).values(
     lines.map((l, i) => ({
@@ -60,17 +63,28 @@ async function writeLines(tx: Tx, companyId: string, requestId: string, projectI
   );
 }
 
-export async function createRequest(tx: Tx, ctx: ProcurementCtx, input: CreatePurchaseRequestInput) {
-  const [project] = await tx.select().from(projects).where(eq(projects.id, input.projectId));
+export async function validateProcurementProject(tx: Tx, ctx: ProcurementCtx, inputProjectId?: string | null): Promise<string | null> {
+  const sector = ctx.sector ?? (await tx.select({ sector: companies.sector }).from(companies).where(eq(companies.id, ctx.companyId)))[0]?.sector;
+  if (['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(sector)) {
+    if (inputProjectId) throw unprocessable('Genel tedarik bir şantiye projesine bağlanamaz', 'PROCUREMENT_PROJECT_NOT_ALLOWED');
+    return null;
+  }
+  if (!inputProjectId) throw unprocessable('Şantiye satın almasında proje gerekli', 'PROJECT_REQUIRED');
+  const [project] = await tx.select().from(projects).where(eq(projects.id, inputProjectId));
   if (!project) throw unprocessable('Proje bulunamadı', 'PROJECT_NOT_FOUND');
   if (project.status === 'completed' || project.status === 'cancelled') throw unprocessable('Kapalı projeye talep açılamaz', 'PROJECT_CLOSED');
-  await validateLineRefs(tx, input.projectId, input.lines);
+  return inputProjectId;
+}
+
+export async function createRequest(tx: Tx, ctx: ProcurementCtx, input: CreatePurchaseRequestInput) {
+  const projectId = await validateProcurementProject(tx, ctx, input.projectId);
+  await validateLineRefs(tx, projectId, input.lines);
   const code = formatRequestCode(await nextNumber(tx, ctx.companyId, 'PURCHASE_REQUEST', 0));
   const [row] = await tx
     .insert(purchaseRequests)
-    .values({ companyId: ctx.companyId, code, projectId: input.projectId, title: input.title, needDate: input.needDate ?? null, note: input.note ?? null, requestedBy: ctx.userId })
+    .values({ companyId: ctx.companyId, code, projectId, title: input.title, needDate: input.needDate ?? null, note: input.note ?? null, requestedBy: ctx.userId })
     .returning();
-  await writeLines(tx, ctx.companyId, row!.id, input.projectId, input.lines);
+  await writeLines(tx, ctx.companyId, row!.id, projectId, input.lines);
   return getRequest(tx, row!.id);
 }
 
@@ -139,7 +153,7 @@ export async function getRequest(tx: Tx, id: string) {
   const head = await tx.execute<Record<string, unknown>>(sql`
     select r.id, r.code, r.title, r.status, r.need_date::text as "needDate", r.note, r.rejection_note as "rejectionNote",
            r.project_id as "projectId", p.code as "projectCode", p.name as "projectName", r.created_at as "createdAt", r.submitted_at as "submittedAt"
-      from purchase_requests r join projects p on p.id = r.project_id where r.id = ${id}`);
+      from purchase_requests r left join projects p on p.id = r.project_id where r.id = ${id}`);
   const request = head.rows[0];
   if (!request) throw notFound('Satın alma talebi');
   const lines = await tx.execute<Record<string, unknown>>(sql`
@@ -168,7 +182,7 @@ export async function listRequests(tx: Tx, q: { projectId?: string; status?: str
            (select count(*)::int from purchase_request_lines l where l.request_id = r.id) as "lineCount",
            coalesce((select sum(round(l.quantity * l.est_unit_price, 2)) from purchase_request_lines l where l.request_id = r.id), 0)::text as "estimatedTotal",
            r.created_at as "createdAt"
-      from purchase_requests r join projects p on p.id = r.project_id
+      from purchase_requests r left join projects p on p.id = r.project_id
      where (${q.projectId ?? null}::uuid is null or r.project_id = ${q.projectId ?? null}::uuid)
        and (${q.status ?? null}::text is null or r.status = ${q.status ?? null}::text)
      order by r.code desc ${pageSql(page)}`);

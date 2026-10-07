@@ -32,11 +32,13 @@ const userIdParam = z.object({ userId: uuid });
 
 const moduleLabel = (key: string) => MODULES.find((m) => m.key === key);
 
-/** Şirketin sektöründe kullanılabilen erişim alanları (alanın kendi modülü sektörde yoksa listelenmez ve yazılamaz). */
+/** Şirketin sektöründe bağlı modüllerinden en az biri kullanılabilen erişim alanları. */
 export function areasForSector(sector: Sector): AccessAreaKey[] {
   return ACCESS_AREA_KEYS.filter((k) => {
-    const m = moduleLabel(k);
-    return !!m && isModuleAvailableForSector(m, sector);
+    return modulesOfArea(k).some((mk) => {
+      const m = moduleLabel(mk);
+      return !!m && isModuleAvailableForSector(m, sector);
+    });
   });
 }
 

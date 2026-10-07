@@ -1,4 +1,24 @@
 {
+  "leather": {
+    "title": "Deri aksesuar ve moda",
+    "subtitle": "Modelden bitmiş ürüne; deri kabulü, kesim, üretim, kalite ve servis.",
+    "models": "Model ve koleksiyon",
+    "materials": "Deri kabul ve kesim",
+    "production": "Üretim ve maliyet",
+    "quality": "Kalite ve fason",
+    "customOrders": "Özel siparişler",
+    "service": "Servis ve onarım"
+  },
+  "pos": {
+    "title": "Mağaza satış noktası",
+    "subtitle": "Barkodla ürün seçin, sepeti hazırlayın ve ödemeyi kaydedin.",
+    "settings": "Satış noktası ayarları",
+    "sessions": "Kasa oturumları",
+    "sale": "Satışı tamamla",
+    "open": "Kasayı aç",
+    "close": "Kasayı kapat",
+    "return": "İade ve değişim"
+  },
   "app": {
     "name": "Ada Muhasebe",
     "tagline": "KKTC işletmeleri için sade ve güçlü muhasebe"
@@ -96,12 +116,16 @@
     "accountant": "Muhasebeci",
     "sales": "Satış",
     "site_manager": "Şantiye şefi",
-    "viewer": "İzleyici"
+    "viewer": "İzleyici",
+    "operations_manager": "Operasyon yöneticisi",
+    "operator": "Operatör"
   },
   "sectors": {
     "CONSTRUCTION": "İnşaat ve taahhüt",
     "RETAIL_MARKET": "Market ve perakende",
-    "COMMERCE": "Ticaret"
+    "COMMERCE": "Ticaret",
+    "LEATHER_FASHION": "Deri aksesuar ve moda",
+    "MANUFACTURING_WHOLESALE": "Üretim ve Toptan Ticaret"
   },
   "modules": {
     "directory": "Rehber, ajanda ve görüşme notları",
@@ -130,7 +154,26 @@
     "salesPricelists": "Fiyat listeleri ve cari özel fiyat",
     "inventorySerials": "Seri no takibi",
     "inventoryImports": "İthalat maliyet dağıtımı",
-    "treasuryExpenses": "Gider kartları ve raporları"
+    "treasuryExpenses": "Gider kartları ve raporları",
+    "coreProcurement": "Satın alma ve tedarik",
+    "leatherCatalog": "Model, koleksiyon ve reçete",
+    "leatherMaterials": "Deri parti ve parça takibi",
+    "leatherProduction": "Kesim ve üretim",
+    "leatherSubcontracting": "Fason operasyonlar",
+    "leatherQuality": "Kalite ve izlenebilirlik",
+    "leatherService": "Garanti ve onarım",
+    "salesPos": "Mağaza kasası",
+    "manufacturing.catalog": "Katalog ve reçete",
+    "manufacturing.mrp": "Malzeme ihtiyaç planlama",
+    "manufacturing.production": "Üretim ve atölye",
+    "manufacturing.planning": "Kapasite ve termin",
+    "manufacturing.quality": "Kalite kontrol",
+    "manufacturing.subcontracting": "Fason üretim",
+    "manufacturing.maintenance": "Makine ve bakım",
+    "manufacturing.costs": "Üretim maliyetleri",
+    "inventory.wms": "Depo ve raf yönetimi",
+    "sales.logistics": "Paketleme ve sevkiyat",
+    "core.integrations": "Entegrasyonlar"
   },
   "nav": {
     "fixedAssets": "Demirbaş ve amortisman",
@@ -146,7 +189,10 @@
       "construction": "Şantiye",
       "reports": "Raporlar",
       "hr": "İnsan kaynakları",
-      "directory": "Rehber"
+      "directory": "Rehber",
+      "procurement": "Satın alma ve tedarik",
+      "leather": "Deri aksesuar ve moda",
+      "manufacturing": "Üretim ve toptan ticaret"
     },
     "dashboard": "Genel bakış",
     "projects": "Projeler",
@@ -246,7 +292,26 @@
     "backups": "Yedekleme",
     "recurring": "Tekrarlayan işler",
     "insights": "Rapor panom",
-    "campaigns": "Kampanya ve promosyon"
+    "campaigns": "Kampanya ve promosyon",
+    "leatherCenter": "Deri iş merkezi",
+    "leatherModels": "Modeller ve koleksiyonlar",
+    "leatherMaterials": "Deri parti ve parçalar",
+    "leatherProduction": "Kesim ve üretim",
+    "leatherSubcontracts": "Fason operasyonlar",
+    "leatherQuality": "Kalite ve izlenebilirlik",
+    "leatherService": "Garanti ve onarım",
+    "salesPos": "Mağaza kasası",
+    "manufacturing.catalog": "Katalog ve reçete",
+    "manufacturing.mrp": "Malzeme ihtiyaç planlama",
+    "manufacturing.production": "Üretim ve atölye",
+    "manufacturing.planning": "Kapasite ve termin",
+    "manufacturing.quality": "Kalite kontrol",
+    "manufacturing.subcontracting": "Fason üretim",
+    "manufacturing.maintenance": "Makine ve bakım",
+    "manufacturing.costs": "Üretim maliyetleri",
+    "inventory.wms": "Depo ve raf yönetimi",
+    "sales.logistics": "Paketleme ve sevkiyat",
+    "core.integrations": "Entegrasyonlar"
   },
   "shell": {
     "search": "Ara veya komut yaz…",
@@ -432,7 +497,9 @@
         "accountant": "Yevmiye, hesap planı, kurlar, dönem kapatma, raporlar",
         "sales": "Şimdilik yalnızca genel bakış",
         "site_manager": "Şimdilik yalnızca genel bakış",
-        "viewer": "Kayıt ve raporları görür, değiştiremez"
+        "viewer": "Kayıt ve raporları görür, değiştiremez",
+        "operations_manager": "Model, üretim, kalite, satın alma ve mağaza operasyonlarını yönetir; maliyet ve operasyon onaylarını taşır.",
+        "operator": "Başlangıçta yalnız çalışma alanına erişir. Görev profili veya modül erişimleri yönetici tarafından açılır."
       },
       "mfa": "İki adımlı",
       "mfaOn": "Açık",
@@ -597,7 +664,15 @@
         "treasuryCheques": "Alınan ve verilen çek/senet portföyü, ciro, tahsil ve takas.",
         "treasuryGuarantees": "Alınan ve verilen banka teminat mektuplarının süre ve tutar takibi.",
         "treasuryExpenses": "Gider kartları, gider fişleri ve gider raporları.",
-        "retailPos": "Market için hızlı satış ekranı."
+        "retailPos": "Market için hızlı satış ekranı.",
+        "coreProcurement": "Proje gerektirmeyen talep, teklif, sipariş, mal kabul ve fatura eşleştirmesi.",
+        "leatherCatalog": "Model aileleri, SKU varyantları, koleksiyonlar ve sabitlenen reçete revizyonları.",
+        "leatherMaterials": "Tabaklanmış derinin parti, fiziksel parça, alan ve kalite kaydı.",
+        "leatherProduction": "İş emirleri, operasyonlar, malzeme tüketimi, fire ve mamul kabulü.",
+        "leatherSubcontracting": "Dış atölyelere verilen operasyonlar ve teslim takibi.",
+        "leatherQuality": "Giriş, ara ve son kontroller ile parti/parça izlenebilirliği.",
+        "leatherService": "Garanti, müşteri ürünü kabulü ve onarım takibi.",
+        "salesPos": "Kasaya atanmış kullanıcıların vardiya, satış, ödeme ve iade işlemleri."
       }
     }
   },
@@ -1297,6 +1372,7 @@
       "reconcileTitle": "Muhasebe mutabakatı",
       "reconcileStock": "Stok defteri değeri",
       "reconcileLedger": "150–157 hesap bakiyesi",
+      "reconcileWip": "Ayrıca devam eden üretim",
       "reconcileDiff": "Fark",
       "reconcileOk": "Stok defteri muhasebe bakiyesiyle uyumlu.",
       "reconcileOff": "Stok değeri ile muhasebe bakiyesi arasında açıklanamayan fark var. Stok belgelerinin ve faturaların yevmiyesini ve elle girilen 150–157 fişlerini kontrol edin.",
@@ -3544,7 +3620,9 @@
         "accountant": "Muhasebeci",
         "sales": "Satış",
         "site_manager": "Şantiye sorumlusu",
-        "viewer": "İzleyici"
+        "viewer": "İzleyici",
+        "operations_manager": "Operasyon yöneticisi",
+        "operator": "Operatör"
       },
       "note": "Karar notu",
       "approve": "Onayla",
@@ -6208,6 +6286,26 @@
       "draft_stale": {
         "label": "Uzun süredir bekleyen taslak",
         "desc": "Belirlenen günden uzun süredir kaydedilmeyen fatura ve yevmiye taslaklarının sayısı. Gün eşiği: taslak kaç günden eski olsun."
+      },
+      "leather_production_due": {
+        "label": "Üretim teslim tarihi",
+        "desc": "Teslim tarihi yaklaşan veya geçen açık üretim emirleri."
+      },
+      "leather_subcontract_due": {
+        "label": "Fason teslim tarihi",
+        "desc": "Fasondan geri dönüş tarihi yaklaşan veya geçen açık işler."
+      },
+      "leather_custom_order_due": {
+        "label": "Özel sipariş teslim tarihi",
+        "desc": "Teslim tarihi yaklaşan veya geçen kişiye özel siparişler."
+      },
+      "manufacturing_production_due": {
+        "label": "Üretim teslimi",
+        "desc": "Termin tarihi yaklaşan açık üretim kayıtları."
+      },
+      "manufacturing_subcontract_due": {
+        "label": "Fason teslimi",
+        "desc": "Termin tarihi yaklaşan açık üretim kayıtları."
       }
     },
     "emailNeedsInApp": "E-posta özeti uygulama içi bildirime dayanır; önce uygulama içini açın."

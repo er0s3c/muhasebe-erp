@@ -64,6 +64,20 @@
       "when": 1791270000003,
       "tag": "0008_customer_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791270000004,
+      "tag": "0009_leather_sector",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791270000005,
+      "tag": "0010_manufacturing_sector",
+      "breakpoints": true
     }
   ]
 }

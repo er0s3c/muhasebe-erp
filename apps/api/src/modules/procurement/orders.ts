@@ -8,10 +8,10 @@ import {
   type UpdatePurchaseOrderInput,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { parties, projects, purchaseOrderLines, purchaseOrders, purchaseRequests, taxRates } from '../../db/schema';
+import { parties, purchaseOrderLines, purchaseOrders, purchaseRequests, taxRates } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { nextNumber } from '../settings/numbering';
-import { validateLineRefs, type ProcurementCtx } from './requests';
+import { validateLineRefs, validateProcurementProject, type ProcurementCtx } from './requests';
 import { pageSql, paged, type PageQuery } from '../../http/paging';
 
 export const formatOrderCode = (n: number) => `SIP-${String(n).padStart(4, '0')}`;
@@ -30,7 +30,7 @@ async function vatRateFor(tx: Tx, vatCode: string | null | undefined, date: stri
   return dec(hit.rate).toFixed(4);
 }
 
-async function writeLines(tx: Tx, companyId: string, orderId: string, projectId: string, lines: CreatePurchaseOrderInput['lines']) {
+async function writeLines(tx: Tx, companyId: string, orderId: string, projectId: string | null, lines: CreatePurchaseOrderInput['lines']) {
   await tx.delete(purchaseOrderLines).where(eq(purchaseOrderLines.orderId, orderId));
   await tx.insert(purchaseOrderLines).values(
     lines.map((l, i) => ({
@@ -50,17 +50,15 @@ async function writeLines(tx: Tx, companyId: string, orderId: string, projectId:
 }
 
 export async function createOrder(tx: Tx, ctx: ProcurementCtx, input: CreatePurchaseOrderInput & { offerId?: string | null }) {
-  const [project] = await tx.select().from(projects).where(eq(projects.id, input.projectId));
-  if (!project) throw unprocessable('Proje bulunamadı', 'PROJECT_NOT_FOUND');
-  if (project.status === 'completed' || project.status === 'cancelled') throw unprocessable('Kapalı projeye sipariş açılamaz', 'PROJECT_CLOSED');
+  const projectId = await validateProcurementProject(tx, ctx, input.projectId);
   const [party] = await tx.select().from(parties).where(eq(parties.id, input.partyId));
   if (!party) throw unprocessable('Tedarikçi bulunamadı', 'PARTY_NOT_FOUND');
   if (!party.isActive) throw unprocessable(`${party.name} carisi pasif`, 'PARTY_INACTIVE');
   if (party.kind === 'customer') throw unprocessable('Sipariş tedarikçi türünde bir cariye verilir', 'PARTY_KIND_MISMATCH');
-  await validateLineRefs(tx, input.projectId, input.lines);
+  await validateLineRefs(tx, projectId, input.lines);
   if (input.requestId) {
     const [rq] = await tx.select().from(purchaseRequests).where(eq(purchaseRequests.id, input.requestId));
-    if (!rq || !['approved', 'ordered'].includes(rq.status) || rq.projectId !== input.projectId) {
+    if (!rq || !['approved', 'ordered'].includes(rq.status) || rq.projectId !== projectId) {
       throw unprocessable('Sipariş yalnızca aynı projenin onaylı talebinden oluşturulur', 'REQUEST_NOT_APPROVED');
     }
   }
@@ -70,7 +68,7 @@ export async function createOrder(tx: Tx, ctx: ProcurementCtx, input: CreatePurc
     .values({
       companyId: ctx.companyId,
       code,
-      projectId: input.projectId,
+      projectId,
       partyId: input.partyId,
       requestId: input.requestId ?? null,
       offerId: input.offerId ?? null,
@@ -82,7 +80,7 @@ export async function createOrder(tx: Tx, ctx: ProcurementCtx, input: CreatePurc
       createdBy: ctx.userId,
     })
     .returning();
-  await writeLines(tx, ctx.companyId, row!.id, input.projectId, input.lines);
+  await writeLines(tx, ctx.companyId, row!.id, projectId, input.lines);
   if (input.requestId) await tx.update(purchaseRequests).set({ status: 'ordered' }).where(sql`${purchaseRequests.id} = ${input.requestId} and ${purchaseRequests.status} = 'approved'`);
   return getOrder(tx, row!.id);
 }
@@ -122,7 +120,7 @@ export async function issueOrder(tx: Tx, id: string) {
   if (o.status !== 'draft') throw unprocessable('Yalnızca taslak sipariş verilir', 'ORDER_NOT_DRAFT');
   const lines = await tx.select().from(purchaseOrderLines).where(eq(purchaseOrderLines.orderId, id));
   if (lines.length === 0) throw unprocessable('Satırsız sipariş verilemez', 'ORDER_EMPTY');
-  if (lines.some((l) => !l.wbsId)) throw unprocessable('Siparişin her satırında iş kalemi seçilmeli (taahhüt iş kalemine yazılır)', 'ORDER_WBS_REQUIRED');
+  if (o.projectId && lines.some((l) => !l.wbsId)) throw unprocessable('Siparişin her satırında iş kalemi seçilmeli (taahhüt iş kalemine yazılır)', 'ORDER_WBS_REQUIRED');
   const vatRate = await vatRateFor(tx, o.vatCode, todayIso());
   await tx.update(purchaseOrders).set({ status: 'issued', issuedAt: new Date(), vatRate }).where(eq(purchaseOrders.id, id));
   return getOrder(tx, id);
@@ -154,7 +152,7 @@ export async function getOrder(tx: Tx, id: string) {
            o.currency_code as "currencyCode", o.vat_code as "vatCode", o.vat_rate::text as "vatRate", o.payment_days as "paymentDays",
            o.delivery_location as "deliveryLocation", o.note, o.cancel_reason as "cancelReason", o.issued_at as "issuedAt", o.created_at as "createdAt"
       from purchase_orders o
-      join projects p on p.id = o.project_id
+      left join projects p on p.id = o.project_id
       join parties pa on pa.id = o.party_id
       left join purchase_requests rq on rq.id = o.request_id
      where o.id = ${id}`);
@@ -209,7 +207,7 @@ export async function listOrders(tx: Tx, q: { projectId?: string; partyId?: stri
                       join purchase_order_lines l on l.id = rl.order_line_id
                      where l.order_id = o.id and r.status = 'posted'), 0)::numeric(19,4)::text as "receivedQty"
       from purchase_orders o
-      join projects p on p.id = o.project_id
+      left join projects p on p.id = o.project_id
       join parties pa on pa.id = o.party_id
      where (${q.projectId ?? null}::uuid is null or o.project_id = ${q.projectId ?? null}::uuid)
        and (${q.partyId ?? null}::uuid is null or o.party_id = ${q.partyId ?? null}::uuid)

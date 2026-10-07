@@ -332,7 +332,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
             // Sipariş birimi serbest metindir; faturada yalnızca tanımlı birim kodları kullanılır
             unit: (ITEM_UNITS as readonly string[]).includes(p.unit) ? p.unit : '',
             unitPrice: trim(p.unitPrice),
-            projectId: p.projectId,
+            projectId: p.projectId ?? '',
             wbsId: p.wbsId ?? '',
             orderLineId: p.lineId,
             orderCode: p.orderCode,

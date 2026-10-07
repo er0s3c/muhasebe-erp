@@ -79,6 +79,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
 
   const settle = type === 'receipt' || type === 'payment';
   const other = type === 'other_receipt' || type === 'other_payment';
+  const customerAdvance = ['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector) && type === 'other_receipt';
   const pair = type === 'transfer' || type === 'exchange';
   const outflow = type !== 'receipt' && type !== 'other_receipt';
   const control = type === 'receipt' ? 'receivable' : 'payable';
@@ -122,7 +123,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
   const fromCur = from?.currencyCode ?? base;
   const toCur = to?.currencyCode ?? base;
 
-  const { options: customerOptions } = usePartyOptions('customer', open && type === 'receipt');
+  const { options: customerOptions } = usePartyOptions('customer', open && (type === 'receipt' || customerAdvance));
   const { options: supplierOptions } = usePartyOptions('supplier', open && type === 'payment');
   const partyOptions = type === 'receipt' ? customerOptions : supplierOptions;
 
@@ -255,6 +256,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
           ...(pair ? { toAccountId } : {}),
           ...(type === 'exchange' ? { counterAmount } : {}),
           ...(other ? { glAccountId } : {}),
+          ...(customerAdvance && partyId ? { partyId } : {}),
           // Proje etiketi yalnızca gelir/gider/maliyet karşı hesabında anlamlıdır (sunucu kuralı)
           ...(glTaggable ? projectFields(projectId, wbsId) : {}),
           ...(showRate && fxRate ? { fxRate } : {}),
@@ -457,6 +459,11 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
         {rateMissing && <Callout tone="warning">{t('treasury.sheet.rateMissing', { currency: currencySymbol(rateCur) })}</Callout>}
         {cashLow && <Callout tone="warning">{t('treasury.sheet.cashLow', { balance: moneyIn(from!.balance, from!.currencyCode) })}</Callout>}
 
+        {customerAdvance && (
+          <Field label="Kapora müşterisi" hint="Müşteri kaporasında karşı hesap olarak alınan avans hesabını seçin. Diğer gelir tahsilatlarında boş bırakın.">
+            {(id) => <Combobox id={id} value={partyId} onChange={setPartyId} options={customerOptions} />}
+          </Field>
+        )}
         {settle && (
           <section aria-label={t('treasury.sheet.items')} className="flex flex-col gap-3">
             <Field label={type === 'receipt' ? t('treasury.sheet.customer') : t('treasury.sheet.supplier')} required>

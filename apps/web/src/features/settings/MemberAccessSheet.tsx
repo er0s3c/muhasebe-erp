@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ACCESS_LEVELS, type AccessLevel } from '@erp/shared';
+import { ACCESS_LEVELS, MANUFACTURING_ACCESS_PROFILES, LEATHER_ACCESS_PROFILES, type AccessLevel } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -12,6 +12,8 @@ import { errorMessage } from '../../lib/errors';
 import { moduleName } from '../../lib/modules';
 import { useCMutation, useCQuery } from '../../lib/queries';
 import type { Member } from '../../lib/types';
+import { useCompany } from '../../lib/session';
+import { Select } from '../../components/ui/Field';
 
 type Choice = AccessLevel | 'default';
 const CHOICES: readonly Choice[] = ['default', ...ACCESS_LEVELS];
@@ -43,6 +45,7 @@ const tone = (l: AccessLevel) => (l === 'none' ? 'danger' : l === 'read' ? 'warn
 export function MemberAccessSheet({ member, onClose }: { member: Member | null; onClose: () => void }) {
   const { t } = useTranslation();
   const toast = useToast();
+  const sector = useCompany().sector;
   const userId = member?.userId ?? null;
   const { data, isPending, error } = useCQuery<AccessResponse>(['module-access', userId ?? ''], userId ? `/api/company/members/${userId}/module-access` : null);
   const [draft, setDraft] = useState<Record<string, Choice>>({});
@@ -126,6 +129,26 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
         ) : (
           <div className="flex flex-col gap-4">
             {!editable && data.blockedReason && <Callout tone="info">{data.blockedReason}</Callout>}
+            {editable && ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'].includes(sector) && (
+              <label className="flex flex-col gap-1 text-sm">Üretim görev profili
+                <Select defaultValue="" onChange={e=>{const profile=MANUFACTURING_ACCESS_PROFILES.find(p=>p.key===e.target.value);if(profile)setDraft(Object.fromEntries(areas.map(a=>[a.key,profile.levels[a.key as keyof typeof profile.levels]??'none'])));}}>
+                  <option value="">Profil seçin</option>{MANUFACTURING_ACCESS_PROFILES.filter(p=>p.role===member?.role).map(p=><option key={p.key} value={p.key}>{p.label}</option>)}
+                </Select>
+              </label>
+            )}
+            {editable && sector === 'LEATHER_FASHION' && member?.role === 'operator' && (
+              <label className="flex flex-col gap-1 text-sm">
+                Hazır görev profili
+                <Select defaultValue="" onChange={(e) => {
+                  const profile = LEATHER_ACCESS_PROFILES.find((p) => p.key === e.target.value);
+                  if (profile) setDraft(Object.fromEntries(areas.map((a) => [a.key, profile.levels[a.key as keyof typeof profile.levels] ?? 'none'])));
+                }} data-testid="access-leather-profile">
+                  <option value="">Görev profili seçin</option>
+                  {LEATHER_ACCESS_PROFILES.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                </Select>
+                <span className="text-xs text-muted">Seçim aşağıdaki erişimleri hazırlar. Kaydetmeden önce değişiklikleri kontrol edin; onay ve maliyet yetkileri role bağlıdır.</span>
+              </label>
+            )}
             <SegmentedTabs
               items={[
                 { key: 'edit', label: t('settings.members.access.tabEdit') },

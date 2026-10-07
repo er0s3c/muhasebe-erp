@@ -1,3 +1,4 @@
+import { manufacturingAdapterRoutes } from './modules/manufacturing/adapters';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -75,6 +76,11 @@ import { companyBudgetRoutes } from './modules/administration/company-budgets';
 import { accessRoutes } from './modules/access/routes';
 import { memberRoutes } from './modules/tenancy/members';
 import { tenancyRoutes } from './modules/tenancy/routes';
+import { posRoutes } from './modules/pos/routes';
+import { manufacturingIntegrationRoutes } from './modules/manufacturing/integrations';
+import { manufacturingRoutes } from './modules/manufacturing/routes';
+import { manufacturingWarehouseRoutes } from './modules/manufacturing/warehouse-routes';
+import { leatherRoutes } from './modules/leather/routes';
 
 export interface BuildAppOptions {
   db: Db;
@@ -290,6 +296,12 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(procurementRoutes);
   await app.register(realEstateRoutes);
   await app.register(cashRoutes);
+  await app.register(posRoutes);
+  await app.register(leatherRoutes);
+  await app.register(manufacturingRoutes);
+  await app.register(manufacturingWarehouseRoutes);
+  await app.register(manufacturingIntegrationRoutes);
+  await app.register(manufacturingAdapterRoutes);
 
   // Derlenmiş web arayüzü (üretim): rotalardan SONRA kaydedilir; SPA yedeği yukarıdaki 404 işleyicisindedir.
   if (config.WEB_DIST_DIR) {

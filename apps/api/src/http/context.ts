@@ -247,6 +247,11 @@ export function tenantRoute<T>(
       if (options.module && isModuleDenied(access, options.module)) throw moduleAccessDenied();
       if (options.permission && !access.permissions.has(options.permission)) throw denialFor(access, options.permission);
 
+      // Serialize cost provenance before document, item and treasury row locks.
+      if (['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'leather-costs:' + companyId}, 0))`);
+      }
+
       return handler({
         tx,
         user,

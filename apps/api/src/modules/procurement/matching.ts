@@ -121,7 +121,7 @@ export async function orderMatchSummary(tx: Tx) {
            sum(round(greatest(rc.q - iv.q, 0) * l.unit_price, 2))::text as "uninvoicedReceiptAmount",
            coalesce(bool_or(iv.q > l.quantity or iv.q > rc.q), false) as "hasExcess"
       from purchase_orders o
-      join projects p on p.id = o.project_id
+      left join projects p on p.id = o.project_id
       join parties pa on pa.id = o.party_id
       join purchase_order_lines l on l.order_id = o.id
       cross join lateral (select coalesce(sum(rl.quantity), 0) as q from po_receipt_lines rl join po_receipts r on r.id = rl.receipt_id

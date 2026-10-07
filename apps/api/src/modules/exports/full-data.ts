@@ -6,6 +6,7 @@ import type { CellValue, ReportTable, TableColumn } from '../../files/table';
 import { BOOK_EXPORT_MAX_LINES, countBookLines, journalBook } from '../ledger/books';
 import { TXN_LABEL } from '../treasury/posting';
 import { INVOICE_TYPE_LABEL, col, directoryContactsTable, directoryOrganizationsTable, journalBookColumns, unitLabel, PARTY_KIND_LABEL, STOCK_DOC_LABEL, type BuildCtx } from './builders';
+import { leatherDataTables } from './leather-data';
 
 /** Sayfa başına en çok satır: büyük şirketlerde tarih süzgeci kullanılmalıdır. */
 export const FULL_DATA_SHEET_MAX_ROWS = 100_000;
@@ -635,6 +636,8 @@ export async function fullDataTables(ctx: BuildCtx, q: FullDataQuery): Promise<R
     const [orgs] = await directoryOrganizationsTable(ctx, { archived: 'all' });
     if (orgs && orgs.rows.length > 0) tables.push({ ...orgs, key: 'rehber-kurumlari', title: 'Rehber kurumları', sheet: 'Rehber kurumları' });
   }
+
+  tables.push(...await leatherDataTables(ctx, q, FULL_DATA_SHEET_MAX_ROWS));
 
   // Kullanıcı bazlı modül erişimi: bu dosya çok modüllü bir dökümdür; üyenin "Erişim yok" yaptığı alanların sayfaları dosyaya girmez.
   if (ctx.access) {

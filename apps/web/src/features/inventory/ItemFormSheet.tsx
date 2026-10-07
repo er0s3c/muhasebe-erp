@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { CustomValuesPanel } from '../manufacturing/SupportPanels';
 import { useTranslation } from 'react-i18next';
-import { ITEM_KINDS, ITEM_UNITS } from '@erp/shared';
+import { INVENTORY_ROLES, ITEM_KINDS, ITEM_UNITS, type InventoryRole } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
@@ -17,6 +18,7 @@ interface FormState {
   name: string;
   code: string;
   kind: ItemKind;
+  inventoryRole: InventoryRole;
   unit: string;
   categoryId: string;
   barcode: string;
@@ -37,6 +39,7 @@ const fromItem = (i: Item): FormState => ({
   name: i.name,
   code: i.code,
   kind: i.kind,
+  inventoryRole: i.inventoryRole ?? 'merchandise',
   unit: i.unit,
   categoryId: i.categoryId ?? '',
   barcode: i.barcode ?? '',
@@ -65,7 +68,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
   const { company } = useCompanyApi();
   const editing = !!item;
   const empty: FormState = {
-    name: '', code: '', kind: 'goods', unit: 'adet', categoryId: '', barcode: '', vatCode: '',
+    name: '', code: '', kind: 'goods', inventoryRole: 'merchandise', unit: 'adet', categoryId: '', barcode: '', vatCode: '',
     purchasePrice: '', purchaseCurrency: company.baseCurrency, salePrice: '', saleCurrency: company.baseCurrency, minLevel: '', notes: '', tracksSerial: false,
   };
   const [f, setF] = useState<FormState>(empty);
@@ -97,6 +100,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           body: {
             name: f.name.trim(),
             kind: f.kind,
+            ...(['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector) && goods ? { inventoryRole: f.inventoryRole } : {}),
             unit: f.unit,
             categoryId: f.categoryId || null,
             barcode: f.barcode,
@@ -117,6 +121,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
         body: {
           name: f.name.trim(),
           kind: f.kind,
+          ...(['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector) && goods ? { inventoryRole: f.inventoryRole } : {}),
           unit: f.unit,
           ...(f.code.trim() ? { code: f.code.trim() } : {}),
           ...(f.categoryId ? { categoryId: f.categoryId } : {}),
@@ -208,6 +213,9 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
             )}
           </Field>
         </div>
+        {['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector) && goods && <Field label="Üretim stok rolü" hint="Hammadde ve mamul maliyet hesaplarının ayrılmasını sağlar." error={errors.inventoryRole}>
+          {(id) => <Select id={id} value={f.inventoryRole} onChange={(event) => set('inventoryRole', event.target.value as InventoryRole)}>{INVENTORY_ROLES.map((role) => <option key={role} value={role}>{{ merchandise: 'Ticari mal', raw_material: 'Hammadde', semi_finished: 'Yarı mamul', finished_goods: 'Mamul' }[role]}</option>)}</Select>}
+        </Field>}
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label={t('inventory.form.code')} hint={editing ? undefined : t('inventory.form.codeHint')} error={errors.code}>
             {(id) => <Input id={id} value={f.code} onChange={(e) => set('code', e.target.value)} disabled={editing} placeholder="ST-000001" />}
@@ -275,6 +283,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           {(id) => <Textarea id={id} value={f.notes} onChange={(e) => set('notes', e.target.value)} maxLength={1000} />}
         </Field>
       </form>
+      {open&&item&&['MANUFACTURING_WHOLESALE','LEATHER_FASHION'].includes(company.sector)&&<CustomValuesPanel entity="item" id={item.id}/>}
     </Sheet>
   );
 }

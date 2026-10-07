@@ -453,7 +453,7 @@ describe('demo aracı', () => {
       expect(
         (
           await q(
-            `select kind, status, count(*)::int as n from sales_orders group by kind, status order by kind, status`,
+            `select kind, status, count(*)::int as n from sales_orders where company_id in (select id from companies where sector='CONSTRUCTION') group by kind, status order by kind, status`,
           )
         ).map((r) => `${r.kind}:${r.status}:${r.n}`),
       ).toEqual(
@@ -625,5 +625,5 @@ describe('demo aracı', () => {
     } finally {
       await c3.end();
     }
-  });
+  },120_000); // Two full CLI migrations/seeds; keep the same bound as the child-process helper.
 });

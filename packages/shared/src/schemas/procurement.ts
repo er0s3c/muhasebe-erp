@@ -28,7 +28,8 @@ const requestBody = {
   note: z.string().trim().max(1000).nullable().optional(),
   lines: z.array(requestLineSchema).min(1, 'En az bir satır gerekli').max(300),
 };
-export const createPurchaseRequestSchema = z.object({ projectId: uuid, ...requestBody });
+/** Şantiye bağlamında proje API/DB tarafından zorunlu tutulur; genel tedarikte proje yoktur. */
+export const createPurchaseRequestSchema = z.object({ projectId: uuid.nullable().optional(), ...requestBody });
 export type CreatePurchaseRequestInput = z.infer<typeof createPurchaseRequestSchema>;
 export const updatePurchaseRequestSchema = z.object(requestBody);
 export type UpdatePurchaseRequestInput = z.infer<typeof updatePurchaseRequestSchema>;
@@ -92,7 +93,7 @@ const orderBody = {
   lines: z.array(orderLineSchema).min(1, 'En az bir satır gerekli').max(300),
 };
 export const createPurchaseOrderSchema = z.object({
-  projectId: uuid,
+  projectId: uuid.nullable().optional(),
   /** Onaylı talepten oluşturulurken. */
   requestId: uuid.nullable().optional(),
   ...orderBody,

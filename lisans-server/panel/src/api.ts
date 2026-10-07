@@ -45,7 +45,7 @@ export function errorText(err: unknown): string {
 
 // ---- Sunucu yanıt tipleri (lisans-server/server/src/modules/licenses.ts serileştiricileriyle aynı) -----------------
 
-export type Sector = 'CONSTRUCTION' | 'RETAIL_MARKET' | 'COMMERCE';
+export type Sector = 'CONSTRUCTION' | 'RETAIL_MARKET' | 'COMMERCE' | 'LEATHER_FASHION' | 'MANUFACTURING_WHOLESALE';
 export type LicenseStatus = 'active' | 'suspended' | 'revoked';
 
 export interface Customer {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ACCOUNT_MAPPING_KEYS } from '@erp/shared';
 import { readXlsx } from '../src/files/xlsx-read';
 import { addMember, asDb, asOwner, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear, TODAY_LOCAL } from './helpers';
 
@@ -398,7 +399,7 @@ describe('bordro motoru (Faz D3)', async () => {
     });
     // Yeni anahtarlar veritabanı kısıtını geçer: ham ekleme (kısıt) ve geri doldurma INSERT'ü eşleme sayısını tutar
     const n = (await execAsOwner(`select count(*)::int as n from account_mappings where company_id = $1`, [w.company.id])).rows[0].n;
-    expect(n).toBe(46);
+    expect(n).toBe(ACCOUNT_MAPPING_KEYS.length);
   });
 
   it('yetki ve modül: muhasebeci okur ve yönetir; şantiye şefi ve izleyici erişemez; hr.payroll modülü hr.core ve muhasebeye bağlı', async () => {

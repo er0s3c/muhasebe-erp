@@ -2,6 +2,8 @@ export const SECTOR_LABELS: Record<string, string> = {
   CONSTRUCTION: 'İnşaat ve taahhüt',
   RETAIL_MARKET: 'Market ve perakende',
   COMMERCE: 'Ticaret',
+  MANUFACTURING_WHOLESALE: 'Üretim ve Toptan Ticaret',
+  LEATHER_FASHION: 'Deri aksesuar ve moda',
 };
 export const KIND_LABELS: Record<string, string> = { commercial: 'Ticari', trial: 'Deneme', demo: 'Demo' };
 export const STATUS_LABELS: Record<string, string> = { active: 'Etkin', suspended: 'Askıda', revoked: 'İptal' };

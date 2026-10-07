@@ -4,6 +4,8 @@ import { currencyCode, isoDate, rateString, uuid } from './common';
 
 export const ITEM_KINDS = ['goods', 'service'] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
+export const INVENTORY_ROLES = ['merchandise', 'raw_material', 'semi_finished', 'finished_goods'] as const;
+export type InventoryRole = (typeof INVENTORY_ROLES)[number];
 
 /** Ürün birimleri (kod olarak saklanır, etiket arayüzde çevrilir). Birim dönüşümü sonraki sürümde. */
 export const ITEM_UNITS = [
@@ -120,6 +122,7 @@ export const createItemSchema = z.object({
   code: code(30).optional(),
   name: z.string().trim().min(2).max(160),
   kind: z.enum(ITEM_KINDS).default('goods'),
+  inventoryRole: z.enum(INVENTORY_ROLES).default('merchandise'),
   unit: z.enum(ITEM_UNITS).default('adet'),
   categoryId: uuid.nullable().optional(),
   barcode: optionalText(40),
@@ -140,6 +143,7 @@ export type CreateItemInput = z.infer<typeof createItemSchema>;
 export const updateItemSchema = z.object({
   name: z.string().trim().min(2).max(160).optional(),
   kind: z.enum(ITEM_KINDS).optional(),
+  inventoryRole: z.enum(INVENTORY_ROLES).optional(),
   unit: z.enum(ITEM_UNITS).optional(),
   categoryId: uuid.nullable().optional(),
   barcode: clearableText(40),

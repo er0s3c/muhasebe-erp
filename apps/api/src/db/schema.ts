@@ -254,7 +254,7 @@ export const companies = pgTable(
   },
   (t) => [
     index('companies_org_idx').on(t.organizationId),
-    check('companies_sector_ck', sql`${t.sector} in ('CONSTRUCTION','RETAIL_MARKET','COMMERCE')`),
+    check('companies_sector_ck', sql`${t.sector} in ('CONSTRUCTION','RETAIL_MARKET','COMMERCE','LEATHER_FASHION','MANUFACTURING_WHOLESALE')`),
   ],
 );
 
@@ -288,7 +288,7 @@ export const memberships = pgTable(
     index('memberships_user_idx').on(t.userId),
     check(
       'memberships_role_ck',
-      sql`${t.role} in ('owner','admin','accountant','sales','site_manager','viewer')`,
+      sql`${t.role} in ('owner','admin','accountant','sales','site_manager','viewer','operations_manager','operator')`,
     ),
   ],
 );
@@ -2034,6 +2034,8 @@ export const items = pgTable(
     name: text().notNull(),
     /** 'goods' stok tutar; 'service' (işçilik, nakliye…) hareket görmez. */
     kind: text().notNull().default('goods'),
+    /** Üretimde stok hesap sınıfı; mevcut kartlar ticari mal olarak kalır. */
+    inventoryRole: text().notNull().default('merchandise'),
     unit: text().notNull().default('adet'),
     categoryId: uuid(),
     barcode: text(),
@@ -2070,6 +2072,7 @@ export const items = pgTable(
       foreignColumns: [itemCategories.id, itemCategories.companyId],
     }),
     check('items_kind_ck', sql`${t.kind} in ('goods','service')`),
+    check('items_inventory_role_ck', sql`${t.inventoryRole} in ('raw_material','semi_finished','finished_goods','merchandise')`),
     check('items_serial_goods_ck', sql`not ${t.tracksSerial} or ${t.kind} = 'goods'`),
     check(
       'items_amounts_ck',
@@ -2314,7 +2317,7 @@ export const accountMappings = pgTable(
     }),
     check(
       'account_mappings_key_ck',
-      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable','cheque_portfolio','note_portfolio','docs_in_collection','cheque_issued','note_payable','import_cost_clearing','employee_advance','year_end_profit','year_end_loss','year_end_retained_profit','year_end_retained_loss')`,
+      sql`${t.key} in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable','cheque_portfolio','note_portfolio','docs_in_collection','cheque_issued','note_payable','import_cost_clearing','employee_advance','year_end_profit','year_end_loss','year_end_retained_profit','year_end_retained_loss','raw_material_stock','semi_finished_stock','finished_goods_stock','production_wip','produced_cogs','goods_receipt_accrual')`,
     ),
   ],
 );
@@ -3313,7 +3316,7 @@ export const purchaseRequests = pgTable(
       .notNull()
       .references(() => companies.id),
     code: text().notNull(),
-    projectId: uuid().notNull(),
+    projectId: uuid(),
     title: text().notNull(),
     needDate: date({ mode: 'string' }),
     note: text(),
@@ -3346,7 +3349,7 @@ export const purchaseRequestLines = pgTable(
       .notNull()
       .references(() => companies.id),
     requestId: uuid().notNull(),
-    projectId: uuid().notNull(),
+    projectId: uuid(),
     lineNo: integer().notNull(),
     itemId: uuid(),
     description: text().notNull(),
@@ -3364,6 +3367,7 @@ export const purchaseRequestLines = pgTable(
       columns: [t.requestId, t.projectId],
       foreignColumns: [purchaseRequests.id, purchaseRequests.projectId],
     }).onDelete('cascade'),
+    foreignKey({ name: 'purchase_request_lines_request_company_fk', columns: [t.requestId, t.companyId], foreignColumns: [purchaseRequests.id, purchaseRequests.companyId] }).onDelete('cascade'),
     foreignKey({
       name: 'purchase_request_lines_item_fk',
       columns: [t.itemId, t.companyId],
@@ -3375,6 +3379,7 @@ export const purchaseRequestLines = pgTable(
       foreignColumns: [projectWbs.id, projectWbs.projectId],
     }),
     check('purchase_request_lines_qty_ck', sql`${t.quantity} > 0 and (${t.estUnitPrice} is null or ${t.estUnitPrice} >= 0)`),
+    check('purchase_request_lines_project_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
   ],
 );
 
@@ -3482,7 +3487,7 @@ export const purchaseOrders = pgTable(
       .notNull()
       .references(() => companies.id),
     code: text().notNull(),
-    projectId: uuid().notNull(),
+    projectId: uuid(),
     partyId: uuid().notNull(),
     requestId: uuid(),
     offerId: uuid(),
@@ -3541,7 +3546,7 @@ export const purchaseOrderLines = pgTable(
       .notNull()
       .references(() => companies.id),
     orderId: uuid().notNull(),
-    projectId: uuid().notNull(),
+    projectId: uuid(),
     lineNo: integer().notNull(),
     requestLineId: uuid(),
     itemId: uuid(),
@@ -3560,6 +3565,7 @@ export const purchaseOrderLines = pgTable(
       columns: [t.orderId, t.projectId],
       foreignColumns: [purchaseOrders.id, purchaseOrders.projectId],
     }).onDelete('cascade'),
+    foreignKey({ name: 'purchase_order_lines_order_company_fk', columns: [t.orderId, t.companyId], foreignColumns: [purchaseOrders.id, purchaseOrders.companyId] }).onDelete('cascade'),
     foreignKey({
       name: 'purchase_order_lines_item_fk',
       columns: [t.itemId, t.companyId],
@@ -3576,6 +3582,7 @@ export const purchaseOrderLines = pgTable(
       foreignColumns: [purchaseRequestLines.id, purchaseRequestLines.companyId],
     }),
     check('purchase_order_lines_amount_ck', sql`${t.quantity} > 0 and ${t.unitPrice} >= 0`),
+    check('purchase_order_lines_project_ck', sql`${t.wbsId} is null or ${t.projectId} is not null`),
   ],
 );
 
@@ -5641,11 +5648,11 @@ export const workItems = pgTable('work_items', {
   dueDate:date({mode:'string'}).notNull(),ownerId:uuid().notNull().references(()=>users.id),createdBy:uuid().notNull().references(()=>users.id),
   priority:text().notNull().default('normal'),status:text().notNull().default('open'),recordKind:text(),recordId:uuid(),version:integer().notNull().default(1),
   createdAt:createdAt(),updatedAt:timestamp({withTimezone:true}).notNull().defaultNow(),
-},t=>[unique('work_items_id_company').on(t.id,t.companyId),index('work_items_due_idx').on(t.companyId,t.ownerId,t.status,t.dueDate),check('work_items_title_ck',sql`length(btrim(${t.title})) between 2 and 200`),check('work_items_priority_ck',sql`${t.priority} in ('normal','high')`),check('work_items_status_ck',sql`${t.status} in ('open','done','cancelled')`),check('work_items_version_ck',sql`${t.version} > 0`),check('work_items_ref_ck',sql`(${t.recordKind} is null) = (${t.recordId} is null)`)]);
+},t=>[unique('work_items_id_company').on(t.id,t.companyId),index('work_items_due_idx').on(t.companyId,t.ownerId,t.status,t.dueDate),check('work_items_title_ck',sql`length(btrim(${t.title})) between 2 and 200`),check('work_items_priority_ck',sql`${t.priority} in ('normal','high')`),check('work_items_status_ck',sql`${t.status} in ('open','done','cancelled')`),check('work_items_version_ck',sql`${t.version} > 0`),check('work_items_ref_ck',sql`(${t.recordKind} is null) = (${t.recordId} is null)`),check('work_items_record_kind_ck',sql`${t.recordKind} is null or ${t.recordKind} in ('party','invoice','project','subcontract','sales_contract','employee','foreign_worker_doc','transaction','site_report','defect','rfi','site_instruction','quality_check','safety','manufacturing_model','manufacturing_production','manufacturing_subcontract','manufacturing_resource','manufacturing_maintenance','wms_lot','logistics_shipment','leather_model','leather_piece','leather_production','leather_subcontract','leather_custom_order','leather_service','pos_sale')`)]);
 
 export const recordDocuments = pgTable('record_documents', {
  id:id(),companyId:uuid().notNull().references(()=>companies.id),recordKind:text().notNull(),recordId:uuid().notNull(),filename:text().notNull(),mime:text().notNull(),size:integer().notNull(),sha256:text().notNull(),previousId:uuid(),createdBy:uuid().notNull().references(()=>users.id),createdAt:createdAt(),
-},t=>[unique('record_documents_id_company_uq').on(t.id,t.companyId),unique('record_documents_previous_uq').on(t.previousId),foreignKey({name:'record_documents_previous_fk',columns:[t.previousId,t.companyId],foreignColumns:[t.id,t.companyId]}),index('record_documents_record_idx').on(t.companyId,t.recordKind,t.recordId,t.createdAt),check('record_documents_size_ck',sql`${t.size} between 1 and 104857600`),check('record_documents_mime_ck',sql`${t.mime} in ('application/pdf','image/jpeg','image/png')`)]);
+},t=>[unique('record_documents_id_company_uq').on(t.id,t.companyId),unique('record_documents_previous_uq').on(t.previousId),foreignKey({name:'record_documents_previous_fk',columns:[t.previousId,t.companyId],foreignColumns:[t.id,t.companyId]}),index('record_documents_record_idx').on(t.companyId,t.recordKind,t.recordId,t.createdAt),check('record_documents_size_ck',sql`${t.size} between 1 and 104857600`),check('record_documents_mime_ck',sql`${t.mime} in ('application/pdf','image/jpeg','image/png')`),check('record_documents_kind_ck',sql`${t.recordKind} in ('party','invoice','project','subcontract','sales_contract','employee','foreign_worker_doc','transaction','site_report','defect','rfi','site_instruction','quality_check','safety','manufacturing_model','manufacturing_production','manufacturing_subcontract','manufacturing_resource','manufacturing_maintenance','wms_lot','logistics_shipment','leather_model','leather_piece','leather_production','leather_subcontract','leather_custom_order','leather_service','pos_sale')`)]);
 export const recordDocumentContent = pgTable('record_document_content', {
  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),content:text().notNull(),
 },t=>[foreignKey({name:'record_document_content_document_fk',columns:[t.id,t.companyId],foreignColumns:[recordDocuments.id,recordDocuments.companyId]})]);
@@ -5760,3 +5767,7 @@ export const notificationDigests = pgTable(
 export * from './construction-schema';
 
 export * from './administration-schema';
+export * from './leather-schema';
+export * from './pos-schema';
+
+export * from './manufacturing-schema';

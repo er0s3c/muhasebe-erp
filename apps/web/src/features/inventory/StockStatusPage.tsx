@@ -193,6 +193,11 @@ export function StockStatusPage() {
               <div>
                 <dt className="text-muted">{t('inventory.status.reconcileLedger')}</dt>
                 <dd className="mt-0.5 tabular-nums">{money(ledger.accountsBalance)}</dd>
+                {!isZero(ledger.workInProgress) && (
+                  <dd className="mt-0.5 text-xs text-muted">
+                    {t('inventory.status.reconcileWip')}: {money(ledger.workInProgress)}
+                  </dd>
+                )}
               </div>
               <div>
                 <dt className="text-muted">{t('inventory.status.reconcileDiff')}</dt>

@@ -41,6 +41,7 @@ import { insertDocument, reverseStockDocument, type StockCtx } from '../inventor
 import { StockPlanner } from '../inventory/planner';
 import { createJournalEntry, reverseJournalEntry, type AutoJournalLine, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
+import { applyAcquisitionDelta, lockLeatherCosts, reverseAcquisitionDelta } from '../leather/costs';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
@@ -343,6 +344,7 @@ async function assertSourcesPosted(tx: Tx, lines: readonly (typeof importFileLin
  * Kilit sırası: dosya → ürünler → numaralar.
  */
 export async function postImportFile(tx: Tx, ctx: ImportCtx, id: string, input: { date?: string }) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const file = await lockFile(tx, id);
   if (file.status !== 'allocated') throw unprocessable('Yalnızca dağıtılmış dosya muhasebeleştirilebilir', 'IMPORT_NOT_ALLOCATED');
   const date = input.date ?? todayIso();
@@ -366,8 +368,17 @@ export async function postImportFile(tx: Tx, ctx: ImportCtx, id: string, input: 
   let toStockTotal = dec(0);
   let toCogsTotal = dec(0);
   const split = new Map<string, { stocked: MoneyValue; cogs: MoneyValue }>();
+  const traced = new Set<string>();
+  const tracedLines: AutoJournalLine[] = [];
   for (const l of lines) {
     const allocated = perLine.get(l.id) ?? dec(0);
+    const adjustment = allocated.isZero() ? null : await applyAcquisitionDelta(tx, stockCtx(ctx), {sourceKind:l.sourceKind as 'invoice'|'delivery',sourceLineId:(l.invoiceLineId??l.deliveryLineId)!,amount:allocated.toFixed(2),date,sourceKey:`import:${id}:${l.lineNo}`});
+    if (adjustment) {
+      traced.add(l.id);tracedLines.push(...adjustment.lines);
+      const stocked=adjustment.destinations.filter(d=>d.target.startsWith('stock:')).reduce((s,d)=>s.plus(d.amount),dec(0));
+      split.set(l.id,{stocked,cogs:allocated.minus(stocked)});
+      continue;
+    }
     const onHand = planner.state(l.itemId).qty.minus(poolUsed.get(l.itemId) ?? 0);
     const part = splitStockCogs(allocated, dec(l.quantity), onHand);
     poolUsed.set(l.itemId, (poolUsed.get(l.itemId) ?? dec(0)).plus(part.usable));
@@ -377,6 +388,7 @@ export async function postImportFile(tx: Tx, ctx: ImportCtx, id: string, input: 
   }
   // Havuz paylaşımı yalnızca payı bölmek içindir; durum ilerletme planlayıcıyla (cost_adjust) yapılır
   for (const l of lines) {
+    if (traced.has(l.id)) continue;
     const s = split.get(l.id)!;
     planner.adjust(l.lineNo, l.itemId, l.warehouseId, s.stocked);
   }
@@ -400,7 +412,7 @@ export async function postImportFile(tx: Tx, ctx: ImportCtx, id: string, input: 
     credit: side === 'credit' ? toDbAmount(amount) : '0',
     description,
   });
-  const jlines: AutoJournalLine[] = [];
+  const jlines: AutoJournalLine[] = [...tracedLines];
   if (toStockTotal.gt(0)) jlines.push(jl(acc.stock!, 'debit', toStockTotal, 'Stok maliyetine eklenen ithalat gideri'));
   if (toCogsTotal.gt(0)) jlines.push(jl(acc.cogs!, 'debit', toCogsTotal, 'Satılmış mala düşen ithalat gideri'));
   for (const [accountId, amount] of credits) jlines.push(jl(accountId, 'credit', amount, 'İthalat maliyeti aktarımı'));
@@ -446,6 +458,7 @@ export async function postImportFile(tx: Tx, ctx: ImportCtx, id: string, input: 
 // --- İptal ---------------------------------------------------------------------------------------------------------------
 
 export async function cancelImportFile(tx: Tx, ctx: ImportCtx, id: string, input: CancelImportInput) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const file = await lockFile(tx, id);
   if (file.status === 'cancelled') throw unprocessable('Dosya zaten iptal edilmiş', 'IMPORT_ALREADY_CANCELLED');
   const patch: Partial<typeof importFiles.$inferInsert> = { status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, cancelReason: input.reason, updatedAt: new Date() };
@@ -454,6 +467,8 @@ export async function cancelImportFile(tx: Tx, ctx: ImportCtx, id: string, input
     const date = input.date ?? todayIso();
     if (file.postDate && date < file.postDate) throw unprocessable('İptal tarihi kayıt tarihinden önce olamaz', 'CANCEL_DATE_BEFORE_POST');
     await requireOpenPeriod(tx, date);
+    const tracedSources=await tx.select().from(importFileLines).where(eq(importFileLines.importFileId,id));
+    for(const l of tracedSources) await reverseAcquisitionDelta(tx,stockCtx(ctx),{sourceKind:l.sourceKind as 'invoice'|'delivery',sourceLineId:(l.invoiceLineId??l.deliveryLineId)!,amount:'0',date,sourceKey:`cancel-import:${id}:${l.lineNo}`,originalSourceKey:`import:${id}:${l.lineNo}`});
     if (file.stockDocumentId) {
       try {
         const rev = await reverseStockDocument(tx, stockCtx(ctx), file.stockDocumentId, { docDate: date, description: `İptal: ${file.code}` }, true);

@@ -1,5 +1,6 @@
 import { dec, formatDateTR, hasPermission, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type PermissionSet, type TreasuryTxnType, type ContactListQuery, type AgendaListQuery } from '@erp/shared';
 import type { Tx } from '../../db/client';
+import type { Role } from '@erp/shared';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
 import { BOOK_EXPORT_MAX_LINES, countBookLines, generalLedger, journalBook } from '../ledger/books';
@@ -50,7 +51,7 @@ export interface BuildCtx {
   tx: Tx;
   company: { name: string; baseCurrency: string; reportingCurrency: string | null };
   /** İsteği yapan kullanıcı (yalnızca kullanıcıya göre görünürlüğü olan raporlar için: ajanda). */
-  user?: { id: string };
+  user?: { id: string; role?: Role };
   /** Şirket kimliği, rol ve açık modüller (bölümleri izin/modüle göre kapılayan raporlar: yönetici özeti, döviz pozisyonu). */
   access?: { companyId: string; permissions: PermissionSet; enabledModules: ReadonlySet<string> };
 }

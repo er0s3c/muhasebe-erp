@@ -17,6 +17,7 @@ import { journalStockDocument } from './journal';
 import { insertDocument, loadStockableItems, type StockCtx } from './documents';
 import { StockPlanner } from './planner';
 import { requireActiveWarehouse } from './warehouses';
+import { lockLeatherCosts, traceStockDocument } from '../leather/costs';
 
 const COUNT_NUMBER_KEY = 'CNT';
 
@@ -198,6 +199,7 @@ export async function deleteStockCount(tx: Tx, id: string) {
  * eksik çıkış olur; tek `count` belgesi üretilir. Sayılmamış (boş) satırlar dikkate alınmaz.
  */
 export async function postStockCount(tx: Tx, ctx: StockCtx, id: string) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const count = await getDraftRow(tx, id);
   const warehouse = await requireActiveWarehouse(tx, count.warehouseId);
   const lines = await tx.select().from(stockCountLines).where(eq(stockCountLines.countId, id));
@@ -243,7 +245,10 @@ export async function postStockCount(tx: Tx, ctx: StockCtx, id: string) {
           planner.rows,
         )
       : null;
-  if (doc) await journalStockDocument(tx, ctx, doc, planner.rows);
+  if (doc) {
+    await journalStockDocument(tx, ctx, doc, planner.rows);
+    await traceStockDocument(tx, ctx, doc, planner.rows);
+  }
 
   for (const line of counted) {
     const d = diffs.get(line.itemId)!;

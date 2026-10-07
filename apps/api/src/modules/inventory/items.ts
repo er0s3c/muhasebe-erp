@@ -54,6 +54,7 @@ export async function createItem(tx: Tx, companyId: string, input: CreateItemInp
       code,
       name: input.name,
       kind: input.kind,
+      inventoryRole: input.inventoryRole,
       unit: input.unit,
       categoryId: input.categoryId ?? null,
       barcode: input.barcode ?? null,
@@ -85,6 +86,9 @@ async function hasMovements(tx: Tx, id: string): Promise<boolean> {
 
 export async function updateItem(tx: Tx, id: string, input: UpdateItemInput) {
   const current = await getItemRow(tx, id);
+  if (input.inventoryRole && input.inventoryRole !== current.inventoryRole && await hasMovements(tx, id)) {
+    throw unprocessable('Hareketi olan kartın stok muhasebe sınıfı değiştirilemez', 'ITEM_ROLE_IN_USE');
+  }
   if (input.kind && input.kind !== current.kind && (await hasMovements(tx, id))) {
     throw unprocessable('Hareketi olan kartın türü değiştirilemez', 'ITEM_KIND_IN_USE');
   }
@@ -98,7 +102,7 @@ export async function updateItem(tx: Tx, id: string, input: UpdateItemInput) {
   const values: Partial<typeof items.$inferInsert> = {};
   for (const key of [
     'name', 'kind', 'unit', 'categoryId', 'barcode', 'vatCode', 'purchasePrice', 'purchaseCurrency',
-    'salePrice', 'saleCurrency', 'minLevel', 'notes', 'isActive', 'tracksSerial',
+    'salePrice', 'saleCurrency', 'minLevel', 'notes', 'isActive', 'tracksSerial', 'inventoryRole',
   ] as const) {
     if (input[key] !== undefined) (values as Record<string, unknown>)[key] = input[key];
   }
@@ -191,7 +195,7 @@ export async function listItems(tx: Tx, q: ListItemsQuery) {
     ${where}`;
 
   const rows = await tx.execute<ListRow>(sql`
-    select i.id, i.code, i.name, i.kind, i.unit, i.barcode, i.is_active as "isActive", i.tracks_serial as "tracksSerial", i.vat_code as "vatCode",
+    select i.id, i.code, i.name, i.kind, i.inventory_role as "inventoryRole", i.unit, i.barcode, i.is_active as "isActive", i.tracks_serial as "tracksSerial", i.vat_code as "vatCode",
            i.min_level as "minLevel", i.category_id as "categoryId", c.name as "categoryName",
            i.purchase_price as "purchasePrice", i.purchase_currency as "purchaseCurrency",
            i.sale_price as "salePrice", i.sale_currency as "saleCurrency",

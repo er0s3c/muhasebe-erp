@@ -8,6 +8,13 @@ import { defineConfig, devices } from '@playwright/test';
 // E2E_TARGET=bundle: geliştirme sunucuları yerine ÜRETİM paketini sınar (`npm run build` sonrası
 // `node apps/api/dist/server.js`; arayüzü API aynı kökenden sunar, CSP ve önbellek başlıkları dahil).
 const bundle = process.env.E2E_TARGET === 'bundle';
+const apiPort = Number(process.env.E2E_API_PORT ?? 3000),
+  webPort = Number(process.env.E2E_WEB_PORT ?? 5173);
+if (![apiPort, webPort].every((p) => Number.isInteger(p) && p > 0 && p <= 65535))
+  throw new Error('Geçersiz E2E portu');
+const apiUrl = `http://localhost:${apiPort}`,
+  webUrl = `http://localhost:${webPort}`;
+const reuse = process.env.E2E_ISOLATED !== '1';
 
 export default defineConfig({
   testDir: '.',
@@ -21,12 +28,14 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: bundle ? 'http://localhost:3000' : 'http://localhost:5173',
+    baseURL: bundle ? 'http://localhost:3000' : webUrl,
     locale: 'tr-TR',
     timezoneId: 'Europe/Nicosia',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
+    launchOptions: process.env.PW_CHROMIUM_PATH
+      ? { executablePath: process.env.PW_CHROMIUM_PATH }
+      : {},
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: bundle
@@ -52,16 +61,17 @@ export default defineConfig({
     : [
         {
           command: 'npm run start -w @erp/api',
-          url: 'http://localhost:3000/api/health',
-          reuseExistingServer: true,
+          url: apiUrl + '/api/health',
+          reuseExistingServer: reuse,
           timeout: 60_000,
-          env: { RATE_LIMIT_ENABLED: 'false' },
+          env: { RATE_LIMIT_ENABLED: 'false', PORT: String(apiPort), CORS_ORIGIN: webUrl },
         },
         {
-          command: 'npm run dev -w @erp/web',
-          url: 'http://localhost:5173',
-          reuseExistingServer: true,
+          command: `npm run dev -w @erp/web -- --port ${webPort}`,
+          url: webUrl,
+          reuseExistingServer: reuse,
           timeout: 60_000,
+          env: { VITE_API_TARGET: apiUrl },
         },
       ],
 });

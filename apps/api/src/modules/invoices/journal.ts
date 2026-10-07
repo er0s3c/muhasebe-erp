@@ -39,6 +39,10 @@ export interface JournalInvoiceLine {
   isStock: boolean;
   /** Stokta hareket eden maliyet (defter para birimi, pozitif): çıkışta maliyet, girişte değer. */
   costValue: MoneyValue;
+  stockAccountId?: string;
+  cogsAccountId?: string;
+  /** Already accrued receipt: invoice clears its provisional accrual elsewhere. */
+  accruedPurchase?: boolean;
   /** Proje boyutu (yalnızca stoksuz alış/gider/alış iadesi satırı): gider satırına yazılır, KDV ve cari satırına yazılmaz. */
   projectId?: string | null;
   wbsId?: string | null;
@@ -128,14 +132,12 @@ export function buildInvoiceJournal(i: BuildJournalInput): BuiltJournal {
     g.base = g.base.plus(base);
     groups.set(key, g);
   };
-  let stockNetBase = dec(0);
   for (const l of i.lines) {
     if (salesSide) {
       addGroup(l.accountId ?? acc(meta.isReturn ? 'sales_return' : 'sales_revenue'), l.net, l.netBase);
     } else if (l.isStock) {
-      stockNetBase = stockNetBase.plus(l.netBase);
       // Alış iadesinde stok satırı, stok defterindeki çıkış değeriyle aşağıda ayrıca yazılır
-      if (!meta.isReturn) addGroup(acc('stock'), l.net, l.netBase);
+      if (!meta.isReturn && !l.accruedPurchase) addGroup(l.stockAccountId ?? acc('stock'), l.net, l.netBase);
     } else {
       addGroup(l.accountId ?? acc('default_expense'), l.net, l.netBase, l.projectId ?? null, l.wbsId ?? null);
     }
@@ -161,19 +163,24 @@ export function buildInvoiceJournal(i: BuildJournalInput): BuiltJournal {
   }
 
   // 4) Stok ve maliyet (defter para birimi)
-  const stockCost = i.lines.filter((l) => l.isStock).reduce((s, l) => s.plus(l.costValue), dec(0));
-  if (i.type === 'sales' && stockCost.gt(0)) {
-    line('debit', acc('cogs'), stockCost, stockCost, {}, true);
-    line('credit', acc('stock'), stockCost, stockCost, {}, true);
-  } else if (i.type === 'sales_return' && stockCost.gt(0)) {
-    line('debit', acc('stock'), stockCost, stockCost, {}, true);
-    line('credit', acc('cogs'), stockCost, stockCost, {}, true);
-  } else if (i.type === 'purchase_return' && i.lines.some((l) => l.isStock)) {
-    // Stok defterinden ortalama maliyetle çıkan değer; iade tutarıyla farkı satılan mal maliyetine gider
-    line('credit', acc('stock'), stockCost, stockCost, {}, true);
-    const variance = stockNetBase.minus(stockCost);
-    if (variance.gt(0)) line('credit', acc('cogs'), variance, variance, {}, true);
-    else if (variance.isNegative()) line('debit', acc('cogs'), variance.abs(), variance.abs(), {}, true);
+  const costGroups = new Map<string, {stock:string;cogs:string;cost:MoneyValue;net:MoneyValue}>();
+  for(const l of i.lines.filter(l=>l.isStock)) {
+    const stock=l.stockAccountId??acc('stock'), cogs=l.cogsAccountId??(m.cogs??'');
+    const key=`${stock}|${cogs}`;
+    const group=costGroups.get(key)??{stock,cogs,cost:dec(0),net:dec(0)};
+    group.cost=group.cost.plus(l.costValue);group.net=group.net.plus(l.netBase);costGroups.set(key,group);
+  }
+  for(const g of costGroups.values()) {
+    if(i.type==='sales'&&g.cost.gt(0)) {
+      line('debit',g.cogs,g.cost,g.cost,{},true);line('credit',g.stock,g.cost,g.cost,{},true);
+    } else if(i.type==='sales_return'&&g.cost.gt(0)) {
+      line('debit',g.stock,g.cost,g.cost,{},true);line('credit',g.cogs,g.cost,g.cost,{},true);
+    } else if(i.type==='purchase_return') {
+      line('credit',g.stock,g.cost,g.cost,{},true);
+      const variance=g.net.minus(g.cost);
+      if(variance.gt(0))line('credit',g.cogs,variance,variance,{},true);
+      else if(variance.isNegative())line('debit',g.cogs,variance.abs(),variance.abs(),{},true);
+    }
   }
   if (!salesSide && !meta.isReturn && !i.stockAdjust.isZero()) {
     const a = i.stockAdjust.abs();

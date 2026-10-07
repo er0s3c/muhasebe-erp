@@ -333,7 +333,12 @@ async function loadPartyLines(tx: Tx, type: PartyControlType, asOf: string, part
     join cheque_events ev on ev.id = a.event_id
     where a.control = ${type} and ev.event_date <= ${asOf}::date
       ${only('a.party_id')}`);
-  for (const a of [...allocs.rows, ...writeoffs.rows, ...chequeAllocs.rows]) {
+  const deposits=type==='receivable'?await tx.execute<{party_id:string;charge_line_id:string;settle_line_id:string;amount:string;amount_base:string}>(sql`
+    select d.party_id,d.charge_line_id,d.settle_line_id,d.amount,d.amount_base
+    from leather_deposit_settlements d join journal_entries e on e.id=d.entry_id
+    left join journal_entries rv on rv.id=e.reversed_by_id and rv.entry_date<=${asOf}::date
+    where e.status='posted' and e.entry_date<=${asOf}::date and rv.id is null ${only('d.party_id')}`):{rows:[]};
+  for (const a of [...allocs.rows, ...writeoffs.rows, ...chequeAllocs.rows,...deposits.rows]) {
     byParty.get(a.party_id)?.allocations.push({
       chargeLineId: a.charge_line_id,
       settleLineId: a.settle_line_id,

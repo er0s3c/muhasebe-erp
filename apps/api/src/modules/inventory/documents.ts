@@ -26,6 +26,9 @@ import { journalStockDocument, ledgerCtxOf } from './journal';
 import { StockPlanner, type DraftRow, type PlannerItem } from './planner';
 import { applySerials, type SerialPlan } from './serials';
 import { requireActiveWarehouse } from './warehouses';
+import { lockLeatherCosts, reverseStockTrace, traceStockDocument } from '../leather/costs';
+import { availableStock } from '../leather/production';
+import { syncStockLots } from '../manufacturing/stock-lots';
 
 export interface StockCtx {
   companyId: string;
@@ -68,6 +71,25 @@ interface Header {
 
 /** Belge başlığını boşluksuz numarayla ve satırlarıyla yazar. Ürünler önceden kilitlenmiş olmalı. */
 export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, header: Header, rows: DraftRow[], serials?: SerialPlan) {
+  const company = (await tx.execute<{sector:string}>(sql`select sector from companies where id=${ctx.companyId}::uuid`)).rows[0];
+  if (company && ['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector)) {
+    const used = new Map<string, MoneyValue>();
+    for (const row of rows.filter(r => r.kind === 'qty' && r.qty.lt(0))) {
+      const key = `${row.itemId}|${row.warehouseId}`;
+      let available: MoneyValue;
+      if (header.reversalOfId || header.sourceType?.startsWith('leather_')) {
+        const q = await loadWarehouseQty(tx,[row.itemId],[row.warehouseId]);
+        available = dec(q.get(key) ?? 0);
+      } else {
+        const tracked = await tx.execute(sql`select 1 from leather_pieces where item_id=${row.itemId}::uuid limit 1`);
+        if (tracked.rows.length && !header.reversalOfId) throw unprocessable('Fiziksel deri çıkışını kesim, üretim sarfı veya fason işlemiyle kaydedin','LEATHER_PHYSICAL_COMMAND_REQUIRED');
+        available = dec(await availableStock(tx,row.itemId,row.warehouseId));
+      }
+      const requested = (used.get(key) ?? dec(0)).plus(row.qty.abs());
+      if (requested.gt(available)) throw unprocessable('Kalite blokesi ve rezervasyon sonrası kullanılabilir stok yetersiz','LEATHER_STOCK_UNAVAILABLE');
+      used.set(key, requested);
+    }
+  }
   const year = isoYear(header.docDate);
   const seq = await nextNumber(tx, ctx.companyId, STOCK_NUMBER_KEY, year);
   const [doc] = await tx
@@ -109,10 +131,12 @@ export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, he
       })),
     );
   }
+  if(company&&['LEATHER_FASHION','MANUFACTURING_WHOLESALE'].includes(company.sector))await syncStockLots(tx,ctx,doc!,rows);
   return doc!;
 }
 
 export async function postStockDocument(tx: Tx, ctx: StockCtx, input: CreateStockDocumentInput) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const warehouse = await requireActiveWarehouse(tx, input.warehouseId, input.type === 'transfer' ? 'Kaynak depo' : 'Depo');
   const toWarehouse = input.toWarehouseId ? await requireActiveWarehouse(tx, input.toWarehouseId, 'Hedef depo') : null;
 
@@ -197,6 +221,7 @@ export async function postStockDocument(tx: Tx, ctx: StockCtx, input: CreateStoc
   );
   // Elle girilen belgenin muhasebe kaydı (fatura kaynaklı belgeler kendi yevmiyesini faturadan alır)
   await journalStockDocument(tx, ctx, doc, planner.rows);
+  await traceStockDocument(tx, ctx, doc, planner.rows);
   return getStockDocument(tx, doc.id);
 }
 
@@ -212,6 +237,7 @@ export async function reverseStockDocument(
   /** Faturanın iptali gibi kaynak belgenin kendi akışı: kaynak korumasını ve yevmiye tersini kaynak yürütür. */
   fromSource = false,
 ) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const [original] = await tx.select().from(stockDocuments).where(eq(stockDocuments.id, id));
   if (!original) throw notFound('Stok belgesi');
   if (original.sourceType && !fromSource) {
@@ -294,6 +320,7 @@ export async function reverseStockDocument(
     { reverseOf: original.id },
   );
   await tx.update(stockDocuments).set({ reversedById: reversal.id }).where(eq(stockDocuments.id, id));
+  await reverseStockTrace(tx, ctx, original, reversal, originalRows);
 
   if (!fromSource) {
     // Belgenin yevmiyesi varsa aynı tarihte ters kaydı yazılır (M6 öncesi belgelerin yevmiyesi yoktur)

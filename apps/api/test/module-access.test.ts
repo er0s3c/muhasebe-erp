@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { ACCESS_AREA_KEYS, effectivePermissions, ROLE_PERMISSIONS, todayIso, type AccessAreaKey, type Role } from '@erp/shared';
+import { effectivePermissions, ROLE_PERMISSIONS, todayIso, type AccessAreaKey, type Role } from '@erp/shared';
 import { withContext } from '../src/db/client';
 import { decide, requestApproval, registerApprovalHandler } from '../src/modules/approvals/service';
 import { readXlsx } from '../src/files/xlsx-read';
+import { areasForSector } from '../src/modules/access/routes';
 import { scanCompany } from '../src/modules/notifications/scan';
 import { addMember, asDb, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, PASSWORD } from './helpers';
 
@@ -167,7 +168,7 @@ describe('kullanıcı bazlı modül erişimi', async () => {
 
     it('çekirdek ekranlar (genel bakış, ayarlar) hiçbir istisnayla kapanmaz; bildirimler ve oturum uçları çalışır', async () => {
       const w = await world('Cekirdek');
-      await ok(w.set(w.m.viewer, Object.fromEntries(ACCESS_AREA_KEYS.map((k) => [k, 'none']))));
+      await ok(w.set(w.m.viewer, Object.fromEntries(areasForSector('CONSTRUCTION').map((k) => [k, 'none']))));
       const nav = await ok(w.m.viewer.client.get('/api/navigation'));
       const items = nav.groups.flatMap((g: any) => g.items.map((i: any) => i.key));
       expect(items).toContain('dashboard');
@@ -183,7 +184,7 @@ describe('kullanıcı bazlı modül erişimi', async () => {
   describe('rol-bağlı izinler asla verilmez / hassas veri', () => {
     it('her alanda "görüntüle ve düzenle" verilse bile rol-bağlı izinler gelmez (görüntüleyici, satış, şantiye, muhasebeci)', async () => {
       const w = await world('Bagli');
-      const all = Object.fromEntries(ACCESS_AREA_KEYS.map((k) => [k, 'write']));
+      const all = Object.fromEntries(areasForSector('CONSTRUCTION').map((k) => [k, 'write']));
       for (const role of ['viewer', 'sales', 'site', 'accountant'] as const) {
         await ok(w.set(w.m[role], all));
         const perms: string[] = (await ok(w.m[role].client.get('/api/me/access'))).permissions;

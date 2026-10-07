@@ -15,7 +15,7 @@ import {
   type PublicKeyring,
   type RestrictedReason,
 } from '@erp/license-core';
-import type { Sector } from '@erp/shared';
+import { SECTORS, type Sector } from '@erp/shared';
 import type { Db } from '../db/client';
 import { AppError } from '../http/errors';
 import { serverFingerprint, type ServerFingerprint } from './fingerprint';
@@ -355,7 +355,7 @@ export class LicenseService {
       const time = transport.time ? await transport.time(row.installationId, newNonce(), this.keyring) : null;
       const env = signEnvelope(
         'activate',
-        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, code, nonce, ts: time?.serverTime ?? this.now(), ...(time ? { protocolVersion: 2, timeNonce: time.nonce } : {}) },
+        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, supportedSectors: [...SECTORS], code, nonce, ts: time?.serverTime ?? this.now(), ...(time ? { protocolVersion: 2, timeNonce: time.nonce } : {}) },
         key,
       );
       const res = await this.call(() => transport.activate({ ...env, pub: row.publicKey }));
@@ -376,7 +376,7 @@ export class LicenseService {
       const time = transport.time ? await transport.time(row.installationId, newNonce(), this.keyring) : null;
       const env = signEnvelope(
         'heartbeat',
-        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, nonce, ts: time?.serverTime ?? this.now(), ...(time ? { protocolVersion: 2, timeNonce: time.nonce } : {}), stats, ...(this.platform ? { platform: this.platform } : {}) },
+        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, supportedSectors: [...SECTORS], nonce, ts: time?.serverTime ?? this.now(), ...(time ? { protocolVersion: 2, timeNonce: time.nonce } : {}), stats, ...(this.platform ? { platform: this.platform } : {}) },
         key,
       );
       const res = await this.call(() => transport.heartbeat(env));
@@ -398,7 +398,7 @@ export class LicenseService {
       const { row, fp } = await this.fresh();
       const requestId = newNonce();
       const requestCode = encodeRequestCode(
-        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, requestId, ts: this.now() },
+        { installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion, supportedSectors: [...SECTORS], requestId, ts: this.now() },
         row.privateKeyPem,
       );
       await this.store.setPendingRequest(requestId, this.now());

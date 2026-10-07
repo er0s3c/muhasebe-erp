@@ -2,6 +2,8 @@
 
 İnşaat projeleri için [Proje 360 kullanım, 30 özellik ve kurulum notları](docs/CONSTRUCTION-360.md).
 
+Üretim, toptan ticaret ve deri için [ortak üretim motoru, demo şirketi ve görev kullanıcıları](docs/MANUFACTURING-WHOLESALE.md). Mevcut demo hesabına ayrı şirket eklemek için `npm run demo:manufacturing`; mevcut inşaat verilerini sıfırlamak gerekmez.
+
 KKTC işletmeleri için sade ve güçlü, web tabanlı muhasebe/ERP. İlk hedef sektör inşaat ve taahhüt; market ve ticaret modülleri aynı çekirdeğin üstüne eklenecek şekilde tasarlandı.
 
 **Durum:** Çekirdek ERP, inşaat/taşeron/gayrimenkul akışları, lisanslama ve dağıtım araçları mevcut. Görev, belge arşivi, mobil saha, iş programı, ekipman, teslim/kusur, dış portal ve nakit senaryosu ekranları eklendi; yerel test kapsamı ve sınırlar [geliştirme programında](docs/PRODUCT-EXPANSION.md). Gerçek kullanıcı pilotu ve resmî e-Fatura doğrulaması dış erişimleri bekliyor. Muhasebe/mevzuat varsayımları uzman teyidi gerektirir. Genel yol haritası: [docs/ROADMAP.md](docs/ROADMAP.md).

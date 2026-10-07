@@ -26,6 +26,7 @@ import {
   extendLicense,
   getLicenseForUpdate,
   regenerateCode,
+  requireSupportedSectors,
   serializeActivation,
   serializeLicense,
   setLicenseStatus,
@@ -272,6 +273,7 @@ export const adminApiRoutes: FastifyPluginAsync = async (app) => {
       if (!license.offlineAllowed) throw conflict('Bu lisans çevrimdışı etkinleştirmeye izin vermiyor', 'OFFLINE_NOT_ALLOWED');
       if (license.status !== 'active') throw conflict('Lisans etkin değil', 'LICENSE_NOT_ACTIVE');
       if (license.validUntil.getTime() < now) throw conflict('Lisansın süresi dolmuş', 'LICENSE_EXPIRED');
+      requireSupportedSectors(license, request.data.supportedSectors);
       const [customer] = await tx.select({ name: customers.name }).from(customers).where(eq(customers.id, license.customerId));
 
       const [existing] = await tx.select().from(activations).where(eq(activations.installationId, request.data.installationId));

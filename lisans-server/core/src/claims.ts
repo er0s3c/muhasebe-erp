@@ -7,6 +7,12 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 const epochMs = z.number().int().min(0).max(8.64e15);
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/);
 const nonce = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/);
+const supportedSectors = z.array(z.enum(SECTORS)).min(1).max(SECTORS.length).optional();
+
+/** Older installations omit capabilities and retain their original sector licenses. */
+export function clientSupportsSectors(licensed: readonly string[], declared?: readonly string[]): boolean {
+  return licensed.every(sector => ['CONSTRUCTION', 'RETAIL_MARKET', 'COMMERCE'].includes(sector) || declared?.includes(sector));
+}
 
 export const LICENSE_KINDS = ['commercial', 'trial', 'demo'] as const;
 export type LicenseKind = (typeof LICENSE_KINDS)[number];
@@ -45,6 +51,7 @@ export const leaseSchema = z.object({
 export type Lease = z.infer<typeof leaseSchema>;
 
 export const activateRequestSchema = z.object({
+  supportedSectors,
   protocolVersion: z.literal(2).optional(),
   timeNonce: nonce.optional(),
   installationId: z.uuid(),
@@ -57,6 +64,7 @@ export const activateRequestSchema = z.object({
 export type ActivateRequest = z.infer<typeof activateRequestSchema>;
 
 export const heartbeatRequestSchema = z.object({
+  supportedSectors,
   protocolVersion: z.literal(2).optional(),
   timeNonce: nonce.optional(),
   installationId: z.uuid(),
@@ -82,6 +90,7 @@ export const deactivateRequestSchema = z.object({
 export type DeactivateRequest = z.infer<typeof deactivateRequestSchema>;
 
 export const offlineRequestSchema = z.object({
+  supportedSectors,
   installationId: z.uuid(),
   fingerprint: hex64,
   appVersion: z.string().max(40),

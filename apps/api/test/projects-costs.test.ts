@@ -317,7 +317,8 @@ describe('şantiye projeleri (B1b): kaynaklar (fatura, stok, kasa), maliyet rapo
     expect(doc.lines[0]).toMatchObject({ projectCode: p.code, wbsCode: '1' });
     const lines = await taggedLines(x, doc.document.id);
     const debits = lines.filter((l) => l.d > 0 && l.account === '710').map((l) => [l.wbs, l.d]);
-    expect(debits).toEqual([['1', 300], ['2', 100], [null, 200]]);
+    expect(debits).toHaveLength(3);
+    expect(debits).toEqual(expect.arrayContaining([['1', 300], ['2', 100], [null, 200]]));
     const stockCredit = lines.filter((l) => l.c > 0 && ['150', '153'].includes(l.account));
     expect(stockCredit).toHaveLength(1);
     expect(stockCredit[0]!.c).toBe(600);

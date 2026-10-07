@@ -2,7 +2,8 @@ import { sql } from 'drizzle-orm';
 import { administrationQuerySchema,insightKeys, type Permission, type WorkflowKind, type OperationKind } from '@erp/shared';
 import type { TenantCtx } from '../../http/context';
 import { forbidden } from '../../http/errors';
-import { RECORDS, canAccessRecord } from '../workspace/records';
+import { recordLinkVisibility } from '../workspace/records';
+import { posSaleScope } from '../pos/scope';
 import { operationAccess } from '../workspace/operations';
 import { workflowAccess } from '../construction-control/workflows';
 import { isModuleDenied } from '../access/effective';
@@ -23,7 +24,18 @@ const groups: [string, Permission, string[]][] = [
   ['core.directory','directory.read',['agenda_items']],
   ['construction.projects','projects.read',['projects','project_wbs','project_budgets','construction_drawings','construction_pins','construction_photos','construction_locations','construction_assets','construction_jobs','construction_snapshots','construction_model_links']],
   ['construction.subcontracts','subcontracts.read',['subcontracts','progress_payments','progress_payment_lines','variation_orders','approval_requests','approval_steps']],
-  ['construction.procurement','procurement.read',['purchase_requests','purchase_request_lines','purchase_orders','purchase_order_lines']],
+  ['construction.procurement','procurement.read',['purchase_requests','purchase_request_lines','purchase_orders','purchase_order_lines','rfqs','rfq_offers','rfq_offer_lines']],
+  ['core.procurement','procurement.read',['purchase_requests','purchase_request_lines','purchase_orders','purchase_order_lines','rfqs','rfq_offers','rfq_offer_lines']],
+  ['leather.catalog','leather.catalog.read',['leather_models','leather_revisions','leather_variants','leather_custom_orders']],
+  ['leather.catalog','ledger.read',['leather_deposit_settlements']],
+  ['leather.materials','leather.materials.read',['leather_lots','leather_pieces','leather_piece_events']],
+  ['leather.production','leather.production.read',['leather_production_orders','leather_reservations','leather_production_documents']],
+  ['leather.production','leather.costs.read',['leather_cost_roots','leather_cost_shares','leather_cost_events','leather_cost_corrections','leather_cost_allocations']],
+  ['leather.quality','leather.quality.read',['leather_quality_checks']],
+  ['leather.subcontracting','leather.subcontracting.read',['leather_subcontract_jobs']],
+  ['leather.service','leather.service.read',['leather_service_cases']],
+  ['sales.pos','pos.manage',['pos_tills','pos_sessions']],
+  ['sales.pos','pos.read',['pos_sales']],
   ['construction.realestate','realestate.read',['real_estate_units','sales_contracts','sales_installments']],
   ['hr.core','hr.sensitive',['employees','attendance_entries','attendance_months']],
   ['hr.foreign','hr.sensitive',['foreign_worker_docs','foreign_doc_renewals']],
@@ -45,22 +57,22 @@ export function requireAdministrator(c: TenantCtx) {
   c.require('members.manage');
 }
 export function activityTables(c: TenantCtx) {
-  return [...groups.filter(([module,p]) => c.enabledModules.has(module) && !isModuleDenied(c.access,module) && c.can(p)).flatMap(([, , tables]) => tables),
+  return [...new Set([...groups.filter(([module,p]) => c.enabledModules.has(module) && !isModuleDenied(c.access,module) && c.can(p)).flatMap(([, , tables]) => tables),
     ...(Object.values(operationAccess).some(a=>c.enabledModules.has(a.module)&&!isModuleDenied(c.access,a.module)&&c.can(a.read))?['operation_entries']:[]),
-    ...(Object.values(workflowAccess).some(a=>c.enabledModules.has(a.module)&&!isModuleDenied(c.access,a.module)&&c.can(a.read))?['construction_workflows']:[])];
+    ...(Object.values(workflowAccess).some(a=>c.enabledModules.has(a.module)&&!isModuleDenied(c.access,a.module)&&c.can(a.read))?['construction_workflows']:[])])];
 }
 export async function activityReport(c: TenantCtx) {
   requireAdministrator(c);
   const q = administrationQuerySchema.parse(c.req.query);
   const allowed = activityTables(c);
   if (q.table && !allowed.includes(q.table)) throw forbidden('Bu kayıt türünü görüntüleme yetkiniz yok.');
-  const linkedKinds = Object.keys(RECORDS).filter(k => canAccessRecord(c, k as keyof typeof RECORDS));
-  const kindVisibility = (field: string) => linkedKinds.length ? sql`(${sql.raw(field)} is null or ${sql.raw(field)} in (${sql.join(linkedKinds.map(k=>sql`${k}`),sql`, `)}))` : sql`${sql.raw(field)} is null`;
-  const visibleTaskIds = sql`select id from work_items where ${kindVisibility('record_kind')}`;
+  const visibleTaskIds = sql`select w.id from work_items w where ${recordLinkVisibility(c, 'w.record_kind', 'w.record_id')}`;
   const kindsWhere=(table:string,kinds:string[])=>sql`(a.table_name<>${table} or ${kinds.length?sql`coalesce(a.new_data,a.old_data)->>'kind' in (${sql.join(kinds.map(k=>sql`${k}`),sql`, `)})`:sql`false`})`;
   const operationKinds=Object.keys(operationAccess).filter(k=>{const a=operationAccess[k as OperationKind];return c.enabledModules.has(a.module)&&!isModuleDenied(c.access,a.module)&&c.can(a.read);});
   const workflowKinds=Object.keys(workflowAccess).filter(k=>{const a=workflowAccess[k as WorkflowKind];return c.enabledModules.has(a.module)&&!isModuleDenied(c.access,a.module)&&c.can(a.read);});
-  const auditVisibility = sql`(a.table_name not in ('work_items','record_documents') or ${kindVisibility("coalesce(a.new_data,a.old_data)->>'record_kind'")}) and ${kindsWhere('operation_entries',operationKinds)} and ${kindsWhere('construction_workflows',workflowKinds)}`;
+  const auditVisibility = sql`(a.table_name not in ('work_items','record_documents') or ${recordLinkVisibility(c, "coalesce(a.new_data,a.old_data)->>'record_kind'", "(coalesce(a.new_data,a.old_data)->>'record_id')::uuid")})
+    and (a.table_name<>'pos_sales' or exists(select 1 from pos_sales r where r.id=a.row_id::uuid and ${posSaleScope(c.user.id, c.can('pos.manage'), 'r')}))
+    and ${kindsWhere('operation_entries',operationKinds)} and ${kindsWhere('construction_workflows',workflowKinds)}`;
   const agendaVisibility=c.can('directory.manage')?sql``:sql`and (a.table_name<>'agenda_items' or coalesce(a.new_data,a.old_data)->>'owner_id' is null or coalesce(a.new_data,a.old_data)->>'owner_id'=${c.user.id})`;
   const insightAllowed=EXPORTS.filter(d=>insightKeys.includes(d.key as typeof insightKeys[number])&&c.enabledModules.has(d.module)&&!isModuleDenied(c.access,d.module)&&c.can(d.permission)).map(d=>d.key);
   const insightVisibility=sql`and (a.table_name<>'saved_insights' or ((coalesce(a.new_data,a.old_data)->>'created_by'=${c.user.id} or coalesce(a.new_data,a.old_data)->'config'->>'shared'='true') and ${insightAllowed.length?sql`coalesce(a.new_data,a.old_data)->'config'->>'reportKey' in (${sql.join(insightAllowed.map(k=>sql`${k}`),sql`, `)})`:sql`false`}))`;

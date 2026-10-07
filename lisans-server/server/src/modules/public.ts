@@ -16,7 +16,7 @@ import {
 import { audit } from '../audit';
 import { activations, customers, licenses } from '../db/schema';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors';
-import { buildLease, countActiveActivations, getLicenseForUpdate, type ActivationRow } from './licenses';
+import { buildLease, countActiveActivations, getLicenseForUpdate, requireSupportedSectors, type ActivationRow } from './licenses';
 import { updateOfferFor } from './releases';
 
 /** İstemci ile satıcı saati arasında kabul edilen en büyük fark (yeniden oynatma penceresi de budur). */
@@ -99,6 +99,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       if (license.status === 'revoked') throw forbidden('Bu lisans iptal edilmiş', 'LICENSE_REVOKED');
       if (license.status === 'suspended') throw forbidden('Bu lisans askıya alınmış; satıcıyla iletişime geçin', 'LICENSE_SUSPENDED');
       if (license.validUntil.getTime() < now) throw forbidden('Bu lisansın süresi dolmuş; yenileme için satıcıyla iletişime geçin', 'LICENSE_EXPIRED');
+      requireSupportedSectors(license, payload.supportedSectors);
 
       const [existing] = await tx.select().from(activations).where(eq(activations.installationId, payload.installationId));
       let activation: ActivationRow;
@@ -199,6 +200,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
         .from(licenses)
         .innerJoin(customers, eq(customers.id, licenses.customerId))
         .where(eq(licenses.id, activation.licenseId));
+      requireSupportedSectors(row!.license, payload.supportedSectors);
       const lease = buildLease(row!.license, row!.customer, { installationId: activation.installationId, fingerprint: activation.fingerprint }, { typ: 'lease', nonce: payload.nonce, now, protocolVersion: payload.protocolVersion });
       // Uzaktan güncelleme: satıcı bu lisansa bir sürüm gönderdiyse teklif (imzalı manifesto + indirme belirteci) eklenir
       const update = await updateOfferFor(app, tx, {

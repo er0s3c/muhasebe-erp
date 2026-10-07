@@ -18,6 +18,7 @@ import { REQUEST_STATUSES, RequestStatusBadge } from './common';
 export function PurchaseRequestsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const projectBased = useCompany().sector === 'CONSTRUCTION';
   const canManage = useCan()('procurement.manage');
   const base = useCompany().baseCurrency;
   const { projects } = useProjectOptions();
@@ -52,12 +53,12 @@ export function PurchaseRequestsPage() {
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            <Select aria-label={t('procurement.filters.project')} value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-64">
+            {projectBased && <Select aria-label={t('procurement.filters.project')} value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-64">
               <option value="">{t('procurement.filters.allProjects')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
               ))}
-            </Select>
+            </Select>}
             <Select aria-label={t('procurement.filters.status')} value={status} onChange={(e) => setStatus(e.target.value)} className="w-48">
               <option value="">{t('procurement.filters.allStatuses')}</option>
               {REQUEST_STATUSES.map((s) => (
@@ -75,7 +76,7 @@ export function PurchaseRequestsPage() {
                   <tr>
                     <Th className="w-32">{t('procurement.cols.code')}</Th>
                     <Th>{t('procurement.cols.title')}</Th>
-                    <Th>{t('procurement.cols.project')}</Th>
+                    {projectBased && <Th>{t('procurement.cols.project')}</Th>}
                     <Th className="w-28">{t('procurement.cols.status')}</Th>
                     <Th className="w-28">{t('procurement.cols.needDate')}</Th>
                     <Th num className="w-20">{t('procurement.cols.lines')}</Th>
@@ -87,7 +88,7 @@ export function PurchaseRequestsPage() {
                     <Tr key={r.id} clickable tabIndex={0} onClick={() => navigate(`/purchasing/requests/${r.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/purchasing/requests/${r.id}`)}>
                       <Td className="font-mono text-[13px] text-muted">{r.code}</Td>
                       <Td>{r.title}</Td>
-                      <Td className="text-muted">{r.projectCode}</Td>
+                      {projectBased && <Td className="text-muted">{r.projectCode}</Td>}
                       <Td><RequestStatusBadge status={r.status} /></Td>
                       <Td className="text-muted">{r.needDate ? formatDateTR(r.needDate) : '—'}</Td>
                       <Td num>{r.lineCount}</Td>

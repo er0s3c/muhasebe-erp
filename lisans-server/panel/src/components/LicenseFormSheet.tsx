@@ -8,7 +8,7 @@ import { useToast } from '@ui/Toast';
 import { api, errorText, type Customer, type License, type Sector } from '../api';
 import { KIND_LABELS, SECTOR_LABELS, toDateInput } from '../format';
 
-const SECTORS: Sector[] = ['CONSTRUCTION', 'RETAIL_MARKET', 'COMMERCE'];
+const SECTORS: Sector[] = ['CONSTRUCTION', 'RETAIL_MARKET', 'COMMERCE', 'LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'];
 
 interface FormState {
   customerId: string;

@@ -2,6 +2,7 @@ import { PackageCheck, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
+import { useCompany } from '../../lib/session';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
@@ -18,6 +19,7 @@ import { ORDER_STATUSES, OrderStatusBadge } from './common';
 export function PurchaseOrdersPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const projectBased = useCompany().sector === 'CONSTRUCTION';
   const canManage = useCan()('procurement.manage');
   const { projects } = useProjectOptions();
   const [projectId, setProjectId] = useState('');
@@ -48,12 +50,12 @@ export function PurchaseOrdersPage() {
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            <Select aria-label={t('procurement.filters.project')} value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-64">
+            {projectBased && <Select aria-label={t('procurement.filters.project')} value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-64">
               <option value="">{t('procurement.filters.allProjects')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
               ))}
-            </Select>
+            </Select>}
             <Select aria-label={t('procurement.filters.status')} value={status} onChange={(e) => setStatus(e.target.value)} className="w-48">
               <option value="">{t('procurement.filters.allStatuses')}</option>
               {ORDER_STATUSES.map((s) => (
@@ -71,7 +73,7 @@ export function PurchaseOrdersPage() {
                   <tr>
                     <Th className="w-36">{t('procurement.cols.code')}</Th>
                     <Th>{t('procurement.cols.supplier')}</Th>
-                    <Th>{t('procurement.cols.project')}</Th>
+                    {projectBased && <Th>{t('procurement.cols.project')}</Th>}
                     <Th className="w-28">{t('procurement.cols.status')}</Th>
                     <Th num className="w-32">{t('procurement.cols.receivedOrdered')}</Th>
                     <Th num>{t('procurement.cols.net')}</Th>
@@ -82,7 +84,7 @@ export function PurchaseOrdersPage() {
                     <Tr key={r.id} clickable tabIndex={0} onClick={() => navigate(`/purchasing/orders/${r.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/purchasing/orders/${r.id}`)}>
                       <Td className="font-mono text-[13px] text-muted">{r.code}</Td>
                       <Td>{r.partyName}</Td>
-                      <Td className="text-muted">{r.projectCode}</Td>
+                      {projectBased && <Td className="text-muted">{r.projectCode}</Td>}
                       <Td><OrderStatusBadge status={r.status} /></Td>
                       <Td num className="text-muted">{qtyText(r.receivedQty) || '0'} / {qtyText(r.orderedQty)}</Td>
                       <Td num>{moneyIn(r.net, r.currencyCode)}</Td>

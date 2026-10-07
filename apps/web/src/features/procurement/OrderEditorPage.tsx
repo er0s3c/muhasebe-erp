@@ -33,7 +33,9 @@ export function PurchaseOrderEditorPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const can = useCan();
-  const base = useCompany().baseCurrency;
+  const company = useCompany();
+  const base = company.baseCurrency;
+  const projectBased = company.sector === 'CONSTRUCTION';
   const isNew = !id || id === 'new';
   const requestId = isNew ? params.get('requestId') : null;
   const { projects } = useProjectOptions();
@@ -63,7 +65,7 @@ export function PurchaseOrderEditorPage() {
   useEffect(() => {
     if (!detail) return;
     const o = detail.order;
-    setProjectId(o.projectId);
+    setProjectId(o.projectId ?? '');
     setPartyId(o.partyId);
     setCurrencyCode(o.currencyCode);
     setVatCode(o.vatCode ?? '');
@@ -76,7 +78,7 @@ export function PurchaseOrderEditorPage() {
   useEffect(() => {
     const r = reqQ.data;
     if (!isNew || !r) return;
-    setProjectId(r.request.projectId);
+    setProjectId(r.request.projectId ?? '');
     setLines(r.lines.map((l) => ({ key: l.id, itemId: l.itemId ?? '', description: l.description, unit: l.unit, quantity: String(Number(l.quantity)), price: l.estUnitPrice ? String(Number(l.estUnitPrice)) : '', wbsId: l.wbsId ?? '' })));
   }, [isNew, reqQ.data]);
 
@@ -90,7 +92,7 @@ export function PurchaseOrderEditorPage() {
   }, [taxData]);
 
   const body = () => ({
-    ...(isNew ? { projectId, requestId: requestId ?? null } : {}),
+    ...(isNew ? { projectId: projectBased ? projectId : null, requestId: requestId ?? null } : {}),
     partyId,
     currencyCode,
     vatCode: vatCode || null,
@@ -99,7 +101,7 @@ export function PurchaseOrderEditorPage() {
     note: note.trim() || null,
     lines: lines.map((l, i) => ({ requestLineId: isNew ? reqQ.data?.lines[i]?.id ?? null : null, itemId: l.itemId || null, description: l.description.trim(), unit: l.unit.trim(), quantity: num(l.quantity), unitPrice: num(l.price), wbsId: l.wbsId || null })),
   });
-  const invalid = !partyId || (isNew && !projectId) || lines.some((l) => !lineValid(l, true));
+  const invalid = !partyId || (isNew && projectBased && !projectId) || lines.some((l) => !lineValid(l, true));
 
   const save = useCMutation(
     (_: void, call) => (isNew ? call<PurchaseOrderDetail>('/api/purchase-orders', { method: 'POST', body: body() }) : call<PurchaseOrderDetail>(`/api/purchase-orders/${id}`, { method: 'PUT', body: body() })),
@@ -135,14 +137,14 @@ export function PurchaseOrderEditorPage() {
 
       {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
       {order?.status === 'cancelled' && <Callout tone="danger" title={t('procurement.orders.cancelledTitle')}>{order.cancelReason}</Callout>}
-      {order && <OrderSubmittals orderId={order.id} />}
+      {projectBased && order && <OrderSubmittals orderId={order.id} />}
       {status === 'draft' && <Callout tone="info">{t('procurement.orders.draftNote')}</Callout>}
 
       <Card>
         <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
-          <Field label={t('procurement.orders.project')} required>
+          {projectBased && <Field label={t('procurement.orders.project')} required>
             {(fid) => <Combobox id={fid} disabled={!isNew || !!requestId} value={projectId || null} onChange={setProjectId} placeholder={t('procurement.requests.projectPlaceholder')} options={projects.filter((p) => p.status !== 'completed' && p.status !== 'cancelled').map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: `${p.code} ${p.name}` }))} />}
-          </Field>
+          </Field>}
           <Field label={t('procurement.orders.supplier')} required>
             {(fid) => <Combobox id={fid} disabled={!editable} value={partyId || null} onChange={setPartyId} options={partyOptions} placeholder={t('procurement.rfqs.supplierPlaceholder')} />}
           </Field>
@@ -166,7 +168,7 @@ export function PurchaseOrderEditorPage() {
       <Card>
         <CardHeader title={t('procurement.orders.linesTitle')} />
         {editable || !detail ? (
-          <LinesEditor projectId={projectId} lines={lines} onChange={setLines} disabled={!editable} priceLabel={t('procurement.orders.unitPrice')} wbsRequired />
+          <LinesEditor projectId={projectId} lines={lines} onChange={setLines} disabled={!editable} priceLabel={t('procurement.orders.unitPrice')} wbsRequired={projectBased} />
         ) : (
           <TableWrap className="rounded-none border-0">
             <Table>
@@ -174,7 +176,7 @@ export function PurchaseOrderEditorPage() {
                 <tr>
                   <Th className="w-8">#</Th>
                   <Th>{t('procurement.lines.description')}</Th>
-                  <Th className="w-28">{t('procurement.lines.wbs')}</Th>
+                  {projectBased && <Th className="w-28">{t('procurement.lines.wbs')}</Th>}
                   <Th num className="w-24">{t('procurement.lines.quantity')}</Th>
                   <Th num className="w-24">{t('procurement.orders.receivedCol')}</Th>
                   <Th num className="w-24">{t('procurement.match.cols.invoiced')}</Th>
@@ -188,7 +190,7 @@ export function PurchaseOrderEditorPage() {
                   <Tr key={l.id}>
                     <Td className="text-muted">{l.lineNo}</Td>
                     <Td>{l.description} <span className="text-xs text-muted">({l.unit}){l.itemCode ? ` · ${l.itemCode}` : ''}</span></Td>
-                    <Td className="text-muted">{l.wbsCode ?? '—'}</Td>
+                    {projectBased && <Td className="text-muted">{l.wbsCode ?? '—'}</Td>}
                     <Td num>{qtyText(l.quantity)}</Td>
                     <Td num>{qtyText(l.receivedQty) || '0'}</Td>
                     <Td num>{qtyText(l.invoicedQty) || '0'}</Td>

@@ -91,6 +91,7 @@ export async function stockStatus(
     pendingDeliveries: PendingDeliveries;
     /** Fark − bekleyen irsaliyeler: sıfırdan farklıysa gerçek bir mutabakat sorunu. */
     unexplained: string;
+    workInProgress: string;
   } | null = null;
   if (!q.warehouseId && !q.categoryId && !q.query && q.lowOnly !== 'true') {
     const bal = await tx.execute<{ balance: string }>(sql`
@@ -99,7 +100,13 @@ export async function stockStatus(
       join journal_entries e on e.id = l.entry_id and e.status = 'posted'
       join accounts a on a.id = l.account_id
       where e.entry_date <= ${q.asOf}::date and a.code ~ '^15[0-7]'`);
-    const accountsBalance = dec(bal.rows[0]!.balance);
+    const wip = await tx.execute<{value:string}>(sql`
+      select (
+        coalesce((select sum(case when to_key like 'wip:%' then value else 0 end - case when from_key like 'wip:%' then value else 0 end) from leather_cost_events where date<=${q.asOf}::date),0)
+        +coalesce((select sum((d->>'amount')::numeric) from leather_cost_corrections c cross join lateral jsonb_array_elements(c.config->'destinations') d where c.date<=${q.asOf}::date and d->>'target' like 'wip:%'),0)
+      )::text as value`);
+    const workInProgress=dec(wip.rows[0]!.value);
+    const accountsBalance = dec(bal.rows[0]!.balance).minus(workInProgress);
     const stockValue = sum(all.map((r) => r.value));
     const difference = stockValue.minus(accountsBalance);
     const pending = await pendingDeliveries(tx, q.asOf);
@@ -109,6 +116,7 @@ export async function stockStatus(
       difference: toDbAmount(difference),
       pendingDeliveries: pending.raw,
       unexplained: toDbAmount(difference.minus(pending.total)),
+      workInProgress: toDbAmount(workInProgress),
     };
   }
 

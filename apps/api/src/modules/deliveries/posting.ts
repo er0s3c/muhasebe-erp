@@ -24,6 +24,7 @@ import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
 import { requireActiveWarehouse } from '../inventory/warehouses';
 import { lineSerials } from '../inventory/serials';
+import { accruePurchaseDelivery, effectiveReturnValue, lockLeatherCosts, reverseDeliveryAccrual, traceStockDocument } from '../leather/costs';
 import { checkReturnLinks, returnedTotals } from './returns';
 import { assertExternalNoFree, getDeliveryNote, loadParty, orderedLines, type DeliveryCtx } from './service';
 
@@ -55,6 +56,7 @@ async function lockNote(tx: Tx, id: string) {
  * açıklanan fark olarak görünür. Kilit sırası: irsaliye → ürünler → numaralar.
  */
 export async function postDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const note = await lockNote(tx, id);
   if (note.status !== 'draft') throw unprocessable('İrsaliye zaten kaydedilmiş', 'DELIVERY_NOT_DRAFT');
   const type = note.type as DeliveryNoteType;
@@ -92,6 +94,7 @@ export async function postDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string) {
 
   const rateCache = new Map<string, MoneyValue>();
   const fxByLine = new Map<number, string | null>();
+  const originalTargets: Record<number,string> = {};
   for (const l of stored) {
     const qty = dec(l.quantity);
     if (!meta.inbound) {
@@ -108,9 +111,13 @@ export async function postDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string) {
       const prev = priorReturns.get(src.id) ?? { qty: dec(0), value: dec(0) };
       const mine = usedReturn.get(src.id) ?? { qty: dec(0), value: dec(0) };
       const remainingQty = src.quantity.minus(prev.qty).minus(mine.qty);
-      const value = qty.eq(remainingQty)
+      let value = qty.eq(remainingQty)
         ? src.stockValue.minus(prev.value).minus(mine.value)
         : roundMoney(src.stockValue.times(qty).div(src.quantity));
+      const source = await tx.execute<{line_no:number}>(sql`select line_no from delivery_note_lines where id=${src.id}::uuid`);
+      const target = `pending_delivery:${src.id}:${source.rows[0]!.line_no}`;
+      const cumulative = await effectiveReturnValue(tx, target, mine.qty.plus(qty).toFixed(4));
+      if (cumulative !== null) { value = dec(cumulative).minus(mine.value); originalTargets[l.lineNo]=target; }
       usedReturn.set(src.id, { qty: mine.qty.plus(qty), value: mine.value.plus(value) });
       planner.receipt(l.lineNo, l.itemId, wh.id, qty, value.isNegative() ? dec(0) : value);
       continue;
@@ -192,6 +199,9 @@ export async function postDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string) {
       .where(eq(deliveryNoteLines.id, l.id));
   }
 
+  if (type === 'purchase') await accruePurchaseDelivery(tx, stockCtx(ctx), doc, await orderedLines(tx,id), planner.rows);
+  else await traceStockDocument(tx, stockCtx(ctx), doc, planner.rows, {movementKind:type, originalTargets, lineRefs:Object.fromEntries(stored.map(l => [l.lineNo,{type:'delivery_line',id:l.id}]))});
+
   await tx
     .update(deliveryNotes)
     .set({
@@ -213,6 +223,7 @@ export async function postDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string) {
  * varsa stok ters çevrilemez.
  */
 export async function cancelDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string, input: CancelDeliveryNoteInput) {
+  await lockLeatherCosts(tx, ctx.companyId);
   const note = await lockNote(tx, id);
   if (note.status === 'cancelled') throw unprocessable('İrsaliye zaten iptal edilmiş', 'DELIVERY_ALREADY_CANCELLED');
   if (note.status !== 'posted') throw unprocessable('Yalnızca kaydedilmiş irsaliye iptal edilebilir', 'DELIVERY_NOT_POSTED');
@@ -271,6 +282,8 @@ export async function cancelDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string, i
     }
     throw e;
   }
+
+  await reverseDeliveryAccrual(tx, stockCtx(ctx), note.id, date);
 
   await tx
     .update(deliveryNotes)

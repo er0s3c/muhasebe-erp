@@ -19,6 +19,7 @@ import { warningAt } from '../foreignworkers/params';
 import { pendingForMe } from '../approvals/service';
 import { inventorySummary } from '../inventory/reports';
 import { allOpenItems } from '../parties/service';
+import { productionOrderScope } from '../leather/visibility';
 
 /**
  * Bildirim kaynakları: her biri bir türün "şu an bildirilecek durum var mı?" sorusunu yanıtlar. Metinler GENELDİR (yalnızca sayı);
@@ -209,8 +210,11 @@ const agendaReminder: NotificationSource = {
 const approvalPending: NotificationSource = {
   kind: 'approval_pending',
   perUser: true,
-  async scan({ tx, companyId }, { user }) {
-    const requests = await pendingForMe(tx, { companyId, userId: user.id, role: user.role, permissions: user.permissions });
+  async scan({ tx, companyId, enabled }, { user }) {
+    const canProcure = ['core.procurement', 'construction.procurement'].some(m => enabled.has(m)) && hasPermission(user.permissions, 'procurement.read');
+    const canSubcontract = enabled.has('construction.subcontracts') && hasPermission(user.permissions, 'subcontracts.read');
+    const requests = (await pendingForMe(tx, { companyId, userId: user.id, role: user.role, permissions: user.permissions }))
+      .filter(r => r.docType === 'purchase_request' ? canProcure : canSubcontract);
     if (requests.length === 0) return null;
     return {
       severity: 'warning',
@@ -218,9 +222,28 @@ const approvalPending: NotificationSource = {
       body: `Sıradaki onay adımı sizde olan ${requests.length} belge var. Onay kutusundan karar verin.`,
       count: requests.length,
       parts: requests.map((r) => r.id),
+      link: enabled.has('core.procurement') && requests.every(r => r.docType === 'purchase_request') ? '/purchasing/requests' : '/approvals',
     };
   },
 };
+
+function leatherDue(kind: NotificationKind, table: string, finished: string[], subject: string): NotificationSource {
+  return {
+    kind,
+    perUser: table === 'leather_production_orders',
+    async scan({ tx, today }, { lead, user }) {
+      const to = addDaysIso(today, lead ?? 3);
+      const result = await tx.execute<IdRow & { due: string }>(sql`select id,due_date::text as due from ${sql.identifier(table)} r
+        where due_date <= ${to}::date and status not in (${inList(finished)})
+          ${table === 'leather_production_orders' ? sql`and ${productionOrderScope(user.role, user.id, 'r')}` : sql``} order by due_date,id`);
+      if (!result.rows.length) return null;
+      const overdue = result.rows.filter(r => r.due < today).length;
+      return { severity: overdue ? 'critical' : 'warning', title: `Teslim tarihi yaklaşan ${subject}: ${result.rows.length}`,
+        body: `${lead ?? 3} gün içinde teslim tarihi gelen veya geçen ${result.rows.length} açık kayıt var. İlgili listeden inceleyin.`,
+        count: result.rows.length, parts: [...ids(result.rows), overdue] };
+    },
+  };
+}
 
 // --- Lisans ---------------------------------------------------------------------------------------------------------
 const licenseExpiring: NotificationSource = {
@@ -375,6 +398,8 @@ const draftStale: NotificationSource = {
 };
 
 export const NOTIFICATION_SOURCES: Readonly<Record<NotificationKind, NotificationSource>> = {
+  manufacturing_production_due: leatherDue('manufacturing_production_due','leather_production_orders',['completed','cancelled'],'üretim emri'),
+  manufacturing_subcontract_due: leatherDue('manufacturing_subcontract_due','leather_subcontract_jobs',['received','cancelled'],'fason işi'),
   cheque_due: chequeDue,
   guarantee_expiring: guaranteeExpiring,
   foreign_doc_expiring: foreignDocExpiring,
@@ -387,4 +412,7 @@ export const NOTIFICATION_SOURCES: Readonly<Record<NotificationKind, Notificatio
   receivable_overdue: receivableOverdue,
   stock_below_min: stockBelowMin,
   draft_stale: draftStale,
+  leather_production_due: leatherDue('leather_production_due', 'leather_production_orders', ['completed', 'cancelled'], 'üretim emri'),
+  leather_subcontract_due: leatherDue('leather_subcontract_due', 'leather_subcontract_jobs', ['received', 'cancelled'], 'fason işi'),
+  leather_custom_order_due: leatherDue('leather_custom_order_due', 'leather_custom_orders', ['delivered', 'cancelled'], 'özel sipariş'),
 };

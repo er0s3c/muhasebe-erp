@@ -37,6 +37,17 @@ export interface AccessAreaDef {
 
 /** Yönetilen erişim alanları. Anahtar = bir kayıt modülünün anahtarı. */
 export const ACCESS_AREAS = {
+  'manufacturing.catalog': { read: ['manufacturing.catalog.read'], write: ['manufacturing.catalog.manage'], bound: { 'manufacturing.catalog.approve':'write' } },
+  'manufacturing.mrp': { read: ['manufacturing.mrp.read'], write: ['manufacturing.mrp.manage'] },
+  'manufacturing.production': { read: ['manufacturing.production.read'], write: ['manufacturing.production.manage'], bound: { 'manufacturing.production.approve':'write' } },
+  'manufacturing.planning': { read: ['manufacturing.planning.read'], write: ['manufacturing.planning.manage'], bound: { 'manufacturing.planning.approve':'write' } },
+  'manufacturing.quality': { read: ['manufacturing.quality.read'], write: ['manufacturing.quality.manage'], bound: { 'manufacturing.quality.approve':'write' } },
+  'manufacturing.subcontracting': { read: ['manufacturing.subcontracting.read'], write: ['manufacturing.subcontracting.manage'] },
+  'manufacturing.maintenance': { read: ['manufacturing.maintenance.read'], write: ['manufacturing.maintenance.manage'] },
+  'manufacturing.costs': { read: ['manufacturing.costs.read'], write: ['manufacturing.costs.manage'] },
+  'inventory.wms': { read: ['inventory.wms.read'], write: ['inventory.wms.manage'] },
+  'sales.logistics': { read: ['sales.logistics.read'], write: ['sales.logistics.manage'] },
+  'core.integrations': { read: ['core.integrations.read'], write: ['core.integrations.manage'] },
   'core.ledger': {
     read: ['ledger.read', 'reports.read'],
     write: ['ledger.post', 'ledger.close_period', 'accounts.manage', 'rates.manage'],
@@ -52,13 +63,20 @@ export const ACCESS_AREAS = {
   'core.treasury': { read: ['treasury.read'], write: ['treasury.manage', 'treasury.post'] },
   'construction.projects': { read: ['projects.read'], write: ['projects.manage', 'projects.budget'] },
   'construction.subcontracts': { read: ['subcontracts.read'], write: ['subcontracts.manage', 'subcontracts.approve'] },
-  'construction.procurement': { read: ['procurement.read'], write: ['procurement.manage', 'procurement.approve'] },
+  'core.procurement': { read: ['procurement.read'], write: ['procurement.manage'], bound: { 'procurement.approve': 'write' } },
   'construction.realestate': { read: ['realestate.read'], write: ['realestate.manage', 'realestate.approve'] },
   'core.directory': { read: ['directory.read'], write: ['directory.manage'] },
   // Personel: hassas alan görme izni (hr.sensitive) rolün; "Sadece görüntüle"de korunur (rol bugün de aynı görür), verilmez
   'hr.core': { read: ['hr.read'], write: ['hr.manage'], bound: { 'hr.sensitive': 'read', 'privacy.manage': 'write' } },
   // Bordro ücret verisidir: hr.core'dan ayrı alan; personel cari ve sosyal güvenlik de bu izinleri kullanır
   'hr.payroll': { read: ['hr.payroll'], write: ['hr.payroll_manage'] },
+  'leather.catalog': { read: ['leather.catalog.read'], write: ['leather.catalog.manage'], bound: { 'leather.catalog.approve': 'write' } },
+  'leather.materials': { read: ['leather.materials.read'], write: ['leather.materials.manage'] },
+  'leather.production': { read: ['leather.production.read'], write: ['leather.production.manage'], bound: { 'leather.production.approve': 'write', 'leather.costs.read': 'read', 'leather.costs.manage': 'write' } },
+  'leather.subcontracting': { read: ['leather.subcontracting.read'], write: ['leather.subcontracting.manage'] },
+  'leather.quality': { read: ['leather.quality.read'], write: ['leather.quality.manage'], bound: { 'leather.quality.approve': 'write' } },
+  'leather.service': { read: ['leather.service.read'], write: ['leather.service.manage'] },
+  'sales.pos': { read: ['pos.read'], write: ['pos.sell'], bound: { 'pos.manage': 'write', 'pos.approve': 'write' } },
 } as const satisfies Record<string, AccessAreaDef>;
 export type AccessAreaKey = keyof typeof ACCESS_AREAS;
 export const ACCESS_AREA_KEYS = Object.keys(ACCESS_AREAS) as AccessAreaKey[];
@@ -71,6 +89,17 @@ export const ROLE_BOUND_PERMISSIONS = ['workspace.use', 'company.manage', 'membe
 
 /** Her kayıt modülünün bağlı olduğu alan; `null` = yönetilmeyen (kilitli çekirdek ya da henüz açılmamış) modül. */
 export const MODULE_AREA: Record<string, AccessAreaKey | null> = {
+  'manufacturing.catalog':'manufacturing.catalog',
+  'manufacturing.mrp':'manufacturing.mrp',
+  'manufacturing.production':'manufacturing.production',
+  'manufacturing.planning':'manufacturing.planning',
+  'manufacturing.quality':'manufacturing.quality',
+  'manufacturing.subcontracting':'manufacturing.subcontracting',
+  'manufacturing.maintenance':'manufacturing.maintenance',
+  'manufacturing.costs':'manufacturing.costs',
+  'inventory.wms':'inventory.wms',
+  'sales.logistics':'sales.logistics',
+  'core.integrations':'core.integrations',
   'core.dashboard': null,
   'core.settings': null,
   'retail.pos': null,
@@ -90,7 +119,15 @@ export const MODULE_AREA: Record<string, AccessAreaKey | null> = {
   'treasury.expenses': 'core.treasury',
   'construction.projects': 'construction.projects',
   'construction.subcontracts': 'construction.subcontracts',
-  'construction.procurement': 'construction.procurement',
+  'construction.procurement': 'core.procurement',
+  'core.procurement': 'core.procurement',
+  'leather.catalog': 'leather.catalog',
+  'leather.materials': 'leather.materials',
+  'leather.production': 'leather.production',
+  'leather.subcontracting': 'leather.subcontracting',
+  'leather.quality': 'leather.quality',
+  'leather.service': 'leather.service',
+  'sales.pos': 'sales.pos',
   'construction.realestate': 'construction.realestate',
   'core.directory': 'core.directory',
   'hr.core': 'hr.core',
@@ -99,6 +136,16 @@ export const MODULE_AREA: Record<string, AccessAreaKey | null> = {
   'hr.employee_ledger': 'hr.payroll',
   'hr.socialsecurity': 'hr.payroll',
 };
+
+/** Operatör rolüne uygulanacak hazır görev profilleri; onay/maliyet izinleri rol sınırında kalır. */
+export const LEATHER_ACCESS_PROFILES: readonly { key: string; label: string; levels: Partial<Record<AccessAreaKey, AccessLevel>> }[] = [
+  { key: 'designer', label: 'Tasarımcı', levels: { 'leather.catalog': 'write', 'leather.materials': 'read', 'leather.production': 'read', 'core.inventory': 'read' } },
+  { key: 'workshop', label: 'Kesim ve atölye', levels: { 'leather.catalog': 'read', 'leather.materials': 'read', 'leather.production': 'write', 'leather.quality': 'read', 'core.inventory': 'read' } },
+  { key: 'warehouse', label: 'Depo ve mal kabul', levels: { 'core.inventory': 'write', 'core.parties': 'read', 'core.procurement': 'write', 'leather.catalog': 'read', 'leather.materials': 'write', 'leather.production': 'read' } },
+  { key: 'quality', label: 'Kalite kontrol', levels: { 'leather.catalog': 'read', 'leather.materials': 'read', 'leather.production': 'read', 'leather.quality': 'write' } },
+  { key: 'cashier', label: 'Mağaza kasiyeri', levels: { 'sales.pos': 'write' } },
+  { key: 'service', label: 'Garanti ve servis', levels: { 'core.parties': 'read', 'core.inventory': 'read', 'leather.catalog': 'read', 'leather.service': 'write' } },
+];
 
 export const isAccessArea = (key: string): key is AccessAreaKey => Object.prototype.hasOwnProperty.call(ACCESS_AREAS, key);
 export const isAccessLevel = (v: unknown): v is AccessLevel => typeof v === 'string' && (ACCESS_LEVELS as readonly string[]).includes(v);
@@ -202,7 +249,18 @@ export function exceedsGranter(granter: PermissionSet, target: PermissionSet, ar
 }
 
 /** Alanın menüdeki grubu (arayüzde alanları gruplamak için). */
-export const AREA_NAV_GROUP: Record<AccessAreaKey, 'parties' | 'invoices' | 'treasury' | 'stock' | 'construction' | 'directory' | 'hr' | 'accounting'> = {
+export const AREA_NAV_GROUP: Record<AccessAreaKey, 'parties' | 'invoices' | 'treasury' | 'stock' | 'construction' | 'directory' | 'hr' | 'accounting' | 'procurement' | 'leather' | 'manufacturing'> = {
+  'manufacturing.catalog':'manufacturing',
+  'manufacturing.mrp':'manufacturing',
+  'manufacturing.production':'manufacturing',
+  'manufacturing.planning':'manufacturing',
+  'manufacturing.quality':'manufacturing',
+  'manufacturing.subcontracting':'manufacturing',
+  'manufacturing.maintenance':'manufacturing',
+  'manufacturing.costs':'manufacturing',
+  'inventory.wms':'manufacturing',
+  'sales.logistics':'manufacturing',
+  'core.integrations':'manufacturing',
   'core.ledger': 'accounting',
   'core.parties': 'parties',
   'core.inventory': 'stock',
@@ -210,7 +268,14 @@ export const AREA_NAV_GROUP: Record<AccessAreaKey, 'parties' | 'invoices' | 'tre
   'core.treasury': 'treasury',
   'construction.projects': 'construction',
   'construction.subcontracts': 'construction',
-  'construction.procurement': 'construction',
+  'core.procurement': 'procurement',
+  'leather.catalog': 'leather',
+  'leather.materials': 'leather',
+  'leather.production': 'leather',
+  'leather.subcontracting': 'leather',
+  'leather.quality': 'leather',
+  'leather.service': 'leather',
+  'sales.pos': 'invoices',
   'construction.realestate': 'construction',
   'core.directory': 'directory',
   'hr.core': 'hr',

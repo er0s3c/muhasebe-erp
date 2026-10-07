@@ -16,7 +16,7 @@ import { moduleName } from '../../lib/modules';
 interface CompanyRow {
   id: string;
   name: string;
-  sector: 'CONSTRUCTION' | 'RETAIL_MARKET' | 'COMMERCE';
+  sector: 'CONSTRUCTION' | 'RETAIL_MARKET' | 'COMMERCE' | 'LEATHER_FASHION' | 'MANUFACTURING_WHOLESALE';
   baseCurrency: string;
   reportingCurrency: string | null;
   taxNumber: string | null;

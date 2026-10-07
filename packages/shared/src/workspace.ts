@@ -2,6 +2,13 @@ import { z } from 'zod';
 import { isoDate, uuid } from './schemas/common';
 
 export const recordKindSchema = z.enum([
+  'manufacturing_model',
+  'manufacturing_production',
+  'manufacturing_subcontract',
+  'manufacturing_resource',
+  'manufacturing_maintenance',
+  'wms_lot',
+  'logistics_shipment',
   'party',
   'invoice',
   'project',
@@ -16,6 +23,13 @@ export const recordKindSchema = z.enum([
   'site_instruction',
   'quality_check',
   'safety',
+  'leather_model',
+  'leather_piece',
+  'leather_production',
+  'leather_subcontract',
+  'leather_custom_order',
+  'leather_service',
+  'pos_sale',
 ]);
 export type RecordKind = z.infer<typeof recordKindSchema>;
 export const recordRefSchema = z.object({ kind: recordKindSchema, id: uuid });
