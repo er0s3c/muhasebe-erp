@@ -41,15 +41,16 @@ import { stockAvailability } from '../manufacturing/availability';
 import { queueInventoryChanges } from '../manufacturing/channels';
 import { consumeMaterialHandoffs } from '../manufacturing/handoff';
 
+
 export async function getProductions(tx: Tx, ids: string[]): Promise<Row[]> {
   if (ids.length === 0) return [];
   const oRows = await all(
     tx,
-    sql`select o.*,i.name as "itemName",r.revision from leather_production_orders o join items i on i.id=o.item_id join leather_revisions r on r.id=o.revision_id where o.id = any(${ids}::uuid[])`,
+    sql`select o.*,i.name as "itemName",r.revision from leather_production_orders o join items i on i.id=o.item_id join leather_revisions r on r.id=o.revision_id where o.id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`,
   );
   const rRows = await all(
     tx,
-    sql`select r.id,r.order_id as "orderId",r.item_id as "itemId",i.name as "itemName",r.piece_id as "pieceId",r.quantity,r.consumed_qty as "consumedQty",r.status from leather_reservations r join items i on i.id=r.item_id where r.order_id = any(${ids}::uuid[]) order by r.created_at`,
+    sql`select r.id,r.order_id as "orderId",r.item_id as "itemId",i.name as "itemName",r.piece_id as "pieceId",r.quantity,r.consumed_qty as "consumedQty",r.status from leather_reservations r join items i on i.id=r.item_id where r.order_id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)}) order by r.created_at`,
   );
 
   const resByOrder = new Map<string, Record<string, unknown>[]>();
