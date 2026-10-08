@@ -29,7 +29,7 @@ export function SegmentedTabs<T extends string>({
           aria-selected={value === it.key}
           onClick={() => onChange(it.key)}
           className={cn(
-            'rounded-md px-4 py-1.5 text-sm transition-colors',
+            'rounded-md px-4 py-1.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2',
             value === it.key ? 'bg-brand text-brand-contrast' : 'text-muted hover:bg-surface-2 hover:text-text',
           )}
         >

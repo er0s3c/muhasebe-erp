@@ -33,7 +33,7 @@ export function Button({ variant = 'secondary', size = 'md', loading, className,
       data-variant={variant}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex max-w-full shrink-0 items-center justify-center gap-2 whitespace-normal break-words rounded-md text-center transition-colors [&>svg]:shrink-0',
+        'inline-flex max-w-full shrink-0 items-center justify-center gap-2 whitespace-normal break-words rounded-md text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&>svg]:shrink-0',
         'disabled:cursor-not-allowed disabled:opacity-50',
         variants[variant],
         sizes[size],
