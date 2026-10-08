@@ -1,6 +1,6 @@
 import { todayIso } from '@erp/shared';
 import { Eye, EyeOff, History, Plus, RefreshCw, Trash2, Paperclip } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -54,7 +54,6 @@ function useEmployees() {
 
 function DocumentsTab() {
   const { t } = useTranslation();
-  const toast = useToast();
   const can = useCan();
   const manage = can('hr.manage');
   const [status, setStatus] = useState('');
@@ -75,43 +74,13 @@ function DocumentsTab() {
   const [asking, setAsking] = useState<ForeignDocRow | null>(null);
   const [history, setHistory] = useState<ForeignDocRow | null>(null);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
-  // Form durumları
-  const [f, setF] = useState({ employeeId: '', typeId: '', no: '', authority: '', issue: '', expiry: '', reference: '' });
-  const [r, setR] = useState({ issue: '', expiry: '', no: '', note: '' });
-  const [reason, setReason] = useState('');
   const docs = data?.docs ?? [];
   const activeTypes = (types?.types ?? []).filter((x) => x.active);
 
-  const add = useCMutation(
-    (_: void, call) =>
-      call('/api/foreign-workers/documents', {
-        method: 'POST',
-        body: {
-          employeeId: f.employeeId,
-          typeId: f.typeId,
-          ...(f.no.trim() ? { documentNo: f.no.trim() } : {}),
-          ...(f.authority.trim() ? { issuingAuthority: f.authority.trim() } : {}),
-          ...(f.issue ? { issueDate: f.issue } : {}),
-          ...(f.expiry ? { expiryDate: f.expiry } : {}),
-          ...(f.reference.trim() ? { referenceNote: f.reference.trim() } : {}),
-        },
-      }),
-    FOREIGN_INVALIDATE,
-  );
-  const renew = useCMutation(
-    (_: void, call) =>
-      call(`/api/foreign-workers/documents/${renewing!.id}/renew`, {
-        method: 'POST',
-        body: { expiryDate: r.expiry, ...(r.issue ? { issueDate: r.issue } : {}), ...(r.no.trim() ? { documentNo: r.no.trim() } : {}), ...(r.note.trim() ? { note: r.note.trim() } : {}) },
-      }),
-    FOREIGN_INVALIDATE,
-  );
-  const revoke = useCMutation((_: void, call) => call(`/api/foreign-workers/documents/${revoking!.id}/revoke`, { method: 'POST', body: { reason: reason.trim() } }), FOREIGN_INVALIDATE);
-  const reveal = useCMutation((v: { id: string; reason: string }, call) => call<{ value: string }>(`/api/foreign-workers/documents/${v.id}/reveal`, { method: 'POST', body: { reason: v.reason } }), [['privacy']]);
   const remove = useCMutation((id: string, call) => call(`/api/foreign-workers/documents/${id}`, { method: 'DELETE' }), FOREIGN_INVALIDATE);
 
   const addButton = manage && (
-    <Button variant="primary" onClick={() => { setError(null); setF({ employeeId: '', typeId: activeTypes[0]?.id ?? '', no: '', authority: '', issue: '', expiry: '', reference: '' }); setAdding(true); }}>
+    <Button variant="primary" onClick={() => { setError(null); setAdding(true); }}>
       <Plus className="size-4" aria-hidden />
       {t('foreign.newDoc')}
     </Button>
@@ -211,7 +180,7 @@ function DocumentsTab() {
                               <EyeOff className="size-4" aria-hidden />
                             </button>
                           ) : (
-                            <button type="button" className="rounded p-1 text-muted hover:bg-surface-2" aria-label={`${t('foreign.show')}: ${d.employeeName}`} onClick={() => { setError(null); setReason(''); setAsking(d); }}>
+                            <button type="button" className="rounded p-1 text-muted hover:bg-surface-2" aria-label={`${t('foreign.show')}: ${d.employeeName}`} onClick={() => { setError(null); setAsking(d); }}>
                               <Eye className="size-4" aria-hidden />
                             </button>
                           ))}
@@ -231,10 +200,10 @@ function DocumentsTab() {
                         </button>
                         {manage && d.status !== 'revoked' && (
                           <>
-                            <button type="button" className="rounded p-1.5 text-muted hover:bg-surface-2" aria-label={`${t('foreign.renew.action')}: ${d.employeeName}`} onClick={() => { setError(null); setR({ issue: '', expiry: '', no: '', note: '' }); setRenewing(d); }}>
+                            <button type="button" className="rounded p-1.5 text-muted hover:bg-surface-2" aria-label={`${t('foreign.renew.action')}: ${d.employeeName}`} onClick={() => { setError(null); setRenewing(d); }}>
                               <RefreshCw className="size-4" aria-hidden />
                             </button>
-                            <Button size="sm" onClick={() => { setError(null); setReason(''); setRevoking(d); }}>{t('foreign.revoke.action')}</Button>
+                            <Button size="sm" onClick={() => { setError(null); setRevoking(d); }}>{t('foreign.revoke.action')}</Button>
                           </>
                         )}
                         {manage && d.renewalCount === 0 && d.status !== 'revoked' && (
@@ -254,117 +223,10 @@ function DocumentsTab() {
         </>
       )}
 
-      <Modal
-        open={adding}
-        onOpenChange={setAdding}
-        title={t('foreign.docForm.title')}
-        description={t('foreign.docForm.desc')}
-        footer={
-          <>
-            <Button onClick={() => setAdding(false)}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={add.isPending} disabled={!f.employeeId || !f.typeId} onClick={() => add.mutate(undefined, { onSuccess: () => { setAdding(false); toast.success(t('foreign.docForm.added')); }, onError: setError })}>
-              {t('foreign.docForm.save')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {error && adding && <Callout tone="danger">{errorMessage(error)}</Callout>}
-          <Field label={t('foreign.docForm.employee')} required>
-            {(id) => (
-              <Select id={id} value={f.employeeId} onChange={(e) => setF({ ...f, employeeId: e.target.value })}>
-                <option value="">{t('foreign.docForm.pick')}</option>
-                {(emps?.employees ?? []).map((e) => <option key={e.id} value={e.id}>{e.code} — {e.fullName}{e.nationality ? ` (${e.nationality})` : ''}</option>)}
-              </Select>
-            )}
-          </Field>
-          <Field label={t('foreign.docForm.type')} required>
-            {(id) => (
-              <Select id={id} value={f.typeId} onChange={(e) => setF({ ...f, typeId: e.target.value })}>
-                {activeTypes.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-              </Select>
-            )}
-          </Field>
-          <Field label={t('foreign.docForm.number')}>{(id) => <Input id={id} maxLength={60} autoComplete="off" value={f.no} onChange={(e) => setF({ ...f, no: e.target.value })} />}</Field>
-          <Field label={t('foreign.docForm.authority')}>{(id) => <Input id={id} maxLength={200} value={f.authority} onChange={(e) => setF({ ...f, authority: e.target.value })} />}</Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={t('foreign.docForm.issue')}>{(id) => <Input id={id} type="date" value={f.issue} onChange={(e) => setF({ ...f, issue: e.target.value })} />}</Field>
-            <Field label={t('foreign.docForm.expiry')}>{(id) => <Input id={id} type="date" value={f.expiry} onChange={(e) => setF({ ...f, expiry: e.target.value })} />}</Field>
-          </div>
-          <Field label={t('foreign.docForm.reference')}>{(id) => <Input id={id} maxLength={300} value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} />}</Field>
-        </div>
-      </Modal>
-
-      <Modal
-        open={!!renewing}
-        onOpenChange={(o) => !o && setRenewing(null)}
-        title={t('foreign.renew.title')}
-        description={t('foreign.renew.desc')}
-        footer={
-          <>
-            <Button onClick={() => setRenewing(null)}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={renew.isPending} disabled={!r.expiry} onClick={() => renew.mutate(undefined, { onSuccess: () => { setRenewing(null); toast.success(t('foreign.renew.done')); }, onError: setError })}>
-              {t('foreign.renew.action')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {error && renewing && <Callout tone="danger">{errorMessage(error)}</Callout>}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={t('foreign.renew.issue')}>{(id) => <Input id={id} type="date" value={r.issue} onChange={(e) => setR({ ...r, issue: e.target.value })} />}</Field>
-            <Field label={t('foreign.renew.expiry')} required>{(id) => <Input id={id} type="date" value={r.expiry} onChange={(e) => setR({ ...r, expiry: e.target.value })} />}</Field>
-          </div>
-          <Field label={t('foreign.renew.number')}>{(id) => <Input id={id} maxLength={60} autoComplete="off" value={r.no} onChange={(e) => setR({ ...r, no: e.target.value })} />}</Field>
-          <Field label={t('foreign.renew.note')}>{(id) => <Input id={id} maxLength={300} value={r.note} onChange={(e) => setR({ ...r, note: e.target.value })} />}</Field>
-        </div>
-      </Modal>
-
-      <Modal
-        open={!!revoking}
-        onOpenChange={(o) => !o && setRevoking(null)}
-        title={t('foreign.revoke.title')}
-        description={t('foreign.revoke.desc')}
-        footer={
-          <>
-            <Button onClick={() => setRevoking(null)}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={revoke.isPending} disabled={reason.trim().length < 3} onClick={() => revoke.mutate(undefined, { onSuccess: () => { setRevoking(null); toast.success(t('foreign.revoke.done')); }, onError: setError })}>
-              {t('foreign.revoke.action')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {error && revoking && <Callout tone="danger">{errorMessage(error)}</Callout>}
-          <Field label={t('foreign.revoke.reason')} required>{(id) => <Input id={id} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>
-        </div>
-      </Modal>
-
-      <Modal
-        open={!!asking}
-        onOpenChange={(o) => !o && setAsking(null)}
-        title={t('foreign.reveal.title')}
-        description={t('foreign.reveal.desc')}
-        footer={
-          <>
-            <Button onClick={() => setAsking(null)}>{t('common.cancel')}</Button>
-            <Button
-              variant="primary"
-              loading={reveal.isPending}
-              disabled={reason.trim().length < 3}
-              onClick={() => asking && reveal.mutate({ id: asking.id, reason: reason.trim() }, { onSuccess: (x) => { setRevealed((s) => ({ ...s, [asking.id]: x.value })); setAsking(null); }, onError: setError })}
-            >
-              {t('foreign.show')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {error && asking && <Callout tone="danger">{errorMessage(error)}</Callout>}
-          <Field label={t('foreign.reveal.reason')} required hint={t('foreign.reveal.reasonHint')}>{(id) => <Input id={id} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>
-        </div>
-      </Modal>
-
+      <AddDocumentModal open={adding} onOpenChange={setAdding} activeTypes={activeTypes} emps={emps} />
+      <RenewDocumentModal renewing={renewing} setRenewing={setRenewing} />
+      <RevokeDocumentModal revoking={revoking} setRevoking={setRevoking} />
+      <RevealDocumentModal asking={asking} setAsking={setAsking} setRevealed={setRevealed} />
       <HistoryModal doc={history} onClose={() => setHistory(null)} />
     </>
   );
@@ -397,7 +259,6 @@ function HistoryModal({ doc, onClose }: { doc: ForeignDocRow | null; onClose: ()
 
 function GuaranteesTab() {
   const { t } = useTranslation();
-  const toast = useToast();
   const manage = useCan()('hr.manage');
   const { data, isPending } = useCQuery<{ guarantees: GuaranteeRow[] }>(['foreign', 'guarantees'], '/api/foreign-workers/guarantees');
   const { data: rep } = useCQuery<GuaranteeReport>(['foreign', 'guarantee-report'], '/api/foreign-workers/reports/guarantees');
@@ -407,17 +268,10 @@ function GuaranteesTab() {
   const [adding, setAdding] = useState(false);
   const [resolving, setResolving] = useState<GuaranteeRow | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const [f, setF] = useState({ employeeId: '', docId: '', date: todayIso(), reference: '' });
-  const [res, setRes] = useState({ status: 'refunded', date: todayIso(), note: '' });
   const rows = data?.guarantees ?? [];
   const hasParam = (params?.params ?? []).some((p) => p.key === 'guarantee_amount' && p.enabled);
-  const add = useCMutation(
-    (_: void, call) => call('/api/foreign-workers/guarantees', { method: 'POST', body: { employeeId: f.employeeId, depositedDate: f.date, ...(f.docId ? { docId: f.docId } : {}), ...(f.reference.trim() ? { depositReference: f.reference.trim() } : {}) } }),
-    FOREIGN_INVALIDATE,
-  );
-  const resolve = useCMutation((_: void, call) => call(`/api/foreign-workers/guarantees/${resolving!.id}/resolve`, { method: 'POST', body: { status: res.status, resolvedDate: res.date, ...(res.note.trim() ? { note: res.note.trim() } : {}) } }), FOREIGN_INVALIDATE);
   const remove = useCMutation((id: string, call) => call(`/api/foreign-workers/guarantees/${id}`, { method: 'DELETE' }), FOREIGN_INVALIDATE);
-  const empDocs = (docs?.docs ?? []).filter((d) => d.employeeId === f.employeeId && d.status !== 'revoked');
+  const empDocs = (docs?.docs ?? []).filter((d) => d.status !== 'revoked');
 
   return (
     <>
@@ -432,7 +286,7 @@ function GuaranteesTab() {
       <div className="mb-3 flex justify-end gap-2">
         <ExportMenu exportKey="foreign-guarantees" disabled={rows.length === 0} />
         {manage && (
-          <Button variant="primary" onClick={() => { setError(null); setF({ employeeId: '', docId: '', date: todayIso(), reference: '' }); setAdding(true); }}>
+          <Button variant="primary" onClick={() => { setError(null); setAdding(true); }}>
             <Plus className="size-4" aria-hidden />
             {t('foreign.guarantees.new')}
           </Button>
@@ -485,7 +339,7 @@ function GuaranteesTab() {
                     <Td>
                       {g.status === 'held' && (
                         <div className="flex gap-1">
-                          <Button size="sm" onClick={() => { setError(null); setRes({ status: 'refunded', date: todayIso(), note: '' }); setResolving(g); }}>{t('foreign.guarantees.resolve.action')}</Button>
+                          <Button size="sm" onClick={() => { setError(null); setResolving(g); }}>{t('foreign.guarantees.resolve.action')}</Button>
                           <button type="button" className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-danger" aria-label={t('foreign.guarantees.delete')} onClick={() => remove.mutate(g.id, { onError: setError })}>
                             <Trash2 className="size-4" aria-hidden />
                           </button>
@@ -525,71 +379,320 @@ function GuaranteesTab() {
         </div>
       )}
 
-      <Modal
-        open={adding}
-        onOpenChange={setAdding}
-        title={t('foreign.guarantees.form.title')}
-        description={t('foreign.guarantees.desc')}
-        footer={
-          <>
-            <Button onClick={() => setAdding(false)}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={add.isPending} disabled={!f.employeeId || !f.date} onClick={() => add.mutate(undefined, { onSuccess: () => { setAdding(false); toast.success(t('foreign.guarantees.form.added')); }, onError: setError })}>
-              {t('foreign.guarantees.form.save')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {error && adding && <Callout tone="danger">{errorMessage(error)}</Callout>}
-          <Field label={t('foreign.guarantees.form.employee')} required>
-            {(id) => (
-              <Select id={id} value={f.employeeId} onChange={(e) => setF({ ...f, employeeId: e.target.value, docId: '' })}>
-                <option value="">{t('foreign.guarantees.form.pick')}</option>
-                {(emps?.employees ?? []).map((e) => <option key={e.id} value={e.id}>{e.code} — {e.fullName}</option>)}
-              </Select>
-            )}
-          </Field>
-          <Field label={t('foreign.guarantees.form.doc')}>
-            {(id) => (
-              <Select id={id} value={f.docId} onChange={(e) => setF({ ...f, docId: e.target.value })}>
-                <option value="">{t('foreign.guarantees.form.noDoc')}</option>
-                {empDocs.map((d) => <option key={d.id} value={d.id}>{d.typeName}{d.numberMasked ? ` ${d.numberMasked}` : ''}</option>)}
-              </Select>
-            )}
-          </Field>
-          <Field label={t('foreign.guarantees.form.date')} required>{(id) => <Input id={id} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />}</Field>
-          <Field label={t('foreign.guarantees.form.reference')}>{(id) => <Input id={id} maxLength={120} value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} />}</Field>
-        </div>
-      </Modal>
-
-      <Modal
-        open={!!resolving}
-        onOpenChange={(o) => !o && setResolving(null)}
-        title={t('foreign.guarantees.resolve.title')}
-        description={t('foreign.guarantees.resolve.desc')}
-        footer={
-          <>
-            <Button onClick={() => setResolving(null)}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={resolve.isPending} disabled={!res.date} onClick={() => resolve.mutate(undefined, { onSuccess: () => { setResolving(null); toast.success(t('foreign.guarantees.resolve.done')); }, onError: setError })}>
-              {t('foreign.guarantees.resolve.action')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {error && resolving && <Callout tone="danger">{errorMessage(error)}</Callout>}
-          <Field label={t('foreign.guarantees.resolve.kind')}>
-            {(id) => (
-              <Select id={id} value={res.status} onChange={(e) => setRes({ ...res, status: e.target.value })}>
-                <option value="refunded">{t('foreign.guarantees.resolve.refunded')}</option>
-                <option value="forfeited">{t('foreign.guarantees.resolve.forfeited')}</option>
-              </Select>
-            )}
-          </Field>
-          <Field label={t('foreign.guarantees.resolve.date')} required>{(id) => <Input id={id} type="date" value={res.date} onChange={(e) => setRes({ ...res, date: e.target.value })} />}</Field>
-          <Field label={t('foreign.guarantees.resolve.note')}>{(id) => <Input id={id} maxLength={300} value={res.note} onChange={(e) => setRes({ ...res, note: e.target.value })} />}</Field>
-        </div>
-      </Modal>
+      <AddGuaranteeModal open={adding} onOpenChange={setAdding} emps={emps} empDocs={empDocs} />
+      <ResolveGuaranteeModal resolving={resolving} setResolving={setResolving} />
     </>
+  );
+}
+
+
+function AddDocumentModal({ open, onOpenChange, activeTypes, emps }: { open: boolean; onOpenChange: (open: boolean) => void; activeTypes: ForeignDocTypeRow[]; emps: { employees: EmployeeRow[] } | undefined }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [f, setF] = useState({ employeeId: '', typeId: activeTypes[0]?.id ?? '', no: '', authority: '', issue: '', expiry: '', reference: '' });
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setF({ employeeId: '', typeId: activeTypes[0]?.id ?? '', no: '', authority: '', issue: '', expiry: '', reference: '' });
+      setError(null);
+    }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const add = useCMutation(
+    (_: void, call) =>
+      call('/api/foreign-workers/documents', {
+        method: 'POST',
+        body: {
+          employeeId: f.employeeId,
+          typeId: f.typeId,
+          ...(f.no.trim() ? { documentNo: f.no.trim() } : {}),
+          ...(f.authority.trim() ? { issuingAuthority: f.authority.trim() } : {}),
+          ...(f.issue ? { issueDate: f.issue } : {}),
+          ...(f.expiry ? { expiryDate: f.expiry } : {}),
+          ...(f.reference.trim() ? { referenceNote: f.reference.trim() } : {}),
+        },
+      }),
+    FOREIGN_INVALIDATE,
+  );
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('foreign.docForm.title')}
+      description={t('foreign.docForm.desc')}
+      footer={
+        <>
+          <Button onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={add.isPending} disabled={!f.employeeId || !f.typeId} onClick={() => add.mutate(undefined, { onSuccess: () => { onOpenChange(false); toast.success(t('foreign.docForm.added')); }, onError: setError })}>
+            {t('foreign.docForm.save')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {error && open && <Callout tone="danger">{errorMessage(error)}</Callout>}
+        <Field label={t('foreign.docForm.employee')} required>
+          {(id) => (
+            <Select id={id} value={f.employeeId} onChange={(e) => setF({ ...f, employeeId: e.target.value })}>
+              <option value="">{t('foreign.docForm.pick')}</option>
+              {(emps?.employees ?? []).map((e) => <option key={e.id} value={e.id}>{e.code} — {e.fullName}{e.nationality ? ` (${e.nationality})` : ''}</option>)}
+            </Select>
+          )}
+        </Field>
+        <Field label={t('foreign.docForm.type')} required>
+          {(id) => (
+            <Select id={id} value={f.typeId} onChange={(e) => setF({ ...f, typeId: e.target.value })}>
+              {activeTypes.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </Select>
+          )}
+        </Field>
+        <Field label={t('foreign.docForm.number')}>{(id) => <Input id={id} maxLength={60} autoComplete="off" value={f.no} onChange={(e) => setF({ ...f, no: e.target.value })} />}</Field>
+        <Field label={t('foreign.docForm.authority')}>{(id) => <Input id={id} maxLength={200} value={f.authority} onChange={(e) => setF({ ...f, authority: e.target.value })} />}</Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t('foreign.docForm.issue')}>{(id) => <Input id={id} type="date" value={f.issue} onChange={(e) => setF({ ...f, issue: e.target.value })} />}</Field>
+          <Field label={t('foreign.docForm.expiry')}>{(id) => <Input id={id} type="date" value={f.expiry} onChange={(e) => setF({ ...f, expiry: e.target.value })} />}</Field>
+        </div>
+        <Field label={t('foreign.docForm.reference')}>{(id) => <Input id={id} maxLength={300} value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} />}</Field>
+      </div>
+    </Modal>
+  );
+}
+
+function RenewDocumentModal({ renewing, setRenewing }: { renewing: ForeignDocRow | null; setRenewing: (d: ForeignDocRow | null) => void }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [r, setR] = useState({ issue: '', expiry: '', no: '', note: '' });
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (renewing) {
+      setR({ issue: '', expiry: '', no: '', note: '' });
+      setError(null);
+    }
+  }, [renewing]);
+
+  const renew = useCMutation(
+    (_: void, call) =>
+      call(`/api/foreign-workers/documents/${renewing!.id}/renew`, {
+        method: 'POST',
+        body: { expiryDate: r.expiry, ...(r.issue ? { issueDate: r.issue } : {}), ...(r.no.trim() ? { documentNo: r.no.trim() } : {}), ...(r.note.trim() ? { note: r.note.trim() } : {}) },
+      }),
+    FOREIGN_INVALIDATE,
+  );
+
+  return (
+    <Modal
+      open={!!renewing}
+      onOpenChange={(o) => !o && setRenewing(null)}
+      title={t('foreign.renew.title')}
+      description={t('foreign.renew.desc')}
+      footer={
+        <>
+          <Button onClick={() => setRenewing(null)}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={renew.isPending} disabled={!r.expiry} onClick={() => renew.mutate(undefined, { onSuccess: () => { setRenewing(null); toast.success(t('foreign.renew.done')); }, onError: setError })}>
+            {t('foreign.renew.action')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {error && renewing && <Callout tone="danger">{errorMessage(error)}</Callout>}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t('foreign.renew.issue')}>{(id) => <Input id={id} type="date" value={r.issue} onChange={(e) => setR({ ...r, issue: e.target.value })} />}</Field>
+          <Field label={t('foreign.renew.expiry')} required>{(id) => <Input id={id} type="date" value={r.expiry} onChange={(e) => setR({ ...r, expiry: e.target.value })} />}</Field>
+        </div>
+        <Field label={t('foreign.renew.number')}>{(id) => <Input id={id} maxLength={60} autoComplete="off" value={r.no} onChange={(e) => setR({ ...r, no: e.target.value })} />}</Field>
+        <Field label={t('foreign.renew.note')}>{(id) => <Input id={id} maxLength={300} value={r.note} onChange={(e) => setR({ ...r, note: e.target.value })} />}</Field>
+      </div>
+    </Modal>
+  );
+}
+
+function RevokeDocumentModal({ revoking, setRevoking }: { revoking: ForeignDocRow | null; setRevoking: (d: ForeignDocRow | null) => void }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (revoking) {
+      setReason('');
+      setError(null);
+    }
+  }, [revoking]);
+
+  const revoke = useCMutation((_: void, call) => call(`/api/foreign-workers/documents/${revoking!.id}/revoke`, { method: 'POST', body: { reason: reason.trim() } }), FOREIGN_INVALIDATE);
+
+  return (
+    <Modal
+      open={!!revoking}
+      onOpenChange={(o) => !o && setRevoking(null)}
+      title={t('foreign.revoke.title')}
+      description={t('foreign.revoke.desc')}
+      footer={
+        <>
+          <Button onClick={() => setRevoking(null)}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={revoke.isPending} disabled={reason.trim().length < 3} onClick={() => revoke.mutate(undefined, { onSuccess: () => { setRevoking(null); toast.success(t('foreign.revoke.done')); }, onError: setError })}>
+            {t('foreign.revoke.action')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {error && revoking && <Callout tone="danger">{errorMessage(error)}</Callout>}
+        <Field label={t('foreign.revoke.reason')} required>{(id) => <Input id={id} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>
+      </div>
+    </Modal>
+  );
+}
+
+function RevealDocumentModal({ asking, setAsking, setRevealed }: { asking: ForeignDocRow | null; setAsking: (d: ForeignDocRow | null) => void; setRevealed: React.Dispatch<React.SetStateAction<Record<string, string>>> }) {
+  const { t } = useTranslation();
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (asking) {
+      setReason('');
+      setError(null);
+    }
+  }, [asking]);
+
+  const reveal = useCMutation((v: { id: string; reason: string }, call) => call<{ value: string }>(`/api/foreign-workers/documents/${v.id}/reveal`, { method: 'POST', body: { reason: v.reason } }), [['privacy']]);
+
+  return (
+    <Modal
+      open={!!asking}
+      onOpenChange={(o) => !o && setAsking(null)}
+      title={t('foreign.reveal.title')}
+      description={t('foreign.reveal.desc')}
+      footer={
+        <>
+          <Button onClick={() => setAsking(null)}>{t('common.cancel')}</Button>
+          <Button
+            variant="primary"
+            loading={reveal.isPending}
+            disabled={reason.trim().length < 3}
+            onClick={() => asking && reveal.mutate({ id: asking.id, reason: reason.trim() }, { onSuccess: (x) => { setRevealed((s) => ({ ...s, [asking.id]: x.value })); setAsking(null); }, onError: setError })}
+          >
+            {t('foreign.show')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {error && asking && <Callout tone="danger">{errorMessage(error)}</Callout>}
+        <Field label={t('foreign.reveal.reason')} required hint={t('foreign.reveal.reasonHint')}>{(id) => <Input id={id} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>
+      </div>
+    </Modal>
+  );
+}
+
+function AddGuaranteeModal({ open, onOpenChange, emps, empDocs }: { open: boolean; onOpenChange: (open: boolean) => void; emps: { employees: EmployeeRow[] } | undefined; empDocs: ForeignDocRow[] }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [f, setF] = useState({ employeeId: '', docId: '', date: todayIso(), reference: '' });
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setF({ employeeId: '', docId: '', date: todayIso(), reference: '' });
+      setError(null);
+    }
+
+  }, [open]);
+
+  const add = useCMutation(
+    (_: void, call) => call('/api/foreign-workers/guarantees', { method: 'POST', body: { employeeId: f.employeeId, depositedDate: f.date, ...(f.docId ? { docId: f.docId } : {}), ...(f.reference.trim() ? { depositReference: f.reference.trim() } : {}) } }),
+    FOREIGN_INVALIDATE,
+  );
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('foreign.guarantees.form.title')}
+      description={t('foreign.guarantees.desc')}
+      footer={
+        <>
+          <Button onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={add.isPending} disabled={!f.employeeId || !f.date} onClick={() => add.mutate(undefined, { onSuccess: () => { onOpenChange(false); toast.success(t('foreign.guarantees.form.added')); }, onError: setError })}>
+            {t('foreign.guarantees.form.save')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {error && open && <Callout tone="danger">{errorMessage(error)}</Callout>}
+        <Field label={t('foreign.guarantees.form.employee')} required>
+          {(id) => (
+            <Select id={id} value={f.employeeId} onChange={(e) => setF({ ...f, employeeId: e.target.value, docId: '' })}>
+              <option value="">{t('foreign.guarantees.form.pick')}</option>
+              {(emps?.employees ?? []).map((e) => <option key={e.id} value={e.id}>{e.code} — {e.fullName}</option>)}
+            </Select>
+          )}
+        </Field>
+        <Field label={t('foreign.guarantees.form.doc')}>
+          {(id) => (
+            <Select id={id} value={f.docId} onChange={(e) => setF({ ...f, docId: e.target.value })}>
+              <option value="">{t('foreign.guarantees.form.noDoc')}</option>
+              {empDocs.filter(d => d.employeeId === f.employeeId).map((d) => <option key={d.id} value={d.id}>{d.typeName}{d.numberMasked ? ` ${d.numberMasked}` : ''}</option>)}
+            </Select>
+          )}
+        </Field>
+        <Field label={t('foreign.guarantees.form.date')} required>{(id) => <Input id={id} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />}</Field>
+        <Field label={t('foreign.guarantees.form.reference')}>{(id) => <Input id={id} maxLength={120} value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} />}</Field>
+      </div>
+    </Modal>
+  );
+}
+
+function ResolveGuaranteeModal({ resolving, setResolving }: { resolving: GuaranteeRow | null; setResolving: (g: GuaranteeRow | null) => void }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [res, setRes] = useState({ status: 'refunded', date: todayIso(), note: '' });
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (resolving) {
+      setRes({ status: 'refunded', date: todayIso(), note: '' });
+      setError(null);
+    }
+  }, [resolving]);
+
+  const resolve = useCMutation((_: void, call) => call(`/api/foreign-workers/guarantees/${resolving!.id}/resolve`, { method: 'POST', body: { status: res.status, resolvedDate: res.date, ...(res.note.trim() ? { note: res.note.trim() } : {}) } }), FOREIGN_INVALIDATE);
+
+  return (
+    <Modal
+      open={!!resolving}
+      onOpenChange={(o) => !o && setResolving(null)}
+      title={t('foreign.guarantees.resolve.title')}
+      description={t('foreign.guarantees.resolve.desc')}
+      footer={
+        <>
+          <Button onClick={() => setResolving(null)}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={resolve.isPending} disabled={!res.date} onClick={() => resolve.mutate(undefined, { onSuccess: () => { setResolving(null); toast.success(t('foreign.guarantees.resolve.done')); }, onError: setError })}>
+            {t('foreign.guarantees.resolve.action')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {error && resolving && <Callout tone="danger">{errorMessage(error)}</Callout>}
+        <Field label={t('foreign.guarantees.resolve.kind')}>
+          {(id) => (
+            <Select id={id} value={res.status} onChange={(e) => setRes({ ...res, status: e.target.value })}>
+              <option value="refunded">{t('foreign.guarantees.resolve.refunded')}</option>
+              <option value="forfeited">{t('foreign.guarantees.resolve.forfeited')}</option>
+            </Select>
+          )}
+        </Field>
+        <Field label={t('foreign.guarantees.resolve.date')} required>{(id) => <Input id={id} type="date" value={res.date} onChange={(e) => setRes({ ...res, date: e.target.value })} />}</Field>
+        <Field label={t('foreign.guarantees.resolve.note')}>{(id) => <Input id={id} maxLength={300} value={res.note} onChange={(e) => setRes({ ...res, note: e.target.value })} />}</Field>
+      </div>
+    </Modal>
   );
 }
