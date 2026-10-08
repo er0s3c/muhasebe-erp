@@ -57,4 +57,32 @@ describe('nakit projeksiyonu: açık alacak/borç vadeleri + elle kalemler → h
     expect((await v.client.get('/api/cash-forecast')).statusCode).toBe(200);
     expect((await v.client.post('/api/cash-forecast/items', { itemDate: iso(1), direction: 'in', description: 'Deneme', amount: '1', currencyCode: 'TRY' })).statusCode).toBe(403);
   });
+  it('tam kapanmış faturaların ödeme gecikmesini öğrenir; kısmi ödeme örnek sayısını şişirmez',async()=>{
+    const user=await registerUser(app,'NakitGecikme');
+    const company=await createCompany(app,user.token), c=client(app,user.token,company.id);
+    const party=(await c.post('/api/parties',{name:'Gecikmeli müşteri',kind:'customer'})).json().party.id;
+    const account=(await c.post('/api/treasury/accounts',{kind:'cash',name:'Tahsilat kasası',currency:'TRY'})).json().account.id;
+    for(const offset of [-30,-25,-20,-17]){
+      const invoice=await c.post('/api/invoices',{post:true,type:'sales',partyId:party,invoiceDate:iso(offset-5),dueDate:iso(offset),lines:[{description:'Geçmiş fatura '+offset,quantity:'1',unitPrice:'100'}]});
+      expect(invoice.statusCode,invoice.body).toBe(201);
+      const open=(await c.get(`/api/parties/${party}/open-items?type=receivable&asOf=${iso(0)}`)).json().receivable.items;
+      const line=open.find((i:{dueDate:string})=>i.dueDate===iso(offset));
+      expect(line).toBeDefined();
+      const amount=offset===-17?'50':'100';
+      const paid=await c.post('/api/treasury/transactions',{type:'receipt',date:iso(offset+10),accountId:account,amount,partyId:party,items:[{lineId:line.lineId,amount,settleAmount:amount}]});
+      expect(paid.statusCode,paid.body).toBe(201);
+    }
+    const future=await c.post('/api/invoices',{post:true,type:'sales',partyId:party,invoiceDate:iso(-1),dueDate:iso(7),lines:[{description:'Tahmin edilecek fatura',quantity:'1',unitPrice:'1000'}]});
+    expect(future.statusCode,future.body).toBe(201);
+    const learned=await c.get('/api/cash-forecast?timing=history');
+    expect(learned.statusCode,learned.body).toBe(200);
+    const item=learned.json().items.find((i:{dueDate:string})=>i.dueDate===iso(7));
+    expect(item).toMatchObject({date:iso(17),dueDate:iso(7),delayDays:10,sampleCount:3,timingSource:'payment_history',amountBase:'1000.00',week:3});
+    const due=(await c.get('/api/cash-forecast?timing=due')).json().items.find((i:{dueDate:string})=>i.dueDate===iso(7));
+    expect(due).toMatchObject({date:iso(7),week:2,amountBase:'1000.00'});
+    const delayed=(await c.get('/api/cash-forecast?timing=history&collectionDelayDays=7')).json().items.find((i:{dueDate:string})=>i.dueDate===iso(7));
+    expect(delayed).toMatchObject({date:iso(24),delayDays:17,week:4});
+    const book=readXlsx(new Uint8Array((await c.get('/api/exports/cash-forecast?format=xlsx&timing=history')).rawPayload));
+    expect(book[1]!.rows.flat().includes('Gerçek ödeme geçmişi')).toBe(true);
+  });
 });

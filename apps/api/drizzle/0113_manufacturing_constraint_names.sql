@@ -1,0 +1,3 @@
+ALTER TABLE manufacturing_sales_allocations RENAME CONSTRAINT manufacturing_sales_allocatio_company_id_sales_order_line_i_key TO mfg_alloc_order_warehouse_uq;
+--> statement-breakpoint
+ALTER TABLE manufacturing_sales_allocations RENAME CONSTRAINT manufacturing_sales_allocatio_sales_order_line_id_company__fkey TO mfg_alloc_sales_line_fk;

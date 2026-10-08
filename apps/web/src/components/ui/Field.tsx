@@ -6,14 +6,40 @@ export { Select } from './Select';
 
 /** Girdi: 10px yarıçap, hairline çerçeve; odakta Ink çerçeve (sarı yalnızca eylem yüzeylerinde). */
 const control =
-  'w-full rounded-lg border border-border-strong bg-surface px-3.5 text-sm text-text placeholder:text-muted/70 ' +
+  'min-w-0 w-full rounded-lg border border-border-strong bg-surface px-3.5 text-sm text-text placeholder:text-muted/70 ' +
   'transition-colors focus:border-text focus:outline-none disabled:bg-surface-2 disabled:opacity-70';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...props }, ref) {
   // Tarih/ay girdileri tema renkli takvimle gelir (tarayıcının kendi açılırı stillenemez)
-  const { type, ...rest } = props;
-  if (type === 'date' || type === 'month') return <DateInput ref={ref} className={className} {...rest} type={type as 'date' | 'month'} />;
-  return <input ref={ref} className={cn(control, 'h-10', className)} {...props} />;
+  const { type, onClick, onKeyDown, ...rest } = props;
+  if (type === 'date' || type === 'month') return <DateInput ref={ref} className={className} {...rest} onClick={onClick} onKeyDown={onKeyDown} type={type as 'date' | 'month'} />;
+  const hasPicker = type === 'time' || type === 'datetime-local';
+  const showPicker = (input: HTMLInputElement) => {
+    if (!hasPicker || input.matches(':disabled') || input.readOnly || !input.showPicker) return false;
+    try {
+      input.showPicker();
+      return true;
+    } catch {
+      // Desteklenmeyen ortamlarda saat alanı klavyeyle düzenlenmeye devam eder.
+      return false;
+    }
+  };
+  return (
+    <input
+      ref={ref}
+      className={cn(control, 'h-10', hasPicker && 'cursor-pointer', className)}
+      {...rest}
+      type={type}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) showPicker(event.currentTarget);
+      }}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (!event.defaultPrevented && (event.key === ' ' || (event.altKey && event.key === 'ArrowDown')) && showPicker(event.currentTarget)) event.preventDefault();
+      }}
+    />
+  );
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...props }, ref) {
@@ -33,7 +59,7 @@ interface FieldProps {
 export function Field({ label, hint, error, required, className, children }: FieldProps) {
   const id = useId();
   return (
-    <div className={cn('flex flex-col gap-1.5', className)}>
+    <div className={cn('min-w-0 flex flex-col gap-1.5', className)}>
       <label htmlFor={id} className="text-[13px] text-text">
         {label}
         {required && <span className="ml-0.5 text-danger" aria-hidden>*</span>}

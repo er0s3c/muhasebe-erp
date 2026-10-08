@@ -50,7 +50,7 @@ export function Alerts({ compact = false }: { compact?: boolean }) {
       {!query.isPending && !query.error && items.length === 0 && (
         <div className="flex gap-3 px-5 py-8"><CheckCircle2 className="mt-0.5 size-5 text-success" aria-hidden /><div><p className="text-sm">{all.length ? 'Filtreye uygun uyarı yok' : 'Takipleriniz güncel'}</p><p className="mt-1 text-xs text-muted">{all.length ? 'Diğer uyarılar için filtreleri değiştirin.' : 'Yeni bir vade veya onay gerektiğinde burada görünür.'}</p></div></div>
       )}
-      <div className={compact ? 'max-h-[620px] divide-y divide-border overflow-y-auto' : 'divide-y divide-border'}>
+      <div className="divide-y divide-border">
         {items.slice(0, compact && !expanded ? 5 : 100).map(item => {
           const late = item.dueDate < today;
           return (

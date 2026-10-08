@@ -113,7 +113,7 @@ export function ItemPicker({
         <p className="text-sm text-muted">{t('cheques.items.none')}</p>
       ) : (
         <>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[13px]">{t('cheques.items.title')}</span>
             <Button size="sm" onClick={allocate} disabled={num(total).lte(0)}>{t('cheques.items.allocate')}</Button>
           </div>
@@ -128,7 +128,7 @@ export function ItemPicker({
                     <div className="text-xs text-muted">{t('cheques.items.due')} {formatDateTR(it.dueDate)} · {t('cheques.items.remaining')} {moneyIn(it.remaining, it.currencyCode)}</div>
                   </div>
                   {st && (
-                    <div className="flex items-end gap-2">
+                    <div className="flex flex-wrap items-end gap-2">
                       <Field label={t('cheques.items.amount')} className="w-32">
                         {(id) => <MoneyInput id={id} value={st.amount} onChange={(v) => onChange({ ...items, [it.lineId]: { amount: v, settle: it.currencyCode === base ? v : st.settle } })} />}
                       </Field>

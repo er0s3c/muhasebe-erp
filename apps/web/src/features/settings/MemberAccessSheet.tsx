@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ACCESS_LEVELS, MANUFACTURING_ACCESS_PROFILES, LEATHER_ACCESS_PROFILES, type AccessLevel } from '@erp/shared';
+import { ACCESS_LEVELS, MANUFACTURING_ACCESS_PROFILES, LEATHER_ACCESS_PROFILES, areaAccessOf, type AccessLevel, type AccessAreaKey, type Permission, type PermissionChoice } from '@erp/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -10,10 +11,10 @@ import { useToast } from '../../components/ui/Toast';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { moduleName } from '../../lib/modules';
-import { useCMutation, useCQuery } from '../../lib/queries';
+import { useCMutation, useCQuery, useCompanyApi } from '../../lib/queries';
 import type { Member } from '../../lib/types';
 import { useCompany } from '../../lib/session';
-import { Select } from '../../components/ui/Field';
+import { Input, Select } from '../../components/ui/Field';
 
 type Choice = AccessLevel | 'default';
 const CHOICES: readonly Choice[] = ['default', ...ACCESS_LEVELS];
@@ -28,6 +29,7 @@ interface AreaView {
   override: AccessLevel | null;
   effective: { level: AccessLevel; partial: boolean };
   setBy: string | null;
+  operations: { key: Permission; label: string; roleDefault: boolean; inherited: boolean; override: 'allow' | 'deny' | null; effective: boolean; roleBound: boolean; canAllow: boolean }[];
 }
 interface AccessResponse {
   member: { userId: string; fullName: string; email: string; role: string };
@@ -46,22 +48,28 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
   const { t } = useTranslation();
   const toast = useToast();
   const sector = useCompany().sector;
+  const { company, call } = useCompanyApi();
   const userId = member?.userId ?? null;
   const { data, isPending, error } = useCQuery<AccessResponse>(['module-access', userId ?? ''], userId ? `/api/company/members/${userId}/module-access` : null);
   const [draft, setDraft] = useState<Record<string, Choice>>({});
+  const [operationDraft, setOperationDraft] = useState<Record<string, PermissionChoice>>({});
+  const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'edit' | 'effective'>('edit');
   const [confirming, setConfirming] = useState(false);
 
   // Sunucudan gelen kayıtlı durumdan taslağı kur (üye değişince ya da kayıttan sonra)
   useEffect(() => {
-    if (data) setDraft(Object.fromEntries(data.areas.map((a) => [a.key, (a.override ?? 'default') as Choice])));
+    if (data) {
+      setDraft(Object.fromEntries(data.areas.map((a) => [a.key, (a.override ?? 'default') as Choice])));
+      setOperationDraft(Object.fromEntries(data.areas.flatMap((a) => a.operations.map((p) => [p.key, p.override ?? 'default']))));
+    }
   }, [data]);
   useEffect(() => {
-    if (userId) setTab('edit');
+    if (userId) { setTab('edit'); setSearch(''); setConfirming(false); }
   }, [userId]);
 
   const save = useCMutation(
-    (levels: Record<string, Choice>, call) => call(`/api/company/members/${userId}/module-access`, { method: 'PUT', body: { levels } }),
+    (body: { levels: Record<string, Choice>; permissions: Record<string, PermissionChoice> }, call) => call(`/api/company/members/${userId}/module-access`, { method: 'PUT', body }),
     [['module-access', userId ?? ''], ['members']],
   );
 
@@ -71,21 +79,41 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
     () => areas.filter((a) => (draft[a.key] ?? 'default') !== (a.override ?? 'default')),
     [areas, draft],
   );
+  const operationChanges = useMemo(() => areas.flatMap((a) => a.operations.filter((p) => (operationDraft[p.key] ?? 'default') !== (p.override ?? 'default')).map((p) => ({ ...p, area: a.key }))), [areas, operationDraft]);
+  const previewBody = useMemo(() => ({
+    levels: Object.fromEntries(changes.map(a => [a.key, draft[a.key] ?? 'default'])),
+    permissions: Object.fromEntries(operationChanges.map(p => [p.key, operationDraft[p.key] ?? 'default'])),
+  }), [changes, operationChanges, draft, operationDraft]);
+  const hasChanges = changes.length + operationChanges.length > 0;
+  const preview = useQuery<{ permissions: Permission[] }>({
+    queryKey: [company.id, 'module-access-preview', userId, previewBody],
+    queryFn: () => call(`/api/company/members/${userId}/module-access/preview`, { method: 'POST', body: previewBody }),
+    enabled: !!data && !!userId && hasChanges,
+  });
+  const previewPermissions = useMemo(() => new Set<Permission>(hasChanges
+    ? preview.data?.permissions ?? []
+    : areas.flatMap(a => a.operations.filter(p => p.effective).map(p => p.key))), [hasChanges, preview.data, areas]);
   const grouped = useMemo(() => {
     const out = new Map<string, AreaView[]>();
-    for (const a of areas) out.set(a.group, [...(out.get(a.group) ?? []), a]);
+    const needle = search.trim().toLocaleLowerCase('tr-TR');
+    for (const a of areas) {
+      if (needle && ![moduleName(a.key), ...a.modules.map((m) => moduleName(m.key)), ...a.operations.map((p) => p.label)].some((label) => label.toLocaleLowerCase('tr-TR').includes(needle))) continue;
+      out.set(a.group, [...(out.get(a.group) ?? []), a]);
+    }
     return [...out];
-  }, [areas]);
+  }, [areas, search]);
   const editable = data?.canEdit === true;
 
-  const previewLevel = (a: AreaView): AccessLevel => {
-    const c = draft[a.key] ?? 'default';
-    return c === 'default' ? a.roleDefault.level : c;
-  };
+  const previewAccess = (a: AreaView) => areaAccessOf(previewPermissions, a.key as AccessAreaKey);
+  const operationLabel = (c: PermissionChoice) => c === 'allow' ? 'İzin ver' : c === 'deny' ? 'Engelle' : 'Modül seçimine göre';
+  const resetOperations = () => setOperationDraft(Object.fromEntries(areas.flatMap((a) => a.operations.map((p) => [p.key, 'default']))));
+  const resetAll = () => { setDraft(Object.fromEntries(areas.map((a) => [a.key, 'default' as Choice]))); resetOperations(); };
+  const changedCount = changes.length + operationChanges.length;
 
   const doSave = () => {
     const levels = Object.fromEntries(changes.map((a) => [a.key, draft[a.key] ?? 'default']));
-    save.mutate(levels, {
+    const permissions = Object.fromEntries(operationChanges.map((p) => [p.key, operationDraft[p.key] ?? 'default']));
+    save.mutate({ levels, permissions }, {
       onSuccess: () => {
         toast.success(t('settings.members.access.saved'));
         setConfirming(false);
@@ -105,17 +133,17 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
         onOpenChange={(o) => !o && onClose()}
         wide
         title={t('settings.members.access.title', { name: member?.fullName ?? '' })}
-        description={t('settings.members.access.description')}
+        description="Her modülün temel erişimini seçin; işlem izinlerini açarak görüntüleme, düzenleme, muhasebeleştirme ve onay haklarını ayrı yönetin."
         footer={
           <>
             {editable && (
-              <Button className="mr-auto" onClick={() => setDraft(Object.fromEntries(areas.map((a) => [a.key, 'default' as Choice])))} data-testid="access-reset-all">
+              <Button className="mr-auto" onClick={resetAll} data-testid="access-reset-all">
                 {t('settings.members.access.resetAll')}
               </Button>
             )}
             <Button onClick={onClose}>{t('common.cancel')}</Button>
             {editable && (
-              <Button variant="primary" disabled={changes.length === 0} onClick={() => setConfirming(true)} data-testid="access-save">
+              <Button variant="primary" disabled={changedCount === 0 || preview.isPending || !!preview.error} onClick={() => setConfirming(true)} data-testid="access-save">
                 {t('settings.members.access.save')}
               </Button>
             )}
@@ -129,9 +157,11 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
         ) : (
           <div className="flex flex-col gap-4">
             {!editable && data.blockedReason && <Callout tone="info">{data.blockedReason}</Callout>}
+            {hasChanges && preview.isPending && <p className="text-xs text-muted">Etkin erişim önizlemesi hazırlanıyor…</p>}
+            {hasChanges && preview.error && <Callout tone="danger">{errorMessage(preview.error)}</Callout>}
             {editable && ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'].includes(sector) && (
               <label className="flex flex-col gap-1 text-sm">Üretim görev profili
-                <Select defaultValue="" onChange={e=>{const profile=MANUFACTURING_ACCESS_PROFILES.find(p=>p.key===e.target.value);if(profile)setDraft(Object.fromEntries(areas.map(a=>[a.key,profile.levels[a.key as keyof typeof profile.levels]??'none'])));}}>
+                <Select defaultValue="" onChange={e=>{const profile=MANUFACTURING_ACCESS_PROFILES.find(p=>p.key===e.target.value);if(profile){setDraft(Object.fromEntries(areas.map(a=>[a.key,profile.levels[a.key as keyof typeof profile.levels]??'none'])));resetOperations();}}}>
                   <option value="">Profil seçin</option>{MANUFACTURING_ACCESS_PROFILES.filter(p=>p.role===member?.role).map(p=><option key={p.key} value={p.key}>{p.label}</option>)}
                 </Select>
               </label>
@@ -141,7 +171,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                 Hazır görev profili
                 <Select defaultValue="" onChange={(e) => {
                   const profile = LEATHER_ACCESS_PROFILES.find((p) => p.key === e.target.value);
-                  if (profile) setDraft(Object.fromEntries(areas.map((a) => [a.key, profile.levels[a.key as keyof typeof profile.levels] ?? 'none'])));
+                  if (profile) { setDraft(Object.fromEntries(areas.map((a) => [a.key, profile.levels[a.key as keyof typeof profile.levels] ?? 'none']))); resetOperations(); }
                 }} data-testid="access-leather-profile">
                   <option value="">Görev profili seçin</option>
                   {LEATHER_ACCESS_PROFILES.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
@@ -157,6 +187,11 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
               value={tab}
               onChange={setTab}
             />
+            <label className="flex flex-col gap-1.5 text-sm">
+              Modül veya işlem ara
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Örn. irsaliye, stok hareketi, onay" type="search" data-testid="access-search" />
+            </label>
+            {changedCount > 0 && <p className="text-xs text-muted">{changes.length} modül ve {operationChanges.length} işlem izni değiştirildi. Kaydetmeden önce etkin erişimi kontrol edebilirsiniz.</p>}
             {tab === 'edit' ? (
               <div className="flex flex-col gap-5" data-testid="access-edit">
                 {grouped.map(([group, list]) => (
@@ -169,7 +204,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                         const cur = draft[a.key] ?? 'default';
                         const covered = a.modules.filter((m) => m.key !== a.key).map((m) => moduleName(m.key));
                         return (
-                          <li key={a.key} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between" data-testid={`access-row-${a.key}`}>
+                          <li key={a.key} className="flex flex-col gap-3 px-4 py-3" data-testid={`access-row-${a.key}`}>
                             <div className="min-w-0">
                               <div className="text-sm">{moduleName(a.key)}</div>
                               <div className="text-xs text-muted">
@@ -178,7 +213,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                               </div>
                               {covered.length > 0 && <div className="text-xs text-muted">{t('settings.members.access.covers', { modules: covered.join(', ') })}</div>}
                             </div>
-                            <div role="radiogroup" aria-label={t('settings.members.access.choose', { module: moduleName(a.key) })} className="grid grid-cols-2 gap-1 sm:flex sm:flex-wrap">
+                            <div role="radiogroup" aria-label={t('settings.members.access.choose', { module: moduleName(a.key) })} className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
                               {CHOICES.map((c) => (
                                 <button
                                   key={c}
@@ -189,7 +224,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                                   data-testid={`access-${a.key}-${c}`}
                                   onClick={() => setDraft((d) => ({ ...d, [a.key]: c }))}
                                   className={cn(
-                                    'rounded-md border px-3 py-1.5 text-left text-xs transition-colors sm:text-center',
+                                    'min-w-0 rounded-md border px-3 py-2 text-left text-xs leading-relaxed transition-colors',
                                     cur === c ? 'border-border-strong bg-brand text-brand-contrast' : 'border-border text-muted hover:bg-surface-2 hover:text-text',
                                     !editable && 'cursor-not-allowed opacity-60',
                                   )}
@@ -198,29 +233,54 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                                 </button>
                               ))}
                             </div>
+                            <details className="rounded-lg bg-surface-2" data-testid={`access-details-${a.key}`}>
+                              <summary className="cursor-pointer px-3 py-2 text-xs font-medium">İşlem izinlerini ayrıntılı düzenle ({a.operations.length})</summary>
+                              <div className="flex flex-col gap-3 border-t border-border p-3">
+                                <p className="text-xs leading-relaxed text-muted">Modül seçimi temel hakları belirler. Aşağıdaki seçimler her işlemi ayrı değiştirir. Erişim yok seçiliyse tüm işlemler kapanır.</p>
+                                {a.operations.map((p) => {
+                                  const choice = operationDraft[p.key] ?? 'default';
+                                  const allowed = previewPermissions.has(p.key);
+                                  return <div key={p.key} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0 flex-1">
+                                      <label htmlFor={`operation-${p.key}`} className="text-xs">{p.label}</label>
+                                      <div className="text-[11px] text-muted">{allowed ? 'Etkin: izin var' : 'Etkin: engelli'}{p.roleBound && ' · Kullanıcı rolüyle sınırlı'}</div>
+                                    </div>
+                                    <Select id={`operation-${p.key}`} aria-label={`${moduleName(a.key)}: ${p.label}`} className="sm:w-48 sm:shrink-0" value={choice} disabled={!editable || cur === 'none'} onChange={(e) => setOperationDraft((d) => ({ ...d, [p.key]: e.target.value as PermissionChoice }))} data-testid={`access-operation-${p.key}`}>
+                                      <option value="default">Modül seçimine göre</option>
+                                      <option value="allow" disabled={!p.canAllow}>İzin ver</option>
+                                      <option value="deny">Engelle</option>
+                                    </Select>
+                                  </div>;
+                                })}
+                              </div>
+                            </details>
                           </li>
                         );
                       })}
                     </ul>
                   </section>
                 ))}
+                {grouped.length === 0 && <p className="text-sm text-muted">Aramanıza uygun modül veya işlem bulunamadı.</p>}
                 <Callout tone="info">{t('settings.members.access.boundNote')}</Callout>
               </div>
             ) : (
               <div className="flex flex-col gap-3" data-testid="access-effective">
                 <p className="text-sm text-muted">{t('settings.members.access.effectiveIntro')}</p>
                 <ul className="divide-y divide-border rounded-lg border border-border">
-                  {areas.map((a) => {
-                    const lvl = previewLevel(a);
-                    const dirty = (draft[a.key] ?? 'default') !== (a.override ?? 'default');
+                  {grouped.flatMap(([, list]) => list).map((a) => {
+                    const preview = previewAccess(a);
+                    const lvl = preview.level;
+                    const dirty = (draft[a.key] ?? 'default') !== (a.override ?? 'default') || operationChanges.some((p) => p.area === a.key);
                     return (
-                      <li key={a.key} className="flex items-center justify-between gap-3 px-4 py-2.5" data-testid={`effective-${a.key}`}>
-                        <span className="text-sm">{moduleName(a.key)}</span>
-                        <span className="flex items-center gap-2">
+                      <li key={a.key} className="flex flex-col gap-2 px-4 py-2.5" data-testid={`effective-${a.key}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm">{moduleName(a.key)}</span>
+                        <span className="flex flex-wrap items-center gap-2">
                           {dirty && <span className="text-xs text-muted">{t('settings.members.access.preview')}</span>}
                           <Badge tone={tone(lvl)}>{levelLabel(lvl)}</Badge>
-                          {!dirty && a.effective.partial && <Badge>{t('settings.members.access.partial')}</Badge>}
+                          {preview.partial && <Badge>{t('settings.members.access.partial')}</Badge>}
                         </span>
+                        </div>
+                        <ul className="flex flex-col gap-1 text-xs text-muted">{a.operations.map((p) => <li key={p.key}>{p.label}: {previewPermissions.has(p.key) ? 'İzin var' : 'Engelli'}</li>)}</ul>
                       </li>
                     );
                   })}
@@ -246,12 +306,13 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
         }
       >
         <ul className="flex flex-col gap-1.5 text-sm" data-testid="access-summary">
-          {changes.length === 0 && <li className="text-muted">{t('settings.members.access.noChanges')}</li>}
+          {changedCount === 0 && <li className="text-muted">{t('settings.members.access.noChanges')}</li>}
           {changes.map((a) => (
             <li key={a.key}>
               {t('settings.members.access.changeLine', { module: moduleName(a.key), from: levelLabel((a.override ?? 'default') as Choice), to: levelLabel(draft[a.key] ?? 'default') })}
             </li>
           ))}
+          {operationChanges.map((p) => <li key={p.key}>{moduleName(p.area)} — {p.label}: {operationLabel(p.override ?? 'default')} → {operationLabel(operationDraft[p.key] ?? 'default')}</li>)}
         </ul>
       </Modal>
     </>

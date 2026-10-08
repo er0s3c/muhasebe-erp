@@ -10,6 +10,8 @@ import {
   effectivePermissions,
   exceedsGranter,
   isModuleBlocked,
+  permissionOverrideKey,
+  permissionsOfArea,
   unclassifiedPermissions,
 } from './module-access';
 import { MODULES, NAV_ITEMS } from './module-registry';
@@ -162,5 +164,46 @@ describe('istek şeması', () => {
     expect(setModuleAccessSchema.safeParse({ levels: { 'core.invoices': 'read', 'core.parties': 'default' } }).success).toBe(true);
     expect(setModuleAccessSchema.safeParse({ levels: { 'core.invoices': 'admin' } }).success).toBe(false);
     expect(setModuleAccessSchema.safeParse({ levels: {} }).success).toBe(false);
+  });
+  it('yalnız işlem seçimi kabul edilir; boş istek ve geçersiz seçim reddedilir', () => {
+    expect(setModuleAccessSchema.safeParse({ permissions: { 'invoices.post': 'deny' } }).success).toBe(true);
+    expect(setModuleAccessSchema.safeParse({ permissions: { 'invoices.manage': 'allow', 'deliveries.post': 'default' }, levels: {} }).success).toBe(true);
+    expect(setModuleAccessSchema.safeParse({ permissions: { 'invoices.post': 'write' } }).success).toBe(false);
+    expect(setModuleAccessSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('ayrıntılı işlem izinleri', () => {
+  it('fatura düzenleme ile muhasebeleştirme ve irsaliye hakları ayrı kısıtlanır', () => {
+    const p = effectivePermissions('viewer', { 'core.invoices': 'write', [permissionOverrideKey('invoices.post')]: 'none', [permissionOverrideKey('deliveries.manage')]: 'none' });
+    expect(p.has('invoices.manage')).toBe(true);
+    expect(p.has('invoices.post')).toBe(false);
+    expect(p.has('deliveries.read')).toBe(true);
+    expect(p.has('deliveries.manage')).toBe(false);
+  });
+
+  it('sadece seçilen işlem verilir; kapalı alan tüm işlemler için üstün gelir', () => {
+    const overrides = { 'core.inventory': 'read', [permissionOverrideKey('inventory.move')]: 'write' } as const;
+    const p = effectivePermissions('viewer', overrides);
+    expect(p.has('inventory.move')).toBe(true);
+    expect(p.has('inventory.manage')).toBe(false);
+    expect(effectivePermissions('viewer', { ...overrides, 'core.inventory': 'none' }).has('inventory.move')).toBe(false);
+  });
+
+  it('hassas veri, rol onayı ve yıl sonu hakları rol sınırını aşmaz; sahip kısıtlanmaz', () => {
+    const overrides = { [permissionOverrideKey('hr.sensitive')]: 'write', [permissionOverrideKey('ledger.yearend')]: 'write', [permissionOverrideKey('manufacturing.production.approve')]: 'write' } as const;
+    const viewer = effectivePermissions('viewer', overrides);
+    expect(viewer.has('hr.sensitive')).toBe(false);
+    expect(viewer.has('ledger.yearend')).toBe(false);
+    expect(viewer.has('manufacturing.production.approve')).toBe(false);
+    expect(effectivePermissions('admin', { 'core.ledger': 'read', [permissionOverrideKey('ledger.yearend')]: 'write' }).has('ledger.yearend')).toBe(true);
+    expect(effectivePermissions('owner', { [permissionOverrideKey('ledger.yearend')]: 'none' }).has('ledger.yearend')).toBe(true);
+  });
+
+  it('yönetim çekirdeği ve bilinmeyen işlem anahtarları istisnayla verilemez veya alınamaz', () => {
+    const p = effectivePermissions('viewer', { 'permission.members.manage': 'write', 'permission.not.real': 'write', 'permission.invoices.post': 'read' });
+    expect([...p].sort()).toEqual([...ROLE_PERMISSIONS.viewer].sort());
+    expect(effectivePermissions('admin', { 'permission.members.manage': 'none' }).has('members.manage')).toBe(true);
+    for (const area of ACCESS_AREA_KEYS) for (const permission of permissionsOfArea(area)) expect(permissionOverrideKey(permission).length).toBeLessThanOrEqual(60);
   });
 });

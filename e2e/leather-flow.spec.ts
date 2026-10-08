@@ -91,8 +91,9 @@ test('deri kataloğu: numune, reçete ve iş rotası onaylandıktan sonra mamul 
   await revision.getByRole('button', { name: 'Kaydet', exact: true }).click();
   await page
     .getByRole('row', { name: /R1.*İlk üretim numunesi/ })
-    .getByRole('button', { name: 'Üretime uygun olarak onayla' })
+    .getByRole('button', { name: 'R1 üretime uygunluk' })
     .click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Üretime uygun olarak onayla' }).click();
   await expect(page.getByRole('row', { name: /R1.*İlk üretim numunesi/ })).toContainText(
     'Üretime uygun',
   );

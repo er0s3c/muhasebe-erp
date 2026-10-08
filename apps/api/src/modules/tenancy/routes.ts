@@ -74,6 +74,7 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
         items: NAV_ITEMS.filter(
           (i) =>
             i.group === g.key &&
+            (!i.sectors || i.sectors.includes(company.sector)) &&
             enabledModules.has(i.module) &&
             !(areaOfModule(i.module) && access.overrides[areaOfModule(i.module)!] === 'none') &&
             (!i.permission || hasPermission(access.permissions, i.permission)),

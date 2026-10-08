@@ -16,8 +16,8 @@ const variants: Record<Variant, string> = {
   danger: 'border border-danger bg-transparent text-danger hover:bg-danger-soft',
 };
 const sizes: Record<Size, string> = {
-  sm: 'h-8 px-3 text-[13px] gap-1.5',
-  md: 'h-10 px-5 text-sm gap-2',
+  sm: 'min-h-8 px-3 py-1.5 text-[13px] gap-1.5',
+  md: 'min-h-10 px-5 py-2 text-sm gap-2',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -33,7 +33,7 @@ export function Button({ variant = 'secondary', size = 'md', loading, className,
       data-variant={variant}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-md transition-colors',
+        'inline-flex max-w-full shrink-0 items-center justify-center gap-2 whitespace-normal break-words rounded-md text-center transition-colors [&>svg]:shrink-0',
         'disabled:cursor-not-allowed disabled:opacity-50',
         variants[variant],
         sizes[size],

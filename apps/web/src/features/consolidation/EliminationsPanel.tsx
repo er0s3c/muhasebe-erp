@@ -87,7 +87,7 @@ export function EliminationsPanel({ groupId, currency, archived }: { groupId: st
                 </Select>
               )}
             </Field>
-            <Field label={t('consolidation.elimDescription')} className="min-w-64 grow">{(id) => <Input id={id} value={description} onChange={(e) => setDescription(e.target.value)} />}</Field>
+            <Field label={t('consolidation.elimDescription')} className="min-w-0 w-full grow sm:min-w-64 sm:w-auto">{(id) => <Input id={id} value={description} onChange={(e) => setDescription(e.target.value)} />}</Field>
           </div>
           <div className="flex flex-col gap-2">
             {lines.map((l, i) => (
@@ -106,9 +106,9 @@ export function EliminationsPanel({ groupId, currency, archived }: { groupId: st
               </div>
             ))}
           </div>
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <Button size="sm" onClick={() => setLines((ls) => [...ls, { code: '', side: 'debit', amount: '' }])}>{t('consolidation.addLine')}</Button>
-            <span className="text-sm text-muted">{t('consolidation.balanceInfo', { d: money(String(sum('debit'))), c: money(String(sum('credit'))) })}</span>
+            <span className="min-w-0 break-words text-sm text-muted">{t('consolidation.balanceInfo', { d: money(String(sum('debit'))), c: money(String(sum('credit'))) })}</span>
             <Button variant="primary" className="ml-auto" disabled={!valid} loading={create.isPending} onClick={() => create.mutate()}>{t('consolidation.saveElim')}</Button>
           </div>
         </Card>
@@ -162,7 +162,7 @@ export function EliminationsPanel({ groupId, currency, archived }: { groupId: st
 
       <Card className="p-5">
         <CardHeader title={t('consolidation.hintsTitle')} description={t('consolidation.hintsDesc')} />
-        <div className="mb-3 flex items-end gap-3">
+        <div className="mb-3 flex flex-wrap items-end gap-3">
           <Field label={t('fxPosition.asOf')}>{(id) => <Input id={id} type="date" value={hintsAsOf} onChange={(e) => setHintsAsOf(e.target.value)} className="w-44" />}</Field>
           <Button onClick={() => setShowHints(true)}>{t('consolidation.showHints')}</Button>
         </div>

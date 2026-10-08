@@ -13,9 +13,10 @@ import {
   currencyCode,
   isoDate,
   dec,
+  percentString,
 } from '@erp/shared';
 import { tenantRoute } from '../../http/context';
-import { forbidden } from '../../http/errors';
+import { forbidden, AppError } from '../../http/errors';
 import { encryptField, decryptField } from '../hr/crypto';
 import {
   all,
@@ -30,19 +31,25 @@ import { createSalesDoc, transitionSalesDoc } from '../sales/orders';
 import { createRecord, getRecord, listRecords, recordShape, updateRecord } from './service';
 import { manufacturingCtx } from './routes';
 import type { Tx } from '../../db/client';
+import { resolveVat } from '../invoices/service';
+import { manufacturingWebhookRoutes } from './webhooks';
+import { manufacturingChannelRoutes } from './channels';
 
 export const externalOrderSchema = z.object({
   externalId: z.string().min(1).max(160),
+  externalVersion: z.string().max(100).default(''),
   partyId: uuid,
   warehouseId: uuid,
   date: isoDate,
   currency: currencyCode,
+  vatIncluded: z.boolean().default(false),
   lines: z
     .array(
       z.object({
         sku: z.string().min(1).max(80),
         quantity: positiveQuantity,
         unitPrice: unitCostString,
+        vatRate: percentString.optional(),
       }),
     )
     .min(1)
@@ -142,14 +149,14 @@ export async function shopifyGraphql(
 export async function ticimaxSoap(
   endpoint: string,
   token: string,
-  method: 'SelectSiparis' | 'SaveUrunStok' | 'SaveSiparisKargoPaketKargoTakipNo',
+  method: 'SelectSiparis' | 'StokAdediGuncelle' | 'SaveSiparisKargoPaketKargoTakipNo',
   params: Record<string, unknown>,
   fetcher: typeof fetch = fetch,
 ) {
   const builder = new XMLBuilder({ ignoreAttributes: false });
   const inner = builder.build({ 'tem:UyeKodu': token, ...params });
   const envelope = `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/" xmlns:a="http://schemas.datacontract.org/2004/07/"><soapenv:Body><tem:${method}>${inner}</tem:${method}></soapenv:Body></soapenv:Envelope>`;
-  const service = method === 'SaveUrunStok' ? 'IUrunServis' : 'ISiparisServis';
+  const service = method === 'StokAdediGuncelle' ? 'IUrunServis' : 'ISiparisServis';
   const response = await fetcher(endpoint, {
     method: 'POST',
     redirect: 'error',
@@ -185,11 +192,46 @@ export async function enqueueIntegrationEvent(
     sql`select * from manufacturing_records where kind='integration_event' and code=${code}`,
   );
   if (prior.length) {
-    if (prior[0]!.config.payloadHash !== digest(input))
+    if (prior[0]!.config.payloadHash !== digest(input)) {
+      if (
+        input.externalVersion &&
+        input.externalVersion !== prior[0]!.config.payload.externalVersion
+      ) {
+        const updateCode = digest({
+          connectionId,
+          externalId: input.externalId,
+          version: input.externalVersion,
+        });
+        const update = await all(
+          tx,
+          sql`select * from manufacturing_records where kind='integration_event' and code=${updateCode}`,
+        );
+        if (update[0]) {
+          if (update[0].config.payloadHash !== digest(input))
+            throw fail('Dış sürüm farklı içerikle tekrar geldi');
+          return recordShape(update[0]);
+        }
+        return createRecord(
+          tx,
+          ctx,
+          'integration_event',
+          {
+            code: updateCode,
+            connectionId,
+            payload: input,
+            payloadHash: digest(input),
+            attempts: 0,
+            previousEventId: prior[0]!.id,
+            error: 'Sipariş güncellendi; mevcut mali kayıtlarla karşılaştırılarak onaylanmalı',
+          },
+          'needs_review',
+        );
+      }
       throw fail(
         'Kaynak sipariş kimliği farklı içerikle tekrar geldi',
         'INTEGRATION_EVENT_CONFLICT',
       );
+    }
     return recordShape(prior[0]!);
   }
   await one(
@@ -210,10 +252,29 @@ export async function enqueueIntegrationEvent(
     'queued',
   );
 }
-export async function processIntegrationEvent(tx: Tx, ctx: LeatherCtx, id: string) {
+export async function processIntegrationEvent(
+  tx: Tx,
+  ctx: LeatherCtx,
+  id: string,
+  manual?: { reason: string },
+) {
   await lockLeatherCosts(tx, ctx.companyId);
   const event = await getRecord(tx, id, 'integration_event', true);
   if (event.status === 'processed') return recordShape(event);
+  if (event.status === 'needs_review')
+    throw fail('Dış sipariş güncellemesi manuel karşılaştırma gerektiriyor');
+  if (
+    !manual &&
+    (event.status === 'dead_letter' ||
+      (event.config.retryAfter && Date.parse(event.config.retryAfter) > Date.now()))
+  )
+    return { ...recordShape(event), retryEligible: false };
+  if (manual) {
+    event.config.manualRetryReason = manual.reason;
+    event.config.manualRetryBy = ctx.userId;
+    event.config.manualRetryAt = new Date().toISOString();
+    event.config.attempts = 0;
+  }
   if (!event.config.payload) throw fail('Sipariş yükü bulunamadı');
   try {
     const salesOrderId = await tx.transaction(async (nested) => {
@@ -222,9 +283,20 @@ export async function processIntegrationEvent(tx: Tx, ctx: LeatherCtx, id: strin
       for (const line of payload.lines) {
         const item = await one(
           nested,
-          sql`select id,name from items where code=${line.sku} and is_active`,
+          sql`select i.id,i.name,i.vat_code,m.warehouse_id as "mappedWarehouseId" from items i left join manufacturing_records m on m.kind='channel_mapping' and m.status='active' and m.item_id=i.id and m.company_id=i.company_id and m.config->>'connectionId'=${event.config.connectionId} and m.config->>'channelSku'=${line.sku} where (m.id is not null or i.code=${line.sku}) and i.is_active order by (m.id is not null) desc limit 1`,
           'SKU eşlemesi: ' + line.sku,
         );
+        if (item.mappedWarehouseId && item.mappedWarehouseId !== payload.warehouseId)
+          throw fail('Kanal deposu SKU konum eşlemesiyle uyuşmuyor: ' + line.sku);
+        if (line.vatRate !== undefined) {
+          const rates = await resolveVat(
+            nested,
+            item.vat_code ? [item.vat_code] : [],
+            payload.date,
+          );
+          if (!dec(rates.get(item.vat_code) ?? 0).eq(line.vatRate))
+            throw fail('Kanal vergi oranı SKU vergi eşlemesiyle uyuşmuyor: ' + line.sku);
+        }
         lines.push({
           itemId: item.id,
           description: item.name,
@@ -241,6 +313,7 @@ export async function processIntegrationEvent(tx: Tx, ctx: LeatherCtx, id: strin
           warehouseId: payload.warehouseId,
           docDate: payload.date,
           currency: payload.currency,
+          vatIncluded: payload.vatIncluded,
           lines,
           notes: 'Dış kanal ' + payload.externalId,
         }),
@@ -256,7 +329,7 @@ export async function processIntegrationEvent(tx: Tx, ctx: LeatherCtx, id: strin
       processedAt: new Date().toISOString(),
     });
   } catch (error) {
-    return updateRecord(tx, id, 'failed', {
+    return updateRecord(tx, id, Number(event.config.attempts) + 1 >= 5 ? 'dead_letter' : 'failed', {
       ...event.config,
       attempts: event.config.attempts + 1,
       error: error instanceof Error ? error.message.slice(0, 500) : 'Aktarım hatası',
@@ -268,6 +341,8 @@ export async function processIntegrationEvent(tx: Tx, ctx: LeatherCtx, id: strin
 }
 
 export const manufacturingIntegrationRoutes: FastifyPluginAsync = async (app) => {
+  await app.register(manufacturingWebhookRoutes);
+  await app.register(manufacturingChannelRoutes);
   const read = { module: 'core.integrations', permission: 'core.integrations.read' } as const,
     write = { module: 'core.integrations', permission: 'core.integrations.manage' } as const;
   const id = (p: unknown) => z.object({ id: uuid }).parse(p).id;
@@ -293,7 +368,17 @@ export const manufacturingIntegrationRoutes: FastifyPluginAsync = async (app) =>
     '/api/integrations/connections',
     tenantRoute(app, write, async (c) => {
       const input = integrationConnectionSchema.parse(c.req.body);
-      const { token, ...publicConfig } = input;
+      const { token, webhookSecret, ...publicConfig } = input;
+      if (input.webhookPartyId)
+        await one(
+          c.tx,
+          sql`select id from parties where id=${input.webhookPartyId}::uuid and kind in ('customer','both')`,
+        );
+      if (input.webhookWarehouseId)
+        await one(
+          c.tx,
+          sql`select id from warehouses where id=${input.webhookWarehouseId}::uuid and is_active`,
+        );
       if (input.endpoint) await validateIntegrationEndpoint(input.endpoint);
       const record = await createRecord(
         c.tx,
@@ -301,6 +386,10 @@ export const manufacturingIntegrationRoutes: FastifyPluginAsync = async (app) =>
         'connection',
         {
           ...publicConfig,
+          orgId: c.user.orgId,
+          webhookSecret: webhookSecret
+            ? encryptField(webhookSecret, 'integrations:' + app.config.JWT_SECRET)
+            : undefined,
           credentials: token
             ? encryptField(token, 'integrations:' + app.config.JWT_SECRET)
             : undefined,
@@ -318,10 +407,24 @@ export const manufacturingIntegrationRoutes: FastifyPluginAsync = async (app) =>
       if (input.provider !== r.config.provider)
         throw fail('Sağlayıcı değiştirmek için yeni bağlantı açın');
       if (input.endpoint) await validateIntegrationEndpoint(input.endpoint);
-      const { token, ...publicConfig } = input;
+      const { token, webhookSecret, ...publicConfig } = input;
+      if (input.webhookPartyId)
+        await one(
+          c.tx,
+          sql`select id from parties where id=${input.webhookPartyId}::uuid and kind in ('customer','both')`,
+        );
+      if (input.webhookWarehouseId)
+        await one(
+          c.tx,
+          sql`select id from warehouses where id=${input.webhookWarehouseId}::uuid and is_active`,
+        );
       const config = {
         ...r.config,
         ...publicConfig,
+        orgId: c.user.orgId,
+        webhookSecret: webhookSecret
+          ? encryptField(webhookSecret, 'integrations:' + app.config.JWT_SECRET)
+          : r.config.webhookSecret,
         credentials: token
           ? encryptField(token, 'integrations:' + app.config.JWT_SECRET)
           : r.config.credentials,
@@ -368,7 +471,35 @@ export const manufacturingIntegrationRoutes: FastifyPluginAsync = async (app) =>
     '/api/integrations/events/:id/retry',
     tenantRoute(app, write, async (c) => {
       c.require('invoices.manage');
-      return { record: await processIntegrationEvent(c.tx, manufacturingCtx(c), id(c.req.params)) };
+      const input = z
+        .object({
+          force: z.boolean().default(false),
+          reason: z.string().trim().min(1).max(500).optional(),
+        })
+        .parse(c.req.body);
+      if (input.force && !input.reason) throw fail('Manuel tekrar nedeni gerekli');
+      const event = await getRecord(c.tx, id(c.req.params), 'integration_event');
+      const rate = await app.limiter.consume(
+        'integration-process:' + c.company.id + ':' + event.config.connectionId,
+        30,
+        60000,
+      );
+      if (!rate.ok) {
+        c.reply.header('retry-after', String(rate.retryAfterSec));
+        throw new AppError(
+          429,
+          'RATE_LIMITED',
+          'Kanal aktarım sınırı aşıldı; daha sonra tekrar deneyin',
+        );
+      }
+      return {
+        record: await processIntegrationEvent(
+          c.tx,
+          manufacturingCtx(c),
+          id(c.req.params),
+          input.force ? { reason: input.reason! } : undefined,
+        ),
+      };
     }),
   );
   const live = async (tx: Tx, companyId: string) => {

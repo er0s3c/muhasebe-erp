@@ -12,15 +12,15 @@ Arayüz editoryal bir finans yayını gibi davranır: kırık beyaz kâğıt zem
 
 ## Belirteçler
 
-| Rol | Açık | Koyu |
-|---|---|---|
-| Zemin `--bg` / yıkama `--surface-2` | `#f4f2f0` (Bone) | `#131211` / `#242322` |
-| Kart `--surface` | `#ffffff` | `#1a1919` |
-| Çizgi `--border` / `--border-strong` | `#e5e7eb` / `#d3d3d3` | `#2e2c2b` / `#3d3b3a` |
-| Metin `--text` / sönük `--muted` | `#0c0a08` (Ink) / `#6d6c6b` (Ash) | `#f4f2f0` / `#a3a19f` |
-| Vurgu `--brand` (yalnızca dolgu) | `#e4f222` | `#e4f222` |
-| Koyu şerit `--inverted` | `#1a1919` (Obsidian) | `#262524` |
-| Odak halkası `--focus` | Ink | sarı |
+| Rol                                  | Açık                              | Koyu                  |
+| ------------------------------------ | --------------------------------- | --------------------- |
+| Zemin `--bg` / yıkama `--surface-2`  | `#f4f2f0` (Bone)                  | `#131211` / `#242322` |
+| Kart `--surface`                     | `#ffffff`                         | `#1a1919`             |
+| Çizgi `--border` / `--border-strong` | `#e5e7eb` / `#d3d3d3`             | `#2e2c2b` / `#3d3b3a` |
+| Metin `--text` / sönük `--muted`     | `#0c0a08` (Ink) / `#6d6c6b` (Ash) | `#f4f2f0` / `#a3a19f` |
+| Vurgu `--brand` (yalnızca dolgu)     | `#e4f222`                         | `#e4f222`             |
+| Koyu şerit `--inverted`              | `#1a1919` (Obsidian)              | `#262524`             |
+| Odak halkası `--focus`               | Ink                               | sarı                  |
 
 **Durum renkleri** (başarı/uyarı/hata) referanstaki "tek vurgu" kuralının bilinçli istisnasıdır: muhasebe uygulamasında hata, kritik stok ve negatif bakiye renkle de okunabilmelidir. Sönük tonlardadır ve yalnızca metin, simge ve küçük rozetlerde kullanılır (geniş alan dolgusu yok); anlam her zaman metin/simgeyle de verilir, yalnızca renge bağlı değildir.
 
@@ -46,3 +46,7 @@ Tüm metin/zemin belirteç çiftleri WCAG AA (≥ 4.5:1) sağlar, odak halkası 
 ## Yeni ekran eklerken
 
 `Card`, `Stat`, `Table*`, `SegmentedTabs`, `Badge`, `Callout`, `Button`, `Field` bileşenlerini kullanın; ham renk, gölge, `font-bold` ya da pill şekli eklemeyin. Vurguyu yalnızca eylem/aktif durum için kullanın. Kalın yerine boyut, renk ve büyük harf mikro etiketi (`.micro`) kullanın.
+
+Tabloda UUID yerine okunabilir belge/kayıt kodu ve bağlantılı ürün, depo veya operasyon adı gösterin. Durum ve tahmin kaynaklarını Türkçe etiketleyin; tarihler ve miktarlar ortak biçimleyicilerden gelsin. Satır işlemleri küçük düğmeyle `Sheet` açsın; tablo hücresine büyük form yerleştirmeyin. Depo sekmesinde yalnız o sekmenin oluşturma formunu gösterin. Menüde görünen bir rota, aynı modül ve izin kapısından geçmelidir.
+
+Ana içerikte tek dikey kaydırma alanı `AppShell` içindeki `main` olmalıdır. Sayfa tablolarına/listelerine `max-height` ile ikinci dikey kaydırma eklemeyin; geniş tablolar kendi yatay kaydırmasını korur. İçerik ve form alanlarında `min-w-0` kullanın. Dar ekranda araç çubukları ve eylemler satır atsın, arama alanı tam satır alsın. Düğmelerin yüksekliği en az 40px (küçükte 32px) olsun; uzun metinler yüksekliği artırabilsin. Para değerleri kesilmeden tam gösterilsin. Teknik kimlik denetimi UUIDv7 kayıtlarını da kapsar; görünen otomatik kodlar listede, ayrıntıda ve aramada aynı olmalıdır.

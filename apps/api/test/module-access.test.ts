@@ -60,6 +60,118 @@ describe('kullanıcı bazlı modül erişimi', async () => {
 
   const denial = (res: { statusCode: number; json: () => any }) => (res.statusCode === 403 ? (res.json().error.code as string) : null);
 
+  it('taslak önizleme merkezi etkin izinleri verir, kaydı değiştirmez ve üyelik/yönetim sınırlarını korur', async () => {
+    const w = await world('Preview');
+    const v = w.m.viewer;
+    const path = `/api/company/members/${v.userId}/module-access`;
+    const input = { levels: { 'core.inventory': 'write' }, permissions: { 'inventory.move': 'deny' } };
+    const before = await w.dump(v.userId);
+    const preview = await ok(w.owner.post(path + '/preview', input));
+    expect(preview.permissions).toContain('inventory.manage');
+    expect(preview.permissions).not.toContain('inventory.move');
+    expect(await w.dump(v.userId)).toEqual(before);
+    const saved = await ok(w.owner.put(path, input));
+    const inventory = saved.areas.find((a: any) => a.key === 'core.inventory');
+    expect(preview.areas.find((a: any) => a.key === 'core.inventory')).toMatchObject(inventory.effective);
+    expect((await v.client.post(path + '/preview', input)).statusCode).toBe(403);
+    expect((await w.owner.post(`/api/company/members/${randomUUID()}/module-access/preview`, input)).statusCode).toBe(404);
+  });
+
+  describe('ayrıntılı işlem izinleri (API)', () => {
+    it('düzenleme açıkken muhasebeleştirme ayrı kapatılır ve varsayılana dönüş anında uygulanır', async () => {
+      const w = await world('IslemFatura');
+      const v = w.m.viewer;
+      const path = `/api/company/members/${v.userId}/module-access`;
+      const view = await ok(w.owner.put(path, { levels: { 'core.invoices': 'write' }, permissions: { 'invoices.post': 'deny' } }));
+      const area = view.areas.find((a: any) => a.key === 'core.invoices');
+      expect(area.effective.partial).toBe(true);
+      expect(area.operations.find((p: any) => p.key === 'invoices.post')).toMatchObject({ override: 'deny', effective: false });
+      expect((await v.client.get('/api/invoices')).statusCode).toBe(200);
+      expect([400, 422]).toContain((await v.client.post('/api/invoices', {})).statusCode);
+      const id = randomUUID();
+      const denied = await v.client.post(`/api/invoices/${id}/post`, {});
+      expect(denial(denied)).toBe('MODULE_ACCESS_DENIED');
+      expect(denied.json().error.message).toContain('Bu işlem için');
+      expect(await w.dump(v.userId)).toEqual([{ module_key: 'core.invoices', level: 'write' }, { module_key: 'permission.invoices.post', level: 'none' }]);
+      await ok(w.owner.put(path, { permissions: { 'invoices.post': 'default' } }));
+      expect((await v.client.post(`/api/invoices/${id}/post`, {})).statusCode).toBe(404);
+    });
+
+    it('stok hareketi ayrı açılır; erişim yok bütün işlem istisnalarını bastırır', async () => {
+      const w = await world('IslemStok');
+      const v = w.m.viewer;
+      const path = `/api/company/members/${v.userId}/module-access`;
+      await ok(w.owner.put(path, { levels: { 'core.inventory': 'read' }, permissions: { 'inventory.move': 'allow' } }));
+      let perms = (await ok(v.client.get('/api/me/access'))).permissions as string[];
+      expect(perms).toContain('inventory.move');
+      expect(perms).not.toContain('inventory.manage');
+      await ok(w.set(v, { 'core.inventory': 'none' }));
+      perms = (await ok(v.client.get('/api/me/access'))).permissions;
+      expect(perms).not.toContain('inventory.move');
+      expect(denial(await v.client.get('/api/items'))).toBe('MODULE_ACCESS_DENIED');
+    });
+
+    it('hassas ve rol ile sınırlı haklar yükseltilemez; bilinmeyen/çekirdek yetkiler reddedilir', async () => {
+      const w = await world('IslemRol');
+      const path = `/api/company/members/${w.m.viewer.userId}/module-access`;
+      for (const permission of ['hr.sensitive', 'ledger.yearend', 'procurement.approve']) {
+        const res = await w.owner.put(path, { permissions: { [permission]: 'allow' } });
+        expect(denial(res)).toBe('MODULE_ACCESS_ROLE_BOUND');
+      }
+      for (const permission of ['members.manage', 'fake.permission', '__proto__']) {
+        const res = await w.owner.put(path, { permissions: { [permission]: 'allow' } });
+        expect(res.statusCode, permission).toBe(permission === '__proto__' ? 400 : 422);
+      }
+      expect(await w.dump(w.m.viewer.userId)).toEqual([]);
+      await ok(w.owner.put(`/api/company/members/${w.m.admin.userId}/module-access`, { permissions: { 'hr.sensitive': 'deny' } }));
+      const perms = (await ok(w.m.admin.client.get('/api/me/access'))).permissions as string[];
+      expect(perms).toContain('hr.read');
+      expect(perms).not.toContain('hr.sensitive');
+    });
+
+    it('kısıtlı yönetici engellediği işlem hakkını veremez veya bir kısıtı sıfırlayarak geri açamaz', async () => {
+      const w = await world('IslemSinir');
+      await ok(w.owner.put(`/api/company/members/${w.m.admin.userId}/module-access`, { permissions: { 'invoices.post': 'deny' } }));
+      const admin = w.m.admin.client;
+      const path = `/api/company/members/${w.m.accountant.userId}/module-access`;
+      await ok(w.owner.put(path, { permissions: { 'invoices.post': 'deny' } }));
+      expect(denial(await admin.put(path, { permissions: { 'invoices.post': 'allow' } }))).toBe('MODULE_ACCESS_EXCEEDS_OWN');
+      expect(denial(await admin.put(path, { permissions: { 'invoices.post': 'default' } }))).toBe('MODULE_ACCESS_EXCEEDS_OWN');
+      expect(denial(await admin.delete(path))).toBe('MODULE_ACCESS_EXCEEDS_OWN');
+      // Başka bir hakkı kısıtlamak yeni yetki vermediğinden mümkündür.
+      await ok(admin.put(path, { permissions: { 'deliveries.manage': 'deny' } }));
+      const viewerPath = `/api/company/members/${w.m.viewer.userId}/module-access`;
+      await ok(w.set(w.m.viewer, { 'core.invoices': 'none' }));
+      expect(denial(await admin.put(viewerPath, { permissions: { 'invoices.post': 'allow' } }))).toBe('MODULE_ACCESS_EXCEEDS_OWN');
+    });
+
+    it('rol değişimi işlem istisnalarını da temizler', async () => {
+      const w = await world('IslemTemizle');
+      const v = w.m.viewer;
+      await ok(w.owner.put(`/api/company/members/${v.userId}/module-access`, { permissions: { 'invoices.manage': 'deny' } }));
+      expect(await w.dump(v.userId)).toHaveLength(1);
+      await ok(w.owner.patch(`/api/company/members/${v.userId}`, { role: 'sales' }));
+      expect(await w.dump(v.userId)).toEqual([]);
+      expect((await ok(v.client.get('/api/me/access'))).permissions).toContain('invoices.manage');
+    });
+
+    it('kısıtlı yönetici yeni rol veya yeni üyeyle kendinde olmayan işlem hakkını veremez', async () => {
+      const w = await world('IslemRolSinir');
+      await ok(w.owner.put(`/api/company/members/${w.m.admin.userId}/module-access`, { permissions: { 'invoices.post': 'deny' } }));
+      const admin = w.m.admin.client;
+      const accountantPath = `/api/company/members/${w.m.accountant.userId}`;
+      await ok(w.owner.put(`${accountantPath}/module-access`, { permissions: { 'invoices.post': 'deny' } }));
+      expect(denial(await admin.patch(accountantPath, { role: 'admin' }))).toBe('MODULE_ACCESS_EXCEEDS_OWN');
+      expect(denial(await admin.patch(`/api/company/members/${w.m.viewer.userId}`, { role: 'accountant' }))).toBe('MODULE_ACCESS_EXCEEDS_OWN');
+      const newMember = { email: `restricted-${randomUUID()}@example.com`, fullName: 'Kısıtlı Atama', role: 'accountant', password: PASSWORD };
+      expect(denial(await admin.post('/api/company/members', newMember))).toBe('MODULE_ACCESS_EXCEEDS_OWN');
+      await ok(w.owner.patch(accountantPath, { role: 'admin' }));
+      expect((await ok(w.m.accountant.client.get('/api/me/access'))).permissions).toContain('invoices.post');
+      // Satış rolü bu işlem hakkını taşımadığından normal atama yapılabilir.
+      await ok(admin.patch(`/api/company/members/${w.m.viewer.userId}`, { role: 'sales' }));
+    });
+  });
+
   // -------------------------------------------------------------------------------------------------------------------
   describe('düzey matrisi (API)', () => {
     const levels = ['none', 'read', 'write'] as const;

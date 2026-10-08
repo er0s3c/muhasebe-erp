@@ -129,7 +129,7 @@ export function TrialBalancePage() {
             </Card>
           ) : (
             <>
-              <TableWrap className="max-h-[calc(100vh-24rem)] min-h-64">
+              <TableWrap>
                 <Table>
                   <thead>
                     <tr>

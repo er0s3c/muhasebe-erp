@@ -132,7 +132,7 @@ export function PurchaseOrderEditorPage() {
           {!isNew && <OrderStatusBadge status={status} />}
           {order && order.receiptState !== 'none' && <Badge tone={order.receiptState === 'complete' ? 'success' : 'warning'}>{t(`procurement.orders.receiptState.${order.receiptState}`)}</Badge>}
         </h1>
-        {order?.requestId && <p className="mt-1 text-sm text-muted"><Link className="text-brand hover:underline" to={`/purchasing/requests/${order.requestId}`}>{order.requestCode}</Link></p>}
+        {order?.requestId && <p className="mt-1 text-sm text-muted"><Link className="link" to={`/purchasing/requests/${order.requestId}`}>{order.requestCode}</Link></p>}
       </div>
 
       {error && <Callout tone="danger">{errorMessage(error)}</Callout>}

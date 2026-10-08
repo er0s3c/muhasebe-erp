@@ -58,7 +58,7 @@ export const manufacturingMaintenanceSchema = z
   .object({
     resourceId: uuid,
     start: instant,
-    end: instant,
+    end: instant.optional(),
     kind: z.enum(['planned', 'breakdown']),
     description: name,
     spareParts: z
@@ -67,10 +67,20 @@ export const manufacturingMaintenanceSchema = z
       .default([]),
     warehouseId: uuid.optional(),
   })
-  .refine(
-    (v) => Date.parse(v.end) > Date.parse(v.start) && (!v.spareParts.length || !!v.warehouseId),
-    'Bakım aralığı ve yedek parça deposu gerekli',
-  );
+  .refine((v) => !v.end || Date.parse(v.end) > Date.parse(v.start), {
+    message: 'Tahmini bitiş başlangıçtan sonra olmalı',
+    path: ['end'],
+  })
+  .refine((v) => !v.spareParts.length || !!v.warehouseId, {
+    message: 'Yedek parça için sarf deposu seçin',
+    path: ['warehouseId'],
+  });
+export const manufacturingMaintenanceCompleteSchema = z.object({
+  action: z.literal('complete').default('complete'),
+  requestKey: uuid,
+  end: instant,
+  date: isoDate.optional(),
+});
 export const manufacturingScheduleSchema = z.object({
   direction: z.enum(['forward', 'backward']).default('forward'),
   anchor: instant,
@@ -83,7 +93,7 @@ export const manufacturingScheduleSchema = z.object({
         minutes: z.number().int().min(1).max(525600),
         priority: z.number().int().min(0).max(100).default(0),
         predecessor: name.optional(),
-        durationSource: z.enum(['actual', 'standard', 'manual']).optional(),
+        durationSource: z.enum(['actual', 'blended', 'standard', 'manual']).optional(),
       }),
     )
     .min(1)
@@ -154,6 +164,10 @@ export const integrationConnectionSchema = z
     name,
     endpoint: z.url().optional(),
     token: z.string().min(1).max(4000).optional(),
+    webhookSecret: z.string().min(16).max(4000).optional(),
+    webhookPartyId: uuid.optional(),
+    webhookWarehouseId: uuid.optional(),
+    shippingSku: z.string().trim().min(1).max(80).optional(),
     shop: z
       .string()
       .regex(/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/)
@@ -259,8 +273,16 @@ export function explodeManufacturingNeed(
 export interface CapacityInterval {
   resourceId: string;
   start: string;
-  end: string;
+  end?: string | null;
   available: boolean;
+}
+/** An unavailable resource stays blocked until its actual end is recorded. */
+export function capacityIntervalEnd(interval: CapacityInterval) {
+  return interval.end
+    ? Date.parse(interval.end)
+    : interval.available
+      ? Number.NEGATIVE_INFINITY
+      : Number.POSITIVE_INFINITY;
 }
 export interface ScheduledOperation {
   orderId: string;
@@ -320,10 +342,10 @@ export function finiteManufacturingSchedule(
       const t = direction === 'forward' ? cursor : cursor - 60000;
       const relevant = calendars.filter((c) => c.resourceId === job.resourceId);
       const allowed = relevant.some(
-        (c) => c.available && Date.parse(c.start) <= t && Date.parse(c.end) >= t + 60000,
+        (c) => c.available && Date.parse(c.start) <= t && capacityIntervalEnd(c) >= t + 60000,
       );
       const blocked = relevant.some(
-        (c) => !c.available && Date.parse(c.start) < t + 60000 && Date.parse(c.end) > t,
+        (c) => !c.available && Date.parse(c.start) < t + 60000 && capacityIntervalEnd(c) > t,
       );
       const busy = [...occupied, ...result].filter(
         (o) =>

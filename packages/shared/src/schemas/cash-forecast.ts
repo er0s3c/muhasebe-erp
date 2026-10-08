@@ -5,6 +5,8 @@ export const cashForecastQuerySchema = z.object({
   from: isoDate.optional(),
   weeks: z.coerce.number().int().min(4).max(26).default(13),
   projectId: uuid.optional(),
+  timing: z.enum(['due', 'history', 'conservative']).optional(),
+  collectionDelayDays: z.coerce.number().int().min(0).max(120).optional(),
 });
 export type CashForecastQuery = z.infer<typeof cashForecastQuerySchema>;
 

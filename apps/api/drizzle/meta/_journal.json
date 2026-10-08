@@ -778,6 +778,27 @@
       "when": 1791290070675,
       "tag": "0110_pos_backup_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1791290070676,
+      "tag": "0111_manufacturing_execution",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1791290070677,
+      "tag": "0112_manufacturing_handoff",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1791290070678,
+      "tag": "0113_manufacturing_constraint_names",
+      "breakpoints": true
     }
   ]
 }

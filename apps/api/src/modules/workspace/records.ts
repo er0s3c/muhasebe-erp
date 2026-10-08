@@ -7,6 +7,9 @@ import { isModuleDenied } from '../access/effective';
 import { posSaleScope } from '../pos/scope';
 import { productionOrderScope } from '../leather/visibility';
 
+// Legacy auto-generated identifiers have the same readable fallback in lists, detail and search.
+const manufacturingLabel = (prefix: string) => `case when r.code ~* '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}' then '${prefix}-' || to_char(r.created_at at time zone 'UTC','YYYYMMDD') || '-' || upper(right(replace(r.id::text,'-',''),12)) else r.code end`;
+
 export const RECORDS: Record<
   RecordKind,
   {
@@ -50,8 +53,8 @@ export const RECORDS: Record<
   },
   manufacturing_resource: {
     table: 'manufacturing_records',
-    label: 'code',
-    columns: ['code'],
+    label: `coalesce(nullif(r.config->>'name',''),${manufacturingLabel('KYN')})`,
+    columns: ['code', "r.config->>'name'", manufacturingLabel('KYN')],
     path: '/manufacturing/planning?open=',
     module: 'manufacturing.planning',
     read: 'manufacturing.planning.read',
@@ -60,8 +63,8 @@ export const RECORDS: Record<
   },
   manufacturing_maintenance: {
     table: 'manufacturing_records',
-    label: 'code',
-    columns: ['code'],
+    label: `${manufacturingLabel('BKM')} || coalesce(' · ' || nullif(r.config->>'description',''),'')`,
+    columns: ['code', "r.config->>'description'", manufacturingLabel('BKM')],
     path: '/manufacturing/maintenance?open=',
     module: 'manufacturing.maintenance',
     read: 'manufacturing.maintenance.read',
@@ -70,8 +73,8 @@ export const RECORDS: Record<
   },
   wms_lot: {
     table: 'manufacturing_records',
-    label: 'code',
-    columns: ['code'],
+    label: manufacturingLabel('PRT'),
+    columns: ['code', manufacturingLabel('PRT')],
     path: '/wms?open=',
     module: 'inventory.wms',
     read: 'inventory.wms.read',
@@ -80,8 +83,8 @@ export const RECORDS: Record<
   },
   logistics_shipment: {
     table: 'manufacturing_records',
-    label: 'code',
-    columns: ['code'],
+    label: manufacturingLabel('SVK'),
+    columns: ['code', manufacturingLabel('SVK')],
     path: '/logistics?open=',
     module: 'sales.logistics',
     read: 'sales.logistics.read',
@@ -99,7 +102,7 @@ export const RECORDS: Record<
   },
   leather_piece: {
     table: 'leather_pieces',
-    label: "code || ' · ' || status",
+    label: 'code',
     columns: ['code'],
     path: '/leather/materials?piece=',
     module: 'leather.materials',
@@ -108,7 +111,7 @@ export const RECORDS: Record<
   },
   leather_production: {
     table: 'leather_production_orders',
-    label: "code || ' · ' || status",
+    label: 'code',
     columns: ['code'],
     path: '/leather/production?open=',
     module: 'leather.production',

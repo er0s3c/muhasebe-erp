@@ -157,3 +157,52 @@ test('modül erişimi: sadece görüntüle → erişim yok → görüntüle ve d
   expect(((await tryOwner.json()) as { error: { code: string } }).error.code).toBe('MODULE_ACCESS_OWNER');
   await admin.ctx.close();
 });
+
+test('ayrıntılı erişim: fatura düzenleme açıkken muhasebeleştirmeyi ayrı kapatır, kaydeder ve tümünü geri alır', async ({ page, request }) => {
+  const o = await ownerWithCompany(request, 'islem-erisim');
+  const email = `e2e-islem-${o.stamp}@example.com`;
+  const memberId = await addMember(request, o.headers, email, 'Ayrıntılı Kullanıcı', 'accountant');
+  await loginUi(page, o.email);
+  await page.goto('/settings/members');
+  await page.getByTestId(`member-access-${memberId}`).click();
+  const sheet = page.getByRole('dialog', { name: /Modül erişimi:/ });
+  await sheet.getByTestId('access-search').fill('irsaliye');
+  await expect(sheet.getByTestId('access-row-core.invoices')).toBeVisible();
+  await expect(sheet.getByTestId('access-row-core.inventory')).toHaveCount(0);
+  await sheet.getByTestId('access-details-core.invoices').locator('summary').click();
+  await sheet.getByTestId('access-operation-invoices.post').selectOption('deny', { force: true });
+  await sheet.getByRole('tab', { name: 'Etkin erişim' }).click();
+  const effective = sheet.getByTestId('effective-core.invoices');
+  await expect(effective).toContainText('Faturaları muhasebeleştirme: Engelli');
+  await expect(effective).toContainText('Fatura, sipariş ve fiyat listesi düzenleme: İzin var');
+  await expect(effective).toContainText('kısmi');
+  await sheet.getByTestId('access-save').click();
+  const confirm = page.getByRole('dialog', { name: 'Değişiklikleri onaylayın' });
+  await expect(confirm.getByTestId('access-summary')).toContainText('Faturaları muhasebeleştirme: Modül seçimine göre → Engelle');
+  await confirm.getByTestId('access-confirm').click();
+  await expect(sheet).toBeHidden();
+
+  const login = await request.post('/api/auth/login', { data: { email, password: PASSWORD } });
+  expect(login.status()).toBe(200);
+  const headers = { authorization: `Bearer ${((await login.json()) as { accessToken: string }).accessToken}`, 'x-company-id': o.companyId };
+  expect((await request.get('/api/invoices', { headers })).status()).toBe(200);
+  expect([400, 422]).toContain((await request.post('/api/invoices', { headers, data: {} })).status());
+  const denied = await request.post('/api/invoices/00000000-0000-4000-8000-000000000001/post', { headers, data: {} });
+  expect(denied.status()).toBe(403);
+  expect(((await denied.json()) as { error: { message: string } }).error.message).toContain('Bu işlem için');
+
+  // Kaydedilmiş seçim küçük ekranda da okunur, ayrıntılar yana taşmaz.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId(`member-access-${memberId}`).click();
+  await sheet.getByTestId('access-search').fill('irsaliye');
+  await sheet.getByTestId('access-details-core.invoices').locator('summary').click();
+  await expect(sheet.getByTestId('access-operation-invoices.post')).toHaveValue('deny');
+  expect(await sheet.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  await sheet.getByTestId('access-reset-all').click();
+  await sheet.getByTestId('access-save').click();
+  await expect(confirm.getByTestId('access-summary')).toContainText('Faturaları muhasebeleştirme: Engelle → Modül seçimine göre');
+  await confirm.getByTestId('access-confirm').click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByTestId(`custom-access-${memberId}`)).toHaveCount(0);
+  expect((await request.post('/api/invoices/00000000-0000-4000-8000-000000000001/post', { headers, data: {} })).status()).toBe(404);
+});

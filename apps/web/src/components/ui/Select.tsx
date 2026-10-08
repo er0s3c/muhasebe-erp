@@ -15,7 +15,7 @@ const nativeValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,
 
 /** Girdi görünümü (Field.tsx `control` ile aynı): 10px yarıçap, hairline çerçeve; odakta/açıkken Ink çerçeve. */
 const trigger =
-  'relative flex h-10 w-full items-center rounded-lg border border-border-strong bg-surface px-3.5 pr-8 text-left text-sm text-text ' +
+  'relative flex h-10 min-w-0 w-full items-center rounded-lg border border-border-strong bg-surface px-3.5 pr-8 text-left text-sm text-text ' +
   'transition-colors focus:border-text focus:outline-none data-[state=open]:border-text has-[+select:focus-visible]:border-text disabled:bg-surface-2 disabled:opacity-70';
 
 const content =
@@ -111,6 +111,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
           disabled={disabled}
           tabIndex={-1}
           aria-hidden="true"
+          title={selected?.label}
           className={cn(trigger, className)}
         >
           <span className={cn('min-w-0 flex-1 truncate', value === '' && 'text-muted')}>{selected?.label || ' '}</span>
@@ -131,7 +132,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
             <Dropdown.RadioGroup value={value} onValueChange={choose}>
               {opts.map((o) => (
                 <Dropdown.RadioItem key={o.value} value={o.value} disabled={o.disabled} className={cn(item, o.value === '' && 'text-muted')}>
-                  <span className="truncate">{o.label || ' '}</span>
+                  <span className="min-w-0 break-words">{o.label || ' '}</span>
                   <Dropdown.ItemIndicator>
                     <Check className="size-4 text-text" aria-hidden />
                   </Dropdown.ItemIndicator>

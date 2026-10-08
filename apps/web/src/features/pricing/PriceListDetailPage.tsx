@@ -16,7 +16,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, formatMoney } from '../../lib/format';
+import { currencySymbol, formatDateTR, formatMoney } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { PriceListItemRow, PriceListRow } from '../../lib/types';
 import { qtyText } from '../inventory/common';
@@ -106,7 +106,7 @@ export function PriceListDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-heading">{list.name}</h1>
             <KindBadge kind={list.kind} />
-            <Badge>{list.currencyCode}</Badge>
+            <Badge>{currencySymbol(list.currencyCode)}</Badge>
             {list.isDefault && <Badge tone="brand">{t('pricing.lists.default')}</Badge>}
             {!list.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
           </div>

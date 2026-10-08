@@ -28,7 +28,11 @@ export async function issueLots(
       let need = dec(line.quantity);
       allocations = [];
       for (const lot of lots) {
-        const left = dec(lot.config.remainingQty ?? lot.config.quantity),
+        const physical = dec(lot.config.remainingQty ?? lot.config.quantity),
+          left =
+            lot.config.releasedQty !== undefined && dec(lot.config.releasedQty).lt(physical)
+              ? dec(lot.config.releasedQty)
+              : physical,
           take = left.lt(need) ? left : need;
         if (take.gt(0)) allocations.push({ lotId: lot.id, quantity: take.toFixed(4) });
         need = need.minus(take);
@@ -63,11 +67,12 @@ export async function issueLots(
         lot.status !== 'available' ||
         lot.item_id !== line.itemId ||
         lot.warehouse_id !== warehouseId ||
-        left.lt(a.quantity)
+        left.lt(a.quantity) ||
+        (lot.config.releasedQty !== undefined && dec(lot.config.releasedQty).lt(a.quantity))
       )
         throw fail('Serbest parti, malzeme, depo ve miktar eşleşmeli');
       await tx.execute(
-        sql`update manufacturing_records set config=config||${json({ remainingQty: left.minus(a.quantity).toFixed(4) })},updated_at=now() where id=${lot.id}`,
+        sql`update manufacturing_records set config=config||${json({ remainingQty: left.minus(a.quantity).toFixed(4), ...(lot.config.releasedQty !== undefined ? { releasedQty: dec(lot.config.releasedQty).minus(a.quantity).toFixed(4) } : {}) })},updated_at=now() where id=${lot.id}`,
       );
       await pickLotPlacements(tx, lot.id, a.quantity, documentId);
       await tx.execute(
@@ -111,6 +116,9 @@ export async function returnLots(
           remainingQty: dec(lot.config.remainingQty ?? lot.config.quantity)
             .plus(returned)
             .toFixed(4),
+          ...(lot.config.releasedQty !== undefined
+            ? { releasedQty: dec(lot.config.releasedQty).plus(returned).toFixed(4) }
+            : {}),
         })},updated_at=now() where id=${lot.id}`,
       );
       await tx.execute(

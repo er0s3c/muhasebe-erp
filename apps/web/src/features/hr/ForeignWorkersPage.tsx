@@ -14,7 +14,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, moneyIn } from '../../lib/format';
+import { currencySymbol, formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { EmployeeRow, ForeignDocList, ForeignDocRenewalRow, ForeignDocRow, ForeignDocStatus, ForeignDocTypeRow, GuaranteeReport, GuaranteeRow } from '../../lib/types';
 import { FOREIGN_INVALIDATE, ForeignStatusBadge, ForeignUnverifiedBadge, GuaranteeStatusBadge } from './foreign-common';
@@ -444,7 +444,7 @@ function GuaranteesTab() {
           <span className="text-sm font-medium">{t('foreign.guarantees.totals')}:</span>
           {rep.totals.map((x) => (
             <span key={x.currency} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm">
-              {x.currency}: {t('foreign.guarantees.held')} <span className="num">{moneyIn(x.held, x.currency)}</span> · {t('foreign.guarantees.refunded')} <span className="num">{moneyIn(x.refunded, x.currency)}</span> · {t('foreign.guarantees.forfeited')} <span className="num">{moneyIn(x.forfeited, x.currency)}</span>
+              {currencySymbol(x.currency)}: {t('foreign.guarantees.held')} <span className="num">{moneyIn(x.held, x.currency)}</span> · {t('foreign.guarantees.refunded')} <span className="num">{moneyIn(x.refunded, x.currency)}</span> · {t('foreign.guarantees.forfeited')} <span className="num">{moneyIn(x.forfeited, x.currency)}</span>
             </span>
           ))}
           {rep.unverified && <ForeignUnverifiedBadge />}

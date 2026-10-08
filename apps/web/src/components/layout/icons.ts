@@ -61,6 +61,18 @@ import {
   ClipboardList,
   FileSearch,
   ListChecks,
+  Factory,
+  GitBranch,
+  CalendarClock,
+  Calculator,
+  Plug,
+  Files,
+  ChartNoAxesCombined,
+  Settings,
+  Database,
+  Timer,
+  TriangleAlert,
+  PackageSearch,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -127,6 +139,18 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   'clipboard-list': ClipboardList,
   'file-search': FileSearch,
   'list-checks': ListChecks,
+  factory: Factory,
+  'git-branch': GitBranch,
+  'calendar-clock': CalendarClock,
+  calculator: Calculator,
+  plug: Plug,
+  files: Files,
+  'chart-no-axes-combined': ChartNoAxesCombined,
+  settings: Settings,
+  database: Database,
+  timer: Timer,
+  'triangle-alert': TriangleAlert,
+  'package-search': PackageSearch,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

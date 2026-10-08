@@ -139,7 +139,7 @@ export function DrawingCanvas({
               title={p.label}
               aria-label={p.label}
               onClick={(e) => e.stopPropagation()}
-              className="absolute flex size-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-black bg-accent text-xs text-black"
+              className="absolute flex size-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border border-border-strong bg-brand text-xs text-brand-contrast"
               style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
             >
               {i + 1}

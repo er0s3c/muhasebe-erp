@@ -120,7 +120,7 @@ export function AppShell() {
   };
 
   return (
-    <div className="flex h-full print:block print:h-auto">
+    <div className="relative flex h-full min-h-0 overflow-hidden print:block print:h-auto print:overflow-visible">
       <a
         href="#main"
         className="sr-only z-[70] rounded-md bg-surface px-3 py-2 focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
@@ -154,7 +154,7 @@ export function AppShell() {
         />
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col" inert={drawerOpen}>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col" inert={drawerOpen}>
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur [box-shadow:var(--shadow-subtle)] print:hidden sm:px-6">
           <button
             ref={menuButtonRef}
@@ -187,7 +187,7 @@ export function AppShell() {
           </div>
         </header>
 
-        <main id="main" className="flex-1 overflow-y-auto print:overflow-visible">
+        <main id="main" className="relative min-h-0 min-w-0 flex-1 overflow-y-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-8 sm:py-8">
             <PrintLetterhead />
             <LicenseBanner />
@@ -248,7 +248,7 @@ function Sidebar({
         <CompanySwitcher collapsed={collapsed} />
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-3" aria-label={t('common.mainMenu')}>
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-label={t('common.mainMenu')}>
         {nav?.groups.map((group) => (
           <div key={group.key} className="mb-4">
             <p className={cn('micro px-3 pb-1.5', collapsed && 'lg:hidden')}>

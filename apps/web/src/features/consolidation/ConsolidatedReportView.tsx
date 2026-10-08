@@ -3,7 +3,7 @@ import { Card, CardHeader } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { cn } from '../../lib/cn';
-import { formatDateTR, isZero, money, moneyIn } from '../../lib/format';
+import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import type { ConsolidatedReportData, StatementLine } from '../../lib/types';
 import { ExcludedNotice } from '../reports/FxPositionView';
 
@@ -65,7 +65,7 @@ export function ConsolidatedReportView({ data }: { data: ConsolidatedReportData 
               {data.companies.map((c) => (
                 <Tr key={c.id}>
                   <Td>{c.name}</Td>
-                  <Td>{c.baseCurrency}</Td>
+                  <Td>{currencySymbol(c.baseCurrency)}</Td>
                   <Td num>{Number(c.closingRate).toLocaleString('tr-TR', { maximumFractionDigits: 8 })}</Td>
                   <Td className="text-muted">{t(`consolidation.sources.${c.closingSource as 'manual'}`)}</Td>
                   <Td num>{Number(c.plRate).toLocaleString('tr-TR', { maximumFractionDigits: 8 })}</Td>

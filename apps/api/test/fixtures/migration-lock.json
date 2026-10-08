@@ -418,5 +418,41 @@
   "0104_tidy_daimon_hellstrom": {
     "sha256": "7829e7b23bbd3e32ef061f45667c620efe22de5f02ce7dbce1e4b12e6a2a6879",
     "when": 1791290070669
+  },
+  "0105_leather_foundation": {
+    "sha256": "e14cf2ed4bba3808038a4eb96d47713eb5bc97b20feb169d7fdaa1599d0f6408",
+    "when": 1791290070670
+  },
+  "0106_leather_domain": {
+    "sha256": "3b924978d4e4f07a7556acb50d8072d6e2a70a9a0274549b21b3aac38a286920",
+    "when": 1791290070671
+  },
+  "0107_leather_pos": {
+    "sha256": "1cab521a624167e1c604f11200efc878248a7b8400a0d87dee6b4704f733814f",
+    "when": 1791290070672
+  },
+  "0108_manufacturing": {
+    "sha256": "fdb26980215ccecf7037c9711dbf6a0d441d13de1fabc3a77487cb2549aac8c8",
+    "when": 1791290070673
+  },
+  "0109_manufacturing_lot_trace": {
+    "sha256": "759c793958168cb28fd2f3b77bfcee7817d0b5242aa9d167336d79e9c48ce60d",
+    "when": 1791290070674
+  },
+  "0110_pos_backup_owner": {
+    "sha256": "0cb0980cbc096d116008c7eb852382304e6237ecc2626df5ed6abd9f05d53912",
+    "when": 1791290070675
+  },
+  "0111_manufacturing_execution": {
+    "sha256": "8ef9f94fd0aab48d1bb6e97f030929f0bbb4a431787818ea54b67bb27ac155b8",
+    "when": 1791290070676
+  },
+  "0112_manufacturing_handoff": {
+    "sha256": "344624d666aef3452bfc54ee9b6396cca6dafbde39c655fef89d165445257324",
+    "when": 1791290070677
+  },
+  "0113_manufacturing_constraint_names": {
+    "sha256": "c5f6bbd99e14e43f70d96bc553679db7c00f280f47222aa7549bdb4ef0b786a0",
+    "when": 1791290070678
   }
 }

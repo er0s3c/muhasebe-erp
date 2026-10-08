@@ -1,7 +1,7 @@
 import Decimal from 'decimal.js';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -101,21 +101,37 @@ interface Bootstrap {
 
 function PosHeader({ title, description }: { title: string; description?: string }) {
   const can = useCan();
+  const { pathname } = useLocation();
+  const tabs = [
+    ['/pos', 'Satış ekranı'],
+    ['/pos/sessions', 'Kasa oturumları'],
+    ...(can('pos.manage') ? [['/pos/settings', 'Satış noktası ayarları']] : []),
+  ];
   return (
     <>
       <PageHeader title={title} description={description} />
-      <nav aria-label="Mağaza ekranları" className="mb-5 flex flex-wrap gap-5 text-sm">
-        <Link className="link" to="/pos">
-          Satış ekranı
-        </Link>
-        <Link className="link" to="/pos/sessions">
-          Kasa oturumları
-        </Link>
-        {can('pos.manage') && (
-          <Link className="link" to="/pos/settings">
-            Satış noktası ayarları
-          </Link>
-        )}
+      <nav
+        aria-label="Mağaza ekranları"
+        className="mb-5 flex flex-wrap gap-1 rounded-lg border border-border bg-surface p-1 text-sm"
+      >
+        {tabs.map(([path, label]) => {
+          const active = pathname === path || (path !== '/pos' && pathname.startsWith(path + '/'));
+          return (
+            <Link
+              key={path}
+              to={path!}
+              aria-current={active ? 'page' : undefined}
+              className={
+                'rounded-md px-4 py-1.5 transition-colors ' +
+                (active
+                  ? 'bg-brand text-brand-contrast'
+                  : 'text-muted hover:bg-surface-2 hover:text-text')
+              }
+            >
+              {label}
+            </Link>
+          );
+        })}
       </nav>
     </>
   );
@@ -221,9 +237,7 @@ export function PosSettingsPage() {
                 </label>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted">
-              En az bir yetkili çalışan seçin.
-            </p>
+            <p className="mt-2 text-xs text-muted">En az bir yetkili çalışan seçin.</p>
           </fieldset>
         </OperationForm>
       )}
@@ -280,7 +294,9 @@ export function PosSessionsPage() {
             numberField('openingCash', 'Açılış nakdi', '0'),
           ]}
           action="Kasayı aç"
-          submit={(values) => save('/api/pos/sessions', { tillId: values.tillId, openingCash: values.openingCash })}
+          submit={(values) =>
+            save('/api/pos/sessions', { tillId: values.tillId, openingCash: values.openingCash })
+          }
         />
       )}
       <Records
@@ -522,8 +538,8 @@ export function PosPage() {
                   )}
                 </Field>
               </div>
-              <div className="grid items-start gap-5 lg:grid-cols-2">
-                <div>
+              <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+                <div className="min-w-0">
                   <Card className="mb-4 p-5">
                     <form
                       aria-label="Barkodla ürün ekle"
@@ -531,9 +547,12 @@ export function PosPage() {
                         event.preventDefault();
                         void scan();
                       }}
-                      className="flex items-end gap-3"
+                      className="flex flex-wrap items-end gap-3"
                     >
-                      <Field label="Barkod veya ürün ara" className="flex-1">
+                      <Field
+                        label="Barkod veya ürün ara"
+                        className="min-w-0 basis-full sm:basis-48 sm:flex-1"
+                      >
                         {(id) => (
                           <Input
                             id={id}
@@ -603,7 +622,7 @@ export function PosPage() {
                     {basket.map((line, index) => (
                       <div key={line.item.id} className="space-y-3 border-b border-border pb-4">
                         <div className="flex justify-between gap-3">
-                          <p>{line.item.name}</p>
+                          <p className="min-w-0 break-words">{line.item.name}</p>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -616,7 +635,7 @@ export function PosPage() {
                             Kaldır
                           </Button>
                         </div>
-                        <div className="grid grid-cols-3 items-end gap-3">
+                        <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-3">
                           <Field label={`Miktar ${index + 1}`}>
                             {(id) => (
                               <Input
@@ -667,13 +686,13 @@ export function PosPage() {
                               />
                             )}
                           </Field>
-                          <p className="pb-2 text-right text-sm">
+                          <p className="col-span-2 break-words pb-2 text-right text-sm tabular-nums sm:col-span-1">
                             {moneyIn(lineTotal(line).toFixed(2), till.currencyCode)}
                           </p>
                         </div>
                       </div>
                     ))}
-                    <div className="border-b border-border pb-3 text-heading">
+                    <div className="break-words border-b border-border pb-3 text-heading tabular-nums">
                       {moneyIn(total.toFixed(2), till.currencyCode)}
                     </div>
                     <div className="grid grid-cols-2 gap-3">

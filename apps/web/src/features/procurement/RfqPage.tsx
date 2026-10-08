@@ -56,7 +56,7 @@ export function RfqPage() {
           <RfqStatusBadge status={rfq.status} />
         </h1>
         <p className="mt-1 text-sm text-muted">
-          <Link className="text-brand hover:underline" to={`/purchasing/requests/${rfq.requestId}`}>{rfq.requestCode}</Link> — {rfq.requestTitle} · {rfq.projectCode}
+          <Link className="link" to={`/purchasing/requests/${rfq.requestId}`}>{rfq.requestCode}</Link> — {rfq.requestTitle} · {rfq.projectCode}
           {rfq.dueDate && <> · {t('procurement.rfqs.dueDate')}: {formatDateTR(rfq.dueDate)}</>}
         </p>
       </div>

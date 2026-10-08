@@ -2,7 +2,7 @@ import { hash } from '@node-rs/argon2';
 import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { WEAK_PASSWORD_MESSAGE, addMemberSchema, isWeakPassword, updateMemberSchema, uuid } from '@erp/shared';
+import { WEAK_PASSWORD_MESSAGE, addMemberSchema, isWeakPassword, updateMemberSchema, uuid, type PermissionSet, type Role } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { memberModuleAccess, memberships, userMfa, users } from '../../db/schema';
 import { tenantRoute } from '../../http/context';
@@ -12,6 +12,7 @@ import { recordSecurityEvent } from '../auth/events';
 import { issueUserToken } from '../auth/tokens';
 import { queueMail } from '../mail/queue';
 import { verifyEmailMail } from '../mail/templates';
+import { buildAccess, loadOverrides } from '../access/effective';
 
 const userIdParam = z.object({ userId: uuid });
 
@@ -22,6 +23,14 @@ const userIdParam = z.object({ userId: uuid });
 function requireOwnerFor(callerRole: string, ...roles: (string | null | undefined)[]) {
   if (callerRole !== 'owner' && roles.includes('owner')) {
     throw forbidden('Sahip rolünü yalnızca şirket sahipleri verebilir, değiştirebilir veya kaldırabilir', 'OWNER_ONLY');
+  }
+}
+
+/** Rol ataması da yetki verir: kısıtlı yönetici, modül/işlem kısıtlarını yeni bir kullanıcı veya rol değişimiyle aşamaz. */
+function assertRoleWithinGranter(granter: PermissionSet, role: Role, before: PermissionSet = new Set()) {
+  const extra = [...buildAccess(role, {}).permissions].filter((permission) => !before.has(permission) && !granter.has(permission));
+  if (extra.length > 0) {
+    throw forbidden('Bu rol, kendinizde bulunmayan yetkiler veriyor; bu atamayı şirket sahibi yapmalıdır', 'MODULE_ACCESS_EXCEEDS_OWN');
   }
 }
 
@@ -52,9 +61,10 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/company/members',
-    tenantRoute(app, manage, async ({ tx, req, reply, company, user, role }) => {
+    tenantRoute(app, manage, async ({ tx, req, reply, company, user, role, access }) => {
       const input = addMemberSchema.parse(req.body);
       requireOwnerFor(role, input.role);
+      assertRoleWithinGranter(access.permissions, input.role);
 
       let [target] = await tx.select().from(users).where(eq(users.email, input.email));
       if (target && target.organizationId !== user.orgId) {
@@ -102,18 +112,25 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch(
     '/api/company/members/:userId',
-    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole, user }) => {
+    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole, user, access }) => {
       const { userId } = userIdParam.parse(req.params);
       const { role } = updateMemberSchema.parse(req.body);
+      // Sahip satırları hedef üyeden önce kilitlenir; eşzamanlı rol değişiklikleri aynı sırayla ilerler.
+      if (callerRole === 'owner') await lockOwnerMemberships(tx, company.id);
       const [current] = await tx
         .select({ role: memberships.role })
         .from(memberships)
-        .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)));
+        .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)))
+        .for('update');
       if (!current) throw notFound('Üye');
       requireOwnerFor(callerRole, role, current.role);
       await assertAccessOverridesAllowRoleChange(tx, company.id, userId, current.role, callerRole, user.id);
-      await assertNotLastOwner(tx, company.id, userId, role);
-      const overridesBefore = await countOverrides(tx, company.id, userId);
+      if (role !== current.role) {
+        const beforePermissions = buildAccess(current.role as Role, await loadOverrides(tx, company.id, userId)).permissions;
+        assertRoleWithinGranter(access.permissions, role, beforePermissions);
+      }
+      if (current.role === 'owner') await assertNotLastOwner(tx, company.id, userId, role);
+      const overridesBefore = role !== current.role ? await countOverrides(tx, company.id, userId) : 0;
       const [row] = await tx
         .update(memberships)
         .set({ role })
@@ -218,12 +235,17 @@ async function assertNotLastOwner(
   newRole: string | null,
 ) {
   if (newRole === 'owner') return;
-  const owners = await tx
-    .select({ userId: memberships.userId })
-    .from(memberships)
-    .where(and(eq(memberships.companyId, companyId), eq(memberships.role, 'owner')))
-    .for('update');
+  const owners = await lockOwnerMemberships(tx, companyId);
   if (owners.some((o) => o.userId === userId) && owners.length <= 1) {
     throw unprocessable('Şirketin en az bir sahibi olmalı', 'LAST_OWNER');
   }
+}
+
+async function lockOwnerMemberships(tx: Tx, companyId: string) {
+  return tx
+    .select({ userId: memberships.userId })
+    .from(memberships)
+    .where(and(eq(memberships.companyId, companyId), eq(memberships.role, 'owner')))
+    .orderBy(memberships.userId)
+    .for('update');
 }

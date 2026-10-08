@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCan, useCompanyApi, useCQuery } from '../../lib/queries';
-import { OperationForm, Records, selectField, numberField } from '../leather/common';
+import { OperationForm, Records, Status, selectField, numberField } from '../leather/common';
+import { displayQuantity } from '../../lib/presentation';
 
 type Transfer = {
   id: string;
@@ -38,11 +39,18 @@ export function TransfersPanel({
         loading={records.isPending}
         error={records.error}
         columns={[
-          { label: 'Kaynak', render: (r) => r.fromOperation },
-          { label: 'Hedef', render: (r) => r.toOperation },
-          { label: 'Gönderilen', render: (r) => r.quantity },
-          { label: 'Kabul', render: (r) => r.receivedQty },
-          { label: 'Durum', render: (r) => r.status },
+          {
+            label: 'Kaynak',
+            render: (r) =>
+              operations.find((o) => o.key === r.fromOperation)?.name ?? r.fromOperation,
+          },
+          {
+            label: 'Hedef',
+            render: (r) => operations.find((o) => o.key === r.toOperation)?.name ?? r.toOperation,
+          },
+          { label: 'Gönderilen', numeric: true, render: (r) => displayQuantity(r.quantity) },
+          { label: 'Kabul', numeric: true, render: (r) => displayQuantity(r.receivedQty) },
+          { label: 'Durum', render: (r) => <Status value={r.status} /> },
         ]}
         action={(r) =>
           can('manufacturing.production.manage') &&

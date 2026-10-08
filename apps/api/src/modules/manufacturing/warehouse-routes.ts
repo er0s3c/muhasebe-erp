@@ -14,6 +14,7 @@ import { tenantRoute, type TenantCtx } from '../../http/context';
 import { all, one, fail, lockLeatherCosts } from '../leather/common';
 import { manufacturingCtx } from './routes';
 import { createRecord, getRecord, listRecords, recordShape, updateRecord } from './service';
+import { queueInventoryChanges } from './channels';
 
 const id = (c: TenantCtx) => z.object({ id: uuid }).parse(c.req.params).id;
 export const manufacturingWarehouseRoutes: FastifyPluginAsync = async (app) => {
@@ -90,6 +91,24 @@ export const manufacturingWarehouseRoutes: FastifyPluginAsync = async (app) => {
         c.tx,
         sql`select coalesce(sum(qty),0)::text as qty from stock_movements where document_id=${doc.id} and item_id=${input.itemId}::uuid and warehouse_id=${input.warehouseId}::uuid and qty>0`,
       );
+      // An untouched automatic receipt lot can be partitioned into labelled physical lots.
+      const automatic = await all(
+        c.tx,
+        sql`select * from manufacturing_records where kind='lot' and source_document_id=${doc.id}::uuid and item_id=${input.itemId}::uuid and warehouse_id=${input.warehouseId}::uuid and status='quarantine' and config->>'automatic'='true' for update`,
+      );
+      let partition = dec(input.quantity);
+      for (const lot of automatic) {
+        const left = dec(lot.config.remainingQty ?? lot.config.quantity);
+        if (!left.eq(lot.config.quantity)) continue;
+        const take = left.lt(partition) ? left : partition;
+        await updateRecord(c.tx, lot.id, left.eq(take) ? 'partitioned' : 'quarantine', {
+          ...lot.config,
+          quantity: left.minus(take).toFixed(4),
+          remainingQty: left.minus(take).toFixed(4),
+        });
+        partition = partition.minus(take);
+        if (partition.isZero()) break;
+      }
       const assigned = await one(
         c.tx,
         sql`select coalesce(sum((a.config->>'quantity')::numeric),0)::text as qty from manufacturing_records a where a.item_id=${input.itemId}::uuid and ((a.kind='lot' and a.source_document_id=${doc.id}) or (a.kind='lot_event' and a.status='returned' and (a.source_document_id=${doc.id} or a.source_document_id=${doc.source_id ?? null}::uuid) and exists(select 1 from manufacturing_records l where l.kind='lot' and l.id::text=a.config->>'lotId' and l.source_document_id<>${doc.id})))`,
@@ -98,7 +117,11 @@ export const manufacturingWarehouseRoutes: FastifyPluginAsync = async (app) => {
         throw fail('Parti adedi kaynak kabul miktarını aşamaz');
       if (input.serials.length && !dec(input.quantity).eq(input.serials.length))
         throw fail('Seri sayısı miktarla eşleşmeli');
-      return { record: await createRecord(c.tx, manufacturingCtx(c), 'lot', input, input.status) };
+      const record = await createRecord(c.tx, manufacturingCtx(c), 'lot', input, input.status);
+      await queueInventoryChanges(c.tx, manufacturingCtx(c), 'lot-create:' + record.id, [
+        input.itemId,
+      ]);
+      return { record };
     }),
   );
   app.post(
@@ -109,13 +132,32 @@ export const manufacturingWarehouseRoutes: FastifyPluginAsync = async (app) => {
       if (!['release', 'block'].includes(input.action)) throw fail('Parti kararı uygun değil');
       await lockLeatherCosts(c.tx, c.company.id);
       const lot = await getRecord(c.tx, id(c), 'lot', true);
+      if (['leather_traced', 'partitioned'].includes(lot.status))
+        throw fail('Bu kabul fiziksel parça kayıtlarından yönetilir');
+      const record = await updateRecord(
+        c.tx,
+        lot.id,
+        input.action === 'release' ? 'available' : 'blocked',
+        {
+          ...lot.config,
+          releasedQty:
+            input.action === 'release'
+              ? dec(lot.config.remainingQty ?? lot.config.quantity)
+                  .minus(lot.config.damagedQty ?? 0)
+                  .toFixed(4)
+              : '0',
+          approvedBy: c.user.id,
+          approvedAt: new Date().toISOString(),
+        },
+      );
+      await queueInventoryChanges(
+        c.tx,
+        manufacturingCtx(c),
+        'lot-action:' + lot.id + ':' + new Date().toISOString(),
+        [lot.item_id],
+      );
       return {
-        record: await updateRecord(
-          c.tx,
-          lot.id,
-          input.action === 'release' ? 'available' : 'blocked',
-          { ...lot.config, approvedBy: c.user.id, approvedAt: new Date().toISOString() },
-        ),
+        record,
       };
     }),
   );

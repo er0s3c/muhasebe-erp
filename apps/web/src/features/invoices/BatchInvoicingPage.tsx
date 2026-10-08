@@ -273,7 +273,7 @@ export function BatchInvoicingPage() {
             );
           })}
 
-          <div className="sticky bottom-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4 shadow-lg print:hidden">
+          <div className="sticky bottom-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4 print:hidden">
             <div className="text-sm">
               <span className="font-medium">{t('batch.selected', { count: picked.size })}</span>
               {selectedGross.length > 0 && <span className="ml-3 text-muted">{selectedGross.map(([c, v]) => moneyIn(v.toFixed(2), c)).join(' · ')}</span>}

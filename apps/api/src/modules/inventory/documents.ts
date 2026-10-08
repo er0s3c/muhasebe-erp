@@ -27,8 +27,10 @@ import { StockPlanner, type DraftRow, type PlannerItem } from './planner';
 import { applySerials, type SerialPlan } from './serials';
 import { requireActiveWarehouse } from './warehouses';
 import { lockLeatherCosts, reverseStockTrace, traceStockDocument } from '../leather/costs';
-import { availableStock } from '../leather/production';
+import { stockAvailability } from '../manufacturing/availability';
+import { sourceSalesLines, settleSalesAllocations } from '../manufacturing/allocations';
 import { syncStockLots } from '../manufacturing/stock-lots';
+import {queueInventoryChanges} from '../manufacturing/channels';
 
 export interface StockCtx {
   companyId: string;
@@ -73,6 +75,7 @@ interface Header {
 export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, header: Header, rows: DraftRow[], serials?: SerialPlan) {
   const company = (await tx.execute<{sector:string}>(sql`select sector from companies where id=${ctx.companyId}::uuid`)).rows[0];
   if (company && ['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector)) {
+    const ownSalesLines = (await sourceSalesLines(tx,header)).map(l=>l.sales_order_line_id as string);
     const used = new Map<string, MoneyValue>();
     for (const row of rows.filter(r => r.kind === 'qty' && r.qty.lt(0))) {
       const key = `${row.itemId}|${row.warehouseId}`;
@@ -83,7 +86,7 @@ export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, he
       } else {
         const tracked = await tx.execute(sql`select 1 from leather_pieces where item_id=${row.itemId}::uuid limit 1`);
         if (tracked.rows.length && !header.reversalOfId) throw unprocessable('Fiziksel deri çıkışını kesim, üretim sarfı veya fason işlemiyle kaydedin','LEATHER_PHYSICAL_COMMAND_REQUIRED');
-        available = dec(await availableStock(tx,row.itemId,row.warehouseId));
+        available = dec((await stockAvailability(tx,row.itemId,row.warehouseId,undefined,ownSalesLines)).available);
       }
       const requested = (used.get(key) ?? dec(0)).plus(row.qty.abs());
       if (requested.gt(available)) throw unprocessable('Kalite blokesi ve rezervasyon sonrası kullanılabilir stok yetersiz','LEATHER_STOCK_UNAVAILABLE');
@@ -131,7 +134,11 @@ export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, he
       })),
     );
   }
-  if(company&&['LEATHER_FASHION','MANUFACTURING_WHOLESALE'].includes(company.sector))await syncStockLots(tx,ctx,doc!,rows);
+  if(company&&['LEATHER_FASHION','MANUFACTURING_WHOLESALE'].includes(company.sector)){
+    await syncStockLots(tx,ctx,doc!,rows);
+    await settleSalesAllocations(tx,ctx,doc!,rows);
+    await queueInventoryChanges(tx,ctx,'stock:'+doc!.id,[...new Set(rows.map(r=>r.itemId))]);
+  }
   return doc!;
 }
 

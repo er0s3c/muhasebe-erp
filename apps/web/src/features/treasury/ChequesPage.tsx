@@ -17,7 +17,7 @@ import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR, money, moneyIn } from '../../lib/format';
+import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ChequeActionResult, ChequeBatchRow, ChequeBouncedReport, ChequeDetail, ChequeDueReport, ChequeList, ChequeMaturity, ChequeRow } from '../../lib/types';
@@ -284,7 +284,7 @@ function ChequeSheet({ direction, onClose }: { direction: ChequeDirection | null
           </Field>
           <Field label="Para birimi">{id=><Select id={id} value={f.currency} onChange={e=>{setF({...f,currency:e.target.value as typeof base,fxRate:''});setItems({});}}><CurrencyOptions /></Select>}</Field>
           <Field label={t('cheques.form.amount', { cur: f.currency })} required>{(id) => <MoneyInput id={id} value={f.amount} onChange={(v) => setF({ ...f, amount: v })} />}</Field>
-          {f.currency!==base && <Field label={`Kayıt kuru: 1 ${f.currency} = ${base}`} hint="Boş bırakılırsa kayıt tarihindeki geçerli kur kullanılır.">{id=><MoneyInput id={id} value={f.fxRate} decimals={8} onChange={v=>setF({...f,fxRate:v})} />}</Field>}
+          {f.currency!==base && <Field label={`Kayıt kuru: 1 ${currencySymbol(f.currency)} = ${currencySymbol(base)}`} hint="Boş bırakılırsa kayıt tarihindeki geçerli kur kullanılır.">{id=><MoneyInput id={id} value={f.fxRate} decimals={8} onChange={v=>setF({...f,fxRate:v})} />}</Field>}
           <DateField label={t('cheques.form.registerDate')} value={f.registerDate} onChange={(v) => { setF({ ...f, registerDate: v }); setItems({}); }} required />
           <DateField label={t('cheques.form.issueDate')} value={f.issueDate} onChange={(v) => setF({ ...f, issueDate: v })} required />
           <DateField label={t('cheques.form.dueDate')} value={f.dueDate} onChange={(v) => setF({ ...f, dueDate: v })} required />
@@ -366,7 +366,7 @@ function ActionModal({ target, onClose }: { target: { action: ChequeAction; cheq
         {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
         {cheque && <p className="text-sm text-muted">{cheque.partyName} · {moneyIn(cheque.amount, cheque.currencyCode)} · {t('cheques.cols.due')} {formatDateTR(cheque.dueDate)}</p>}
         <DateField label={t('cheques.form.actionDate')} value={date} onChange={(v) => { setDate(v); setItems({}); }} required />
-        {(action==='collect'||action==='pay')&&cheque?.currencyCode!==base&&<Field label={`İşlem kuru: 1 ${cheque?.currencyCode} = ${base}`} hint="Boş bırakılırsa işlem tarihindeki geçerli kur kullanılır.">{id=><MoneyInput id={id} value={fxRate} decimals={4} maxDecimals={8} onChange={setFxRate} />}</Field>}
+        {(action==='collect'||action==='pay')&&cheque?.currencyCode!==base&&<Field label={`İşlem kuru: 1 ${currencySymbol(cheque?.currencyCode??base)} = ${currencySymbol(base)}`} hint="Boş bırakılırsa işlem tarihindeki geçerli kur kullanılır.">{id=><MoneyInput id={id} value={fxRate} decimals={4} maxDecimals={8} onChange={setFxRate} />}</Field>}
         {needsBank && (
           <Field label={t('cheques.form.bankAccount')} required>
             {(id) => (
@@ -498,7 +498,7 @@ function ClearingTab() {
           {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Para birimi" className="w-36">{id=><Select id={id} value={currency} onChange={e=>{setCurrency(e.target.value);setSel({});setBankId('');setFilterBank('');setFxRate('');}}><CurrencyOptions /></Select>}</Field>
-            {(action==='collect'||action==='pay')&&currency!==base&&<Field label={`1 ${currency} = ${base}`} hint="Boş: kayıtlı güncel kur" className="w-44">{id=><MoneyInput id={id} value={fxRate} decimals={4} maxDecimals={8} onChange={setFxRate} />}</Field>}
+            {(action==='collect'||action==='pay')&&currency!==base&&<Field label={`1 ${currencySymbol(currency)} = ${currencySymbol(base)}`} hint="Boş: kayıtlı güncel kur" className="w-44">{id=><MoneyInput id={id} value={fxRate} decimals={4} maxDecimals={8} onChange={setFxRate} />}</Field>}
             <DateField label={t('cheques.form.actionDate')} value={date} onChange={setDate} />
             {needsBank && (
               <Field label={t('cheques.form.bankAccount')} className="w-56">
@@ -558,7 +558,7 @@ function ClearingTab() {
               </Table>
             </TableWrap>
           )}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-sm text-muted">{t('cheques.clearing.selected', { n: chosen.length, total: moneyIn(String(total), currency) })}</span>
             {can('treasury.post') && (
               <Button

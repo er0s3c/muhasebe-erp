@@ -74,4 +74,8 @@ export * from './leather';
 export * from './pos';
 
 export * from './manufacturing';
+export * from './forecasting';
+export * from './manufacturing-execution';
+export * from './manufacturing-capacity';
+export * from './manufacturing-queue';
 export * from './manufacturing-profiles';

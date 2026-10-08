@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CURRENCY_CODES, MAP_LEVELS, todayIso } from '@erp/shared';
+import { currencySymbol, MAP_LEVELS, todayIso } from '@erp/shared';
+import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
@@ -73,7 +74,7 @@ function GroupsPanel({ groups }: { groups: ConsolidationGroup[] }) {
           <Field label={t('consolidation.groupCurrency')} hint={t('consolidation.groupCurrencyHint')}>
             {(id) => (
               <Select id={id} value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-32">
-                {CURRENCY_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
+                <CurrencyOptions />
               </Select>
             )}
           </Field>
@@ -88,7 +89,7 @@ function GroupsPanel({ groups }: { groups: ConsolidationGroup[] }) {
                 <li key={c.id}>
                   <label className="flex cursor-pointer items-center gap-2 text-sm">
                     <input type="checkbox" checked={picked.includes(c.id)} onChange={() => toggle(c.id)} />
-                    {c.name} <span className="text-muted">({c.baseCurrency} · {t(`roles.${c.role as 'owner'}`)})</span>
+                    {c.name} <span className="text-muted">({currencySymbol(c.baseCurrency)} · {t(`roles.${c.role as 'owner'}`)})</span>
                   </label>
                 </li>
               ))}
@@ -103,7 +104,7 @@ function GroupsPanel({ groups }: { groups: ConsolidationGroup[] }) {
         return (
           <Card key={g.id} className="p-5" data-testid="group-card">
             <CardHeader
-              title={`${g.name} (${g.reportingCurrency})`}
+              title={`${g.name} (${currencySymbol(g.reportingCurrency)})`}
               action={<Button size="sm" onClick={() => archive.mutate({ id: g.id, isArchived: !g.isArchived })}>{g.isArchived ? t('consolidation.unarchive') : t('consolidation.archive')}</Button>}
             />
             <ul className="flex flex-col gap-1.5 text-sm">
@@ -192,14 +193,14 @@ export function ConsolidationPage() {
           ) : undefined
         }
       />
-      <PrintHeader subtitle={group ? `${group.name} (${group.reportingCurrency})` : undefined} note={t('consolidation.unverified')} />
+      <PrintHeader subtitle={group ? `${group.name} (${currencySymbol(group.reportingCurrency)})` : undefined} note={t('consolidation.unverified')} />
       <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <SegmentedTabs items={tabs} value={tab} onChange={setTab} />
         {needsGroup && groups.length > 0 && (
           <Field label={t('consolidation.group')}>
             {(id) => (
               <Select id={id} value={groupId} onChange={(e) => { setGroupId(e.target.value); setApplied(null); }} className="w-64">
-                {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.reportingCurrency})</option>)}
+                {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({currencySymbol(g.reportingCurrency)})</option>)}
               </Select>
             )}
           </Field>

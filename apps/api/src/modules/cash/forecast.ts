@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { applyRate, dec, toDbAmount, todayIso, type CashForecastQuery, type CreateCashForecastItemInput, type MoneyValue, type UpdateCashForecastItemInput } from '@erp/shared';
+import { applyRate, dec, toDbAmount, todayIso, estimatePaymentDelay, type CashForecastQuery, type CreateCashForecastItemInput, type MoneyValue, type UpdateCashForecastItemInput } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { cashForecastItems } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
@@ -29,6 +29,11 @@ export interface ForecastItem {
   itemId?: string;
   /** Çek/senet portföyünden gelen kalem (vade = belge vadesi). */
   cheque?: boolean;
+  dueDate?: string;
+  timingSource?: 'due' | 'payment_history' | 'conservative_history' | 'manual' | 'cheque';
+  sampleCount?: number;
+  delayDays?: number;
+  confidence?: 'low' | 'medium' | 'high';
 }
 
 /**
@@ -43,6 +48,20 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
   const weeks = q.weeks;
   const horizonEnd = addDays(from, weeks * 7 - 1);
   const base = ctx.baseCurrency;
+  const timing = q.timing ?? 'due';
+  const history = timing === 'due' ? [] : (await tx.execute<{party_id:string; control:string; due_date:string; paid_date:string}>(sql`
+    select p.party_id,p.control,c.id,c.due_date::text as due_date,max(se.entry_date)::text as paid_date
+    from party_allocations p
+    join treasury_transactions t on t.id=p.transaction_id and t.company_id=p.company_id and t.status='posted'
+    join journal_lines c on c.id=p.charge_line_id and c.company_id=p.company_id
+    join journal_entries ce on ce.id=c.entry_id and ce.company_id=p.company_id and ce.status='posted' and ce.reversed_by_id is null
+    join journal_lines s on s.id=p.settle_line_id and s.company_id=p.company_id
+    join journal_entries se on se.id=s.entry_id and se.company_id=p.company_id and se.status='posted' and se.reversed_by_id is null
+    where c.due_date is not null and ce.entry_date<=${today}::date and se.entry_date<=${today}::date
+    group by p.party_id,p.control,c.id,c.due_date,c.debit_base,c.credit_base
+    having sum(p.amount_base)>=abs(c.debit_base-c.credit_base)-0.01 and max(se.entry_date)>=${today}::date-180
+  `)).rows;
+  const timingCache = new Map<string,ReturnType<typeof estimatePaymentDelay>>();
 
   const rates = new Map<string, MoneyValue | null>();
   let missing = 0;
@@ -68,9 +87,15 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
       const due = it.dueDate;
       const projectOk = !q.projectId; // cari kalemleri projeye bağlı değildir; proje süzgeci yalnızca elle kalemlere uygulanır
       if (!projectOk) continue;
+      const key = it.partyId + ':' + type;
+      if (!timingCache.has(key)) timingCache.set(key, estimatePaymentDelay(history.filter(h=>h.party_id===it.partyId && h.control===type).map(h=>({dueDate:h.due_date,paidDate:h.paid_date})), timing==='conservative'?'conservative':'history', today));
+      const learned = timingCache.get(key)!;
+      const delay = (timing==='due' ? 0 : learned.delayDays) + (type==='receivable' ? q.collectionDelayDays ?? 0 : 0);
+      const expected = addDays(due, delay);
       items.push({
-        date: due,
-        week: weekOf(due),
+        date: expected,
+        dueDate: due,
+        week: weekOf(expected),
         source: type,
         direction: type === 'receivable' ? 'in' : 'out',
         description: it.description,
@@ -79,6 +104,10 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
         amount: dec(it.remaining).toFixed(2),
         amountBase: (await toBase(dec(it.remaining), it.currencyCode, dec(it.remainingBase))).toFixed(2),
         overdue: due < from,
+        timingSource: timing!=='due' && learned.source==='payment_history' ? timing==='conservative'?'conservative_history':'payment_history' : 'due',
+        sampleCount: learned.sampleCount,
+        delayDays: delay,
+        confidence: timing==='due' ? 'low' : learned.confidence,
       });
     }
   }
@@ -104,6 +133,8 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
         amountBase: (await toBase(dec(d.amount),d.currency_code,dec(d.amount_base))).toFixed(2),
         overdue: d.due_date < from,
         cheque: true,
+        timingSource: 'cheque',
+        dueDate: d.due_date,
       });
     }
   }
@@ -124,6 +155,7 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
       amountBase: (await toBase(dec(m.amount), m.currency_code)).toFixed(2),
       overdue: m.item_date < from,
       itemId: m.id,
+      timingSource: 'manual',
     });
   }
   items.sort((a, b) => a.date.localeCompare(b.date) || a.description.localeCompare(b.description, 'tr'));
@@ -185,6 +217,9 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
     lowest: { week: lowest.week, balance: lowest.value.toFixed(2) },
     items: items.filter((i) => i.week !== null),
     missingRate: missing,
+    timing,
+    collectionDelayDays: q.collectionDelayDays ?? 0,
+    assumptions: { asOf: today, historyDays:180, minSamples:3, learnedItems:items.filter(i=>i.timingSource==='payment_history'||i.timingSource==='conservative_history').length, fallbackItems:items.filter(i=>i.timingSource==='due').length, overdueReceivables:items.filter(i=>i.source==='receivable' && i.overdue).reduce((s,i)=>s.plus(i.amountBase),dec(0)).toFixed(2) },
   };
 }
 

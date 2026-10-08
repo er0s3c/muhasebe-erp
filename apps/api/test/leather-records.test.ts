@@ -14,6 +14,25 @@ const document = { filename: 'uretim.pdf', mime: 'application/pdf', base64: Buff
 const created = (r: { statusCode: number; body: string; json: () => any }) => { expect(r.statusCode, r.body).toBe(201); return r.json(); };
 
 describe('leather shared record tools', () => {
+  it.each([randomUUID(), 'PRODUCTION:01a11a54-a1d2-7dae-b566-c4dd50aaa5b1:0'])('eski UUID kodu %s listede ve aramada okunabilir, aynı şirket kaydına bağlanır', async (legacyCode) => {
+    const owner = await registerUser(app,'ReadableManufacturing');
+    const company = await createCompany(app,owner.token,{sector:'MANUFACTURING_WHOLESALE'});
+    const c = client(app,owner.token,company.id);
+    const response = await c.post('/api/manufacturing/resources',{code:legacyCode,name:'Okunabilir makine',type:'machine'});
+    expect(response.statusCode,response.body).toBe(200);
+    const record = response.json().record;
+    expect(record.code).not.toContain(legacyCode);
+    const listed = (await c.get('/api/manufacturing/resources')).json().records.find((r:{id:string})=>r.id===record.id);
+    expect(listed.code).toBe(record.code);
+    const another = await c.post('/api/manufacturing/resources',{code:randomUUID(),name:'İkinci okunabilir makine',type:'machine'});
+    expect(another.statusCode,another.body).toBe(200);
+    expect(another.json().record.code).not.toBe(record.code);
+    const search = await c.get(`/api/workspace/search?q=${encodeURIComponent(record.code)}&kind=manufacturing_resource`);
+    expect(search.statusCode,search.body).toBe(200);
+    expect(search.json().items).toEqual([expect.objectContaining({id:record.id,label:'Okunabilir makine',path:`/manufacturing/planning?open=${record.id}`})]);
+    const isolated = await createCompany(app,owner.token,{sector:'MANUFACTURING_WHOLESALE'});
+    expect((await client(app,owner.token,isolated.id).get(`/api/workspace/search?q=${record.code}&kind=manufacturing_resource`)).json().items).toEqual([]);
+  });
   it('model search, tasks and documents follow source access and company scope', async () => {
     const owner = await registerUser(app, 'ModelArchive');
     const company = await createCompany(app, owner.token, { sector: 'LEATHER_FASHION' });

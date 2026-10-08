@@ -1,7 +1,7 @@
 import { LockKeyhole, ShieldOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Outlet, useLocation, useMatches } from 'react-router-dom';
-import { ACCESS_AREAS, areaOfPermission, type Permission } from '@erp/shared';
+import { ACCESS_AREAS, areaOfPermission, permissionOverrideKey, type Permission } from '@erp/shared';
 import { EmptyState, PageLoading } from '../components/ui/Feedback';
 import { useNavigation } from '../lib/queries';
 import { useSession } from '../lib/session';
@@ -50,11 +50,11 @@ export function RequireCompany() {
 }
 
 /** Modül şirkette etkin değilse sayfayı hiç göstermez (sunucu da 403 verir). */
-export function RequireModule({ module }: { module: string }) {
+export function RequireModule({ module, alternatives = [] }: { module: string; alternatives?: string[] }) {
   const { t } = useTranslation();
   const { data, isPending } = useNavigation();
   if (isPending) return <PageLoading />;
-  if (!data?.modules.includes(module)) {
+  if (![module,...alternatives].some(key=>data?.modules.includes(key))) {
     return (
       <EmptyState
         icon={<LockKeyhole className="size-5" />}
@@ -84,14 +84,15 @@ export function ForbiddenPage({ permission }: { permission?: Permission | null }
   const { data } = useNavigation();
   const area = permission ? areaOfPermission(permission) : null;
   const custom = area ? data?.moduleAccess?.[area] : undefined;
+  const operationBlocked = !!(permission && data?.moduleAccess?.[permissionOverrideKey(permission)] === 'none');
   const isWrite = !!(area && permission && (ACCESS_AREAS[area].write as readonly string[]).includes(permission));
-  const reason: 'blocked' | 'readOnly' | 'role' = custom === 'none' ? 'blocked' : custom === 'read' && isWrite ? 'readOnly' : 'role';
+  const reason: 'blocked' | 'readOnly' | 'role' = custom === 'none' || operationBlocked ? 'blocked' : custom === 'read' && isWrite ? 'readOnly' : 'role';
   return (
     <div data-testid="forbidden-page" data-reason={reason}>
       <EmptyState
         icon={<ShieldOff className="size-5" />}
         title={reason === 'blocked' ? t('common.moduleBlockedTitle') : t('common.forbiddenTitle')}
-        description={reason === 'blocked' ? t('common.moduleBlockedDesc') : reason === 'readOnly' ? t('common.moduleReadOnlyDesc') : t('common.forbiddenDesc')}
+        description={operationBlocked && custom !== 'none' ? 'Bu sayfayı görüntüleme erişiminiz yönetici tarafından kapatıldı.' : reason === 'blocked' ? t('common.moduleBlockedDesc') : reason === 'readOnly' ? t('common.moduleReadOnlyDesc') : t('common.forbiddenDesc')}
         action={
           <Link to="/">
             <Button variant="secondary">{t('common.goHome')}</Button>

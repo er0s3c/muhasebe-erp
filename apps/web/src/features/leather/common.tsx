@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
-import { ProductionLink as Link, useProductionCan as useCan, useGenericProduction, productionPath } from './production-context';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import {
+  ProductionLink as Link,
+  useProductionCan as useCan,
+  useGenericProduction,
+  productionPath,
+} from './production-context';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
@@ -11,6 +16,11 @@ import { Table, TableWrap, Td, Th } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { useCompanyApi } from '../../lib/queries';
 import { ApiError } from '../../lib/api';
+import { errorMessage } from '../../lib/errors';
+import { Sheet } from '../../components/ui/Sheet';
+import { domainLabels, displayDateTime, displayQuantity } from '../../lib/presentation';
+
+const InRecordActions = createContext(false);
 
 export type Values = Record<string, string>;
 export interface Option {
@@ -20,7 +30,7 @@ export interface Option {
 export interface FormField {
   name: string;
   label: string;
-  type?: 'text' | 'password' | 'number' | 'date' | 'textarea' | 'select';
+  type?: 'text' | 'password' | 'number' | 'date' | 'time' | 'textarea' | 'select';
   options?: Option[];
   required?: boolean;
   value?: string;
@@ -36,6 +46,7 @@ export function OperationForm({
   fields,
   submit,
   action = 'Kaydet',
+  successMessage = 'İşlem kaydedildi',
   disabled,
   onDone,
   children,
@@ -45,6 +56,80 @@ export function OperationForm({
   fields: FormField[];
   submit: (values: Values) => Promise<unknown>;
   action?: string;
+  successMessage?: string;
+  disabled?: boolean;
+  onDone?: () => void;
+  children?: ReactNode;
+}) {
+  const inRecord = useContext(InRecordActions);
+  const [open, setOpen] = useState(false);
+  if (inRecord)
+    return (
+      <>
+        <Button size="sm" onClick={() => setOpen(true)}>
+          {title}
+        </Button>
+        <Sheet
+          open={open}
+          onOpenChange={setOpen}
+          title={title}
+          description={description}
+          wide={fields.length > 4}
+        >
+          <InRecordActions.Provider value={false}>
+            {open && (
+              <OperationForm
+                title={title}
+                description={description}
+                fields={fields}
+                submit={submit}
+                action={action}
+                successMessage={successMessage}
+                disabled={disabled}
+                onDone={() => {
+                  onDone?.();
+                  setOpen(false);
+                }}
+              >
+                {children}
+              </OperationForm>
+            )}
+          </InRecordActions.Provider>
+        </Sheet>
+      </>
+    );
+  return (
+    <OperationFormContent
+      title={title}
+      description={description}
+      fields={fields}
+      submit={submit}
+      action={action}
+      successMessage={successMessage}
+      disabled={disabled}
+      onDone={onDone}
+    >
+      {children}
+    </OperationFormContent>
+  );
+}
+function OperationFormContent({
+  title,
+  description,
+  fields,
+  submit,
+  action = 'Kaydet',
+  successMessage = 'İşlem kaydedildi',
+  disabled,
+  onDone,
+  children,
+}: {
+  title: string;
+  description?: string;
+  fields: FormField[];
+  submit: (values: Values) => Promise<unknown>;
+  action?: string;
+  successMessage?: string;
   disabled?: boolean;
   onDone?: () => void;
   children?: ReactNode;
@@ -59,7 +144,7 @@ export function OperationForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const toast = useToast();
   return (
-    <Card className="mb-5">
+    <Card className="my-5">
       <CardHeader title={title} description={description} />
       <form
         aria-label={title}
@@ -71,11 +156,11 @@ export function OperationForm({
           setFieldErrors({});
           try {
             await submit(values);
-            toast.success('İşlem kaydedildi');
+            toast.success(successMessage);
             setValues(initial());
             onDone?.();
           } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'İşlem kaydedilemedi');
+            setError(errorMessage(cause));
             if (cause instanceof ApiError)
               setFieldErrors(
                 Object.fromEntries(
@@ -154,9 +239,9 @@ export function OperationForm({
 export function useLeatherActions() {
   const { call, company } = useCompanyApi();
   const queries = useQueryClient();
-  const generic=useGenericProduction();
+  const generic = useGenericProduction();
   return async (path: string, body: unknown, method: 'POST' | 'PATCH' | 'PUT' = 'POST') => {
-    const result = await call(productionPath(path,generic), { method, body });
+    const result = await call(productionPath(path, generic), { method, body });
     await Promise.all(
       ['leather', 'pos', 'items', 'inventory-summary', 'stock-status', 'parties', 'treasury'].map(
         (key) => queries.invalidateQueries({ queryKey: [company.id, key] }),
@@ -217,7 +302,7 @@ export function Status({ value }: { value: string }) {
             : 'neutral'
       }
     >
-      {statusLabels[value] ?? value}
+      {statusLabels[value] ?? domainLabels[value] ?? 'Durum belirtilmedi'}
     </Badge>
   );
 }
@@ -231,18 +316,23 @@ export function Records<T extends { id: string }>({
   action,
 }: {
   rows?: T[];
-  columns: { label: string; render: (row: T) => ReactNode; numeric?: boolean }[];
+  columns: {
+    label: string;
+    render: (row: T) => ReactNode;
+    numeric?: boolean;
+    formatted?: boolean;
+  }[];
   loading?: boolean;
   error?: Error | null;
   empty?: string;
   action?: (row: T) => ReactNode;
 }) {
   if (loading) return <PageLoading />;
-  if (error) return <Callout tone="danger">{error.message}</Callout>;
+  if (error) return <Callout tone="danger">{errorMessage(error)}</Callout>;
   if (!rows?.length)
     return (
       <Card>
-        <EmptyState title={empty} description="İlk kaydı yukarıdaki formdan oluşturabilirsiniz." />
+        <EmptyState title={empty} description="Bu görünümde henüz kayıt bulunmuyor." />
       </Card>
     );
   return (
@@ -260,13 +350,26 @@ export function Records<T extends { id: string }>({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id}>
+            <tr key={row.id} className="last:[&>td]:border-b-0 hover:bg-surface-2/50">
               {columns.map((column) => (
                 <Td key={column.label} num={column.numeric}>
-                  {column.render(row)}
+                  {(() => {
+                    const value = column.render(row);
+                    if (typeof value !== 'string') return value;
+                    if (/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value)) return displayDateTime(value);
+                    if (column.numeric && !column.formatted && /^-?\d+(?:\.\d+)?$/.test(value))
+                      return displayQuantity(value);
+                    return value;
+                  })()}
                 </Td>
               ))}
-              {action && <Td>{action(row)}</Td>}
+              {action && (
+                <Td>
+                  <InRecordActions.Provider value={true}>
+                    <div className="flex flex-wrap items-center gap-2">{action(row)}</div>
+                  </InRecordActions.Provider>
+                </Td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -277,7 +380,8 @@ export function Records<T extends { id: string }>({
 
 export function LeatherHeader({ title, description }: { title: string; description?: string }) {
   const can = useCan();
-  const generic=useGenericProduction();
+  const generic = useGenericProduction();
+  const { pathname } = useLocation();
   const links = [
     ['/leather', 'Genel bakış', 'leather.catalog.read'],
     ['/leather/models', 'Model ve koleksiyon', 'leather.catalog.read'],
@@ -290,16 +394,45 @@ export function LeatherHeader({ title, description }: { title: string; descripti
   ];
   return (
     <>
-      <PageHeader title={generic?title.replace(/Deri/g,'Üretim').replace(/deri/g,'ürün'):title} description={description} />
+      <PageHeader
+        title={
+          generic
+            ? ((
+                {
+                  'Deri model ve koleksiyon': 'Ürün kataloğu ve reçeteler',
+                  'Deri üretim ve atölye': 'Üretim ve atölye',
+                  'Deri sektör merkezi': 'Üretim merkezi',
+                } as Record<string, string>
+              )[title] ?? title.replace(/Deri/g, 'Üretim').replace(/deri/g, 'ürün'))
+            : title
+        }
+        description={description}
+      />
       <nav
-        aria-label="Deri üretim ekranları"
-        className="mb-5 flex flex-wrap gap-x-5 gap-y-2 text-sm"
+        aria-label={generic ? 'Üretim ekranları' : 'Deri üretim ekranları'}
+        className="mb-5 flex flex-wrap gap-1 rounded-lg border border-border bg-surface p-1 text-sm"
       >
         {links
-          .filter(([path, , permission]) => (!generic||!['/leather/materials','/leather/custom-orders','/leather/service'].includes(path!)) && can(permission!))
+          .filter(
+            ([path, , permission]) =>
+              (!generic ||
+                !['/leather/materials', '/leather/custom-orders', '/leather/service'].includes(
+                  path!,
+                )) &&
+              can(permission!),
+          )
           .map(([path, label]) => (
-            <Link key={path} className="link" to={path!}>
-              {label}
+            <Link
+              key={path}
+              aria-current={pathname === productionPath(path!, generic) ? 'page' : undefined}
+              className={
+                pathname === productionPath(path!, generic)
+                  ? 'rounded-md bg-brand px-3 py-2 text-brand-contrast'
+                  : 'rounded-md px-3 py-2 text-muted hover:bg-surface-2 hover:text-text'
+              }
+              to={path!}
+            >
+              {generic && label === 'Model ve koleksiyon' ? 'Katalog ve reçete' : label}
             </Link>
           ))}
       </nav>

@@ -10,7 +10,7 @@ import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { moneyIn } from '../../lib/format';
+import { currencySymbol, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { cn } from '../../lib/cn';
 
@@ -50,12 +50,12 @@ export function ProfitabilityPage() {
   return (
     <>
       <PageHeader title={t('profitability.title')} description={t('profitability.subtitle')} actions={<ExportMenu exportKey="project-profitability" params={{ asOf }} />} />
-      <PrintHeader subtitle={`${t('profitability.asOf')}: ${asOf.split('-').reverse().join('.')} · ${cur}`} />
+      <PrintHeader subtitle={`${t('profitability.asOf')}: ${asOf.split('-').reverse().join('.')} · ${currencySymbol(cur)}`} />
       <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <Field label={t('profitability.asOf')}>{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-44" />}</Field>
         {repOk && (
           <SegmentedTabs
-            items={[{ key: 'base', label: t('profitability.view.base', { cur: data.baseCurrency }) }, { key: 'reporting', label: t('profitability.view.reporting', { cur: data.reportingCurrency }) }]}
+            items={[{ key: 'base', label: t('profitability.view.base', { cur: currencySymbol(data.baseCurrency) }) }, { key: 'reporting', label: t('profitability.view.reporting', { cur: currencySymbol(data.reportingCurrency!) }) }]}
             value={view}
             onChange={setView}
           />

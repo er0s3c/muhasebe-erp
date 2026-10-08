@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   accountLedgerQuerySchema,
+  cashForecastQuerySchema,
   agingQuerySchema,
   agendaListQuerySchema,
   attendanceLaborQuerySchema,
@@ -213,7 +214,7 @@ export const EXPORTS: readonly ExportDef[] = [
     key: 'cash-forecast',
     module: 'core.treasury',
     permission: 'treasury.read',
-    schema: z.object({ from: isoDate.optional(), weeks: z.coerce.number().int().min(4).max(26).optional() }),
+    schema: cashForecastQuerySchema.omit({ projectId: true }).partial({ weeks: true }),
     build: cashForecastTable,
     file: () => `nakit-projeksiyonu-${todayIso()}`,
   }),

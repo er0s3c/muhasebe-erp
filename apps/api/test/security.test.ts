@@ -327,6 +327,8 @@ describe('sözleşme testleri', async () => {
     'GET /api/public-config',
     // External portal: invitation secret + password; expiry, revocation and issuer privilege checks.
     'POST /api/portal/view',
+    // Exact raw-body HMAC, configured shop, active issuer/module/license and shared rate limiter.
+    'POST /api/integrations/webhooks/:companyId/:connectionId/shopify',
     'POST /api/auth/register',
     'POST /api/auth/login',
     // İkinci adım: yalnızca 5 dakikalık purpose:'mfa' belirteciyle çalışır (parola doğrulandıktan sonra verilir).

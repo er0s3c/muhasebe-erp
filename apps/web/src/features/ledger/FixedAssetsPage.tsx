@@ -210,7 +210,7 @@ function AssetContent() {
                   </div>
                 </div>
                 <div
-                  className="h-1.5 overflow-hidden rounded-full bg-surface-2"
+                  className="h-1.5 overflow-hidden rounded-sm bg-surface-2"
                   aria-label={`${a.config.name} amortisman ilerlemesi`}
                 >
                   <div

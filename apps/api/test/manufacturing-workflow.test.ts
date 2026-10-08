@@ -208,7 +208,86 @@ describe('üretim kabulü, depo ve kapasite', async () => {
     expect(again.status).toBe('part_received');
     expect(again.receivedQty).toBe('3.0000');
   });
+  it('süre tahmini kalan iyi adedi ve kaynağın gerçekleşmesini kullanır; yetkisiz emri açmaz', async () => {
+    const machine = (
+      await ok(
+        c.post('/api/manufacturing/resources', {
+          code: 'W-EST',
+          name: 'Tahmin kaynağı',
+          type: 'machine',
+        }),
+      )
+    ).record;
+    const other = (
+      await ok(
+        c.post('/api/manufacturing/resources', {
+          code: 'W-NODATA',
+          name: 'Geçmişi olmayan kaynak',
+          type: 'machine',
+        }),
+      )
+    ).record;
+    const before = await ok(c.get(`/api/manufacturing/production/orders/${order}/estimates`));
+    expect(
+      before.operations
+        .find((o: { operationKey: string }) => o.operationKey === 'second')
+        .resources.find((r: { resourceId: string }) => r.resourceId === machine.id),
+    ).toMatchObject({ source: 'no_data', minutes: null, remainingQty: 10 });
+    await ok(
+      c.post(`/api/manufacturing/production/orders/${order}/operations`, {
+        ...action(),
+        key: 'second',
+        status: 'started',
+        quantity: '2',
+        goodQty: '2',
+        minutes: '10',
+        resourceId: machine.id,
+      }),
+    );
+    const estimate = await ok(c.get(`/api/manufacturing/production/orders/${order}/estimates`));
+    const second = estimate.operations.find(
+      (o: { operationKey: string }) => o.operationKey === 'second',
+    );
+    expect(
+      second.resources.find((r: { resourceId: string }) => r.resourceId === machine.id),
+    ).toMatchObject({
+      source: 'actual',
+      minutes: 40,
+      remainingQty: 8,
+      sampleCount: 1,
+      confidence: 'low',
+    });
+    expect(
+      second.resources.find((r: { resourceId: string }) => r.resourceId === other.id),
+    ).toMatchObject({ source: 'no_data', minutes: null, remainingQty: 8 });
+    expect(estimate.operations[0].resources[0]).toMatchObject({
+      remainingQty: 0,
+      minutes: 0,
+      source: 'standard',
+    });
+    const operator = await addMember(app, c, company.id, 'operator', 'EstimateOperator');
+    await ok(
+      c.put(`/api/company/members/${operator.userId}/module-access`, {
+        levels: { 'manufacturing.planning': 'read', 'manufacturing.production': 'read' },
+      }),
+    );
+    expect(
+      (await operator.client.get(`/api/manufacturing/production/orders/${order}/estimates`))
+        .statusCode,
+    ).toBe(404);
+    const isolated = await createCompany(app, user.token, { sector: 'MANUFACTURING_WHOLESALE' });
+    expect(
+      (
+        await client(app, user.token, isolated.id).get(
+          `/api/manufacturing/production/orders/${order}/estimates`,
+        )
+      ).statusCode,
+    ).toBe(404);
+  });
   it('bakım plan yayımlama kontrolünü değiştirir ve yedek parça bir kez sarf edilir', async () => {
+    const date = new Date(Date.parse(TODAY_LOCAL + 'T12:00:00Z') - 86400000)
+      .toISOString()
+      .slice(0, 10);
     const resource = (
       await ok(
         c.post('/api/manufacturing/resources', {
@@ -218,12 +297,12 @@ describe('üretim kabulü, depo ve kapasite', async () => {
         }),
       )
     ).record.id;
-    const start = TODAY_LOCAL + 'T08:00:00Z';
+    const start = date + 'T08:00:00Z';
     await ok(
       c.post('/api/manufacturing/calendars', {
         resourceId: resource,
         start,
-        end: TODAY_LOCAL + 'T17:00:00Z',
+        end: date + 'T17:00:00Z',
         available: true,
         reason: 'shift',
       }),
@@ -238,7 +317,6 @@ describe('üretim kabulü, depo ve kapasite', async () => {
         c.post('/api/manufacturing/maintenance', {
           resourceId: resource,
           start,
-          end: TODAY_LOCAL + 'T09:00:00Z',
           kind: 'breakdown',
           description: 'Arıza',
           warehouseId: wh,
@@ -249,9 +327,15 @@ describe('üretim kabulü, depo ve kapasite', async () => {
     expect(
       (await c.post(`/api/manufacturing/planning/schedules/${scenario}/publish`, {})).statusCode,
     ).toBe(422);
-    await ok(c.put(`/api/manufacturing/planning/schedules/${scenario}`, payload));
-    await ok(c.post(`/api/manufacturing/planning/schedules/${scenario}/publish`, {}));
-    const command = { action: 'complete', ...action() };
+    const revisionInput = {
+      ...payload,
+      requestKey: randomUUID(),
+      reason: 'Arıza sonrası yeniden planlama',
+    };
+    expect(
+      (await c.put(`/api/manufacturing/planning/schedules/${scenario}`, revisionInput)).statusCode,
+    ).toBe(422);
+    const command = { action: 'complete', ...action(), end: date + 'T09:00:00Z' };
     const first = (
       await ok(c.post(`/api/manufacturing/maintenance/${maintenance}/complete`, command))
     ).record;
@@ -259,11 +343,169 @@ describe('üretim kabulü, depo ve kapasite', async () => {
       await ok(c.post(`/api/manufacturing/maintenance/${maintenance}/complete`, command))
     ).record;
     expect(repeated.stockDocumentId).toBe(first.stockDocumentId);
+    expect(first.end).toBe(command.end);
+    const revised = (
+      await ok(c.put(`/api/manufacturing/planning/schedules/${scenario}`, revisionInput))
+    ).record;
+    expect(revised.parentId).toBe(scenario);
+    expect(revised.version).toBe(2);
+    expect(revised.operations[0].start).toBe(date + 'T09:00:00.000Z');
+    expect(
+      (await ok(c.put(`/api/manufacturing/planning/schedules/${scenario}`, revisionInput))).record
+        .id,
+    ).toBe(revised.id);
+    await ok(c.post(`/api/manufacturing/planning/schedules/${revised.id}/publish`, {}));
     const metrics = await ok(
-      c.get(`/api/manufacturing/maintenance/metrics?from=${TODAY_LOCAL}&to=${TODAY_LOCAL}`),
+      c.get(`/api/manufacturing/maintenance/metrics?from=${date}&to=${date}`),
     );
     expect(metrics.metrics[0].mttrMinutes).toBe(60);
     expect(metrics.metrics[0].oee).toBeNull();
+  });
+  it('bitişsiz arıza kapasiteyi kapatır; yalnız geçmişte ve başlangıçtan sonra tamamlanabilir', async () => {
+    const date = new Date(Date.parse(TODAY_LOCAL + 'T12:00:00Z') - 86400000)
+      .toISOString()
+      .slice(0, 10);
+    const start = date + 'T08:00:00Z',
+      end = date + 'T17:00:00Z';
+    const resource = (
+      await ok(
+        c.post('/api/manufacturing/resources', {
+          code: 'W-OPEN-FAULT',
+          name: 'Devam eden arıza makinesi',
+          type: 'machine',
+        }),
+      )
+    ).record.id;
+    await ok(
+      c.post('/api/manufacturing/calendars', {
+        resourceId: resource,
+        start,
+        end,
+        available: true,
+        reason: 'shift',
+      }),
+    );
+    const opened = (
+      await ok(
+        c.post('/api/manufacturing/maintenance', {
+          resourceId: resource,
+          start,
+          kind: 'breakdown',
+          description: 'Bitişi bilinmeyen arıza',
+        }),
+      )
+    ).record;
+    expect(opened).toMatchObject({ status: 'open', end: null });
+    const capacity = () =>
+      ok(c.get(`/api/manufacturing/planning/capacity?from=${start}&to=${end}`));
+    expect(
+      (await capacity()).resources.find((r: { id: string }) => r.id === resource).capacityMinutes,
+    ).toBe(0);
+    const metric = () =>
+      ok(c.get(`/api/manufacturing/maintenance/metrics?from=${date}&to=${date}`));
+    expect(
+      (await metric()).metrics.find((r: { resourceId: string }) => r.resourceId === resource),
+    ).toMatchObject({ downtimeMinutes: 540, mttrMinutes: null });
+    for (const [payload, status] of [
+      [{ ...action(), action: 'complete' }, 400],
+      [{ ...action(), action: 'complete', end: start }, 422],
+      [{ ...action(), action: 'complete', end: new Date(Date.now() + 3600000).toISOString() }, 422],
+      [{ ...action(), action: 'cancel', end: date + 'T09:30:00Z' }, 400],
+    ] as const) {
+      const response = await c.post(
+        `/api/manufacturing/maintenance/${opened.id}/complete`,
+        payload,
+      );
+      expect(response.statusCode, response.body).toBe(status);
+    }
+    const completed = (
+      await ok(
+        c.post(`/api/manufacturing/maintenance/${opened.id}/complete`, {
+          ...action(),
+          action: 'complete',
+          end: date + 'T09:30:00Z',
+        }),
+      )
+    ).record;
+    expect(completed).toMatchObject({
+      status: 'completed',
+      stockDocumentId: null,
+      end: date + 'T09:30:00Z',
+    });
+    expect(
+      (await capacity()).resources.find((r: { id: string }) => r.id === resource).capacityMinutes,
+    ).toBe(450);
+    expect(
+      (await metric()).metrics.find((r: { resourceId: string }) => r.resourceId === resource),
+    ).toMatchObject({ downtimeMinutes: 90, mttrMinutes: 90 });
+  });
+  it('açık arıza vardiya içindeki canlı çalışmayı engeller; tamamlanınca çalışma başlayabilir', async () => {
+    const now = Date.now();
+    const resource = (
+      await ok(
+        c.post('/api/manufacturing/resources', {
+          code: 'W-LIVE-FAULT',
+          name: 'Canlı bakım makinesi',
+          type: 'machine',
+        }),
+      )
+    ).record.id;
+    await ok(
+      c.post('/api/manufacturing/calendars', {
+        resourceId: resource,
+        start: new Date(now - 3 * 3600000).toISOString(),
+        end: new Date(now + 3600000).toISOString(),
+        available: true,
+        reason: 'shift',
+      }),
+    );
+    const opened = (
+      await ok(
+        c.post('/api/manufacturing/maintenance', {
+          resourceId: resource,
+          start: new Date(now - 2 * 3600000).toISOString(),
+          end: new Date(now - 3600000).toISOString(),
+          kind: 'breakdown',
+          description: 'Tahmini süresini aşan arıza',
+        }),
+      )
+    ).record;
+    expect(opened.end).toBeNull();
+    const work = {
+      ...action(),
+      action: 'start',
+      operationKey: 'second',
+      resourceId: resource,
+      reason: 'Arıza kontrolü',
+    };
+    const blocked = await c.post(`/api/manufacturing/production/orders/${order}/work`, work);
+    expect(blocked.statusCode, blocked.body).toBe(422);
+    expect(blocked.body).toContain('bakım');
+    await ok(
+      c.post(`/api/manufacturing/maintenance/${opened.id}/complete`, {
+        ...action(),
+        action: 'complete',
+        end: new Date(now - 3600000).toISOString(),
+      }),
+    );
+    const started = (await ok(c.post(`/api/manufacturing/production/orders/${order}/work`, work)))
+      .record;
+    expect(started.status).toBe('running');
+    await ok(
+      c.post(`/api/manufacturing/production/orders/${order}/work`, {
+        ...action(),
+        action: 'pause',
+        operationKey: 'second',
+        reason: 'Test tamamlandı',
+      }),
+    );
+    await ok(
+      c.post(`/api/manufacturing/production/orders/${order}/phase`, {
+        requestKey: randomUUID(),
+        phase: 'ready',
+        reason: 'Bakım testi sonrası üretime devam',
+      }),
+    );
   });
   it('yan ürün değeri ikinci kez yaratılmaz; 160 TL 128/32 bölünür', async () => {
     const quality = (
@@ -500,11 +742,22 @@ describe('üretim kabulü, depo ve kapasite', async () => {
     expect(
       (await ok(c.get('/api/wms/lots'))).records.find((r: { id: string }) => r.id === finished.id)
         .remainingQty,
-    ).toBe('8.0000');
+    ).toBe('7.0000');
+    const returned = (await ok(c.get('/api/wms/lots'))).records.find(
+      (r: { parentLotId: string; status: string }) =>
+        r.parentLotId === finished.id && r.status === 'quarantine',
+    );
+    expect(returned.remainingQty).toBe('1.0000');
+    const availability = await ok(
+      c.get(`/api/manufacturing/stock-availability?itemId=${fg}&warehouseId=${wh}`),
+    );
+    expect(availability.physical).toBe('8.0000');
+    expect(availability.qualityHold).toBe('1.0000');
   });
   it('depo transferi ve geri alma parti izini korur, toplam miktar veya değer çoğaltmaz', async () => {
     const root = (await ok(c.get('/api/wms/lots'))).records.find(
-      (r: { itemId: string; warehouseId: string }) => r.itemId === fg && r.warehouseId === wh,
+      (r: { itemId: string; warehouseId: string; status: string }) =>
+        r.itemId === fg && r.warehouseId === wh && r.status === 'available',
     );
     const destination = (
       await ok(c.post('/api/warehouses', { name: 'Parti transfer deposu' }), 201)
@@ -520,7 +773,7 @@ describe('üretim kabulü, depo ve kapasite', async () => {
       201,
     );
     let lots = (await ok(c.get('/api/wms/lots'))).records;
-    expect(lots.find((r: { id: string }) => r.id === root.id).remainingQty).toBe('6.0000');
+    expect(lots.find((r: { id: string }) => r.id === root.id).remainingQty).toBe('5.0000');
     const child = lots.find(
       (r: { parentLotId: string; warehouseId: string }) =>
         r.parentLotId === root.id && r.warehouseId === destination,
@@ -530,8 +783,8 @@ describe('üretim kabulü, depo ve kapasite', async () => {
       c.post(`/api/stock-documents/${transfer.document.id}/reverse`, { docDate: TODAY_LOCAL }),
     );
     lots = (await ok(c.get('/api/wms/lots'))).records;
-    expect(lots.find((r: { id: string }) => r.id === root.id).remainingQty).toBe('8.0000');
+    expect(lots.find((r: { id: string }) => r.id === root.id).remainingQty).toBe('7.0000');
     expect(lots.find((r: { id: string }) => r.id === child.id).remainingQty).toBe('0.0000');
-    expect(lots.filter((r: { itemId: string }) => r.itemId === fg)).toHaveLength(2);
+    expect(lots.filter((r: { itemId: string }) => r.itemId === fg)).toHaveLength(3);
   });
 });

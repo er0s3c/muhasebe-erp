@@ -163,19 +163,25 @@
     "leatherQuality": "Kalite ve izlenebilirlik",
     "leatherService": "Garanti ve onarım",
     "salesPos": "Mağaza kasası",
-    "manufacturing.catalog": "Katalog ve reçete",
-    "manufacturing.mrp": "Malzeme ihtiyaç planlama",
-    "manufacturing.production": "Üretim ve atölye",
-    "manufacturing.planning": "Kapasite ve termin",
-    "manufacturing.quality": "Kalite kontrol",
-    "manufacturing.subcontracting": "Fason üretim",
-    "manufacturing.maintenance": "Makine ve bakım",
-    "manufacturing.costs": "Üretim maliyetleri",
-    "inventory.wms": "Depo ve raf yönetimi",
-    "sales.logistics": "Paketleme ve sevkiyat",
-    "core.integrations": "Entegrasyonlar"
+    "manufacturing": {
+      "catalog": "Katalog ve reçete",
+      "mrp": "Malzeme ihtiyaç planlama",
+      "production": "Üretim ve atölye",
+      "planning": "Kapasite ve termin",
+      "quality": "Kalite kontrol",
+      "subcontracting": "Fason üretim",
+      "maintenance": "Makine ve bakım",
+      "costs": "Üretim maliyetleri"
+    },
+    "inventoryWms": "Depo ve raf yönetimi",
+    "sales": { "logistics": "Paketleme ve sevkiyat" },
+    "core": { "integrations": "Entegrasyonlar" }
   },
   "nav": {
+    "manufacturing.promise": "Sipariş taahhüdü",
+    "manufacturing.shopFloor": "Atölye iş ekranı",
+    "manufacturing.exceptions": "Müdahale bekleyen işler",
+    "manufacturing.supply": "Tedarik ve stok politikaları",
     "fixedAssets": "Demirbaş ve amortisman",
     "companyBudgets": "Bütçe ve sapma",
     "groups": {
@@ -509,7 +515,7 @@
       "access": {
         "action": "Modül erişimi",
         "customBadge": "Özel erişim",
-        "customBadgeHint": "{{count}} modülde rolün varsayılanından farklı erişim tanımlı",
+        "customBadgeHint": "{{count}} özel modül veya işlem erişimi tanımlı",
         "title": "Modül erişimi: {{name}}",
         "description": "Bu kullanıcının hangi modüllere erişebileceğini ve hangilerinde düzenleme yapabileceğini seçin. “Rol varsayılanı” seçiliyse rolün olağan yetkisi geçerlidir.",
         "tabEdit": "Erişim ayarı",
@@ -535,12 +541,12 @@
         "effectiveIntro": "Kullanıcının kaydedilmiş ayarlarına ve rolüne göre bugünkü erişimi. Henüz kaydetmediğiniz seçimler de önizlemede gösterilir.",
         "effectiveCol": "Etkin erişim",
         "preview": "önizleme",
-        "boundNote": "Şirket ve üye yönetimi, yıl sonu kapanışı, konsolidasyon, hassas personel verisi ve dışa aktarma yetkileri yalnızca role bağlıdır; buradan verilemez. Rol değiştirilirse bu kullanıcının özel erişimi silinir ve yeni rolün varsayılanı geçerli olur.",
+        "boundNote": "Şirket ve üye yönetimi ile dışa aktarma yetkileri rol tarafından belirlenir. Rol ile sınırlı onay, yıl sonu, konsolidasyon ve hassas veri hakları yalnızca rolün izin verdiği kullanıcılara açılabilir. Rol değiştirilirse tüm özel modül ve işlem ayarları silinir.",
         "blocked": "Bu kullanıcının erişimini değiştiremezsiniz",
         "loadFailed": "Erişim bilgisi yüklenemedi",
         "setBy": "Ayarlayan: {{name}}",
         "partialRole": "Rol bu modülde kısmi yetkili",
-        "clearedOnRole": "Rol güncellendi; {{count}} modüldeki özel erişim ayarı silindi, yeni rolün varsayılanı geçerli"
+        "clearedOnRole": "Rol güncellendi; {{count}} özel modül veya işlem erişim ayarı silindi, yeni rolün varsayılanı geçerli"
       }
     },
     "currencies": {
@@ -666,13 +672,26 @@
         "treasuryExpenses": "Gider kartları, gider fişleri ve gider raporları.",
         "retailPos": "Market için hızlı satış ekranı.",
         "coreProcurement": "Proje gerektirmeyen talep, teklif, sipariş, mal kabul ve fatura eşleştirmesi.",
-        "leatherCatalog": "Model aileleri, SKU varyantları, koleksiyonlar ve sabitlenen reçete revizyonları.",
+        "leatherCatalog": "Model aileleri, ürün varyantları, koleksiyonlar ve sabitlenen reçete revizyonları.",
         "leatherMaterials": "Tabaklanmış derinin parti, fiziksel parça, alan ve kalite kaydı.",
         "leatherProduction": "İş emirleri, operasyonlar, malzeme tüketimi, fire ve mamul kabulü.",
         "leatherSubcontracting": "Dış atölyelere verilen operasyonlar ve teslim takibi.",
         "leatherQuality": "Giriş, ara ve son kontroller ile parti/parça izlenebilirliği.",
         "leatherService": "Garanti, müşteri ürünü kabulü ve onarım takibi.",
-        "salesPos": "Kasaya atanmış kullanıcıların vardiya, satış, ödeme ve iade işlemleri."
+        "salesPos": "Kasaya atanmış kullanıcıların vardiya, satış, ödeme ve iade işlemleri.",
+        "manufacturing": {
+          "catalog": "Ürün aileleri, ürün varyantları, çok seviyeli reçeteler ve onaylı operasyon rotaları.",
+          "mrp": "Talep, kullanılabilir stok ve rezervasyonlardan net malzeme ve üretim ihtiyacı.",
+          "production": "Atanmış işler, süre ve iyi adet girişi, operasyon transferi ve mamul kabulü.",
+          "planning": "Kaynak takvimi, sonlu kapasite, gerçekleşen süre tahmini ve yayımlanan plan senaryoları.",
+          "quality": "Mal kabulü, ara operasyon ve mamul kontrolleri; uygunsuzluk ve serbest bırakma.",
+          "subcontracting": "Dış atölyedeki şirket malzemeleri, kısmi teslim ve fason hizmet maliyeti.",
+          "maintenance": "Makine, planlı bakım, arıza, yedek parça sarfı ve kapasite kaybı.",
+          "costs": "Kaynak belge maliyetleri, devam eden üretim, geç fark dağıtımı ve mutabakat."
+        },
+        "inventoryWms": "Stok belgesine bağlı parti, kalite blokesi, raf ve yerleştirme takibi.",
+        "sales": { "logistics": "İrsaliyeden paketleme, taşıyıcı, sevk ve teslim takibi." },
+        "core": { "integrations": "Dış kanal bağlantıları, ürün eşleştirmesi, tekrar deneme ve hata kuyruğu." }
       }
     }
   },
@@ -4302,7 +4321,7 @@
     "profiles": {
       "title": "Personel profilleri",
       "desc": "Tarihli: bordro tipi kodu, sigorta başlangıç/bitiş ve sosyal güvenlik numarası. Numara şifreli saklanır, maskeli görünür.",
-      "privacy": "Numara kişisel veridir: açık görüntüleme gerekçe ve hr.sensitive izni ister, erişim günlüğüne yazılır. Bu liste okunduğunda da günlüğe kayıt düşer.",
+      "privacy": "Numara kişisel veridir: açık görüntüleme için gerekçe ve hassas personel verilerini görüntüleme izni gerekir. Erişim günlüğüne yazılır; bu liste okunduğunda da günlüğe kayıt düşer.",
       "empty": "Henüz profil yok",
       "employee": "Personel",
       "from": "Başlangıç",

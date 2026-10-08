@@ -211,7 +211,7 @@ export function CurrenciesPage() {
               <EmptyState icon={<Coins className="size-5" />} title={t('settings.currencies.noRates')} description={t('settings.currencies.noRatesDesc')} />
             </Card>
           ) : (
-            <TableWrap className="max-h-[28rem]">
+            <TableWrap>
               <Table>
                 <thead>
                   <tr>

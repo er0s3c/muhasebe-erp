@@ -75,7 +75,7 @@ export interface NavigationData {
   company: { id: string; name: string; sector: string; baseCurrency: string; reportingCurrency: string | null; allowNegativeStock: boolean };
   role: string;
   permissions: string[];
-  /** Yöneticinin bu üyeye verdiği özel modül erişimi (alan → düzey); boşsa rol varsayılanı. */
+  /** Özel alan düzeyi ve permission.<izin> işlem seçimleri; boşsa rol varsayılanı. */
   moduleAccess: Record<string, 'none' | 'read' | 'write'>;
   modules: string[];
   groups: {

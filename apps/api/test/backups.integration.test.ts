@@ -9,6 +9,7 @@ import { runMigrations } from '../src/db/migrate';
 import { makeApp,registerUser,createCompany,client } from './helpers';
 import { processBackupJobs } from '../src/modules/administration/backups';
 import { storeAsset } from '../src/modules/construction-control/storage';
+import { todayIso } from '@erp/shared';
 
 // Uses a completely separate database; never restores over erp_dev or erp_test.
 it.skipIf(process.env.RUN_BACKUP_INTEGRATION!=='1')('gerçek pg_dump → imzalı paket → ayrı pg_restore; ek dosyalar ve bozuk paket',async()=>{
@@ -27,6 +28,7 @@ it.skipIf(process.env.RUN_BACKUP_INTEGRATION!=='1')('gerçek pg_dump → imzalı
     cleanup=async()=>{await app.close();await handle.close();};
     const user=await registerUser(app,'Recovery'),company=await createCompany(app,user.token,{sector:'MANUFACTURING_WHOLESALE'}),c=client(app,user.token,company.id);
     const machine=await c.post('/api/manufacturing/resources',{code:'RECOVERY-MACHINE',name:'Yedekten dönen üretim makinesi',type:'machine'});expect(machine.statusCode,machine.body).toBe(200);
+    const template=await c.post('/api/manufacturing/planning/calendar-template',{requestKey:randomUUID(),reason:'Kurtarma testinin değişmez komut izi',resourceId:machine.json().record.id,from:todayIso(),to:todayIso(),weekdays:[0,1,2,3,4,5,6],startTime:'08:00',endTime:'17:00',utcOffset:'+03:00',holidays:[]});expect(template.statusCode,template.body).toBe(200);
     const data=Buffer.from('%PDF-1.4 recovery test'),fileHash=await storeAsset(join(root,'files'),company.id,data);
     const rights=await c.get('/api/settings/backups');expect(rights.statusCode,rights.body).toBe(200);expect(rights.json().available).toBe(true);expect(rights.json().canRestore).toBe(true);
     const queued=await c.post('/api/settings/backups');expect(queued.statusCode,queued.body).toBe(201);
@@ -46,7 +48,7 @@ it.skipIf(process.env.RUN_BACKUP_INTEGRATION!=='1')('gerçek pg_dump → imzalı
     expect(await readFile(join(root,'backups',staged.json().id,'recovery-files',company.id,fileHash))).toEqual(data);
     const recoveryUrl=new URL(ownerUrl);recoveryUrl.pathname='/'+recoveredName;
     const check=new pg.Pool({connectionString:recoveryUrl.toString(),max:1});
-    try{expect((await check.query('select name from companies')).rows[0].name).toBe(company.name);expect((await check.query("select config->>'name' as name from manufacturing_records where kind='resource'")).rows[0].name).toBe('Yedekten dönen üretim makinesi');}finally{await check.end();}
+    try{expect((await check.query('select name from companies')).rows[0].name).toBe(company.name);expect((await check.query("select config->>'name' as name from manufacturing_records where kind='resource'")).rows[0].name).toBe('Yedekten dönen üretim makinesi');expect((await check.query("select count(*)::int as n from manufacturing_records where kind='command_event'")).rows[0].n).toBe(1);expect((await check.query("select to_regclass('public.manufacturing_sales_allocations') as name")).rows[0].name).toBe('manufacturing_sales_allocations');await expect(check.query("update manufacturing_records set status='changed' where kind='command_event'")).rejects.toMatchObject({message:'Üretim komut olayları değiştirilemez'});}finally{await check.end();}
     const before=(await c.get('/api/settings/operations')).json();
     expect((await c.put('/api/settings/operations',{version:before.version,settings:{...before.settings,automaticBackup:true,backupKeepCount:1}})).statusCode).toBe(200);
     const second=await c.post('/api/settings/backups');expect(second.statusCode).toBe(201);await processBackupJobs(app);

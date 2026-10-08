@@ -19,6 +19,14 @@ import {
   createTreasuryAccountSchema,
   createTreasuryTransactionSchema,
   todayIso,
+  manufacturingBatchSchema,
+  manufacturingAllocationSchema,
+  manufacturingSupplierSchema,
+  manufacturingDemandPolicySchema,
+  manufacturingReworkSchema,
+  manufacturingCalendarTemplateSchema,
+  manufacturingScheduleSchema,
+  manufacturingMaterialHandoffSchema,
   type AccessLevel,
 } from '@erp/shared';
 import { users, memberships, memberModuleAccess, warehouses, posTills } from './schema';
@@ -57,6 +65,11 @@ import { createInvoiceDraft } from '../modules/invoices/service';
 import { postInvoice } from '../modules/invoices/posting';
 import { createTreasuryAccount } from '../modules/treasury/accounts';
 import { postTreasuryTransaction } from '../modules/treasury/posting';
+import { createBatch, createRework } from '../modules/manufacturing/execution';
+import { allocateSales } from '../modules/manufacturing/allocations';
+import { calendarTemplate } from '../modules/manufacturing/scenarios';
+import { queueInventoryChanges } from '../modules/manufacturing/channels';
+import { materialHandoff } from '../modules/manufacturing/handoff';
 
 export const MANUFACTURING_DEMO_NAME = 'Ada Üretim ve Toptan Ticaret Demo';
 export const MANUFACTURING_DEMO_DATASET = 'manufacturing-demo-v1';
@@ -137,18 +150,16 @@ export async function seedManufacturingDemo(
       await tx
         .insert(memberships)
         .values({ companyId: company.id, userId: u.id, role: profile.role });
-      await tx
-        .insert(memberModuleAccess)
-        .values(
-          ACCESS_AREA_KEYS.map((area) => ({
-            companyId: company.id,
-            userId: u.id,
-            moduleKey: area,
-            level: (profile.levels[area] ?? 'none') as AccessLevel,
-            setBy: owner.id,
-            note: 'Üretim demo görev profili',
-          })),
-        );
+      await tx.insert(memberModuleAccess).values(
+        ACCESS_AREA_KEYS.map((area) => ({
+          companyId: company.id,
+          userId: u.id,
+          moduleKey: area,
+          level: (profile.levels[area] ?? 'none') as AccessLevel,
+          setBy: owner.id,
+          note: 'Üretim demo görev profili',
+        })),
+      );
     }
     const warehouse = (
       await tx.select().from(warehouses).where(eq(warehouses.companyId, company.id))
@@ -444,19 +455,17 @@ async function populate(
       description: 'Demo satış tahsilatı',
     }),
   );
-  await tx
-    .insert(posTills)
-    .values({
-      companyId: ctx.companyId,
-      name: 'Demo mağaza POS',
-      warehouseId,
-      cashAccountId: cash.id,
-      assignedUserIds: [userIds.get('kasiyer')!],
-      id: newId(),
-      walkInPartyId: customer.id,
-      currencyCode: 'TRY',
-      createdBy: ctx.userId,
-    });
+  await tx.insert(posTills).values({
+    companyId: ctx.companyId,
+    name: 'Demo mağaza POS',
+    warehouseId,
+    cashAccountId: cash.id,
+    assignedUserIds: [userIds.get('kasiyer')!],
+    id: newId(),
+    walkInPartyId: customer.id,
+    currencyCode: 'TRY',
+    createdBy: ctx.userId,
+  });
   await createRecord(
     tx,
     ctx,
@@ -485,8 +494,10 @@ async function upgradeDemo(tx: Tx, ctx: LeatherCtx): Promise<boolean> {
         sql`select id from manufacturing_records where kind='demo_dataset' and code=${code}`,
       )
     ).length
-  )
-    return linkDemoOrder(tx, ctx);
+  ) {
+    await linkDemoOrder(tx, ctx);
+    return upgradeExecutionDemo(tx, ctx);
+  }
   const date = todayIso(),
     action = (extra: Record<string, unknown> = {}) => ({
       date,
@@ -621,6 +632,7 @@ async function upgradeDemo(tx: Tx, ctx: LeatherCtx): Promise<boolean> {
   });
   await createRecord(tx, ctx, 'demo_dataset', { code, version: 2 }, 'completed');
   await linkDemoOrder(tx, ctx);
+  await upgradeExecutionDemo(tx, ctx);
   return true;
 }
 
@@ -669,5 +681,399 @@ async function linkDemoOrder(tx: Tx, ctx: LeatherCtx): Promise<boolean> {
       );
   }
   await createRecord(tx, ctx, 'demo_dataset', { code, version: 3 }, 'completed');
+  return true;
+}
+
+/** V4 appends isolated examples; existing documents, passwords and the v1–v3 scenarios stay intact. */
+async function upgradeExecutionDemo(tx: Tx, ctx: LeatherCtx): Promise<boolean> {
+  const code = 'manufacturing-demo-v4';
+  if (
+    (
+      await all(
+        tx,
+        sql`select id from manufacturing_records where kind='demo_dataset' and code=${code}`,
+      )
+    ).length
+  )
+    return upgradeHandoffDemo(tx, ctx);
+  const date = todayIso(),
+    key = () => ({ requestKey: newId(), reason: 'Demo yürütme senaryosu' }),
+    action = () => ({ date, requestKey: newId(), note: 'Demo yürütme senaryosu' });
+  const warehouse = await one(
+    tx,
+    sql`select id from warehouses where is_default order by created_at limit 1`,
+  );
+  const worker = await one(
+    tx,
+    sql`select u.id from users u join memberships m on m.user_id=u.id where u.email='uretim.atolye@ornek.local' and m.company_id=${ctx.companyId}::uuid`,
+  );
+  const supplier = await one(
+    tx,
+    sql`select id from parties where kind in ('supplier','both') order by created_at limit 1`,
+  );
+  const customer = await one(tx, sql`select id from parties where name='Demo Toptan Bayi'`);
+  const raw = await createItem(
+    tx,
+    ctx.companyId,
+    createItemSchema.parse({
+      code: 'MES-HAM',
+      name: 'Atölye senaryosu hammaddesi',
+      unit: 'adet',
+      inventoryRole: 'raw_material',
+    }),
+  );
+  const fg = await createItem(
+    tx,
+    ctx.companyId,
+    createItemSchema.parse({
+      code: 'MES-MAM',
+      name: 'Partiyle izlenen demo ürün',
+      unit: 'adet',
+      inventoryRole: 'finished_goods',
+      barcode: 'DEMO-MES-001',
+      salePrice: '120',
+    }),
+  );
+  const opening = await postStockDocument(
+    tx,
+    ctx,
+    createStockDocumentSchema.parse({
+      type: 'opening',
+      docDate: date,
+      warehouseId: warehouse.id,
+      description: 'Atölye üretimi örnekleri',
+      lines: [
+        { itemId: raw.id, quantity: '100', unitCost: '10' },
+        { itemId: fg.id, quantity: '20', unitCost: '60' },
+      ],
+    }),
+  );
+  const machine = await createRecord(
+    tx,
+    ctx,
+    'resource',
+    { code: 'MES-MAK', name: 'Parti montaj istasyonu', type: 'machine', capacity: 1 },
+    'active',
+  );
+  const to = new Date(Date.parse(date + 'T00:00:00Z') + 6 * 86400000).toISOString().slice(0, 10);
+  await calendarTemplate(
+    tx,
+    ctx,
+    manufacturingCalendarTemplateSchema.parse({
+      ...key(),
+      resourceId: machine.id,
+      from: date,
+      to,
+      weekdays: [0, 1, 2, 3, 4, 5, 6],
+      startTime: '08:00',
+      endTime: '17:00',
+    }),
+  );
+  const model = await createModel(tx, ctx, {
+    code: 'MES-MODEL',
+    name: 'Parti ve yeniden işleme modeli',
+    family: 'Genel üretim',
+    description: 'Uygun kaynak ve standart hız senaryosu',
+  });
+  const revision = await createRevision(
+    tx,
+    ctx,
+    model.id,
+    leatherRevisionSchema.parse({
+      name: 'Atölye onaylı iş rotası',
+      sampleApproved: true,
+      materials: [{ itemId: raw.id, quantity: '1' }],
+      operations: [
+        {
+          key: 'assembly',
+          name: 'Montaj',
+          plannedMinutes: '2',
+          resources: [{ resourceId: machine.id, minutesPerUnit: '2', priority: 90 }],
+        },
+        {
+          key: 'packing',
+          name: 'Paketleme',
+          plannedMinutes: '1',
+          resources: [{ resourceId: machine.id, minutesPerUnit: '1', priority: 50 }],
+        },
+      ],
+    }),
+  );
+  await approveRevision(tx, ctx, revision.id);
+  const variant = await createVariant(
+    tx,
+    ctx,
+    leatherVariantSchema.parse({
+      modelId: model.id,
+      revisionId: revision.id,
+      itemId: fg.id,
+      color: 'Standart',
+    }),
+  );
+  const sales = await createSalesDoc(
+    tx,
+    ctx,
+    createSalesDocSchema.parse({
+      kind: 'order',
+      partyId: customer.id,
+      warehouseId: warehouse.id,
+      docDate: date,
+      currency: 'TRY',
+      lines: [{ itemId: fg.id, quantity: '50', unitPrice: '120' }],
+    }),
+  );
+  await transitionSalesDoc(tx, ctx, sales, 'confirmed');
+  const line = await one(tx, sql`select id from sales_order_lines where order_id=${sales}::uuid`);
+  await allocateSales(
+    tx,
+    ctx,
+    manufacturingAllocationSchema.parse({
+      ...key(),
+      salesOrderLineId: line.id,
+      warehouseId: warehouse.id,
+      quantity: '10',
+      priority: 90,
+    }),
+  );
+  await createRecord(
+    tx,
+    ctx,
+    'lot',
+    {
+      code: 'MES-KALITE',
+      itemId: fg.id,
+      warehouseId: warehouse.id,
+      sourceDocumentId: opening.document.id,
+      quantity: '5',
+      remainingQty: '5',
+      releasedQty: '0',
+      damagedQty: '0',
+    },
+    'quarantine',
+  );
+  await createRecord(
+    tx,
+    ctx,
+    'supplier_profile',
+    manufacturingSupplierSchema.parse({
+      ...key(),
+      itemId: raw.id,
+      partyId: supplier.id,
+      supplierCode: 'TED-MES',
+      leadDays: 3,
+      minOrderQty: '50',
+      packQty: '25',
+      unitPrice: '10',
+      currency: 'TRY',
+      preferred: true,
+    }),
+    'active',
+  );
+  await createRecord(
+    tx,
+    ctx,
+    'demand_policy',
+    manufacturingDemandPolicySchema.parse({
+      ...key(),
+      itemId: raw.id,
+      warehouseId: warehouse.id,
+      minimum: '150',
+      target: '200',
+    }),
+    'active',
+  );
+  const order = await createProduction(
+    tx,
+    ctx,
+    leatherProductionSchema.parse({
+      variantId: variant.id,
+      revisionId: revision.id,
+      quantity: '30',
+      warehouseId: warehouse.id,
+      outputWarehouseId: warehouse.id,
+      assignedUserId: worker.id,
+      salesOrderLineId: line.id,
+      dueDate: to,
+    }),
+  );
+  await releaseProduction(tx, ctx, order.id, leatherDatedActionSchema.parse(action()));
+  const batches = [];
+  for (let i = 0; i < 2; i++) {
+    const batch = await createBatch(
+      tx,
+      ctx,
+      manufacturingBatchSchema.parse({ ...key(), orderId: order.id, quantity: '15' }),
+    );
+    batches.push(batch);
+    await issueProduction(
+      tx,
+      ctx,
+      order.id,
+      leatherIssueSchema.parse({
+        ...action(),
+        batchId: batch.id,
+        lines: [{ itemId: raw.id, quantity: '15' }],
+      }),
+    );
+  }
+  await recordOperation(tx, ctx, order.id, {
+    ...action(),
+    key: 'assembly',
+    status: 'completed',
+    resourceId: machine.id,
+    quantity: '30',
+    goodQty: '28',
+    scrapQty: '0',
+    reworkQty: '2',
+    minutes: '60',
+  });
+  const source = await one(
+    tx,
+    sql`select id from leather_quality_checks where source_id=${order.id}::uuid and stage='intermediate' and status='pending'`,
+  );
+  await decideQuality(tx, ctx, source.id, {
+    decision: 'approve',
+    note: 'İki ürün yeniden işlenecek',
+  });
+  await createRework(
+    tx,
+    ctx,
+    manufacturingReworkSchema.parse({
+      ...key(),
+      orderId: order.id,
+      qualityCheckId: source.id,
+      operationKey: 'assembly',
+      quantity: '2',
+      defectCode: 'MONTAJ',
+    }),
+  );
+  const check = await createQuality(
+    tx,
+    ctx,
+    leatherQualitySchema.parse({
+      scope: 'production',
+      sourceId: order.id,
+      batchId: batches[0]!.id,
+      stage: 'final',
+      inspectedQty: '10',
+      passedQty: '10',
+      checks: [{ label: 'Parti son kontrolü', passed: true }],
+    }),
+  );
+  await decideQuality(tx, ctx, check.id, { decision: 'approve', note: 'Kısmi parti kabulü' });
+  await completeProduction(
+    tx,
+    ctx,
+    order.id,
+    leatherCompletionSchema.parse({
+      ...action(),
+      batchId: batches[0]!.id,
+      quantity: '5',
+      qualityCheckId: check.id,
+    }),
+  );
+  const jobs = [
+    { orderId: order.id, operationKey: 'packing', resourceId: machine.id, minutes: 30 },
+  ];
+  const planning = manufacturingScheduleSchema.parse({
+    anchor: date + 'T08:00:00+03:00',
+    direction: 'forward',
+    jobs,
+  });
+  await createRecord(
+    tx,
+    ctx,
+    'schedule',
+    {
+      ...planning,
+      operations: await schedule(tx, planning),
+      version: 1,
+      reason: 'Partinin kalan paketleme planı',
+    },
+    'draft',
+  );
+  const connection = await one(
+    tx,
+    sql`select id from manufacturing_records where kind='connection' and config->>'provider'='shopify' order by created_at limit 1`,
+  );
+  await createRecord(
+    tx,
+    ctx,
+    'channel_mapping',
+    {
+      connectionId: connection.id,
+      itemId: fg.id,
+      warehouseId: warehouse.id,
+      channelSku: 'DEMO-MES',
+      inventoryItemId: 'gid://shopify/InventoryItem/1',
+      locationId: 'gid://shopify/Location/1',
+    },
+    'active',
+  );
+  await queueInventoryChanges(tx, ctx, code, [fg.id]);
+  await createRecord(tx, ctx, 'demo_dataset', { code, version: 4 }, 'completed');
+  await upgradeHandoffDemo(tx, ctx);
+  return true;
+}
+
+async function upgradeHandoffDemo(tx: Tx, ctx: LeatherCtx): Promise<boolean> {
+  const code = 'manufacturing-demo-v5';
+  if (
+    (
+      await all(
+        tx,
+        sql`select id from manufacturing_records where kind='demo_dataset' and code=${code}`,
+      )
+    ).length
+  )
+    return false;
+  const variant = await one(
+    tx,
+    sql`select v.id,v.revision_id from leather_variants v join items i on i.id=v.item_id and i.company_id=v.company_id where i.code='MES-MAM'`,
+  );
+  const raw = await one(tx, sql`select id from items where code='MES-HAM'`);
+  const warehouse = await one(
+    tx,
+    sql`select id from warehouses where is_active order by created_at limit 1`,
+  );
+  const operator = await one(
+    tx,
+    sql`select u.id from users u join memberships m on m.user_id=u.id where m.company_id=${ctx.companyId}::uuid and u.email='uretim.atolye@ornek.local'`,
+  );
+  const date = todayIso();
+  const order = await createProduction(
+    tx,
+    ctx,
+    leatherProductionSchema.parse({
+      variantId: variant.id,
+      revisionId: variant.revision_id,
+      quantity: '2',
+      warehouseId: warehouse.id,
+      outputWarehouseId: warehouse.id,
+      assignedUserId: operator.id,
+      note: 'Atölye teslimi ve gerçek sarf ayrımı demo',
+    }),
+  );
+  await releaseProduction(
+    tx,
+    ctx,
+    order.id,
+    leatherDatedActionSchema.parse({ date, requestKey: newId() }),
+  );
+  await materialHandoff(
+    tx,
+    ctx,
+    order.id,
+    manufacturingMaterialHandoffSchema.parse({
+      action: 'deliver',
+      itemId: raw.id,
+      quantity: '2',
+      receiverId: operator.id,
+      date,
+      requestKey: newId(),
+      reason: 'Aynı depoda atölyeye teslim; henüz sarf edilmedi',
+    }),
+  );
+  await createRecord(tx, ctx, 'demo_dataset', { code, version: 5 }, 'completed');
   return true;
 }

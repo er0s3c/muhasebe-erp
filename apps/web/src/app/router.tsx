@@ -290,7 +290,7 @@ export const router = createBrowserRouter([
                     ],
                   },
                   {
-                    element: <RequireModule module="core.procurement" />,
+                    element: <RequireModule module="core.procurement" alternatives={['construction.procurement']} />,
                     children: [
                       { path: 'purchasing/requests', ...page(() => import('../features/procurement/RequestsPage'), 'PurchaseRequestsPage', 'procurement.read') },
                       { path: 'purchasing/requests/:id', ...page(() => import('../features/procurement/RequestEditorPage'), 'PurchaseRequestEditorPage', 'procurement.read') },
@@ -336,11 +336,12 @@ export const router = createBrowserRouter([
                   { path: 'notifications', ...page(() => import('../features/notifications/NotificationsPage'), 'NotificationsPage', null) },
                   { path: 'settings/notifications', ...page(() => import('../features/notifications/NotificationPreferencesPage'), 'NotificationPreferencesPage', null) },
                   {element:<RequireModule module="manufacturing.catalog"/>,children:[{path:'manufacturing/catalog',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingCatalogPage','manufacturing.catalog.read')}]},
-                  {element:<RequireModule module="manufacturing.production"/>,children:[{path:'manufacturing/production',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingProductionPage','manufacturing.production.read')}]},
+                  {element:<RequireModule module="manufacturing.production"/>,children:[{path:'manufacturing/production',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingProductionPage','manufacturing.production.read')},{path:'manufacturing/shop-floor',...page(()=>import('../features/manufacturing/ExecutionPages'),'ManufacturingShopFloorPage','manufacturing.production.read')},{path:'manufacturing/exceptions',...page(()=>import('../features/manufacturing/ExecutionPages'),'ManufacturingExceptionsPage','manufacturing.production.read')}]},
                   {element:<RequireModule module="manufacturing.quality"/>,children:[{path:'manufacturing/quality',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingQualityPage','manufacturing.quality.read')}]},
                   {element:<RequireModule module="manufacturing.subcontracting"/>,children:[{path:'manufacturing/subcontracting',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingSubcontractingPage','manufacturing.subcontracting.read')}]},
                   {element:<RequireModule module="manufacturing.costs"/>,children:[{path:'manufacturing/costs',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingProductionPage','manufacturing.costs.read')}]},
-                  {element:<RequireModule module="manufacturing.mrp"/>,children:[{path:'manufacturing/mrp',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingMrpPage','manufacturing.mrp.read')}]},
+                  {element:<RequireModule module="manufacturing.mrp"/>,children:[{path:'manufacturing/mrp',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingMrpPage','manufacturing.mrp.read')},{path:'manufacturing/supply',...page(()=>import('../features/manufacturing/ExecutionPages'),'ManufacturingSupplyPage','manufacturing.mrp.read')}]},
+                  {element:<RequireModule module="core.invoices"/>,children:[{path:'manufacturing/promise',...page(()=>import('../features/manufacturing/ExecutionPages'),'ManufacturingPromisePage','invoices.read')}]},
                   {element:<RequireModule module="manufacturing.planning"/>,children:[{path:'manufacturing/planning',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingOperationsPage','manufacturing.planning.read')}]},
                   {element:<RequireModule module="manufacturing.maintenance"/>,children:[{path:'manufacturing/maintenance',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingOperationsPage','manufacturing.maintenance.read')}]},
                   {element:<RequireModule module="manufacturing.catalog"/>,children:[{path:'manufacturing',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingOverviewPage','manufacturing.catalog.read')}]},

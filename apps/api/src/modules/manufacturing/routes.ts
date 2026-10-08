@@ -6,10 +6,10 @@ import {
   manufacturingResourceSchema,
   manufacturingCalendarSchema,
   manufacturingMaintenanceSchema,
+  manufacturingMaintenanceCompleteSchema,
   manufacturingScheduleSchema,
   manufacturingTransferSchema,
   manufacturingTransferActionSchema,
-  manufacturingRecordActionSchema,
   leatherProductionFromSalesSchema,
   uuid,
   dec,
@@ -17,6 +17,7 @@ import {
   isoDate,
   manufacturingDepartmentSchema,
   manufacturingCustomFieldSchema,
+  manufacturingCommandSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { forbidden } from '../../http/errors';
@@ -39,6 +40,11 @@ import {
 import { createRequest } from '../procurement/requests';
 import { manufacturingMetrics } from './metrics';
 import { manufacturingSupportRoutes } from './support';
+import { productionEstimates } from './estimates';
+import { productionOrderScope } from '../leather/visibility';
+import { manufacturingExecutionRoutes } from './execution-routes';
+import { purchaseProposals } from './promise';
+import { command } from './commands';
 
 export const manufacturingCtx = (c: TenantCtx): LeatherCtx => ({
   companyId: c.company.id,
@@ -51,10 +57,23 @@ const id = (c: TenantCtx) => z.object({ id: uuid }).parse(c.req.params).id;
 export const manufacturingRoutes: FastifyPluginAsync = async (app) => {
   await app.register(manufacturingCoreRoutes);
   await app.register(manufacturingSupportRoutes);
+  await app.register(manufacturingExecutionRoutes);
   const gate = (area: string, write = false) => ({
     module: area,
     permission: (area + (write ? '.manage' : '.read')) as never,
   });
+  app.get(
+    '/api/manufacturing/production/orders/:id/estimates',
+    tenantRoute(app, gate('manufacturing.planning'), async (c) => {
+      c.require('manufacturing.production.read');
+      await one(
+        c.tx,
+        sql`select o.id from leather_production_orders o where o.id=${id(c)}::uuid and ${productionOrderScope(c.role, c.user.id, 'o')}`,
+        'Üretim emri',
+      );
+      return productionEstimates(c.tx, id(c));
+    }),
+  );
   for (const [kind, path, area] of [
     ['resource', 'resources', 'manufacturing.planning'],
     ['calendar', 'calendars', 'manufacturing.planning'],
@@ -159,20 +178,31 @@ export const manufacturingRoutes: FastifyPluginAsync = async (app) => {
         c.tx,
         sql`select * from manufacturing_records where kind='integration_event' and code=${'mrp-purchase:' + input.requestKey}`,
       );
-      if (prev.length) return { requestId: prev[0]!.config.requestId };
+      if (prev.length) {
+        if (
+          prev[0]!.config.input &&
+          JSON.stringify(prev[0]!.config.input) !== JSON.stringify(input)
+        )
+          throw fail('İstek kimliği farklı satın alma ihtiyacında kullanıldı');
+        return { requestId: prev[0]!.config.requestId };
+      }
       const needs = (await mrp(c.tx, input)).filter(
         (n) => n.action === 'purchase' && dec(n.net).gt(0),
       );
       if (!needs.length) throw fail('Satın alma eksiği yok');
+      const proposals = (
+        await purchaseProposals(c.tx, needs, todayIso() + 'T00:00:00+03:00', {}, input.dueDate)
+      ).filter((p) => dec(p.purchaseQty).gt(0));
+      if (!proposals.length) throw fail('Açık satın alma arzı net ihtiyacı karşılıyor');
       const request = await createRequest(c.tx, manufacturingCtx(c), {
         projectId: null,
         title: 'Üretim ihtiyaç talebi',
         needDate: input.dueDate ?? null,
-        lines: needs.map((n) => ({
+        lines: proposals.map((n) => ({
           itemId: n.itemId,
           description: n.name,
           unit: n.unit,
-          quantity: n.net,
+          quantity: n.suppliers[0]?.quantity ?? n.purchaseQty,
           projectId: null,
           wbsId: null,
         })),
@@ -184,6 +214,7 @@ export const manufacturingRoutes: FastifyPluginAsync = async (app) => {
         {
           code: 'mrp-purchase:' + input.requestKey,
           requestId: (request.request as Record<string, unknown>).id,
+          input,
         },
         'processed',
       );
@@ -206,13 +237,48 @@ export const manufacturingRoutes: FastifyPluginAsync = async (app) => {
     '/api/manufacturing/planning/schedules/:id',
     tenantRoute(app, gate('manufacturing.planning', true), async (c) => {
       const r = await getRecord(c.tx, id(c), 'schedule', true);
-      if (r.status !== 'draft') throw fail('Yayımlanan plan değişmez; yeni senaryo açın');
-      const input = manufacturingScheduleSchema.parse(c.req.body);
+      const input = manufacturingScheduleSchema.merge(manufacturingCommandSchema).parse(c.req.body);
       return {
-        record: await updateRecord(c.tx, r.id, 'draft', {
-          ...input,
-          operations: await schedule(c.tx, input, r.id),
-        }),
+        record: await command(
+          c.tx,
+          manufacturingCtx(c),
+          'plan-revision:' + r.id,
+          input,
+          async () => {
+            if (r.status !== 'draft') throw fail('Yayımlanan plan değişmez; yeni senaryo açın');
+            const operations = await schedule(c.tx, input, r.id);
+            const record = await createRecord(
+              c.tx,
+              manufacturingCtx(c),
+              'schedule',
+              {
+                ...r.config,
+                ...input,
+                code: undefined,
+                parentId: r.id,
+                version: Number(r.config.version ?? 1) + 1,
+                operations,
+                differences: operations.map((op) => ({
+                  orderId: op.orderId,
+                  operationKey: op.operationKey,
+                  previousStart: r.config.operations.find(
+                    (p: Record<string, unknown>) =>
+                      p.orderId === op.orderId && p.operationKey === op.operationKey,
+                  )?.start,
+                  previousEnd: r.config.operations.find(
+                    (p: Record<string, unknown>) =>
+                      p.orderId === op.orderId && p.operationKey === op.operationKey,
+                  )?.end,
+                  start: op.start,
+                  end: op.end,
+                })),
+              },
+              'draft',
+            );
+            await updateRecord(c.tx, r.id, 'superseded', { ...r.config, replacedBy: record.id });
+            return record;
+          },
+        ),
       };
     }),
   );
@@ -281,7 +347,7 @@ export const manufacturingRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     '/api/manufacturing/maintenance/:id/complete',
     tenantRoute(app, gate('manufacturing.maintenance', true), async (c) => {
-      const input = manufacturingRecordActionSchema.parse(c.req.body);
+      const input = manufacturingMaintenanceCompleteSchema.parse(c.req.body);
       return {
         record: await finishMaintenance(c.tx, manufacturingCtx(c), id(c), {
           ...input,

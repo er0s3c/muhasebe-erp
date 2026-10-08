@@ -155,7 +155,7 @@ export function AttendanceGrid({ sheet, canEdit }: { sheet: AttendanceSheetData;
                 <Field label={t('attendance.overtimeHours')} className="w-32">
                   {(id) => <Input id={id} inputMode="decimal" value={brush.overtime} onChange={(e) => setBrush((b) => ({ ...b, overtime: e.target.value }))} placeholder="0" />}
                 </Field>
-                <div className="min-w-72 flex-1">
+                <div className="min-w-0 basis-full sm:min-w-72 sm:flex-1 sm:basis-0">
                   <ProjectWbsFields
                     projectId={brush.projectId}
                     wbsId={brush.wbsId}

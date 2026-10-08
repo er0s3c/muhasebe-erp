@@ -4,9 +4,16 @@ import type { Tx } from '../../db/client';
 import { all, type Row } from '../leather/common';
 import { listRecords } from './service';
 
-function minutes(intervals: { start: string; end: string }[], from: number, to: number) {
+type Interval = { start: string; end?: string | null };
+function minutes(intervals: Interval[], from: number, to: number) {
   const ranges = intervals
-    .map((i) => [Math.max(from, Date.parse(i.start)), Math.min(to, Date.parse(i.end))] as const)
+    .map(
+      (i) =>
+        [
+          Math.max(from, Date.parse(i.start)),
+          Math.min(to, i.end ? Date.parse(i.end) : to),
+        ] as const,
+    )
     .filter((i) => i[1] > i[0])
     .sort((a, b) => a[0] - b[0]);
   let total = 0,
@@ -21,18 +28,15 @@ function minutes(intervals: { start: string; end: string }[], from: number, to: 
   }
   return (total + end - start) / 60000;
 }
-function withinShifts(
-  blocks: { start: string; end: string }[],
-  shifts: { start: string; end: string }[],
-  from: number,
-  to: number,
-) {
+function withinShifts(blocks: Interval[], shifts: Interval[], from: number, to: number) {
   return minutes(
     blocks
       .flatMap((b) =>
         shifts.map((s) => ({
           start: new Date(Math.max(Date.parse(b.start), Date.parse(s.start))).toISOString(),
-          end: new Date(Math.min(Date.parse(b.end), Date.parse(s.end))).toISOString(),
+          end: new Date(
+            Math.min(b.end ? Date.parse(b.end) : to, s.end ? Date.parse(s.end) : to),
+          ).toISOString(),
         })),
       )
       .filter((r) => r.start < r.end),
@@ -42,7 +46,8 @@ function withinShifts(
 }
 export async function manufacturingMetrics(tx: Tx, from: string, to: string) {
   const start = Date.parse(from + 'T00:00:00Z'),
-    end = Date.parse(to + 'T23:59:59Z');
+    end = Date.parse(to + 'T23:59:59Z'),
+    asOf = Math.min(end, Date.now());
   const resources = await listRecords(tx, 'resource'),
     calendars = (await listRecords(tx, 'calendar')).filter((c) => c.status === 'active'),
     maintenance = await listRecords(tx, 'maintenance');
@@ -54,15 +59,21 @@ export async function manufacturingMetrics(tx: Tx, from: string, to: string) {
     const shifts = calendars.filter((c) => c.resourceId === r.id && c.available);
     const planned = minutes(shifts as never, start, end);
     const unavailable = calendars.filter((c) => c.resourceId === r.id && !c.available);
-    const stopped = withinShifts(unavailable as never, shifts as never, start, end);
+    const stopped = withinShifts(unavailable as never, shifts as never, start, asOf);
     const failures = maintenance.filter(
       (m) =>
         m.resourceId === r.id &&
         m.kind === 'breakdown' &&
-        Date.parse(String(m.start)) < end &&
-        Date.parse(String(m.end)) > start,
+        m.status !== 'cancelled' &&
+        Date.parse(String(m.start)) < asOf &&
+        (m.end ? Date.parse(String(m.end)) : asOf) > start,
     );
-    const downtime = withinShifts(failures as never, shifts as never, start, end);
+    const downtime = withinShifts(failures as never, shifts as never, start, asOf);
+    const repaired = failures.filter((m) => m.status === 'completed');
+    const repairedDowntime = repaired.reduce(
+      (total, failure) => total + withinShifts([failure] as never, shifts as never, start, asOf),
+      0,
+    );
     const actual = operations.filter((o) => o.config.resourceId === r.id);
     const totalQty = actual.reduce((s, o) => s.plus(o.config.quantity ?? 0), dec(0)),
       good = actual.reduce((s, o) => s.plus(o.config.goodQty ?? 0), dec(0)),
@@ -80,7 +91,7 @@ export async function manufacturingMetrics(tx: Tx, from: string, to: string) {
       name: r.name,
       plannedMinutes: planned,
       downtimeMinutes: downtime,
-      mttrMinutes: failures.length ? downtime / failures.length : null,
+      mttrMinutes: repaired.length ? repairedDowntime / repaired.length : null,
       mtbfMinutes: failures.length ? Math.max(0, planned - stopped) / failures.length : null,
       availability,
       performance,

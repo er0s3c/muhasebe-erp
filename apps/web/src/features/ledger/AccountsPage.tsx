@@ -112,7 +112,7 @@ export function AccountsPage() {
             <EmptyState icon={<ListTree className="size-5" />} title={t('common.noResults')} />
           </Card>
         ) : (
-          <TableWrap className="max-h-[calc(100vh-22rem)] min-h-64">
+          <TableWrap>
             <Table>
               <thead>
                 <tr>

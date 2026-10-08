@@ -143,13 +143,13 @@ export function PurchaseRequestEditorPage() {
           <ul className="flex flex-col gap-2 p-4 text-sm">
             {detail.rfq && (
               <li className="flex items-center gap-2">
-                <Link className="text-brand hover:underline" to={`/purchasing/rfqs/${detail.rfq.id}`}>{detail.rfq.code}</Link>
+                <Link className="link" to={`/purchasing/rfqs/${detail.rfq.id}`}>{detail.rfq.code}</Link>
                 <RfqStatusBadge status={detail.rfq.status} />
               </li>
             )}
             {detail.orders.map((o) => (
               <li key={o.id} className="flex items-center gap-2">
-                <Link className="text-brand hover:underline" to={`/purchasing/orders/${o.id}`}>{o.code}</Link>
+                <Link className="link" to={`/purchasing/orders/${o.id}`}>{o.code}</Link>
                 <OrderStatusBadge status={o.status} />
               </li>
             ))}

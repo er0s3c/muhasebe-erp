@@ -13,7 +13,7 @@ export function CardHeader({ title, description, action }: { title: string; desc
         <h2 className="text-base">{title}</h2>
         {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
       </div>
-      {action && <div className="print:hidden">{action}</div>}
+      {action && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 print:hidden">{action}</div>}
     </div>
   );
 }
@@ -21,11 +21,11 @@ export function CardHeader({ title, description, action }: { title: string; desc
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <div>
+      <div className="min-w-0 max-w-full">
         <h1 className="text-heading">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-sm text-muted">{description}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2 print:hidden">{actions}</div>}
+      {actions && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 print:hidden">{actions}</div>}
     </div>
   );
 }

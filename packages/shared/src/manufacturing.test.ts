@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { explodeManufacturingNeed, finiteManufacturingSchedule } from './manufacturing';
+import {
+  explodeManufacturingNeed,
+  finiteManufacturingSchedule,
+  manufacturingMaintenanceSchema,
+  manufacturingMaintenanceCompleteSchema,
+} from './manufacturing';
 import { MANUFACTURING_ACCESS_PROFILES } from './manufacturing-profiles';
 import { ACCESS_AREA_KEYS, effectivePermissions } from './module-access';
 import { resolveEnabledModules } from './module-registry';
@@ -79,6 +84,57 @@ describe('ortak üretim motoru', () => {
     expect(p[0]!.segments).toHaveLength(2);
     expect(p[0]!.end).toBe('2026-10-07T10:30:00.000Z');
     expect(p[1]!.start).toBe(p[0]!.end);
+  });
+  it('bitişsiz bakım sonraki vardiyalarda da kapasiteyi kapalı tutar', () => {
+    const ongoing = [
+      ...calendars,
+      { resourceId: 'r', start: '2026-10-07T09:00:00Z', end: null, available: false },
+      {
+        resourceId: 'r',
+        start: '2026-10-08T08:00:00Z',
+        end: '2026-10-08T18:00:00Z',
+        available: true,
+      },
+    ];
+    expect(() =>
+      finiteManufacturingSchedule([jobs[0]!], ongoing, '2026-10-07T09:00:00Z', 'forward'),
+    ).toThrow('Uygun kapasite');
+    const beforeFault = finiteManufacturingSchedule(
+      [{ ...jobs[0]!, minutes: 60 }],
+      ongoing,
+      '2026-10-07T10:00:00Z',
+      'backward',
+    );
+    expect(beforeFault[0]!.end).toBe('2026-10-07T09:00:00.000Z');
+  });
+  it('bakım başlangıçta bitiş istemez; tamamlama gerçek bitiş ve parça için depo ister', () => {
+    const resourceId = '00000000-0000-4000-8000-000000000001';
+    const input = {
+      resourceId,
+      start: '2026-10-07T08:00:00Z',
+      kind: 'breakdown',
+      description: 'Arıza',
+    };
+    expect(manufacturingMaintenanceSchema.safeParse(input).success).toBe(true);
+    expect(
+      manufacturingMaintenanceSchema.safeParse({
+        ...input,
+        spareParts: [{ itemId: resourceId, quantity: '1' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      manufacturingMaintenanceCompleteSchema.safeParse({
+        action: 'complete',
+        requestKey: resourceId,
+      }).success,
+    ).toBe(false);
+    expect(
+      manufacturingMaintenanceCompleteSchema.safeParse({
+        action: 'complete',
+        requestKey: resourceId,
+        end: '2026-10-07T09:00:00Z',
+      }).success,
+    ).toBe(true);
   });
   it('uzun iş vardiyalar arasında bölünür; gece kapasite yaratılmaz', () => {
     const p = finiteManufacturingSchedule(

@@ -219,11 +219,11 @@ export const DateInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLIn
   const locked = props.disabled || props.readOnly;
 
   return (
-    <div className={cn('relative w-full', className)}>
+    <div className={cn('relative min-w-0 w-full', className)}>
       <input
         ref={setRefs}
         type={type}
-        className="h-10 w-full rounded-lg border border-border-strong bg-surface px-3.5 pr-10 text-sm text-text transition-colors focus:border-text focus:outline-none disabled:bg-surface-2 disabled:opacity-70 [&::-webkit-calendar-picker-indicator]:hidden"
+        className="h-10 min-w-0 w-full rounded-lg border border-border-strong bg-surface px-3.5 pr-10 text-sm text-text transition-colors focus:border-text focus:outline-none disabled:bg-surface-2 disabled:opacity-70 [&::-webkit-calendar-picker-indicator]:hidden"
         {...props}
       />
       <Popover.Root

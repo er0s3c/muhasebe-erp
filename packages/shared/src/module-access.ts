@@ -8,6 +8,8 @@ import { PERMISSIONS, ROLE_PERMISSIONS, type Permission, type PermissionSet, typ
  *   read  = Sadece görüntüle (alanın okuma izinleri; yazma izinleri alınır)
  *   write = Görüntüle ve düzenle (alanın okuma + yazma izinleri; rolün olmayan izinleri de eklenir)
  * Kayıt yoksa "rol varsayılanı" geçerlidir. Etkin izin kümesi `effectivePermissions` ile hesaplanır ve izin denetiminin TEK kaynağıdır.
+ * Alan altında gerçek API işlem izinleri ayrı açılıp kapatılabilir. `permission.<izin>` istisnası alan düzeyinden sonra uygulanır;
+ * none alanı tüm işlemleri kapatır, role bağlı bir izin ancak hedefin rolünde zaten varsa açılabilir.
  *
  * Neden "alan"? Birkaç kayıt modülü aynı izni paylaşır (ör. çek/senet, teminat ve gider kartları `treasury.*` izinlerini kullanır; teklif
  * ve fiyat listesi `invoices.*` izinlerini). İzin düzeyinde ayrı yönetilemeyen modüller bir üst alana bağlanır (`MODULE_AREA`); alanın
@@ -167,6 +169,48 @@ export function areaOfPermission(permission: Permission): AccessAreaKey | null {
 
 export type AccessOverrides = Readonly<Partial<Record<string, AccessLevel>>>;
 
+export const PERMISSION_CHOICES = ['allow', 'deny', 'default'] as const;
+export type PermissionChoice = (typeof PERMISSION_CHOICES)[number];
+
+/** İşlem istisnaları aynı erişim tablosunda ayrı anahtarla tutulur; rol/üyelik koruyucuları da aynen geçerlidir. */
+export const permissionOverrideKey = (permission: Permission): string => `permission.${permission}`;
+
+export function permissionOfOverride(key: string): Permission | null {
+  if (!key.startsWith('permission.')) return null;
+  const permission = key.slice('permission.'.length) as Permission;
+  return PERMISSIONS.includes(permission) && areaOfPermission(permission) !== null ? permission : null;
+}
+
+export function permissionsOfArea(area: AccessAreaKey): Permission[] {
+  const a: AccessAreaDef = ACCESS_AREAS[area];
+  return [...a.read, ...a.write, ...(Object.keys(a.bound ?? {}) as Permission[])];
+}
+
+export function isRoleBoundPermission(permission: Permission): boolean {
+  const area = areaOfPermission(permission);
+  return area === null || permission in (areaDef(area).bound ?? {});
+}
+
+/** Alanların paylaşılmış API izinleri ayrı ekran izni gibi gösterilmez; buradaki eylemler sunucunun gerçek kapılarıdır. */
+export function permissionLabel(permission: Permission): string {
+  const labels: Partial<Record<Permission, string>> = {
+    'ledger.read': 'Muhasebe kayıtlarını görüntüleme', 'reports.read': 'Raporları görüntüleme',
+    'ledger.post': 'Muhasebe fişi kaydetme', 'ledger.close_period': 'Muhasebe dönemini kapatma',
+    'ledger.yearend': 'Yıl sonu kapanışı ve devir', 'reports.consolidation': 'Şirket grubu raporlarını görüntüleme',
+    'accounts.manage': 'Hesap planını yönetme', 'rates.manage': 'Döviz kurlarını yönetme',
+    'inventory.manage': 'Stok kartlarını yönetme', 'inventory.move': 'Stok hareketi oluşturma',
+    'invoices.read': 'Faturaları, siparişleri ve fiyat listelerini görüntüleme',
+    'invoices.manage': 'Fatura, sipariş ve fiyat listesi düzenleme', 'invoices.post': 'Faturaları muhasebeleştirme',
+    'deliveries.read': 'İrsaliyeleri görüntüleme', 'deliveries.manage': 'İrsaliyeleri düzenleme', 'deliveries.post': 'İrsaliyeleri muhasebeleştirme',
+    'treasury.manage': 'Kasa, banka ve evrakları düzenleme', 'treasury.post': 'Para hareketlerini muhasebeleştirme',
+    'projects.budget': 'Proje bütçesini yönetme', 'hr.sensitive': 'Hassas personel bilgilerini görüntüleme',
+    'privacy.manage': 'Kişisel veri taleplerini yönetme', 'hr.payroll': 'Bordroları görüntüleme', 'hr.payroll_manage': 'Bordroları düzenleme',
+    'leather.costs.read': 'Üretim maliyetlerini görüntüleme', 'leather.costs.manage': 'Üretim maliyetlerini düzenleme',
+    'pos.sell': 'Satış ve iade işlemi yapma', 'pos.manage': 'Kasa, terminal ve kampanya yönetme', 'pos.approve': 'İndirim ve iadeleri onaylama',
+  };
+  return labels[permission] ?? (permission.endsWith('.read') ? 'Görüntüleme' : permission.endsWith('.approve') ? 'Onaylama' : 'Kayıtları yönetme');
+}
+
 const areaDef = (key: AccessAreaKey): AccessAreaDef => ACCESS_AREAS[key];
 
 /** Alanın verilebilir (role bağlı olmayan) okuma ve yazma izinleri. */
@@ -186,7 +230,7 @@ export function roleDefaultPermissions(role: Role): Set<Permission> {
  *  - none: alanın okuma+yazma+role bağlı izinleri kalkar;
  *  - read: yazma ve role bağlı yazma izinleri kalkar, alanın okuma izinleri eklenir;
  *  - write: alanın okuma+yazma izinleri eklenir (role bağlı izinler eklenmez, rolde varsa korunur).
- * Bilinmeyen alan anahtarı ya da geçersiz düzey yok sayılır.
+ * İşlem istisnaları temel alan seçiminden sonra uygulanır; kapalı alan ve rol sınırı üstün gelir. Bilinmeyen anahtarlar yok sayılır.
  */
 export function effectivePermissions(role: Role, overrides: AccessOverrides = {}): Set<Permission> {
   const perms = roleDefaultPermissions(role);
@@ -204,6 +248,14 @@ export function effectivePermissions(role: Role, overrides: AccessOverrides = {}
     } else {
       for (const p of [...a.read, ...a.write]) perms.add(p);
     }
+  }
+  // İşlem seçimleri alanın temel düzeyinden sonra uygulanır. Tamamen kapalı bir alanı ya da rol sınırını aşamaz.
+  for (const [key, level] of Object.entries(overrides)) {
+    const permission = permissionOfOverride(key);
+    if (!permission || (level !== 'none' && level !== 'write')) continue;
+    const area = areaOfPermission(permission)!;
+    if (overrides[area] === 'none' || level === 'none') perms.delete(permission);
+    else if (!isRoleBoundPermission(permission) || ROLE_PERMISSIONS[role].includes(permission)) perms.add(permission);
   }
   return perms;
 }
@@ -240,12 +292,11 @@ export function unclassifiedPermissions(): Permission[] {
 }
 
 /**
- * Verme sınırı: bir yönetici, hedefte ancak KENDİSİNİN sahip olduğu izinleri açabilir. İstisna sonrası hedefin alan izinleri
- * (role bağlı olmayanlar) çağıranın etkin izinlerinin alt kümesi olmalı; kısıtlama (none) her zaman serbesttir.
+ * Verme sınırı: bir yönetici, hedefte ancak KENDİSİNİN sahip olduğu izinleri açabilir. Çağıran dışındaki alan haklarını listeler;
+ * API bu denetimi yeni verilecek haklara uygular, salt kısıtlama her zaman serbesttir.
  */
 export function exceedsGranter(granter: PermissionSet, target: PermissionSet, area: AccessAreaKey): Permission[] {
-  const a = areaDef(area);
-  return [...a.read, ...a.write].filter((p) => target.has(p) && !granter.has(p));
+  return permissionsOfArea(area).filter((p) => target.has(p) && !granter.has(p));
 }
 
 /** Alanın menüdeki grubu (arayüzde alanları gruplamak için). */

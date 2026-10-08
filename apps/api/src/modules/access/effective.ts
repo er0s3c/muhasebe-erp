@@ -6,6 +6,8 @@ import {
   effectivePermissions,
   isAccessArea,
   isAccessLevel,
+  permissionOfOverride,
+  permissionOverrideKey,
   roleHasDefault,
   type AccessLevel,
   type AccessOverrides,
@@ -35,13 +37,13 @@ export async function loadOverrides(db: Queryable, companyId: string, userId: st
     .from(memberModuleAccess)
     .where(and(eq(memberModuleAccess.companyId, companyId), eq(memberModuleAccess.userId, userId)));
   const out: Record<string, AccessLevel> = {};
-  for (const r of rows) if (isAccessArea(r.key) && isAccessLevel(r.level)) out[r.key] = r.level;
+  for (const r of rows) if (validOverride(r.key, r.level)) out[r.key] = r.level as AccessLevel;
   return out;
 }
 
 export function buildAccess(role: Role, overrides: AccessOverrides): MemberAccess {
   // Sahipte istisna uygulanmaz (veritabanı da sahip için satır yazdırmaz); yine de savunma olarak boşaltılır
-  const valid = role === 'owner' ? {} : (Object.fromEntries(Object.entries(overrides).filter(([k, v]) => isAccessArea(k) && isAccessLevel(v))) as Record<string, AccessLevel>);
+  const valid = role === 'owner' ? {} : (Object.fromEntries(Object.entries(overrides).filter(([k, v]) => validOverride(k, v))) as Record<string, AccessLevel>);
   return { role, overrides: valid, permissions: effectivePermissions(role, valid) };
 }
 
@@ -68,6 +70,9 @@ export const moduleReadOnly = () =>
  * rolün zaten sahip olmadığı izinse olağan 403 FORBIDDEN.
  */
 export function denialFor(a: MemberAccess, permission: Permission): AppError {
+  if (a.overrides[permissionOverrideKey(permission)] === 'none') {
+    return new AppError(403, MODULE_ACCESS_DENIED, 'Bu işlem için erişiminiz yönetici tarafından kapatıldı');
+  }
   const area = areaOfPermission(permission);
   if (area) {
     const level = a.overrides[area];
@@ -76,6 +81,10 @@ export function denialFor(a: MemberAccess, permission: Permission): AppError {
     if (level === 'read' && roleHasDefault(a.role, permission)) return moduleReadOnly();
   }
   return forbidden();
+}
+
+function validOverride(key: string, level: unknown): boolean {
+  return (isAccessArea(key) && isAccessLevel(level)) || (permissionOfOverride(key) !== null && (level === 'none' || level === 'write'));
 }
 
 /** Handler içinde ek izin denetimi (ör. kayıt sırasında "muhasebeleştir" bayrağı): eksikse nedene uygun hata atar. */

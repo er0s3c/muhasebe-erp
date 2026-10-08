@@ -37,7 +37,7 @@ export const MODULES: readonly ModuleDef[] = [
   { key: 'manufacturing.subcontracting', labelKey: 'modules.manufacturing.subcontracting', label: 'Fason üretim', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["manufacturing.production","core.parties"] },
   { key: 'manufacturing.maintenance', labelKey: 'modules.manufacturing.maintenance', label: 'Makine ve bakım', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["core.inventory"] },
   { key: 'manufacturing.costs', labelKey: 'modules.manufacturing.costs', label: 'Üretim maliyetleri', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["manufacturing.production"] },
-  { key: 'inventory.wms', labelKey: 'modules.inventory.wms', label: 'Depo ve raf yönetimi', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["core.inventory"] },
+  { key: 'inventory.wms', labelKey: 'modules.inventoryWms', label: 'Depo ve raf yönetimi', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["core.inventory"] },
   { key: 'sales.logistics', labelKey: 'modules.sales.logistics', label: 'Paketleme ve sevkiyat', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: ["core.invoices"] },
   { key: 'core.integrations', labelKey: 'modules.core.integrations', label: 'Entegrasyonlar', sectors: ['MANUFACTURING_WHOLESALE','LEATHER_FASHION'], status: 'available', requires: [] },
   { key: 'core.dashboard', labelKey: 'modules.dashboard', label: 'Genel bakış', sectors: 'all', status: 'available', locked: true },
@@ -262,6 +262,7 @@ export type NavGroupKey =
   | 'settings';
 
 export interface NavItemDef {
+  sectors?: readonly Sector[];
   key: string;
   labelKey: string;
   path: string;
@@ -290,17 +291,21 @@ export const NAV_GROUPS: readonly { key: NavGroupKey; labelKey: string }[] = [
 ];
 
 export const NAV_ITEMS: readonly NavItemDef[] = [
-  { key:'manufacturing.catalog',labelKey:'nav.manufacturing.catalog',path:'/manufacturing/catalog',icon:'layers',group:'manufacturing',module:'manufacturing.catalog',permission:'manufacturing.catalog.read' },
-  { key:'manufacturing.mrp',labelKey:'nav.manufacturing.mrp',path:'/manufacturing/mrp',icon:'layers',group:'manufacturing',module:'manufacturing.mrp',permission:'manufacturing.mrp.read' },
-  { key:'manufacturing.production',labelKey:'nav.manufacturing.production',path:'/manufacturing/production',icon:'layers',group:'manufacturing',module:'manufacturing.production',permission:'manufacturing.production.read' },
-  { key:'manufacturing.planning',labelKey:'nav.manufacturing.planning',path:'/manufacturing/planning',icon:'layers',group:'manufacturing',module:'manufacturing.planning',permission:'manufacturing.planning.read' },
-  { key:'manufacturing.quality',labelKey:'nav.manufacturing.quality',path:'/manufacturing/quality',icon:'layers',group:'manufacturing',module:'manufacturing.quality',permission:'manufacturing.quality.read' },
-  { key:'manufacturing.subcontracting',labelKey:'nav.manufacturing.subcontracting',path:'/manufacturing/subcontracting',icon:'layers',group:'manufacturing',module:'manufacturing.subcontracting',permission:'manufacturing.subcontracting.read' },
-  { key:'manufacturing.maintenance',labelKey:'nav.manufacturing.maintenance',path:'/manufacturing/maintenance',icon:'layers',group:'manufacturing',module:'manufacturing.maintenance',permission:'manufacturing.maintenance.read' },
-  { key:'manufacturing.costs',labelKey:'nav.manufacturing.costs',path:'/manufacturing/costs',icon:'layers',group:'manufacturing',module:'manufacturing.costs',permission:'manufacturing.costs.read' },
-  { key:'inventory.wms',labelKey:'nav.inventory.wms',path:'/wms',icon:'layers',group:'manufacturing',module:'inventory.wms',permission:'inventory.wms.read' },
-  { key:'sales.logistics',labelKey:'nav.sales.logistics',path:'/logistics',icon:'layers',group:'manufacturing',module:'sales.logistics',permission:'sales.logistics.read' },
-  { key:'core.integrations',labelKey:'nav.core.integrations',path:'/integrations',icon:'layers',group:'manufacturing',module:'core.integrations',permission:'core.integrations.read' },
+  { key:'manufacturing.promise',labelKey:'nav.manufacturing.promise',path:'/manufacturing/promise',icon:'clipboard-list',group:'manufacturing',module:'core.invoices',permission:'invoices.read',sectors:['MANUFACTURING_WHOLESALE','LEATHER_FASHION'] },
+  { key:'manufacturing.shop-floor',labelKey:'nav.manufacturing.shopFloor',path:'/manufacturing/shop-floor',icon:'timer',group:'manufacturing',module:'manufacturing.production',permission:'manufacturing.production.read' },
+  { key:'manufacturing.exceptions',labelKey:'nav.manufacturing.exceptions',path:'/manufacturing/exceptions',icon:'triangle-alert',group:'manufacturing',module:'manufacturing.production',permission:'manufacturing.production.read' },
+  { key:'manufacturing.supply',labelKey:'nav.manufacturing.supply',path:'/manufacturing/supply',icon:'package-search',group:'manufacturing',module:'manufacturing.mrp',permission:'manufacturing.mrp.read' },
+  { key:'manufacturing.catalog',labelKey:'nav.manufacturing.catalog',path:'/manufacturing/catalog',icon:'book-open',group:'manufacturing',module:'manufacturing.catalog',permission:'manufacturing.catalog.read' },
+  { key:'manufacturing.mrp',labelKey:'nav.manufacturing.mrp',path:'/manufacturing/mrp',icon:'git-branch',group:'manufacturing',module:'manufacturing.mrp',permission:'manufacturing.mrp.read' },
+  { key:'manufacturing.production',labelKey:'nav.manufacturing.production',path:'/manufacturing/production',icon:'factory',group:'manufacturing',module:'manufacturing.production',permission:'manufacturing.production.read' },
+  { key:'manufacturing.planning',labelKey:'nav.manufacturing.planning',path:'/manufacturing/planning',icon:'calendar-clock',group:'manufacturing',module:'manufacturing.planning',permission:'manufacturing.planning.read' },
+  { key:'manufacturing.quality',labelKey:'nav.manufacturing.quality',path:'/manufacturing/quality',icon:'clipboard-check',group:'manufacturing',module:'manufacturing.quality',permission:'manufacturing.quality.read' },
+  { key:'manufacturing.subcontracting',labelKey:'nav.manufacturing.subcontracting',path:'/manufacturing/subcontracting',icon:'handshake',group:'manufacturing',module:'manufacturing.subcontracting',permission:'manufacturing.subcontracting.read' },
+  { key:'manufacturing.maintenance',labelKey:'nav.manufacturing.maintenance',path:'/manufacturing/maintenance',icon:'wrench',group:'manufacturing',module:'manufacturing.maintenance',permission:'manufacturing.maintenance.read' },
+  { key:'manufacturing.costs',labelKey:'nav.manufacturing.costs',path:'/manufacturing/costs',icon:'calculator',group:'manufacturing',module:'manufacturing.costs',permission:'manufacturing.costs.read' },
+  { key:'inventory.wms',labelKey:'nav.inventory.wms',path:'/wms',icon:'warehouse',group:'manufacturing',module:'inventory.wms',permission:'inventory.wms.read' },
+  { key:'sales.logistics',labelKey:'nav.sales.logistics',path:'/logistics',icon:'truck',group:'manufacturing',module:'sales.logistics',permission:'sales.logistics.read' },
+  { key:'core.integrations',labelKey:'nav.core.integrations',path:'/integrations',icon:'plug',group:'manufacturing',module:'core.integrations',permission:'core.integrations.read' },
   { key: 'leather-center', labelKey: 'nav.leatherCenter', path: '/leather', icon: 'briefcase', group: 'leather', module: 'leather.catalog', permission: 'leather.catalog.read' },
   { key: 'leather-models', labelKey: 'nav.leatherModels', path: '/leather/models', icon: 'layers', group: 'leather', module: 'leather.catalog', permission: 'leather.catalog.read' },
   { key: 'leather-materials', labelKey: 'nav.leatherMaterials', path: '/leather/materials', icon: 'package', group: 'leather', module: 'leather.materials', permission: 'leather.materials.read' },

@@ -1,21 +1,275 @@
 import { sql } from 'drizzle-orm';
-import { dec, leatherAreaToM2, assertLeatherAreaConservation, type LeatherReceiptInput, type LeatherCutInput } from '@erp/shared';
+import {
+  dec,
+  leatherAreaToM2,
+  assertLeatherAreaConservation,
+  type LeatherReceiptInput,
+  type LeatherCutInput,
+} from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { createDeliveryDraft } from '../deliveries/service';
 import { postDeliveryNote } from '../deliveries/posting';
 import { nextNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
-import { all, one, newId, json, fail, requireGoods, lockLeatherCosts, type LeatherCtx, type Row } from './common';
+import {
+  all,
+  one,
+  newId,
+  json,
+  fail,
+  requireGoods,
+  lockLeatherCosts,
+  type LeatherCtx,
+  type Row,
+} from './common';
 import { issueProduction } from './production';
-function normalizePiece(p:LeatherReceiptInput['pieces'][number]){const area=leatherAreaToM2(p.area,p.areaUnit),usable=leatherAreaToM2(p.usableArea??p.area,p.areaUnit);if(dec(area).lte(0))throw fail('Alan ölçümü m² hassasiyetinde sıfır olamaz');return {...p,area,usableArea:usable,areaUnit:'m2' as const,measurement:{unit:p.areaUnit,area:p.area,usableArea:p.usableArea??p.area}};}
-export const pieceShape=(p:Row)=>({...p.config,id:p.id,lotId:p.lot_id,itemId:p.item_id,warehouseId:p.warehouse_id,parentId:p.parent_id,code:p.code,area:p.area,remainingArea:p.remaining_area,usableArea:p.usable_area,status:p.status});
-export async function listPieces(tx:Tx){return (await all(tx,sql`select * from leather_pieces order by created_at desc limit 1000`)).map(pieceShape);}
-export async function listLots(tx:Tx){return (await all(tx,sql`select l.*,i.name as "itemName",coalesce((select sum(p.remaining_area) from leather_pieces p where p.lot_id=l.id),0)::text as "remainingArea" from leather_lots l join items i on i.id=l.item_id order by l.created_at desc limit 500`)).map(l=>({...l.config,id:l.id,code:l.code,itemId:l.item_id,itemName:l.itemName,warehouseId:l.warehouse_id,partyId:l.party_id,deliveryNoteId:l.delivery_note_id,deliveryLineId:l.delivery_line_id,date:l.date,totalArea:l.total_area,provisionalValue:l.provisional_value,remainingArea:l.remainingArea}));}
-export async function receiveMaterial(tx:Tx,ctx:LeatherCtx,input:LeatherReceiptInput){const measuredPieces=input.pieces.map(normalizePiece);input={...input,pieces:measuredPieces};await lockLeatherCosts(tx,ctx.companyId);await requireOpenPeriod(tx,input.date);if(input.certificateDocumentId)await one(tx,sql`select id from record_documents where id=${input.certificateDocumentId}::uuid`,'Deri sertifikası');const item=await requireGoods(tx,input.itemId,'raw_material');if(item.unit!=='m2')throw fail('Deri kartının temel birimi m² olmalı');const codes=new Set(input.pieces.map(p=>p.code));if(codes.size!==input.pieces.length)throw fail('Parça kodları benzersiz olmalı');for(const p of input.pieces){if(dec(p.usableArea??p.area).gt(p.area)||dec(p.thicknessMin).gt(p.thicknessMax))throw fail('Kullanılabilir alan veya kalınlık aralığı geçersiz');}
- const area=input.pieces.reduce((s,p)=>s.plus(p.area),dec(0));const draft=await createDeliveryDraft(tx,ctx,{type:'purchase',partyId:input.partyId,warehouseId:input.warehouseId,noteDate:input.date,externalNo:input.externalNo,post:false,description:'Deri parti kabulü',lines:[{itemId:input.itemId,quantity:area.toFixed(4),unitCost:input.provisionalUnitCost,currency:input.currency,...(input.fxRate?{fxRate:input.fxRate}:{})}]});const noteId=draft as unknown as string;await postDeliveryNote(tx,ctx,noteId);const line=await one(tx,sql`select id,stock_value from delivery_note_lines where note_id=${noteId}::uuid order by line_no limit 1`);const id=newId();const sequence=await nextNumber(tx,ctx.companyId,'LEATHER_LOT',0);await tx.execute(sql`insert into leather_lots(id,company_id,created_by,code,item_id,warehouse_id,party_id,delivery_note_id,delivery_line_id,date,total_area,provisional_value,config) values(${id},${ctx.companyId},${ctx.userId},${'DER-'+String(sequence).padStart(6,'0')},${input.itemId},${input.warehouseId},${input.partyId},${noteId},${line.id},${input.date},${area.toFixed(4)},${line.stock_value},${json({tanning:input.tanning,tannery:input.tannery,country:input.country,certificateDocumentId:input.certificateDocumentId??null,note:input.note})})`);
- for(const p of input.pieces){const pid=newId();await tx.execute(sql`insert into leather_pieces(id,company_id,created_by,lot_id,item_id,warehouse_id,code,area,remaining_area,usable_area,config) values(${pid},${ctx.companyId},${ctx.userId},${id},${input.itemId},${input.warehouseId},${p.code},${p.area},${p.area},${p.usableArea??p.area},${json(p)})`);await tx.execute(sql`insert into leather_piece_events(id,company_id,created_by,piece_id,date,kind,quantity) values(${newId()},${ctx.companyId},${ctx.userId},${pid},${input.date},'receive',${p.area})`);}return (await listLots(tx)).find(l=>l.id===id)!;
+import { getRecord, updateRecord, listRecords } from '../manufacturing/service';
+import { queueInventoryChanges } from '../manufacturing/channels';
+function normalizePiece(p: LeatherReceiptInput['pieces'][number]) {
+  const area = leatherAreaToM2(p.area, p.areaUnit),
+    usable = leatherAreaToM2(p.usableArea ?? p.area, p.areaUnit);
+  if (dec(area).lte(0)) throw fail('Alan ölçümü m² hassasiyetinde sıfır olamaz');
+  return {
+    ...p,
+    area,
+    usableArea: usable,
+    areaUnit: 'm2' as const,
+    measurement: { unit: p.areaUnit, area: p.area, usableArea: p.usableArea ?? p.area },
+  };
 }
-export async function acceptPiece(tx:Tx,ctx:LeatherCtx,id:string,input:{decision:string;note:string}){await lockLeatherCosts(tx,ctx.companyId);const piece=await one(tx,sql`select * from leather_pieces where id=${id}::uuid for update`,'Deri parçası');if(piece.status!=='quarantine')throw fail('Yalnızca karantinadaki parça kabul edilir');const status=input.decision==='accept'?'available':input.decision==='second'?'second':'rejected';return pieceShape(await one(tx,sql`update leather_pieces set status=${status},config=config || ${json({acceptanceNote:input.note,acceptedBy:ctx.userId})} where id=${id}::uuid returning *`));}
-export async function cutMaterial(tx:Tx,ctx:LeatherCtx,input:LeatherCutInput){input={...input,remnants:input.remnants.map(normalizePiece)};await lockLeatherCosts(tx,ctx.companyId);const duplicate=await all(tx,sql`select * from leather_production_documents where request_key=${input.requestKey}::uuid`);if(duplicate[0]){if(duplicate[0].order_id!==input.orderId||!duplicate[0].config.cut)throw fail('İstek kimliği başka işlemde kullanıldı');return duplicate[0];}const piece=await one(tx,sql`select * from leather_pieces where id=${input.pieceId}::uuid for update`,'Deri parçası');assertLeatherAreaConservation(piece.remaining_area,input.usedArea,input.wasteArea,input.remnants.map(p=>p.area));const consumption=dec(input.usedArea).plus(input.wasteArea);const doc=await issueProduction(tx,ctx,input.orderId,{date:input.date,requestKey:input.requestKey,note:input.note,lines:[{itemId:piece.item_id,quantity:consumption.toFixed(4),pieces:[{pieceId:piece.id,quantity:consumption.toFixed(4)}]}]},{cut:true,cutInput:input});
- for(const p of input.remnants){if(dec(p.usableArea??p.area).gt(p.area))throw fail('Kalan parçanın kullanılabilir alanı toplamından büyük olamaz');const id=newId();await tx.execute(sql`insert into leather_pieces(id,company_id,created_by,lot_id,item_id,warehouse_id,parent_id,code,area,remaining_area,usable_area,status,config) values(${id},${ctx.companyId},${ctx.userId},${piece.lot_id},${piece.item_id},${piece.warehouse_id},${piece.id},${p.code},${p.area},${p.area},${p.usableArea??p.area},${piece.status},${json(p)})`);await tx.execute(sql`insert into leather_piece_events(id,company_id,created_by,piece_id,order_id,document_id,date,kind,quantity,config) values(${newId()},${ctx.companyId},${ctx.userId},${id},${input.orderId},${doc.id},${input.date},'remnant',${p.area},${json({parentId:piece.id})})`);}await tx.execute(sql`update leather_pieces set remaining_area=0,status=${input.remnants.length?'split':'consumed'} where id=${piece.id}`);return doc;
+export const pieceShape = (p: Row) => ({
+  ...p.config,
+  id: p.id,
+  lotId: p.lot_id,
+  itemId: p.item_id,
+  warehouseId: p.warehouse_id,
+  parentId: p.parent_id,
+  code: p.code,
+  area: p.area,
+  remainingArea: p.remaining_area,
+  usableArea: p.usable_area,
+  status: p.status,
+});
+export async function listPieces(tx: Tx) {
+  return (await all(tx, sql`select * from leather_pieces order by created_at desc limit 1000`)).map(
+    pieceShape,
+  );
+}
+export async function listLots(tx: Tx) {
+  return (
+    await all(
+      tx,
+      sql`select l.*,i.name as "itemName",coalesce((select sum(p.remaining_area) from leather_pieces p where p.lot_id=l.id),0)::text as "remainingArea" from leather_lots l join items i on i.id=l.item_id order by l.created_at desc limit 500`,
+    )
+  ).map((l) => ({
+    ...l.config,
+    id: l.id,
+    code: l.code,
+    itemId: l.item_id,
+    itemName: l.itemName,
+    warehouseId: l.warehouse_id,
+    partyId: l.party_id,
+    deliveryNoteId: l.delivery_note_id,
+    deliveryLineId: l.delivery_line_id,
+    date: l.date,
+    totalArea: l.total_area,
+    provisionalValue: l.provisional_value,
+    remainingArea: l.remainingArea,
+  }));
+}
+export async function receiveMaterial(tx: Tx, ctx: LeatherCtx, input: LeatherReceiptInput) {
+  const measuredPieces = input.pieces.map(normalizePiece);
+  input = { ...input, pieces: measuredPieces };
+  await lockLeatherCosts(tx, ctx.companyId);
+  await requireOpenPeriod(tx, input.date);
+  if (input.certificateDocumentId)
+    await one(
+      tx,
+      sql`select id from record_documents where id=${input.certificateDocumentId}::uuid`,
+      'Deri sertifikası',
+    );
+  const item = await requireGoods(tx, input.itemId, 'raw_material');
+  if (item.unit !== 'm2') throw fail('Deri kartının temel birimi m² olmalı');
+  const codes = new Set(input.pieces.map((p) => p.code));
+  if (codes.size !== input.pieces.length) throw fail('Parça kodları benzersiz olmalı');
+  for (const p of input.pieces) {
+    if (dec(p.usableArea ?? p.area).gt(p.area) || dec(p.thicknessMin).gt(p.thicknessMax))
+      throw fail('Kullanılabilir alan veya kalınlık aralığı geçersiz');
+  }
+  const area = input.pieces.reduce((s, p) => s.plus(p.area), dec(0));
+  const draft = await createDeliveryDraft(tx, ctx, {
+    type: 'purchase',
+    partyId: input.partyId,
+    warehouseId: input.warehouseId,
+    noteDate: input.date,
+    externalNo: input.externalNo,
+    post: false,
+    description: 'Deri parti kabulü',
+    lines: [
+      {
+        itemId: input.itemId,
+        quantity: area.toFixed(4),
+        unitCost: input.provisionalUnitCost,
+        currency: input.currency,
+        ...(input.fxRate ? { fxRate: input.fxRate } : {}),
+      },
+    ],
+  });
+  const noteId = draft as unknown as string;
+  await postDeliveryNote(tx, ctx, noteId);
+  const line = await one(
+    tx,
+    sql`select id,stock_value from delivery_note_lines where note_id=${noteId}::uuid order by line_no limit 1`,
+  );
+  const id = newId();
+  const sequence = await nextNumber(tx, ctx.companyId, 'LEATHER_LOT', 0);
+  await tx.execute(
+    sql`insert into leather_lots(id,company_id,created_by,code,item_id,warehouse_id,party_id,delivery_note_id,delivery_line_id,date,total_area,provisional_value,config) values(${id},${ctx.companyId},${ctx.userId},${'DER-' + String(sequence).padStart(6, '0')},${input.itemId},${input.warehouseId},${input.partyId},${noteId},${line.id},${input.date},${area.toFixed(4)},${line.stock_value},${json({ tanning: input.tanning, tannery: input.tannery, country: input.country, certificateDocumentId: input.certificateDocumentId ?? null, note: input.note })})`,
+  );
+  for (const p of input.pieces) {
+    const pid = newId();
+    await tx.execute(
+      sql`insert into leather_pieces(id,company_id,created_by,lot_id,item_id,warehouse_id,code,area,remaining_area,usable_area,config) values(${pid},${ctx.companyId},${ctx.userId},${id},${input.itemId},${input.warehouseId},${p.code},${p.area},${p.area},${p.usableArea ?? p.area},${json(p)})`,
+    );
+    await tx.execute(
+      sql`insert into leather_piece_events(id,company_id,created_by,piece_id,date,kind,quantity) values(${newId()},${ctx.companyId},${ctx.userId},${pid},${input.date},'receive',${p.area})`,
+    );
+  }
+  // The receipt mirror keeps its measured quantity and source. Physical pieces now own
+  // quality decisions; excluding only this untouched mirror prevents a second hold.
+  await tx.execute(
+    sql`update manufacturing_records set status='leather_traced',config=config||${json({ physicalPieceLotId: id })},updated_at=now() where kind='lot' and status='quarantine' and config->>'automatic'='true' and source_document_id in (select id from stock_documents where source_type='delivery_note' and source_id=${noteId}::uuid and reversal_of_id is null) and item_id=${input.itemId}::uuid and warehouse_id=${input.warehouseId}::uuid and coalesce(config->>'remainingQty',config->>'quantity')=config->>'quantity'`,
+  );
+  await queueInventoryChanges(tx, ctx, 'leather-receipt:' + id, [input.itemId]);
+  return (await listLots(tx)).find((l) => l.id === id)!;
+}
+export async function acceptPiece(
+  tx: Tx,
+  ctx: LeatherCtx,
+  id: string,
+  input: { decision: string; note: string },
+) {
+  await lockLeatherCosts(tx, ctx.companyId);
+  const piece = await one(
+    tx,
+    sql`select * from leather_pieces where id=${id}::uuid for update`,
+    'Deri parçası',
+  );
+  if (piece.status !== 'quarantine') throw fail('Yalnızca karantinadaki parça kabul edilir');
+  const status =
+    input.decision === 'accept' ? 'available' : input.decision === 'second' ? 'second' : 'rejected';
+  const accepted = pieceShape(
+    await one(
+      tx,
+      sql`update leather_pieces set status=${status},config=config || ${json({ acceptanceNote: input.note, acceptedBy: ctx.userId })} where id=${id}::uuid returning *`,
+    ),
+  );
+  await queueInventoryChanges(tx, ctx, 'piece-accept:' + id, [piece.item_id]);
+  return accepted;
+}
+export async function cutMaterial(tx: Tx, ctx: LeatherCtx, input: LeatherCutInput) {
+  input = { ...input, remnants: input.remnants.map(normalizePiece) };
+  await lockLeatherCosts(tx, ctx.companyId);
+  const duplicate = await all(
+    tx,
+    sql`select * from leather_production_documents where request_key=${input.requestKey}::uuid`,
+  );
+  if (duplicate[0]) {
+    if (duplicate[0].order_id !== input.orderId || !duplicate[0].config.cut)
+      throw fail('İstek kimliği başka işlemde kullanıldı');
+    return duplicate[0];
+  }
+  const piece = await one(
+    tx,
+    sql`select * from leather_pieces where id=${input.pieceId}::uuid for update`,
+    'Deri parçası',
+  );
+  const activeOrders = new Set(
+    (
+      await all(
+        tx,
+        sql`select id from leather_production_orders where status not in ('completed','cancelled')`,
+      )
+    ).map((o) => o.id),
+  );
+  const activePlans = (await listRecords(tx, 'cut_plan')).filter(
+    (p) => ['planned', 'in_progress'].includes(p.status) && activeOrders.has(p.orderId),
+  );
+  if (activePlans.some((p) => p.pieces.includes(input.pieceId) && p.id !== input.planId))
+    throw fail('Parça açık kesim planına bağlı; sonucu bu plan üzerinden girin');
+  if (input.planId) {
+    const plan = await getRecord(tx, input.planId, 'cut_plan', true);
+    if (
+      plan.order_id !== input.orderId ||
+      !plan.config.pieces.includes(input.pieceId) ||
+      !['planned', 'in_progress'].includes(plan.status)
+    )
+      throw fail('Kesim planı emir ve seçilen parçaya bağlı olmalı');
+    if ((plan.config.results ?? []).some((r: Row) => r.pieceId === input.pieceId))
+      throw fail('Plan parçası için kesim sonucu zaten var');
+    const sets =
+      (plan.config.results ?? []).reduce((s: number, r: Row) => s + Number(r.setsProduced), 0) +
+      input.setsProduced;
+    if (sets > plan.config.sets) throw fail('Kesim seti plan hedefini aşamaz');
+  }
+  assertLeatherAreaConservation(
+    piece.remaining_area,
+    input.usedArea,
+    input.wasteArea,
+    input.remnants.map((p) => p.area),
+  );
+  const consumption = dec(input.usedArea).plus(input.wasteArea);
+  const doc = await issueProduction(
+    tx,
+    ctx,
+    input.orderId,
+    {
+      date: input.date,
+      requestKey: input.requestKey,
+      note: input.note,
+      lines: [
+        {
+          itemId: piece.item_id,
+          quantity: consumption.toFixed(4),
+          pieces: [{ pieceId: piece.id, quantity: consumption.toFixed(4) }],
+        },
+      ],
+    },
+    { cut: true, cutInput: input },
+  );
+  for (const p of input.remnants) {
+    if (dec(p.usableArea ?? p.area).gt(p.area))
+      throw fail('Kalan parçanın kullanılabilir alanı toplamından büyük olamaz');
+    const id = newId();
+    await tx.execute(
+      sql`insert into leather_pieces(id,company_id,created_by,lot_id,item_id,warehouse_id,parent_id,code,area,remaining_area,usable_area,status,config) values(${id},${ctx.companyId},${ctx.userId},${piece.lot_id},${piece.item_id},${piece.warehouse_id},${piece.id},${p.code},${p.area},${p.area},${p.usableArea ?? p.area},${piece.status},${json(p)})`,
+    );
+    await tx.execute(
+      sql`insert into leather_piece_events(id,company_id,created_by,piece_id,order_id,document_id,date,kind,quantity,config) values(${newId()},${ctx.companyId},${ctx.userId},${id},${input.orderId},${doc.id},${input.date},'remnant',${p.area},${json({ parentId: piece.id })})`,
+    );
+  }
+  await tx.execute(
+    sql`update leather_pieces set remaining_area=0,status=${input.remnants.length ? 'split' : 'consumed'} where id=${piece.id}`,
+  );
+  if (input.planId) {
+    const plan = await getRecord(tx, input.planId, 'cut_plan', true),
+      results = [
+        ...(plan.config.results ?? []),
+        {
+          pieceId: piece.id,
+          documentId: doc.id,
+          setsProduced: input.setsProduced,
+          usedArea: input.usedArea,
+          wasteArea: input.wasteArea,
+          remnantArea: input.remnants.reduce((s, p) => s.plus(p.area), dec(0)).toFixed(4),
+        },
+      ];
+    await updateRecord(
+      tx,
+      plan.id,
+      results.length === plan.config.pieces.length ? 'completed' : 'in_progress',
+      { ...plan.config, results },
+    );
+  }
+  return doc;
 }

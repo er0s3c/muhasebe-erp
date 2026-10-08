@@ -1,6 +1,6 @@
 import { dec, formatDateTR, hasPermission, IMPORT_FILE_STATUS_LABELS, ITEM_UNIT_LABELS, sum, todayIso, type ExpenseReportQuery, type ListExpenseEntriesQuery, type ListImportFilesQuery, type ListDeliveryNotesQuery, type ListSerialsQuery, type ListSalesDocsQuery, type BankGuaranteeListQuery, type ChequeDueQuery, type ChequeListQuery, type ChequeMaturityQuery, type ForeignDocListQuery, type ItemUnit, type PermissionSet, type TreasuryTxnType, type ContactListQuery, type AgendaListQuery } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import type { Role } from '@erp/shared';
+import type { Role, CashForecastQuery } from '@erp/shared';
 import { unprocessable } from '../../http/errors';
 import type { CellValue, ColumnKind, ReportTable, TableColumn } from '../../files/table';
 import { BOOK_EXPORT_MAX_LINES, countBookLines, generalLedger, journalBook } from '../ledger/books';
@@ -1687,9 +1687,9 @@ export async function projectProfitabilityTable(ctx: BuildCtx, q: { asOf?: strin
 }
 
 /** Nakit projeksiyonu (haftalık): giriş/çıkış kaynakları ve kümülatif bakiye. */
-export async function cashForecastTable(ctx: BuildCtx, q: { from?: string; weeks?: number }): Promise<ReportTable[]> {
+export async function cashForecastTable(ctx: BuildCtx, q: Pick<CashForecastQuery,'from'|'timing'|'collectionDelayDays'> & { weeks?: number }): Promise<ReportTable[]> {
   const b = ctx.company.baseCurrency;
-  const d = await cashForecast(ctx.tx, { companyId: '', userId: '', baseCurrency: b, reportingCurrency: ctx.company.reportingCurrency }, { from: q.from, weeks: q.weeks ?? 13 });
+  const d = await cashForecast(ctx.tx, { companyId: '', userId: '', baseCurrency: b, reportingCurrency: ctx.company.reportingCurrency }, { ...q, weeks: q.weeks ?? 13 });
   return [
     {
       key: 'nakit-projeksiyonu',
@@ -1715,7 +1715,9 @@ export async function cashForecastTable(ctx: BuildCtx, q: { from?: string; weeks
       sheet: 'Kalemler',
       subtitle: sub(ctx, `${formatDateTR(d.from)} başlangıçlı`),
       columns: [
-        col('date', 'Vade', 'date'),
+        col('date', 'Beklenen tarih', 'date'),
+        col('dueDate', 'Sözleşme vadesi', 'date'),
+        col('basis', 'Tahmin dayanağı', 'text', 25),
         col('week', 'Hafta', 'int'),
         col('source', 'Kaynak', 'text', 14),
         col('party', 'Cari', 'text', 28),
@@ -1725,7 +1727,7 @@ export async function cashForecastTable(ctx: BuildCtx, q: { from?: string; weeks
         col('amountBase', `Karşılık (${b})`, 'money', undefined, b),
         col('overdue', 'Gecikmiş', 'text', 10),
       ],
-      rows: d.items.map((i) => ({ date: i.date, week: i.week, source: i.source === 'receivable' ? 'Alacak' : i.source === 'payable' ? 'Borç' : i.direction === 'in' ? 'Elle giriş' : 'Elle çıkış', party: i.partyName, description: i.description, currency: i.currencyCode, amount: i.direction === 'in' ? i.amount : `${i.amount}`, amountBase: i.direction === 'in' ? i.amountBase : dec(i.amountBase).neg().toFixed(2), overdue: i.overdue ? 'Evet' : null })),
+      rows: d.items.map((i) => ({ date: i.date, dueDate: i.dueDate ?? i.date, basis: i.timingSource === 'payment_history' ? 'Gerçek ödeme geçmişi' : i.timingSource === 'conservative_history' ? 'İhtiyatlı ödeme geçmişi' : i.timingSource === 'manual' ? 'Elle girilen' : i.timingSource === 'cheque' ? 'Çek/senet vadesi' : 'Sözleşme vadesi', week: i.week, source: i.source === 'receivable' ? 'Alacak' : i.source === 'payable' ? 'Borç' : i.direction === 'in' ? 'Elle giriş' : 'Elle çıkış', party: i.partyName, description: i.description, currency: i.currencyCode, amount: i.direction === 'in' ? i.amount : `${i.amount}`, amountBase: i.direction === 'in' ? i.amountBase : dec(i.amountBase).neg().toFixed(2), overdue: i.overdue ? 'Evet' : null })),
     },
   ];
 }

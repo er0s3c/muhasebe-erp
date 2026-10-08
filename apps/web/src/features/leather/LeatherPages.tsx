@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { TransfersPanel } from '../manufacturing/TransfersPanel';
+import { ReworkExecutionPanel } from '../manufacturing/ExecutionPanels';
+import { PieceGeometryPanel, LeatherCutPlanningPanel, ServiceTimePanel } from './ExecutionPanels';
 import { CustomValuesPanel, PieceRatePanel } from '../manufacturing/SupportPanels';
 import { ProductionLink as Link, useGenericProduction } from './production-context';
 import { useTranslation } from 'react-i18next';
@@ -88,8 +90,8 @@ interface LookupItem {
   inventoryRole: string;
 }
 interface LookupData {
-  resources?:{id:string;name:string}[];
-  lots?:{id:string;code:string;itemId:string;warehouseId:string;quantity:string}[];
+  resources?: { id: string; name: string }[];
+  lots?: { id: string; code: string; itemId: string; warehouseId: string; quantity: string }[];
   items: LookupItem[];
   parties: { id: string; name: string; kind: string }[];
   warehouses: { id: string; name: string }[];
@@ -144,8 +146,8 @@ function useStockLookups() {
     salesOrderLines: data.data?.salesOrderLines ?? [],
     saleLines: data.data?.saleLines ?? [],
     costLines: data.data?.costLines ?? [],
-    resources:data.data?.resources??[],
-    lots:data.data?.lots??[],
+    resources: data.data?.resources ?? [],
+    lots: data.data?.lots ?? [],
     error: data.error,
   };
 }
@@ -240,7 +242,7 @@ export function LeatherOverviewPage() {
 }
 
 export function LeatherModelsPage() {
-  const generic=useGenericProduction();
+  const generic = useGenericProduction();
   const { t } = useTranslation();
   const can = useCan();
   const save = useLeatherActions();
@@ -265,11 +267,13 @@ export function LeatherModelsPage() {
           fields={[
             textField('code', 'Model kodu', true),
             textField('name', 'Model adı', true),
-            generic?textField('family','Ürün ailesi',true):selectField(
-              'family',
-              'Ürün ailesi',
-              Object.entries(familyNames).map(([value, label]) => ({ value, label })),
-            ),
+            generic
+              ? textField('family', 'Ürün ailesi', true)
+              : selectField(
+                  'family',
+                  'Ürün ailesi',
+                  Object.entries(familyNames).map(([value, label]) => ({ value, label })),
+                ),
             textField('description', 'Model açıklaması'),
           ]}
           submit={(values) => save('/api/leather/catalog/models', values)}
@@ -319,7 +323,7 @@ export function LeatherModelsPage() {
       </div>
       {modelId && (
         <>
-          {generic&&<CustomValuesPanel entity="model" id={modelId}/>}
+          {generic && <CustomValuesPanel entity="model" id={modelId} />}
           {can('leather.catalog.manage') && (
             <RevisionEditor
               key={`${modelId}-${editing?.id ?? 'new'}`}
@@ -429,7 +433,29 @@ export function LeatherModelsPage() {
                   .join(' · '),
             },
           ]}
-          action={row=>modelId===row.modelId&&can('leather.catalog.approve')?<OperationForm title="Varyantın yeni üretim revizyonu" description="Açık emirler kendi onaylı reçetelerini korur." fields={[selectField('revisionId','Onaylı revizyon',options(revisions.data?.revisions.filter(r=>r.status==='approved')??[],r=>`R${r.revision} · ${r.name}`))]} submit={v=>save(`/api/leather/catalog/variants/${row.id}/revision`,{revisionId:v.revisionId})}/>:null}
+          action={(row) =>
+            modelId === row.modelId && can('leather.catalog.approve') ? (
+              <OperationForm
+                title="Varyantın yeni üretim revizyonu"
+                description="Açık emirler kendi onaylı reçetelerini korur."
+                fields={[
+                  selectField(
+                    'revisionId',
+                    'Onaylı revizyon',
+                    options(
+                      revisions.data?.revisions.filter((r) => r.status === 'approved') ?? [],
+                      (r) => `R${r.revision} · ${r.name}`,
+                    ),
+                  ),
+                ]}
+                submit={(v) =>
+                  save(`/api/leather/catalog/variants/${row.id}/revision`, {
+                    revisionId: v.revisionId,
+                  })
+                }
+              />
+            ) : null
+          }
         />
       </div>
     </>
@@ -448,34 +474,49 @@ function RevisionEditor({
   onDone: () => void;
 }) {
   const save = useLeatherActions();
-  const generic=useGenericProduction();
+  const generic = useGenericProduction();
   const can = useCan();
+  const { resources = [] } = useStockLookups();
   const files = useCQuery<{ items: { id: string; filename: string }[] }>(
     ['record-documents', 'leather-model', modelId],
     `/api/workspace/documents?kind=leather_model&id=${modelId}&latest=true`,
     { enabled: can('workspace.use'), refetchOnWindowFocus: true },
   );
   const [attachments, setAttachments] = useState<string[]>(revision?.attachments ?? []);
-  const [materials, setMaterials] = useState<(LeatherRevisionInput['materials'][number]&{alternatives?:string[]})[]>(
-    revision?.materials ?? [{ itemId: '', quantity: '1', wastePct: '0', note: '' }],
+  const [materials, setMaterials] = useState<
+    (LeatherRevisionInput['materials'][number] & { alternatives?: string[] })[]
+  >(revision?.materials ?? [{ itemId: '', quantity: '1', wastePct: '0', note: '' }]);
+  const [byproducts, setByproducts] = useState<
+    { itemId: string; quantity: string; costShare: string }[]
+  >(
+    (
+      revision as
+        | (LeatherRevision & {
+            byproducts?: { itemId: string; quantity: string; costShare: string }[];
+          })
+        | null
+    )?.byproducts ?? [],
   );
-  const [byproducts,setByproducts]=useState<{itemId:string;quantity:string;costShare:string}[]>((revision as (LeatherRevision & {byproducts?:{itemId:string;quantity:string;costShare:string}[]})|null)?.byproducts??[]);
   const [operations, setOperations] = useState<LeatherRevisionInput['operations']>(
     revision?.operations ??
-      (generic?['assembly','packing']:[
-        'selection',
-        'cutting',
-        'skiving',
-        'stitching',
-        'edge_finishing',
-        'assembly',
-        'final_quality',
-        'packing',
-      ]).map((key) => ({
+      (generic
+        ? ['assembly', 'packing']
+        : [
+            'selection',
+            'cutting',
+            'skiving',
+            'stitching',
+            'edge_finishing',
+            'assembly',
+            'final_quality',
+            'packing',
+          ]
+      ).map((key) => ({
         key,
         name: operationNames[key]!,
         station: '',
         plannedMinutes: '0',
+        resources: [],
         outsourced: false,
       })),
   );
@@ -530,7 +571,7 @@ function RevisionEditor({
               qualityNotes: values.qualityNotes ?? '',
             },
             materials,
-            ...(generic?{byproducts}:{}),
+            ...(generic ? { byproducts } : {}),
             operations,
             attachments,
           },
@@ -570,7 +611,40 @@ function RevisionEditor({
             key={index}
             className="grid items-end gap-3 rounded-xl border border-border p-3 sm:grid-cols-4"
           >
-            {generic&&<Field label={`Alternatif malzemeler ${index+1}`} hint="Birden fazla seçim için Ctrl tuşunu kullanın.">{id=><Select id={id} multiple value={line.alternatives??[]} onChange={e=>setMaterials(old=>old.map((row,i)=>i===index?{...row,alternatives:Array.from(e.target.selectedOptions,o=>o.value)}:row))}>{items.filter(i=>i.id!==line.itemId).map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</Select>}</Field>}
+            {generic && (
+              <Field
+                label={`Alternatif malzemeler ${index + 1}`}
+                hint="Birden fazla seçim için Ctrl tuşunu kullanın."
+              >
+                {(id) => (
+                  <Select
+                    id={id}
+                    multiple
+                    value={line.alternatives ?? []}
+                    onChange={(e) =>
+                      setMaterials((old) =>
+                        old.map((row, i) =>
+                          i === index
+                            ? {
+                                ...row,
+                                alternatives: Array.from(e.target.selectedOptions, (o) => o.value),
+                              }
+                            : row,
+                        ),
+                      )
+                    }
+                  >
+                    {items
+                      .filter((i) => i.id !== line.itemId)
+                      .map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.name}
+                        </option>
+                      ))}
+                  </Select>
+                )}
+              </Field>
+            )}
             <Field label={`Reçete malzemesi ${index + 1}`} required>
               {(id) => (
                 <Select
@@ -649,103 +723,379 @@ function RevisionEditor({
           Reçete malzemesi ekle
         </Button>
       </div>
-      {generic&&<fieldset className="space-y-3"><legend>Yan ürünler</legend>{byproducts.map((line,index)=><div key={index} className="grid gap-3 sm:grid-cols-4"><Field label={`Yan ürün ${index+1}`} required>{id=><Select id={id} value={line.itemId} required onChange={e=>setByproducts(old=>old.map((r,i)=>i===index?{...r,itemId:e.target.value}:r))}><option value="">Stok seçiniz</option>{items.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</Select>}</Field><Field label={`Yan ürün miktarı ${index+1}`} required>{id=><Input id={id} required type="number" min="0.0001" step="any" value={line.quantity} onChange={e=>setByproducts(old=>old.map((r,i)=>i===index?{...r,quantity:e.target.value}:r))}/>}</Field><Field label={`Maliyet payı ${index+1}`} hint="0,20 payı %20 anlamına gelir.">{id=><Input id={id} type="number" min="0" max="0.9999" step="any" value={line.costShare} onChange={e=>setByproducts(old=>old.map((r,i)=>i===index?{...r,costShare:e.target.value}:r))}/>}</Field><Button type="button" onClick={()=>setByproducts(old=>old.filter((_,i)=>i!==index))}>Kaldır</Button></div>)}<Button type="button" onClick={()=>setByproducts(old=>[...old,{itemId:'',quantity:'1',costShare:'0'}])}>Yan ürün ekle</Button></fieldset>}
-      {generic&&<fieldset className="space-y-3"><legend>Operasyon rotası</legend>{operations.map((op,index)=><div key={index} className="grid gap-3 sm:grid-cols-3">{(['key','name','station','plannedMinutes']as const).map((key,i)=><Field key={key} label={['Operasyon kodu','Operasyon adı','İş merkezi','Birim süre (dk)'][i]!}>{id=><Input id={id} value={op[key]} type={key==='plannedMinutes'?'number':'text'} onChange={e=>setOperations(old=>old.map((r,j)=>j===index?{...r,[key]:e.target.value}:r))}/>}</Field>)}<label><input type="checkbox" checked={op.outsourced} onChange={e=>setOperations(old=>old.map((r,i)=>i===index?{...r,outsourced:e.target.checked}:r))}/> Fason operasyon</label><Button type="button" onClick={()=>setOperations(old=>old.filter((_,i)=>i!==index))}>Operasyonu kaldır</Button></div>)}<Button type="button" onClick={()=>setOperations(old=>[...old,{key:'op'+(old.length+1),name:'Yeni operasyon',station:'',plannedMinutes:'0',outsourced:false}])}>Operasyon ekle</Button></fieldset>}
-      {!generic&&<fieldset className="space-y-3">
-        <legend className="mb-3">İş rotası ve süre</legend>
-        {Object.entries(operationNames).map(([key, name]) => {
-          const row = operations.find((item) => item.key === key);
-          return (
-            <div
-              key={key}
-              className="grid items-center gap-3 border-b border-border pb-3 sm:grid-cols-4"
-            >
-              <label className="flex gap-2 text-sm">
+      {generic && (
+        <fieldset className="space-y-3">
+          <legend>Yan ürünler</legend>
+          {byproducts.map((line, index) => (
+            <div key={index} className="grid gap-3 sm:grid-cols-4">
+              <Field label={`Yan ürün ${index + 1}`} required>
+                {(id) => (
+                  <Select
+                    id={id}
+                    value={line.itemId}
+                    required
+                    onChange={(e) =>
+                      setByproducts((old) =>
+                        old.map((r, i) => (i === index ? { ...r, itemId: e.target.value } : r)),
+                      )
+                    }
+                  >
+                    <option value="">Stok seçiniz</option>
+                    {items.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {i.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <Field label={`Yan ürün miktarı ${index + 1}`} required>
+                {(id) => (
+                  <Input
+                    id={id}
+                    required
+                    type="number"
+                    min="0.0001"
+                    step="any"
+                    value={line.quantity}
+                    onChange={(e) =>
+                      setByproducts((old) =>
+                        old.map((r, i) => (i === index ? { ...r, quantity: e.target.value } : r)),
+                      )
+                    }
+                  />
+                )}
+              </Field>
+              <Field label={`Maliyet payı ${index + 1}`} hint="0,20 payı %20 anlamına gelir.">
+                {(id) => (
+                  <Input
+                    id={id}
+                    type="number"
+                    min="0"
+                    max="0.9999"
+                    step="any"
+                    value={line.costShare}
+                    onChange={(e) =>
+                      setByproducts((old) =>
+                        old.map((r, i) => (i === index ? { ...r, costShare: e.target.value } : r)),
+                      )
+                    }
+                  />
+                )}
+              </Field>
+              <Button
+                type="button"
+                onClick={() => setByproducts((old) => old.filter((_, i) => i !== index))}
+              >
+                Kaldır
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            onClick={() =>
+              setByproducts((old) => [...old, { itemId: '', quantity: '1', costShare: '0' }])
+            }
+          >
+            Yan ürün ekle
+          </Button>
+        </fieldset>
+      )}
+      {generic && (
+        <fieldset className="space-y-3">
+          <legend>Operasyon rotası</legend>
+          {operations.map((op, index) => (
+            <div key={index} className="grid gap-3 sm:grid-cols-3">
+              {(['key', 'name', 'station', 'plannedMinutes'] as const).map((key, i) => (
+                <Field
+                  key={key}
+                  label={['Operasyon kodu', 'Operasyon adı', 'İş merkezi', 'Birim süre (dk)'][i]!}
+                >
+                  {(id) => (
+                    <Input
+                      id={id}
+                      value={op[key]}
+                      type={key === 'plannedMinutes' ? 'number' : 'text'}
+                      onChange={(e) =>
+                        setOperations((old) =>
+                          old.map((r, j) => (j === index ? { ...r, [key]: e.target.value } : r)),
+                        )
+                      }
+                    />
+                  )}
+                </Field>
+              ))}
+              <label>
                 <input
                   type="checkbox"
-                  checked={!!row}
-                  onChange={(event) =>
+                  checked={op.outsourced}
+                  onChange={(e) =>
                     setOperations((old) =>
-                      event.target.checked
-                        ? Object.keys(operationNames)
-                            .filter(
-                              (operationKey) =>
-                                operationKey === key ||
-                                old.some((item) => item.key === operationKey),
-                            )
-                            .map(
-                              (operationKey) =>
-                                old.find((item) => item.key === operationKey) ?? {
-                                  key: operationKey,
-                                  name: operationNames[operationKey]!,
-                                  station: '',
-                                  plannedMinutes: '0',
-                                  outsourced: false,
-                                },
-                            )
-                        : old.filter((item) => item.key !== key),
+                      old.map((r, i) => (i === index ? { ...r, outsourced: e.target.checked } : r)),
                     )
                   }
-                />
-                {name}
+                />{' '}
+                Fason operasyon
               </label>
-              {row && (
-                <>
-                  <Field label={`${name} iş istasyonu`}>
-                    {(id) => (
-                      <Input
-                        id={id}
-                        value={row.station}
-                        onChange={(event) =>
-                          setOperations((old) =>
-                            old.map((item) =>
-                              item.key === key ? { ...item, station: event.target.value } : item,
-                            ),
-                          )
+              <Button
+                type="button"
+                onClick={() => setOperations((old) => old.filter((_, i) => i !== index))}
+              >
+                Operasyonu kaldır
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            onClick={() =>
+              setOperations((old) => [
+                ...old,
+                {
+                  key: 'op' + (old.length + 1),
+                  name: 'Yeni operasyon',
+                  station: '',
+                  plannedMinutes: '0',
+                  resources: [],
+                  outsourced: false,
+                },
+              ])
+            }
+          >
+            Operasyon ekle
+          </Button>
+        </fieldset>
+      )}
+      <fieldset className="space-y-4">
+        <legend>Operasyona uygun kaynaklar ve hızlar</legend>
+        {operations.map((op, index) => (
+          <div key={op.key} className="rounded-card border border-border p-4">
+            <h3 className="mb-3 text-subheading">{op.name}</h3>
+            {(op.resources ?? []).map((r, j) => (
+              <div key={j} className="mb-3 grid gap-3 sm:grid-cols-4">
+                <Field label="Uygun kaynak" required>
+                  {(id) => (
+                    <Select
+                      id={id}
+                      required
+                      value={r.resourceId}
+                      onChange={(e) =>
+                        setOperations((old) =>
+                          old.map((o, i) =>
+                            i === index
+                              ? {
+                                  ...o,
+                                  resources: o.resources.map((v, k) =>
+                                    k === j ? { ...v, resourceId: e.target.value } : v,
+                                  ),
+                                }
+                              : o,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="">Kaynak seçin</option>
+                      {resources.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+                <Field label="Birim süre (dk)" required>
+                  {(id) => (
+                    <Input
+                      id={id}
+                      type="number"
+                      min="0.0001"
+                      step="any"
+                      required
+                      value={r.minutesPerUnit}
+                      onChange={(e) =>
+                        setOperations((old) =>
+                          old.map((o, i) =>
+                            i === index
+                              ? {
+                                  ...o,
+                                  resources: o.resources.map((v, k) =>
+                                    k === j ? { ...v, minutesPerUnit: e.target.value } : v,
+                                  ),
+                                }
+                              : o,
+                          ),
+                        )
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Öncelik (0–100)">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={r.priority}
+                      onChange={(e) =>
+                        setOperations((old) =>
+                          old.map((o, i) =>
+                            i === index
+                              ? {
+                                  ...o,
+                                  resources: o.resources.map((v, k) =>
+                                    k === j ? { ...v, priority: Number(e.target.value) } : v,
+                                  ),
+                                }
+                              : o,
+                          ),
+                        )
+                      }
+                    />
+                  )}
+                </Field>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    setOperations((old) =>
+                      old.map((o, i) =>
+                        i === index
+                          ? { ...o, resources: o.resources.filter((_, k) => k !== j) }
+                          : o,
+                      ),
+                    )
+                  }
+                >
+                  Kaynağı kaldır
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              onClick={() =>
+                setOperations((old) =>
+                  old.map((o, i) =>
+                    i === index
+                      ? {
+                          ...o,
+                          resources: [
+                            ...(o.resources ?? []),
+                            {
+                              resourceId: '',
+                              minutesPerUnit: op.plannedMinutes === '0' ? '1' : op.plannedMinutes,
+                              priority: 50,
+                            },
+                          ],
                         }
-                      />
-                    )}
-                  </Field>
-                  <Field label={`${name} süre (dk)`}>
-                    {(id) => (
-                      <Input
-                        id={id}
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={row.plannedMinutes}
+                      : o,
+                  ),
+                )
+              }
+            >
+              Uygun kaynak ekle
+            </Button>
+          </div>
+        ))}
+      </fieldset>
+      {!generic && (
+        <fieldset className="space-y-3">
+          <legend className="mb-3">İş rotası ve süre</legend>
+          {Object.entries(operationNames).map(([key, name]) => {
+            const row = operations.find((item) => item.key === key);
+            return (
+              <div
+                key={key}
+                className="grid items-center gap-3 border-b border-border pb-3 sm:grid-cols-4"
+              >
+                <label className="flex gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!!row}
+                    onChange={(event) =>
+                      setOperations((old) =>
+                        event.target.checked
+                          ? Object.keys(operationNames)
+                              .filter(
+                                (operationKey) =>
+                                  operationKey === key ||
+                                  old.some((item) => item.key === operationKey),
+                              )
+                              .map(
+                                (operationKey) =>
+                                  old.find((item) => item.key === operationKey) ?? {
+                                    key: operationKey,
+                                    name: operationNames[operationKey]!,
+                                    station: '',
+                                    plannedMinutes: '0',
+                                    resources: [],
+                                    outsourced: false,
+                                  },
+                              )
+                          : old.filter((item) => item.key !== key),
+                      )
+                    }
+                  />
+                  {name}
+                </label>
+                {row && (
+                  <>
+                    <Field label={`${name} iş istasyonu`}>
+                      {(id) => (
+                        <Input
+                          id={id}
+                          value={row.station}
+                          onChange={(event) =>
+                            setOperations((old) =>
+                              old.map((item) =>
+                                item.key === key ? { ...item, station: event.target.value } : item,
+                              ),
+                            )
+                          }
+                        />
+                      )}
+                    </Field>
+                    <Field label={`${name} süre (dk)`}>
+                      {(id) => (
+                        <Input
+                          id={id}
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={row.plannedMinutes}
+                          onChange={(event) =>
+                            setOperations((old) =>
+                              old.map((item) =>
+                                item.key === key
+                                  ? { ...item, plannedMinutes: event.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                      )}
+                    </Field>
+                    <label className="flex gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={row.outsourced}
                         onChange={(event) =>
                           setOperations((old) =>
                             old.map((item) =>
                               item.key === key
-                                ? { ...item, plannedMinutes: event.target.value }
+                                ? { ...item, outsourced: event.target.checked }
                                 : item,
                             ),
                           )
                         }
                       />
-                    )}
-                  </Field>
-                  <label className="flex gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={row.outsourced}
-                      onChange={(event) =>
-                        setOperations((old) =>
-                          old.map((item) =>
-                            item.key === key ? { ...item, outsourced: event.target.checked } : item,
-                          ),
-                        )
-                      }
-                    />
-                    Fason operasyon
-                  </label>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </fieldset>}
+                      Fason operasyon
+                    </label>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </fieldset>
+      )}
     </OperationForm>
   );
 }
@@ -803,7 +1153,11 @@ function PieceRows({
             </Field>
             <Field label={`Alan ölçü birimi ${index + 1}`}>
               {(id) => (
-                <Select id={id} value={row.areaUnit} onChange={(event) => update(index, 'areaUnit', event.target.value)}>
+                <Select
+                  id={id}
+                  value={row.areaUnit}
+                  onChange={(event) => update(index, 'areaUnit', event.target.value)}
+                >
                   <option value="m2">m²</option>
                   <option value="dm2">dm²</option>
                   <option value="ft2">ft²</option>
@@ -917,6 +1271,9 @@ export function LeatherMaterialsPage() {
     ['leather', 'pieces'],
     '/api/leather/materials/pieces',
   );
+  const cutPlans = useCQuery<{
+    plans: { id: string; code: string; pieces: string[]; status: string }[];
+  }>(['leather', 'cut-lookups'], '/api/leather/materials/cutting/lookups');
   const [incoming, setIncoming] = useState<PieceDraft[]>([newPiece()]);
   const [selected, setSelected] = useState<LeatherPiece | null>(null);
   const [cutting, setCutting] = useState<LeatherPiece | null>(null);
@@ -928,6 +1285,7 @@ export function LeatherMaterialsPage() {
         title={t('leather.materials')}
         description="Tabaklanmış deriyi fiziksel parça ve gerçek alanıyla kabul edin; kesimde kullanılan, fire ve kalan alanı birlikte kaydedin."
       />
+      <LeatherCutPlanningPanel pieces={pieces.data?.pieces ?? []} />
       {can('leather.materials.manage') && can('leather.costs.manage') && (
         <OperationForm
           title="Tabaklanmış deri kabulü"
@@ -1040,6 +1398,9 @@ export function LeatherMaterialsPage() {
         ]}
         action={(row) => (
           <div className="flex gap-2">
+            <Button size="sm" onClick={() => setSelected(row)}>
+              Parça ayrıntısı
+            </Button>
             {row.status === 'quarantine' && can('leather.quality.approve') && (
               <Button size="sm" onClick={() => setSelected(row)}>
                 Kabul kararı
@@ -1070,6 +1431,7 @@ export function LeatherMaterialsPage() {
               {selected.tone || '—'} · kalınlık {selected.thicknessMin}–{selected.thicknessMax} mm
             </p>
             <Status value={selected.status} />
+            <PieceGeometryPanel key={selected.id} piece={selected} />
             {selected.status === 'quarantine' && can('leather.quality.approve') && (
               <OperationForm
                 key={selected.id}
@@ -1099,6 +1461,17 @@ export function LeatherMaterialsPage() {
             description={`Başlangıç alanı ${cutting.remainingArea}. Kullanılan + fire + kalan parçalar toplamı bu alana eşit olmalıdır.`}
             fields={[
               selectField(
+                'planId',
+                'Bağlı kesim planı',
+                options(
+                  cutPlans.data?.plans.filter(
+                    (p) => p.pieces.includes(cutting.id) && p.status !== 'completed',
+                  ) ?? [],
+                  (p) => p.code,
+                ),
+                false,
+              ),
+              selectField(
                 'orderId',
                 'Kesimin üretim emri',
                 options(
@@ -1118,6 +1491,7 @@ export function LeatherMaterialsPage() {
               save('/api/leather/materials/cuts', {
                 ...dated(values),
                 pieceId: cutting.id,
+                planId: values.planId || undefined,
                 orderId: values.orderId,
                 usedArea: values.usedArea,
                 wasteArea: values.wasteArea,
@@ -1255,7 +1629,7 @@ function ReservationRows({
 }
 
 export function LeatherProductionPage() {
-  const generic=useGenericProduction();
+  const generic = useGenericProduction();
   const { t } = useTranslation();
   const can = useCan();
   const company = useCompany();
@@ -1405,13 +1779,13 @@ export function LeatherProductionPage() {
         </div>
       )}
       {can('leather.costs.read') && <CostPanel />}
-      {generic&&<PieceRatePanel/>}
+      {generic && <PieceRatePanel />}
     </>
   );
 }
 
 function ProductionDetail({ orderId }: { orderId: string }) {
-  const generic=useGenericProduction();
+  const generic = useGenericProduction();
   const can = useCan();
   const save = useLeatherActions();
   const company = useCompany();
@@ -1429,6 +1803,20 @@ function ProductionDetail({ orderId }: { orderId: string }) {
     ['leather', 'checks'],
     '/api/leather/quality/checks',
     { enabled: can('leather.quality.read') },
+  );
+  const batches = useCQuery<{
+    records: {
+      id: string;
+      code: string;
+      orderId: string;
+      quantity: string;
+      completedQty?: string;
+      status: string;
+    }[];
+  }>(['leather', 'batches'], '/api/leather/production/batches');
+  const batchOptions = options(
+    (batches.data?.records ?? []).filter((b) => b.orderId === orderId && b.status !== 'completed'),
+    (b) => b.code + ' · ' + b.quantity + ' adet',
   );
   const [issueItemId, setIssueItemId] = useState('');
   const order = data.data?.order;
@@ -1462,6 +1850,23 @@ function ProductionDetail({ orderId }: { orderId: string }) {
           </div>
         </div>
       </Card>
+      {can('leather.production.manage') && !['completed', 'cancelled'].includes(order.status) && (
+        <OperationForm
+          title="Üretim partisi oluştur"
+          fields={[
+            numberField('quantity', 'Parti hedef adedi'),
+            textField('reason', 'Parti ayırma nedeni', true),
+          ]}
+          submit={(v) =>
+            save(generic ? '/api/manufacturing/batches' : '/api/leather/production/batches', {
+              orderId,
+              quantity: v.quantity,
+              reason: v.reason,
+              requestKey: v._requestKey,
+            })
+          }
+        />
+      )}
       {order.status === 'planned' && can('leather.production.approve') && (
         <OperationForm
           title="Üretime başlat"
@@ -1472,7 +1877,12 @@ function ProductionDetail({ orderId }: { orderId: string }) {
           }
         />
       )}
-      {generic&&<><CustomValuesPanel entity="production" id={orderId}/><TransfersPanel orderId={orderId} operations={order.operations}/></>}
+      {generic && (
+        <>
+          <CustomValuesPanel entity="production" id={orderId} />
+          <TransfersPanel orderId={orderId} operations={order.operations} />
+        </>
+      )}
       <h3 className="mb-3">Malzeme rezervasyonları</h3>
       <Records
         rows={order.reservations}
@@ -1507,7 +1917,12 @@ function ProductionDetail({ orderId }: { orderId: string }) {
           <OperationForm
             title="Operasyon kaydı"
             fields={[
-              selectField('resourceId','Çalışılan kaynak',options(lookups.resources,r=>r.name),false),
+              selectField(
+                'resourceId',
+                'Çalışılan kaynak',
+                options(lookups.resources, (r) => r.name),
+                false,
+              ),
               selectField(
                 'key',
                 'Operasyon',
@@ -1535,7 +1950,7 @@ function ProductionDetail({ orderId }: { orderId: string }) {
                 goodQty: values.goodQty,
                 reworkQty: values.reworkQty,
                 scrapQty: values.scrapQty,
-                resourceId:values.resourceId||undefined,
+                resourceId: values.resourceId || undefined,
               })
             }
           />
@@ -1563,8 +1978,19 @@ function ProductionDetail({ orderId }: { orderId: string }) {
               title="Malzeme tüketimi"
               description="Deri için seçilen fiziksel parçadan tüketilir; kesim kaydı aynı alanın ikinci kez tüketimi olarak girilmemelidir."
               fields={[
+                selectField('batchId', 'Üretim partisi (isteğe bağlı)', batchOptions, false),
                 numberField('quantity', 'Tüketim miktarı'),
-                selectField('lotId','Sarf partisi',options(lookups.lots.filter(l=>l.itemId===issueItemId&&l.warehouseId===order.warehouseId),l=>`${l.code} · ${l.quantity}`),false),
+                selectField(
+                  'lotId',
+                  'Sarf partisi',
+                  options(
+                    lookups.lots.filter(
+                      (l) => l.itemId === issueItemId && l.warehouseId === order.warehouseId,
+                    ),
+                    (l) => `${l.code} · ${l.quantity}`,
+                  ),
+                  false,
+                ),
                 selectField(
                   'pieceId',
                   'Tüketilen deri parçası',
@@ -1585,11 +2011,14 @@ function ProductionDetail({ orderId }: { orderId: string }) {
               submit={(values) =>
                 save(`/api/leather/production/orders/${orderId}/issues`, {
                   ...dated(values),
+                  batchId: values.batchId || undefined,
                   lines: [
                     {
                       itemId: issueItemId,
                       quantity: values.quantity,
-                      lotAllocations:values.lotId?[{lotId:values.lotId,quantity:values.quantity}]:undefined,
+                      lotAllocations: values.lotId
+                        ? [{ lotId: values.lotId, quantity: values.quantity }]
+                        : undefined,
                       pieces: values.pieceId
                         ? [{ pieceId: values.pieceId, quantity: values.quantity }]
                         : [],
@@ -1641,6 +2070,7 @@ function ProductionDetail({ orderId }: { orderId: string }) {
               title="Mamul kabulü"
               description="Son kalite kontrolü onaylanmış olmalıdır. Son kabulde kalan üretim değeri mamullere dağıtılır."
               fields={[
+                selectField('batchId', 'Kabul edilen parti (isteğe bağlı)', batchOptions, false),
                 numberField('quantity', 'Kabul edilen mamul adedi', '1', 1),
                 selectField(
                   'qualityCheckId',
@@ -1673,6 +2103,7 @@ function ProductionDetail({ orderId }: { orderId: string }) {
               submit={(values) =>
                 save(`/api/leather/production/orders/${orderId}/completions`, {
                   ...dated(values),
+                  batchId: values.batchId || undefined,
                   quantity: values.quantity,
                   qualityCheckId: values.qualityCheckId,
                   final: values.final === 'true',
@@ -1703,6 +2134,10 @@ function ProductionDetail({ orderId }: { orderId: string }) {
                 return: 'Malzeme iadesi',
                 completion: 'Mamul kabulü',
                 cut: 'Kesim',
+                operation: 'Operasyon',
+                release: 'Üretime açılış',
+                cancel: 'İptal',
+                scrap: 'Hurda',
               })[row.kind] ?? row.kind,
           },
           { label: 'Tarih', render: (row) => row.date },
@@ -1829,7 +2264,26 @@ function CostPanel() {
               row.destinations
                 .map(
                   (destination) =>
-                    `${destination.target}: ${moneyIn(destination.amount, company.baseCurrency)}`,
+                    `${(() => {
+                      const [kind, id] = destination.target.split(':');
+                      const label =
+                        (
+                          {
+                            stock: 'Eldeki stok',
+                            wip: 'Devam eden üretim',
+                            pending_delivery: 'Faturalanmamış sevk',
+                            sale: 'Satılan ürün',
+                            loss: 'Kayıp',
+                          } as Record<string, string>
+                        )[kind!] ?? 'Maliyet payı';
+                      const source =
+                        kind === 'wip'
+                          ? orders.data?.orders.find((o) => o.id === id)?.code
+                          : kind === 'stock'
+                            ? lookups.items.find((i) => i.id === id)?.name
+                            : undefined;
+                      return source ? `${label} · ${source}` : label;
+                    })()}: ${moneyIn(destination.amount, company.baseCurrency)}`,
                 )
                 .join(' · '),
           },
@@ -1842,8 +2296,8 @@ function CostPanel() {
 export function LeatherQualityPage() {
   const { t } = useTranslation();
   const can = useCan();
+  const generic = useGenericProduction();
   const save = useLeatherActions();
-  const orders = useOrders();
   const pieces = useCQuery<{ pieces: LeatherPiece[] }>(
     ['leather', 'pieces'],
     '/api/leather/materials/pieces',
@@ -1858,6 +2312,10 @@ export function LeatherQualityPage() {
     ['leather', 'checks'],
     '/api/leather/quality/checks',
   );
+  const batches = useCQuery<{
+    records: { id: string; code: string; orderId: string; quantity: string }[];
+    orders: { id: string; code: string; operations: { key: string; name: string }[] }[];
+  }>(['leather', 'quality-batches'], '/api/leather/quality/batches');
   const [scope, setScope] = useState('production');
   const [selected, setSelected] = useState<LeatherQualityCheck | null>(null);
   const [criteria, setCriteria] = useState([
@@ -1868,7 +2326,7 @@ export function LeatherQualityPage() {
   ]);
   const sources =
     scope === 'production'
-      ? options(orders.data?.orders, orderName)
+      ? options(batches.data?.orders, (o) => o.code)
       : scope === 'material'
         ? options(pieces.data?.pieces, (row) => row.code)
         : options(services.data?.cases, (row) => `${row.partyName} · ${row.itemName}`);
@@ -1896,6 +2354,25 @@ export function LeatherQualityPage() {
             title="Yeni kalite kontrolü"
             fields={[
               selectField('sourceId', 'Kontrol edilen kayıt', sources),
+              ...(scope === 'production'
+                ? [
+                    selectField(
+                      'batchId',
+                      'Üretim partisi (isteğe bağlı)',
+                      options(
+                        batches.data?.records ?? [],
+                        (b) =>
+                          (batches.data?.orders.find((o) => o.id === b.orderId)?.code ?? 'Üretim') +
+                          ' · ' +
+                          b.code +
+                          ' · ' +
+                          b.quantity +
+                          ' adet',
+                      ),
+                      false,
+                    ),
+                  ]
+                : []),
               selectField(
                 'stage',
                 'Kontrol aşaması',
@@ -1917,7 +2394,12 @@ export function LeatherQualityPage() {
             ]}
             action="Kalite kontrolünü kaydet"
             submit={(values) =>
-              save('/api/leather/quality/checks', { ...values, scope, checks: criteria })
+              save('/api/leather/quality/checks', {
+                ...values,
+                batchId: values.batchId || undefined,
+                scope,
+                checks: criteria,
+              })
             }
           >
             <fieldset className="space-y-3">
@@ -1999,7 +2481,8 @@ export function LeatherQualityPage() {
             label: 'Kaynak',
             render: (row) =>
               row.scope === 'production'
-                ? (orders.data?.orders.find((order) => order.id === row.sourceId)?.code ?? 'Üretim')
+                ? (batches.data?.orders.find((order) => order.id === row.sourceId)?.code ??
+                  'Üretim')
                 : row.scope === 'material'
                   ? (pieces.data?.pieces.find((piece) => piece.id === row.sourceId)?.code ?? 'Deri')
                   : 'Servis',
@@ -2024,6 +2507,17 @@ export function LeatherQualityPage() {
           </Button>
         )}
       />
+      {selected?.scope === 'production' && (
+        <ReworkExecutionPanel
+          orderId={selected.sourceId}
+          operations={
+            batches.data?.orders.find((o) => o.id === selected.sourceId)?.operations ?? []
+          }
+          resources={[]}
+          quality
+          prefix={generic ? 'manufacturing' : 'leather'}
+        />
+      )}
       {selected && (
         <Card className="mt-5">
           <CardHeader title="Kalite kontrolü ayrıntısı" />
@@ -2162,7 +2656,12 @@ export function LeatherSubcontractsPage() {
           { label: 'Fason üretici', render: (row) => row.partyName },
           {
             label: 'Operasyon',
-            render: (row) => operationNames[row.operationKey] ?? row.operationKey,
+            render: (row) =>
+              orders.data?.orders
+                .find((source) => source.id === row.orderId)
+                ?.operations.find((operation) => operation.key === row.operationKey)?.name ??
+              operationNames[row.operationKey] ??
+              'Fason operasyon',
           },
           { label: 'Gönderilen / gelen', render: (row) => `${row.quantity} / ${row.returnedQty}` },
           { label: 'Termin', render: (row) => row.dueDate ?? '—' },
@@ -2488,96 +2987,97 @@ export function LeatherServicePage() {
           { label: 'Ücret', render: (row) => moneyIn(row.fee, company.baseCurrency) },
           { label: 'Durum', render: (row) => <Status value={row.status} /> },
         ]}
-        action={(row) =>
-          can('leather.service.manage') ? (
-            <Button size="sm" onClick={() => setSelected(row)}>
-              Servis işlemi
-            </Button>
-          ) : null
-        }
+        action={(row) => (
+          <Button size="sm" onClick={() => setSelected(row)}>
+            {can('leather.service.manage') ? 'Servis işlemi' : 'Servis ayrıntısı'}
+          </Button>
+        )}
       />
       {selected && (
         <div className="mt-5">
-          <OperationForm
-            key={selected.id}
-            title={`${selected.itemName} servis işlemi`}
-            fields={[
-              selectField('action', 'Servis işlemi', [
-                { value: 'diagnose', label: 'İncele ve teşhis et' },
-                { value: 'approve_repair', label: 'Müşteri onayını kaydet' },
-                { value: 'repair', label: 'Onarıma al' },
-                { value: 'ready', label: 'Teslime hazır' },
-                { value: 'deliver', label: 'Müşteriye teslim et' },
-                { value: 'cancel', label: 'Servisi iptal et' },
-              ]),
-              {
-                ...textField('assessment', 'Teknik değerlendirme'),
-                type: 'textarea',
-                value: selected.assessment,
-              },
-              numberField('fee', 'Servis ücreti', selected.fee || '0'),
-              textField('approvalReference', 'Müşteri onayının belge / iletişim referansı'),
-              selectField(
-                'warehouseId',
-                'Onarım malzemesi deposu',
-                options(lookups.warehouses, (warehouse) => warehouse.name),
-                false,
-              ),
-              selectField(
-                'invoiceId',
-                'Ücretli servis faturası',
-                lookups.saleLines
-                  .filter(
-                    (row, index, rows) =>
-                      row.partyId === selected.partyId &&
-                      rows.findIndex((item) => item.invoiceId === row.invoiceId) === index,
-                  )
-                  .map((row) => ({ value: row.invoiceId, label: row.description })),
-                false,
-              ),
-              ...datedFields(),
-            ]}
-            submit={(values) =>
-              save(`/api/leather/service/cases/${selected.id}/actions`, {
-                ...dated(values),
-                action: values.action,
-                assessment: values.assessment,
-                fee: values.fee,
-                invoiceId: values.invoiceId || undefined,
-                approvalReference: values.approvalReference || undefined,
-                warehouseId:
-                  values.action === 'repair' ? values.warehouseId || undefined : undefined,
-                parts:
-                  values.action === 'repair' && parts.length
-                    ? parts.map((line) => ({
-                        itemId: line.itemId,
-                        quantity: line.quantity,
-                        pieces: line.pieceId
-                          ? [{ pieceId: line.pieceId, quantity: line.quantity }]
-                          : [],
-                      }))
-                    : undefined,
-              })
-            }
-            onDone={() => {
-              setSelected(null);
-              setParts([]);
-            }}
-          >
-            <ReservationRows
-              title="Onarımda kullanılan parçalar"
-              materialLabel="Onarım malzemesi"
-              quantityLabel="Onarım sarf miktarı"
-              rows={parts}
-              onChange={setParts}
-              items={lookups.items}
-              pieces={pieces.data?.pieces ?? []}
-            />
-            <p className="text-sm text-muted">
-              Ücretli onarımda teşhis ve fiyatlandırmadan sonra müşteri onayını kaydedin. Parça
-              sarfı, onarım işlemi sırasında seçilen depodan yapılır.
-            </p>
-          </OperationForm>
+          <ServiceTimePanel serviceId={selected.id} members={lookups.members} />
+          {can('leather.service.manage') && (
+            <OperationForm
+              key={selected.id}
+              title={`${selected.itemName} servis işlemi`}
+              fields={[
+                selectField('action', 'Servis işlemi', [
+                  { value: 'diagnose', label: 'İncele ve teşhis et' },
+                  { value: 'approve_repair', label: 'Müşteri onayını kaydet' },
+                  { value: 'repair', label: 'Onarıma al' },
+                  { value: 'ready', label: 'Teslime hazır' },
+                  { value: 'deliver', label: 'Müşteriye teslim et' },
+                  { value: 'cancel', label: 'Servisi iptal et' },
+                ]),
+                {
+                  ...textField('assessment', 'Teknik değerlendirme'),
+                  type: 'textarea',
+                  value: selected.assessment,
+                },
+                numberField('fee', 'Servis ücreti', selected.fee || '0'),
+                textField('approvalReference', 'Müşteri onayının belge / iletişim referansı'),
+                selectField(
+                  'warehouseId',
+                  'Onarım malzemesi deposu',
+                  options(lookups.warehouses, (warehouse) => warehouse.name),
+                  false,
+                ),
+                selectField(
+                  'invoiceId',
+                  'Ücretli servis faturası',
+                  lookups.saleLines
+                    .filter(
+                      (row, index, rows) =>
+                        row.partyId === selected.partyId &&
+                        rows.findIndex((item) => item.invoiceId === row.invoiceId) === index,
+                    )
+                    .map((row) => ({ value: row.invoiceId, label: row.description })),
+                  false,
+                ),
+                ...datedFields(),
+              ]}
+              submit={(values) =>
+                save(`/api/leather/service/cases/${selected.id}/actions`, {
+                  ...dated(values),
+                  action: values.action,
+                  assessment: values.assessment,
+                  fee: values.fee,
+                  invoiceId: values.invoiceId || undefined,
+                  approvalReference: values.approvalReference || undefined,
+                  warehouseId:
+                    values.action === 'repair' ? values.warehouseId || undefined : undefined,
+                  parts:
+                    values.action === 'repair' && parts.length
+                      ? parts.map((line) => ({
+                          itemId: line.itemId,
+                          quantity: line.quantity,
+                          pieces: line.pieceId
+                            ? [{ pieceId: line.pieceId, quantity: line.quantity }]
+                            : [],
+                        }))
+                      : undefined,
+                })
+              }
+              onDone={() => {
+                setSelected(null);
+                setParts([]);
+              }}
+            >
+              <ReservationRows
+                title="Onarımda kullanılan parçalar"
+                materialLabel="Onarım malzemesi"
+                quantityLabel="Onarım sarf miktarı"
+                rows={parts}
+                onChange={setParts}
+                items={lookups.items}
+                pieces={pieces.data?.pieces ?? []}
+              />
+              <p className="text-sm text-muted">
+                Ücretli onarımda teşhis ve fiyatlandırmadan sonra müşteri onayını kaydedin. Parça
+                sarfı, onarım işlemi sırasında seçilen depodan yapılır.
+              </p>
+            </OperationForm>
+          )}
         </div>
       )}
     </>

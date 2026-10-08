@@ -1,20 +1,220 @@
 import { sql } from 'drizzle-orm';
-import { explodeManufacturingNeed, type LeatherModelInput, type LeatherRevisionInput, type LeatherVariantInput } from '@erp/shared';
+import {
+  explodeManufacturingNeed,
+  type LeatherModelInput,
+  type LeatherRevisionInput,
+  type LeatherVariantInput,
+} from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { all, one, newId, json, fail, requireGoods, lockLeatherCosts, type LeatherCtx, type Row } from './common';
-export async function listModels(tx:Tx){return all(tx,sql`select id,code,name,family,description,created_at as "createdAt" from leather_models order by name limit 500`);}
-export async function createModel(tx:Tx,ctx:LeatherCtx,input:Omit<LeatherModelInput,'family'> & {family:string}){return one(tx,sql`insert into leather_models(id,company_id,created_by,code,name,family,description) values(${newId()},${ctx.companyId},${ctx.userId},${input.code},${input.name},${input.family},${input.description}) returning id,code,name,family,description,created_at as "createdAt"`);}
-const revisionShape=(r:Row)=>({...r.config,id:r.id,modelId:r.model_id,revision:r.revision,status:r.status,approvedAt:r.approved_at});
-export async function listRevisions(tx:Tx,modelId:string){return (await all(tx,sql`select * from leather_revisions where model_id=${modelId}::uuid order by revision desc`)).map(revisionShape);}
-async function validateRevision(tx:Tx,input:LeatherRevisionInput){if(new Set(input.operations.map(x=>x.key)).size!==input.operations.length)throw fail('Rota operasyon anahtarı benzersiz olmalı');if(new Set(input.materials.map(x=>x.itemId)).size!==input.materials.length)throw fail('Reçetede aynı malzeme birleştirilmeli');for(const m of input.materials)await requireGoods(tx,m.itemId);for(const attachment of input.attachments)await one(tx,sql`select id from record_documents where id=${attachment}::uuid`,'Reçete eki');}
-export async function createRevision(tx:Tx,ctx:LeatherCtx,modelId:string,input:LeatherRevisionInput){await one(tx,sql`select id from leather_models where id=${modelId}::uuid for update`,'Model');await validateRevision(tx,input);await validateExtendedRevision(tx,input);const r=await one(tx,sql`select coalesce(max(revision),0)+1 as n from leather_revisions where model_id=${modelId}::uuid`);return revisionShape(await one(tx,sql`insert into leather_revisions(id,company_id,created_by,model_id,revision,config) values(${newId()},${ctx.companyId},${ctx.userId},${modelId},${r.n},${json(input)}) returning *`));}
-async function validateExtendedRevision(tx:Tx,input:LeatherRevisionInput){const r=input as LeatherRevisionInput&{byproducts?:{itemId:string}[]};for(const m of r.materials as (typeof r.materials[number]&{alternatives?:string[]})[]){for(const a of m.alternatives??[]){if(a===m.itemId)throw fail('Alternatif ana malzemeyle aynı olamaz');await requireGoods(tx,a);}}for(const b of r.byproducts??[])await requireGoods(tx,b.itemId);if(new Set(r.byproducts?.map(b=>b.itemId)).size!==(r.byproducts?.length??0))throw fail('Yan ürün satırları tekil olmalı');}
-export async function updateRevision(tx:Tx,id:string,input:LeatherRevisionInput){const r=await one(tx,sql`select * from leather_revisions where id=${id}::uuid for update`,'Revizyon');if(r.status!=='draft')throw fail('Onaylı reçete değiştirilemez; yeni revizyon oluşturun');await validateRevision(tx,input);await validateExtendedRevision(tx,input);return revisionShape(await one(tx,sql`update leather_revisions set config=${json(input)} where id=${id}::uuid returning *`));}
-export async function approveRevision(tx:Tx,ctx:LeatherCtx,id:string){const r=await one(tx,sql`select * from leather_revisions where id=${id}::uuid for update`,'Revizyon');if(r.status!=='draft')throw fail('Yalnızca taslak reçete onaylanır');if(!r.config.sampleApproved)throw fail('Üretime geçmeden önce numune kabul edilmeli');return revisionShape(await one(tx,sql`update leather_revisions set status='approved',approved_by=${ctx.userId},approved_at=now() where id=${id}::uuid returning *`));}
-export async function listVariants(tx:Tx){return (await all(tx,sql`select v.*,i.code as "itemCode",i.name as "itemName",m.name as "modelName",r.revision from leather_variants v join items i on i.id=v.item_id join leather_models m on m.id=v.model_id join leather_revisions r on r.id=v.revision_id order by m.name,i.name limit 1000`)).map(r=>({...r.config,id:r.id,modelId:r.model_id,revisionId:r.revision_id,itemId:r.item_id,itemCode:r.itemCode,itemName:r.itemName,modelName:r.modelName,revision:r.revision}));}
-export async function changeVariantRevision(tx:Tx,ctx:LeatherCtx,id:string,revisionId:string){await lockLeatherCosts(tx,ctx.companyId);const v=await one(tx,sql`select * from leather_variants where id=${id}::uuid for update`),r=await one(tx,sql`select * from leather_revisions where id=${revisionId}::uuid`);if(r.model_id!==v.model_id||r.status!=='approved'||r.config.byproducts?.some((b:Row)=>b.itemId===v.item_id))throw fail('Aynı modelin onaylı revizyonu gerekli');const variants=await all(tx,sql`select v.item_id,r.config from leather_variants v join leather_revisions r on r.id=v.revision_id where v.id<>${id}::uuid`);const recipes=[...variants.map(p=>({itemId:p.item_id,materials:p.config.materials})),{itemId:v.item_id,materials:r.config.materials}];try{for(const recipe of recipes)explodeManufacturingNeed(recipe.itemId,'1',recipes,{});}catch(error){throw fail(error instanceof Error?error.message:'Reçete döngüsü');}await tx.execute(sql`update leather_variants set revision_id=${revisionId}::uuid,config=config||${json({revisionId})} where id=${id}::uuid`);return (await listVariants(tx)).find(row=>row.id===id)!;}
-export async function createVariant(tx:Tx,ctx:LeatherCtx,input:LeatherVariantInput){await lockLeatherCosts(tx,ctx.companyId);const r=await one(tx,sql`select * from leather_revisions where id=${input.revisionId}::uuid`,'Revizyon');if(r.model_id!==input.modelId||r.status!=='approved')throw fail('Varyant aynı modelin onaylı reçetesine bağlanmalı');const candidates=await all(tx,sql`select v.item_id,r.config from leather_variants v join leather_revisions r on r.id=v.revision_id where r.status='approved'`);
- const recipes=[...candidates.filter(v=>v.item_id!==input.itemId).map(v=>({itemId:v.item_id,materials:v.config.materials})),{itemId:input.itemId,materials:r.config.materials}];
- try{for(const recipe of recipes)explodeManufacturingNeed(recipe.itemId,'1',recipes,{});}catch(error){throw fail(error instanceof Error?error.message:'Reçete döngüsü');}
- if(r.config.byproducts?.some((b:Row)=>b.itemId===input.itemId))throw fail('Yan ürün ana mamulle aynı olamaz');
- const item=await requireGoods(tx,input.itemId);if(!['finished_goods','semi_finished'].includes(item.inventory_role))throw fail('Üretim varyantı mamul veya yarı mamul olmalı');if(item.unit!=='adet')throw fail('Mamul varyantı adet biriminde olmalı');const v=await one(tx,sql`insert into leather_variants(id,company_id,created_by,model_id,revision_id,item_id,config) values(${newId()},${ctx.companyId},${ctx.userId},${input.modelId},${input.revisionId},${input.itemId},${json(input)}) returning id`);return (await listVariants(tx)).find(x=>x.id===v.id)!;}
+import {
+  all,
+  one,
+  newId,
+  json,
+  fail,
+  requireGoods,
+  lockLeatherCosts,
+  type LeatherCtx,
+  type Row,
+} from './common';
+export async function listModels(tx: Tx) {
+  return all(
+    tx,
+    sql`select id,code,name,family,description,created_at as "createdAt" from leather_models order by name limit 500`,
+  );
+}
+export async function createModel(
+  tx: Tx,
+  ctx: LeatherCtx,
+  input: Omit<LeatherModelInput, 'family'> & { family: string },
+) {
+  return one(
+    tx,
+    sql`insert into leather_models(id,company_id,created_by,code,name,family,description) values(${newId()},${ctx.companyId},${ctx.userId},${input.code},${input.name},${input.family},${input.description}) returning id,code,name,family,description,created_at as "createdAt"`,
+  );
+}
+const revisionShape = (r: Row) => ({
+  ...r.config,
+  id: r.id,
+  modelId: r.model_id,
+  revision: r.revision,
+  status: r.status,
+  approvedAt: r.approved_at,
+});
+export async function listRevisions(tx: Tx, modelId: string) {
+  return (
+    await all(
+      tx,
+      sql`select * from leather_revisions where model_id=${modelId}::uuid order by revision desc`,
+    )
+  ).map(revisionShape);
+}
+async function validateRevision(tx: Tx, input: LeatherRevisionInput) {
+  if (new Set(input.operations.map((x) => x.key)).size !== input.operations.length)
+    throw fail('Rota operasyon anahtarı benzersiz olmalı');
+  if (new Set(input.materials.map((x) => x.itemId)).size !== input.materials.length)
+    throw fail('Reçetede aynı malzeme birleştirilmeli');
+  for (const m of input.materials) await requireGoods(tx, m.itemId);
+  for (const op of input.operations) {
+    if (new Set(op.resources.map((r) => r.resourceId)).size !== op.resources.length)
+      throw fail('Operasyon kaynakları benzersiz olmalı');
+    for (const r of op.resources)
+      await one(
+        tx,
+        sql`select id from manufacturing_records where id=${r.resourceId}::uuid and kind='resource' and status='active'`,
+        'Uygun kaynak',
+      );
+  }
+  for (const attachment of input.attachments)
+    await one(tx, sql`select id from record_documents where id=${attachment}::uuid`, 'Reçete eki');
+}
+export async function createRevision(
+  tx: Tx,
+  ctx: LeatherCtx,
+  modelId: string,
+  input: LeatherRevisionInput,
+) {
+  await one(tx, sql`select id from leather_models where id=${modelId}::uuid for update`, 'Model');
+  await validateRevision(tx, input);
+  await validateExtendedRevision(tx, input);
+  const r = await one(
+    tx,
+    sql`select coalesce(max(revision),0)+1 as n from leather_revisions where model_id=${modelId}::uuid`,
+  );
+  return revisionShape(
+    await one(
+      tx,
+      sql`insert into leather_revisions(id,company_id,created_by,model_id,revision,config) values(${newId()},${ctx.companyId},${ctx.userId},${modelId},${r.n},${json(input)}) returning *`,
+    ),
+  );
+}
+async function validateExtendedRevision(tx: Tx, input: LeatherRevisionInput) {
+  const r = input as LeatherRevisionInput & { byproducts?: { itemId: string }[] };
+  for (const m of r.materials as ((typeof r.materials)[number] & { alternatives?: string[] })[]) {
+    for (const a of m.alternatives ?? []) {
+      if (a === m.itemId) throw fail('Alternatif ana malzemeyle aynı olamaz');
+      await requireGoods(tx, a);
+    }
+  }
+  for (const b of r.byproducts ?? []) await requireGoods(tx, b.itemId);
+  if (new Set(r.byproducts?.map((b) => b.itemId)).size !== (r.byproducts?.length ?? 0))
+    throw fail('Yan ürün satırları tekil olmalı');
+}
+export async function updateRevision(tx: Tx, id: string, input: LeatherRevisionInput) {
+  const r = await one(
+    tx,
+    sql`select * from leather_revisions where id=${id}::uuid for update`,
+    'Revizyon',
+  );
+  if (r.status !== 'draft') throw fail('Onaylı reçete değiştirilemez; yeni revizyon oluşturun');
+  await validateRevision(tx, input);
+  await validateExtendedRevision(tx, input);
+  return revisionShape(
+    await one(
+      tx,
+      sql`update leather_revisions set config=${json(input)} where id=${id}::uuid returning *`,
+    ),
+  );
+}
+export async function approveRevision(tx: Tx, ctx: LeatherCtx, id: string) {
+  const r = await one(
+    tx,
+    sql`select * from leather_revisions where id=${id}::uuid for update`,
+    'Revizyon',
+  );
+  if (r.status !== 'draft') throw fail('Yalnızca taslak reçete onaylanır');
+  if (!r.config.sampleApproved) throw fail('Üretime geçmeden önce numune kabul edilmeli');
+  return revisionShape(
+    await one(
+      tx,
+      sql`update leather_revisions set status='approved',approved_by=${ctx.userId},approved_at=now() where id=${id}::uuid returning *`,
+    ),
+  );
+}
+export async function listVariants(tx: Tx) {
+  return (
+    await all(
+      tx,
+      sql`select v.*,i.code as "itemCode",i.name as "itemName",m.name as "modelName",r.revision from leather_variants v join items i on i.id=v.item_id join leather_models m on m.id=v.model_id join leather_revisions r on r.id=v.revision_id order by m.name,i.name limit 1000`,
+    )
+  ).map((r) => ({
+    ...r.config,
+    id: r.id,
+    modelId: r.model_id,
+    revisionId: r.revision_id,
+    itemId: r.item_id,
+    itemCode: r.itemCode,
+    itemName: r.itemName,
+    modelName: r.modelName,
+    revision: r.revision,
+  }));
+}
+export async function changeVariantRevision(
+  tx: Tx,
+  ctx: LeatherCtx,
+  id: string,
+  revisionId: string,
+) {
+  await lockLeatherCosts(tx, ctx.companyId);
+  const v = await one(tx, sql`select * from leather_variants where id=${id}::uuid for update`),
+    r = await one(tx, sql`select * from leather_revisions where id=${revisionId}::uuid`);
+  if (
+    r.model_id !== v.model_id ||
+    r.status !== 'approved' ||
+    r.config.byproducts?.some((b: Row) => b.itemId === v.item_id)
+  )
+    throw fail('Aynı modelin onaylı revizyonu gerekli');
+  const variants = await all(
+    tx,
+    sql`select v.item_id,r.config from leather_variants v join leather_revisions r on r.id=v.revision_id where v.id<>${id}::uuid`,
+  );
+  const recipes = [
+    ...variants.map((p) => ({ itemId: p.item_id, materials: p.config.materials })),
+    { itemId: v.item_id, materials: r.config.materials },
+  ];
+  try {
+    for (const recipe of recipes) explodeManufacturingNeed(recipe.itemId, '1', recipes, {});
+  } catch (error) {
+    throw fail(error instanceof Error ? error.message : 'Reçete döngüsü');
+  }
+  await tx.execute(
+    sql`update leather_variants set revision_id=${revisionId}::uuid,config=config||${json({ revisionId })} where id=${id}::uuid`,
+  );
+  return (await listVariants(tx)).find((row) => row.id === id)!;
+}
+export async function createVariant(tx: Tx, ctx: LeatherCtx, input: LeatherVariantInput) {
+  await lockLeatherCosts(tx, ctx.companyId);
+  const r = await one(
+    tx,
+    sql`select * from leather_revisions where id=${input.revisionId}::uuid`,
+    'Revizyon',
+  );
+  if (r.model_id !== input.modelId || r.status !== 'approved')
+    throw fail('Varyant aynı modelin onaylı reçetesine bağlanmalı');
+  const candidates = await all(
+    tx,
+    sql`select v.item_id,r.config from leather_variants v join leather_revisions r on r.id=v.revision_id where r.status='approved'`,
+  );
+  const recipes = [
+    ...candidates
+      .filter((v) => v.item_id !== input.itemId)
+      .map((v) => ({ itemId: v.item_id, materials: v.config.materials })),
+    { itemId: input.itemId, materials: r.config.materials },
+  ];
+  try {
+    for (const recipe of recipes) explodeManufacturingNeed(recipe.itemId, '1', recipes, {});
+  } catch (error) {
+    throw fail(error instanceof Error ? error.message : 'Reçete döngüsü');
+  }
+  if (r.config.byproducts?.some((b: Row) => b.itemId === input.itemId))
+    throw fail('Yan ürün ana mamulle aynı olamaz');
+  const item = await requireGoods(tx, input.itemId);
+  if (!['finished_goods', 'semi_finished'].includes(item.inventory_role))
+    throw fail('Üretim varyantı mamul veya yarı mamul olmalı');
+  if (item.unit !== 'adet') throw fail('Mamul varyantı adet biriminde olmalı');
+  const v = await one(
+    tx,
+    sql`insert into leather_variants(id,company_id,created_by,model_id,revision_id,item_id,config) values(${newId()},${ctx.companyId},${ctx.userId},${input.modelId},${input.revisionId},${input.itemId},${json(input)}) returning id`,
+  );
+  return (await listVariants(tx)).find((x) => x.id === v.id)!;
+}

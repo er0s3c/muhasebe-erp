@@ -53,7 +53,7 @@ export function BoqTab({ detail }: { detail: SubcontractDetail }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Select aria-label={t('subcontracts.boq.revision')} value={selected} onChange={(e) => setSelected(e.target.value)} className="w-80">
+        <Select aria-label={t('subcontracts.boq.revision')} value={selected} onChange={(e) => setSelected(e.target.value)} className="w-80 max-w-full">
           {detail.revisions.map((r) => (
             <option key={r.id} value={r.id}>
               {t('subcontracts.boq.revLabel', { rev: r.revisionNo, status: t(`subcontracts.boq.revStatus.${r.status}`), total: money(r.total) })}

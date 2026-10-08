@@ -3,6 +3,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
+    // DB fixtures and installation/schema checks must not overlap across files.
+    // Explicit concurrency tests still run simultaneous commands inside their own file.
+    maxWorkers: 1,
     globalSetup: ['test/global-setup.ts'],
     testTimeout: 30_000,
     hookTimeout: 60_000,

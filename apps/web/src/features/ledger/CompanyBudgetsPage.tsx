@@ -21,7 +21,7 @@ import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { useCQuery, useCMutation, useCan } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import { useToast } from '../../components/ui/Toast';
-import { money, formatDateTR } from '../../lib/format';
+import { currencySymbol, money, formatDateTR } from '../../lib/format';
 import { errorMessage } from '../../lib/errors';
 import { apiBlob } from '../../lib/api';
 import { saveBlob } from '../../lib/download';
@@ -130,7 +130,7 @@ function BudgetContent() {
           <Card className="print:hidden overflow-hidden">
             <CardHeader
               title="Bütçe defteri"
-              description={`${list.data.items.length} revizyon · ${currency}`}
+              description={`${list.data.items.length} revizyon · ${currencySymbol(currency)}`}
             />
             <div className="p-4">
               <Input
@@ -140,7 +140,7 @@ function BudgetContent() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="max-h-[640px] overflow-y-auto divide-y divide-border">
+            <div className="divide-y divide-border">
               {visible.map((b) => (
                 <button
                   key={b.id}
@@ -247,7 +247,7 @@ function BudgetContent() {
                           <p className="text-xs text-muted">{s.label}</p>
                           <p className="mt-2 break-words font-mono text-xl tabular-nums">
                             {money(s.value)}
-                            <span className="ml-2 text-xs text-muted">{currency}</span>
+                            <span className="ml-2 text-xs text-muted">{currencySymbol(currency)}</span>
                           </p>
                         </div>
                       ))}
@@ -255,9 +255,9 @@ function BudgetContent() {
                     <div className="border-t border-border p-4 text-xs text-muted space-y-1">
                       <p>
                         Gelir: yıllık plan {money(data.totals.revenue.planned)} · gerçekleşen{' '}
-                        {money(data.totals.revenue.actual)} {currency}. Net sonuç: plan{' '}
+                        {money(data.totals.revenue.actual)} {currencySymbol(currency)}. Net sonuç: plan{' '}
                         {money(data.totals.net.planned)} · gerçekleşen{' '}
-                        {money(data.totals.net.actual)} {currency}.
+                        {money(data.totals.net.actual)} {currencySymbol(currency)}.
                       </p>
                       <p>
                         Taslak yevmiyeler ve yıl sonu kapanış kayıtları dahil değildir. Ters
@@ -365,7 +365,7 @@ function BudgetChart({ data }: { data: CompanyBudgetReport }) {
     <Card className="overflow-hidden">
       <CardHeader
         title="Aylık plan ve gerçekleşen"
-        description={`Plan çizgili, gerçekleşen düz çubuk · ${data.currency}`}
+        description={`Plan çizgili, gerçekleşen düz çubuk · ${currencySymbol(data.currency)}`}
         action={
           <Select
             aria-label="Grafik türü"
@@ -393,7 +393,7 @@ function BudgetChart({ data }: { data: CompanyBudgetReport }) {
               </div>
               <div
                 className="space-y-1.5"
-                aria-label={`${months[m.month - 1]} plan ${money(p)}, gerçekleşen ${future ? 'henüz gelmedi' : money(a)} ${data.currency}`}
+                aria-label={`${months[m.month - 1]} plan ${money(p)}, gerçekleşen ${future ? 'henüz gelmedi' : money(a)} ${currencySymbol(data.currency)}`}
               >
                 <div className="h-2 rounded bg-surface-2">
                   <div
@@ -487,7 +487,7 @@ function BudgetTable({ data }: { data: CompanyBudgetReport }) {
     <Card className="overflow-hidden">
       <CardHeader
         title="Hesap bazında sapma"
-        description={`Gerçekleşen − bütçe · ${data.currency}. Sıfır bütçede yüzde hesaplanmaz.`}
+        description={`Gerçekleşen − bütçe · ${currencySymbol(data.currency)}. Sıfır bütçede yüzde hesaplanmaz.`}
         action={
           <Select
             aria-label="Karşılaştırma ayı"
@@ -804,7 +804,7 @@ function BudgetEditor({
           <p className="text-sm">
             Gelir / gider hesabı ekle{' '}
             <span className="text-xs text-muted">
-              ({config.lines.length}/150 · {currency})
+              ({config.lines.length}/150 · {currencySymbol(currency)})
             </span>
           </p>
           <div className="flex flex-wrap gap-2">
@@ -917,7 +917,7 @@ function BudgetEditor({
                   {line.amounts.every((a) => /^\d+(\.\d+)?$/.test(a))
                     ? money(line.amounts.reduce((s, a) => s.plus(a), dec(0)).toFixed(2))
                     : '—'}{' '}
-                  {currency}
+                  {currencySymbol(currency)}
                 </p>
               </div>
             </Card>

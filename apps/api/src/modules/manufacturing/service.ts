@@ -24,10 +24,52 @@ import { requireOpenPeriod } from '../settings/periods';
 import { leatherProductionSchema, createStockDocumentSchema } from '@erp/shared';
 import { postStockDocument } from '../inventory/documents';
 
+const recordPrefixes: Record<string, string> = {
+  resource: 'KYN',
+  calendar: 'TKV',
+  maintenance: 'BKM',
+  schedule: 'PLAN',
+  transfer: 'TRF',
+  bin: 'RAF',
+  lot: 'PRT',
+  lot_event: 'IZ',
+  placement: 'YRL',
+  shipment: 'SVK',
+  connection: 'BGL',
+  integration_event: 'AKT',
+  department: 'BIR',
+  custom_field: 'ALN',
+  attendance: 'PDKS',
+  demo_dataset: 'DEMO',
+  batch: 'BATCH',
+  work_session: 'MES',
+  rework: 'YIS',
+  pattern: 'KLP',
+  cut_plan: 'KES',
+  exception: 'MDH',
+  supplier_profile: 'TED',
+  demand_policy: 'POL',
+  cost_close: 'MKP',
+  service_time: 'SVS',
+  channel_mapping: 'ESL',
+  inventory_outbox: 'YAY',
+  command_event: 'KMT',
+  material_handoff: 'TES',
+};
+function readableCode(r: Row) {
+  if (
+    !/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i.test(r.code ?? '')
+  )
+    return r.code;
+  const prefix = recordPrefixes[r.kind] ?? 'KYT';
+  return `${prefix}-${new Date(r.created_at).toISOString().slice(0, 10).replaceAll('-', '')}-${r.id.replaceAll('-', '').slice(-12).toUpperCase()}`;
+}
 export const recordShape = (r: Row) => ({
   ...r.config,
+  ...(r.kind === 'maintenance' && r.status === 'open' ? { end: null } : {}),
+  ...(r.kind === 'calendar' && r.maintenance_status === 'open' ? { end: null } : {}),
   id: r.id,
-  code: r.code,
+  code: readableCode(r),
   status: r.status,
   recordKind: r.kind,
   kind: r.config.kind ?? r.kind,
@@ -36,12 +78,24 @@ export const recordShape = (r: Row) => ({
   warehouseId: r.warehouse_id,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
+  itemName: r.item_name,
+  warehouseName: r.warehouse_name,
+  orderCode: r.order_code,
+  supplierName: r.supplier_name,
 });
 export async function listRecords(tx: Tx, kind: string) {
   return (
     await all(
       tx,
-      sql`select * from manufacturing_records where kind=${kind} order by created_at desc limit 1000`,
+      sql`select r.*,${kind === 'calendar' ? sql`maintenance.status` : sql`null`} as maintenance_status,
+        i.name as item_name,w.name as warehouse_name,o.code as order_code,p.name as supplier_name
+        from manufacturing_records r
+        left join items i on i.id=r.item_id and i.company_id=r.company_id
+        left join warehouses w on w.id=r.warehouse_id and w.company_id=r.company_id
+        left join leather_production_orders o on o.id=r.order_id and o.company_id=r.company_id
+        left join parties p on p.id=nullif(r.config->>'partyId','')::uuid and p.company_id=r.company_id
+        ${kind === 'calendar' ? sql`left join manufacturing_records maintenance on maintenance.id::text=r.config->>'maintenanceId' and maintenance.company_id=r.company_id and maintenance.kind='maintenance'` : sql``}
+        where r.kind=${kind} order by r.created_at desc,r.id desc`,
     )
   ).map(recordShape);
 }
@@ -59,10 +113,22 @@ export async function createRecord(
   status = 'draft',
 ) {
   const id = newId();
+  let code = input.code?.trim();
+  if (!code) {
+    const prefix = recordPrefixes[kind] ?? 'KYT';
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${ctx.companyId + ':record-code:' + kind},0))`,
+    );
+    const [next] = await all(
+      tx,
+      sql`select greatest(count(*)+1,coalesce(max(substring(code from ${'^' + prefix + '-([0-9]+)$'})::bigint),0)+1)::text as next from manufacturing_records where kind=${kind}`,
+    );
+    code = `${prefix}-${String(next.next).padStart(6, '0')}`;
+  }
   return recordShape(
     await one(
       tx,
-      sql`insert into manufacturing_records(id,company_id,created_by,kind,code,status,order_id,item_id,warehouse_id,source_document_id,request_key,config) values(${id},${ctx.companyId},${ctx.userId},${kind},${input.code ?? id},${status},${input.orderId ?? null},${input.itemId ?? null},${input.warehouseId ?? null},${input.sourceDocumentId ?? null},${input.requestKey ?? null},${json(input)}) returning *`,
+      sql`insert into manufacturing_records(id,company_id,created_by,kind,code,status,order_id,item_id,warehouse_id,source_document_id,request_key,config) values(${id},${ctx.companyId},${ctx.userId},${kind},${code},${status},${input.orderId ?? null},${input.itemId ?? null},${input.warehouseId ?? null},${input.sourceDocumentId ?? null},${input.requestKey ?? null},${json(input)}) returning *`,
     ),
   );
 }
@@ -77,6 +143,7 @@ export async function updateRecord(tx: Tx, id: string, status: string, config: R
 export async function mrp(
   tx: Tx,
   input: { itemId: string; quantity: string; warehouseId: string },
+  overrides: Readonly<Record<string, string>> = {},
 ) {
   await one(
     tx,
@@ -101,7 +168,8 @@ export async function mrp(
     ...recipes.flatMap((r) => [r.itemId, ...r.materials.map((m) => m.itemId)]),
   ]);
   const stock: Record<string, string> = {};
-  for (const id of ids) stock[id] = await availableStock(tx, id, input.warehouseId);
+  for (const id of ids)
+    stock[id] = overrides[id] ?? (await availableStock(tx, id, input.warehouseId));
   const needs = explodeManufacturingNeed(input.itemId, input.quantity, recipes, stock);
   const items = await all(tx, sql`select id,code,name,unit from items`);
   const labels = new Map(items.map((i) => [i.id, i]));
@@ -171,26 +239,43 @@ export async function schedule(
       !o.config.operations.some((p: Row) => p.key === j.operationKey)
     )
       throw fail('Operasyon açık üretim rotasında yok');
+    const operation = o.config.operations.find((p: Row) => p.key === j.operationKey);
+    if (
+      operation.resources?.length &&
+      !operation.resources.some((r: Row) => r.resourceId === j.resourceId)
+    )
+      throw fail('Kaynak onaylı operasyon için uygun değil');
   }
   const calendars = (await listRecords(tx, 'calendar')).filter((c) => c.status === 'active');
   const published = (await listRecords(tx, 'schedule')).filter(
     (r) => r.status === 'published' && r.id !== excludeId,
   );
   const occupied = published.flatMap((r) => r.operations ?? []) as ScheduledOperation[];
-  return finiteManufacturingSchedule(
-    input.jobs,
-    calendars as never,
-    input.anchor,
-    input.direction,
-    capacities,
-    occupied,
-  );
+  try {
+    return finiteManufacturingSchedule(
+      input.jobs,
+      calendars as never,
+      input.anchor,
+      input.direction,
+      capacities,
+      occupied,
+    );
+  } catch (cause) {
+    if (cause instanceof Error && cause.message === 'Uygun kapasite bulunamadı')
+      throw fail(
+        'Uygun kaynak kapasitesi bulunamadı. Açık bakım/arıza kayıtlarını ve çalışma takvimini kontrol edin.',
+        'MANUFACTURING_CAPACITY_UNAVAILABLE',
+      );
+    throw cause;
+  }
 }
 export async function publishSchedule(tx: Tx, ctx: LeatherCtx, id: string) {
   await lockLeatherCosts(tx, ctx.companyId);
   const r = await getRecord(tx, id, 'schedule', true);
   if (r.status === 'published') return recordShape(r);
   if (r.status !== 'draft') throw fail('Yalnız taslak plan yayımlanır');
+  if (r.config.previewOnly)
+    throw fail('Simülasyon varsayımları gerçek takvimde onaylanmadan plan yayımlanamaz');
   const canonical = (value: unknown): string =>
     JSON.stringify(value, (_k, v) =>
       v && typeof v === 'object' && !Array.isArray(v)
@@ -262,7 +347,17 @@ export async function transferAction(tx: Tx, ctx: LeatherCtx, id: string, input:
 export async function maintenance(tx: Tx, ctx: LeatherCtx, input: Row) {
   await lockLeatherCosts(tx, ctx.companyId);
   await getRecord(tx, input.resourceId, 'resource');
-  const m = await createRecord(tx, ctx, 'maintenance', input, 'open');
+  const m = await createRecord(
+    tx,
+    ctx,
+    'maintenance',
+    {
+      ...input,
+      plannedEnd: input.end ?? null,
+      end: null,
+    },
+    'open',
+  );
   await createRecord(
     tx,
     ctx,
@@ -270,7 +365,7 @@ export async function maintenance(tx: Tx, ctx: LeatherCtx, input: Row) {
     {
       resourceId: input.resourceId,
       start: input.start,
-      end: input.end,
+      end: null,
       available: false,
       reason: input.kind === 'breakdown' ? 'breakdown' : 'maintenance',
       maintenanceId: m.id,
@@ -284,9 +379,13 @@ export async function finishMaintenance(tx: Tx, ctx: LeatherCtx, id: string, inp
   const m = await getRecord(tx, id, 'maintenance', true);
   if (m.status === 'completed') return recordShape(m);
   if (m.status !== 'open') throw fail('Bakım açık değil');
-  await requireOpenPeriod(tx, input.date);
+  if (!input.end || Date.parse(input.end) <= Date.parse(m.config.start))
+    throw fail('Gerçekleşen bitiş başlangıçtan sonra olmalı');
+  if (Date.parse(input.end) > Date.now())
+    throw fail('Gerçekleşen bitiş gelecekte olamaz; bakım devam ediyorsa kaydı açık bırakın');
   let stockDocumentId: string | null = null;
   if (m.config.spareParts?.length) {
+    await requireOpenPeriod(tx, input.date);
     const doc = await postStockDocument(
       tx,
       ctx,
@@ -300,8 +399,12 @@ export async function finishMaintenance(tx: Tx, ctx: LeatherCtx, id: string, inp
     );
     stockDocumentId = doc.document.id;
   }
+  await tx.execute(
+    sql`update manufacturing_records set config=config||${json({ end: input.end })},updated_at=now() where kind='calendar' and config->>'maintenanceId'=${id}`,
+  );
   return updateRecord(tx, id, 'completed', {
     ...m.config,
+    end: input.end,
     completedAt: new Date().toISOString(),
     stockDocumentId,
     requestKey: input.requestKey,

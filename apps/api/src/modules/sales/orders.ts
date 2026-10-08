@@ -28,6 +28,8 @@ import { requireActiveWarehouse } from '../inventory/warehouses';
 import { resolveVat } from '../invoices/service';
 import { formatDocumentNumber, nextNumber } from '../settings/numbering';
 import { resolvePrice } from './pricing';
+import { releaseOrderAllocations } from '../manufacturing/allocations';
+import { lockLeatherCosts, one } from '../leather/common';
 import { orderLineUsage, zeroUsage } from './usage';
 
 export interface SalesCtx {
@@ -43,7 +45,10 @@ async function loadCustomer(tx: Tx, partyId: string) {
   if (!party) throw unprocessable('Cari bulunamadı', 'PARTY_NOT_FOUND');
   if (!party.isActive) throw unprocessable(`${party.name} carisi pasif`, 'PARTY_INACTIVE');
   if (!partyKindFits(party.kind as PartyKind, 'receivable')) {
-    throw unprocessable(`${party.name} carisi müşteri değil; teklif/sipariş müşteri carisine düzenlenir`, 'PARTY_KIND_MISMATCH');
+    throw unprocessable(
+      `${party.name} carisi müşteri değil; teklif/sipariş müşteri carisine düzenlenir`,
+      'PARTY_KIND_MISMATCH',
+    );
   }
   return party;
 }
@@ -53,7 +58,9 @@ type DraftInput = Omit<CreateSalesDocInput, 'kind'> | UpdateSalesDocInput;
 /** Satırları doğrular, fiyat/KDV kancalarını uygular ve tutarlarını hesaplar (belge para biriminde). */
 async function prepareLines(tx: Tx, input: DraftInput, currency: string) {
   const itemIds = [...new Set(input.lines.map((l) => l.itemId).filter((v): v is string => !!v))];
-  const itemRows = itemIds.length ? await tx.select().from(items).where(inArray(items.id, itemIds)) : [];
+  const itemRows = itemIds.length
+    ? await tx.select().from(items).where(inArray(items.id, itemIds))
+    : [];
   const byId = new Map(itemRows.map((r) => [r.id, r]));
   const vatCodes = input.lines.flatMap((l) => {
     const item = l.itemId ? byId.get(l.itemId) : undefined;
@@ -67,16 +74,24 @@ async function prepareLines(tx: Tx, input: DraftInput, currency: string) {
     const label = `Satır ${i + 1}`;
     const item = l.itemId ? byId.get(l.itemId) : undefined;
     if (l.itemId && !item) throw unprocessable(`${label}: stok kartı bulunamadı`, 'ITEM_NOT_FOUND');
-    if (item && !item.isActive) throw unprocessable(`${label}: ${item.code} ${item.name} kartı pasif`, 'ITEM_INACTIVE');
+    if (item && !item.isActive)
+      throw unprocessable(`${label}: ${item.code} ${item.name} kartı pasif`, 'ITEM_INACTIVE');
     const description = l.description ?? item?.name;
-    if (!description) throw unprocessable(`${label}: açıklama ya da stok kartı gerekli`, 'DESCRIPTION_REQUIRED');
+    if (!description)
+      throw unprocessable(`${label}: açıklama ya da stok kartı gerekli`, 'DESCRIPTION_REQUIRED');
     let unitPrice = l.unitPrice;
     let discountPct = l.discountPct;
     if (unitPrice === undefined || discountPct === undefined) {
       const res = item
         ? await resolvePrice(tx, {
             kind: 'sales',
-            item: { id: item.id, salePrice: item.salePrice, saleCurrency: item.saleCurrency, purchasePrice: item.purchasePrice, purchaseCurrency: item.purchaseCurrency },
+            item: {
+              id: item.id,
+              salePrice: item.salePrice,
+              saleCurrency: item.saleCurrency,
+              purchasePrice: item.purchasePrice,
+              purchaseCurrency: item.purchaseCurrency,
+            },
             partyId: input.partyId,
             date: input.docDate,
             currency,
@@ -96,7 +111,11 @@ async function prepareLines(tx: Tx, input: DraftInput, currency: string) {
       discountPct ??= res?.discountPct;
     }
     const vatCode = l.vatCode ?? item?.vatCode ?? null;
-    if (vatCode && !rates.has(vatCode)) throw unprocessable(`${label}: ${vatCode} KDV kodu ${input.docDate} tarihinde geçerli değil`, 'VAT_CODE_INVALID');
+    if (vatCode && !rates.has(vatCode))
+      throw unprocessable(
+        `${label}: ${vatCode} KDV kodu ${input.docDate} tarihinde geçerli değil`,
+        'VAT_CODE_INVALID',
+      );
     prepared.push({
       lineNo: i + 1,
       itemId: item?.id ?? null,
@@ -110,17 +129,32 @@ async function prepareLines(tx: Tx, input: DraftInput, currency: string) {
     });
   }
   const totals = calcInvoice(
-    prepared.map((p) => ({ quantity: p.quantity, unitPrice: p.unitPrice, discountPct: p.discountPct, vatRate: p.vatRate })),
+    prepared.map((p) => ({
+      quantity: p.quantity,
+      unitPrice: p.unitPrice,
+      discountPct: p.discountPct,
+      vatRate: p.vatRate,
+    })),
     input.vatIncluded,
   );
   return { lines: prepared.map((p, i) => ({ ...p, ...totals.lines[i]! })), totals };
 }
 
-async function writeDoc(tx: Tx, ctx: SalesCtx, kind: SalesDocKind, input: DraftInput, id?: string, extra: { quoteId?: string; quoteLineIds?: (string | null)[] } = {}) {
+async function writeDoc(
+  tx: Tx,
+  ctx: SalesCtx,
+  kind: SalesDocKind,
+  input: DraftInput,
+  id?: string,
+  extra: { quoteId?: string; quoteLineIds?: (string | null)[] } = {},
+) {
   const party = await loadCustomer(tx, input.partyId);
   const currency = input.currency ?? party.currencyCode;
   if (kind === 'quote' && input.validUntil && input.validUntil < input.docDate) {
-    throw unprocessable('Geçerlilik tarihi teklif tarihinden önce olamaz', 'VALID_UNTIL_BEFORE_DATE');
+    throw unprocessable(
+      'Geçerlilik tarihi teklif tarihinden önce olamaz',
+      'VALID_UNTIL_BEFORE_DATE',
+    );
   }
   if (input.warehouseId) await requireActiveWarehouse(tx, input.warehouseId, 'Depo');
   const { lines, totals } = await prepareLines(tx, input, currency);
@@ -146,7 +180,13 @@ async function writeDoc(tx: Tx, ctx: SalesCtx, kind: SalesDocKind, input: DraftI
   } else {
     const [row] = await tx
       .insert(salesOrders)
-      .values({ ...header, companyId: ctx.companyId, kind, quoteId: extra.quoteId ?? null, createdBy: ctx.userId })
+      .values({
+        ...header,
+        companyId: ctx.companyId,
+        kind,
+        quoteId: extra.quoteId ?? null,
+        createdBy: ctx.userId,
+      })
       .returning({ id: salesOrders.id });
     docId = row!.id;
   }
@@ -172,7 +212,8 @@ async function writeDoc(tx: Tx, ctx: SalesCtx, kind: SalesDocKind, input: DraftI
   return docId;
 }
 
-export const createSalesDoc = (tx: Tx, ctx: SalesCtx, input: CreateSalesDocInput) => writeDoc(tx, ctx, input.kind, input);
+export const createSalesDoc = (tx: Tx, ctx: SalesCtx, input: CreateSalesDocInput) =>
+  writeDoc(tx, ctx, input.kind, input);
 
 export async function lockDoc(tx: Tx, id: string) {
   const [row] = await tx.select().from(salesOrders).where(eq(salesOrders.id, id)).for('update');
@@ -180,7 +221,12 @@ export async function lockDoc(tx: Tx, id: string) {
   return row;
 }
 
-export async function updateSalesDoc(tx: Tx, ctx: SalesCtx, id: string, input: UpdateSalesDocInput) {
+export async function updateSalesDoc(
+  tx: Tx,
+  ctx: SalesCtx,
+  id: string,
+  input: UpdateSalesDocInput,
+) {
   const row = await lockDoc(tx, id);
   if (row.status !== 'draft') throw unprocessable('Yalnızca taslak düzenlenebilir', 'SO_NOT_DRAFT');
   await writeDoc(tx, ctx, row.kind as SalesDocKind, input, id);
@@ -189,9 +235,16 @@ export async function updateSalesDoc(tx: Tx, ctx: SalesCtx, id: string, input: U
 
 export async function deleteSalesDoc(tx: Tx, id: string) {
   const row = await lockDoc(tx, id);
-  if (row.status !== 'draft' || row.docNo) throw unprocessable('Yalnızca numarasız taslak silinebilir; diğerleri iptal edilir', 'SO_NOT_DRAFT');
+  if (row.status !== 'draft' || row.docNo)
+    throw unprocessable(
+      'Yalnızca numarasız taslak silinebilir; diğerleri iptal edilir',
+      'SO_NOT_DRAFT',
+    );
   // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
-  const deleted = await tx.delete(salesOrders).where(eq(salesOrders.id, id)).returning({ id: salesOrders.id });
+  const deleted = await tx
+    .delete(salesOrders)
+    .where(eq(salesOrders.id, id))
+    .returning({ id: salesOrders.id });
   if (deleted.length === 0) throw notFound('Satış belgesi');
 }
 
@@ -199,27 +252,60 @@ export async function deleteSalesDoc(tx: Tx, id: string) {
  * Durum geçişi: geçiş tablosu doğrulanır, olay (geçmiş) kaydı yazılır, başlık güncellenir. Taslaktan çıkışta numara verilir
  * (bir kez; geri alınıp yeniden gönderilen teklif numarasını korur). Veritabanı tetikleyicisi aynı kuralları ayrıca uygular.
  */
-export async function transitionSalesDoc(tx: Tx, ctx: SalesCtx, id: string, to: SalesDocStatus, reason?: string) {
+export async function transitionSalesDoc(
+  tx: Tx,
+  ctx: SalesCtx,
+  id: string,
+  to: SalesDocStatus,
+  reason?: string,
+) {
+  if (to === 'cancelled') {
+    const company = await one(
+      tx,
+      sql`select sector from companies where id=${ctx.companyId}::uuid`,
+    );
+    if (['MANUFACTURING_WHOLESALE', 'LEATHER_FASHION'].includes(company.sector))
+      await lockLeatherCosts(tx, ctx.companyId);
+  }
   const doc = await lockDoc(tx, id);
   const kind = doc.kind as SalesDocKind;
   if (!canTransition(kind, doc.status as SalesDocStatus, to)) {
-    throw unprocessable(`${KIND_LABEL[kind]} "${doc.status}" durumundan "${to}" durumuna geçirilemez`, 'SO_INVALID_TRANSITION');
+    throw unprocessable(
+      `${KIND_LABEL[kind]} "${doc.status}" durumundan "${to}" durumuna geçirilemez`,
+      'SO_INVALID_TRANSITION',
+    );
   }
-  if (to === 'cancelled' && !reason) throw unprocessable('İptal gerekçesi gerekli', 'SO_REASON_REQUIRED');
+  if (to === 'cancelled' && !reason)
+    throw unprocessable('İptal gerekçesi gerekli', 'SO_REASON_REQUIRED');
   if (kind === 'quote' && to === 'accepted' && doc.validUntil && doc.validUntil < todayIso()) {
-    throw unprocessable('Geçerlilik tarihi geçmiş teklif kabul edilemez; yeni teklif hazırlayın', 'QUOTE_EXPIRED');
+    throw unprocessable(
+      'Geçerlilik tarihi geçmiş teklif kabul edilemez; yeni teklif hazırlayın',
+      'QUOTE_EXPIRED',
+    );
   }
   if (to === 'cancelled' && kind === 'order' && doc.status === 'confirmed') {
-    const lineIds = (await tx.select({ id: salesOrderLines.id }).from(salesOrderLines).where(eq(salesOrderLines.orderId, id))).map((l) => l.id);
+    const lineIds = (
+      await tx
+        .select({ id: salesOrderLines.id })
+        .from(salesOrderLines)
+        .where(eq(salesOrderLines.orderId, id))
+    ).map((l) => l.id);
     const usage = await orderLineUsage(tx, lineIds);
     if ([...usage.values()].some((u) => u.delivered.gt(0) || u.invoiced.gt(0))) {
-      throw unprocessable('Teslim edilmiş ya da faturalanmış sipariş iptal edilemez; kapatın', 'SO_HAS_FULFILMENT');
+      throw unprocessable(
+        'Teslim edilmiş ya da faturalanmış sipariş iptal edilemez; kapatın',
+        'SO_HAS_FULFILMENT',
+      );
     }
   }
   let docNo = doc.docNo;
   if (doc.status === 'draft' && to !== 'cancelled' && !docNo) {
     const year = isoYear(doc.docDate);
-    docNo = formatDocumentNumber(SALES_DOC_PREFIX[kind], year, await nextNumber(tx, ctx.companyId, `SALES:${kind}`, year));
+    docNo = formatDocumentNumber(
+      SALES_DOC_PREFIX[kind],
+      year,
+      await nextNumber(tx, ctx.companyId, `SALES:${kind}`, year),
+    );
   }
   await tx.insert(salesOrderEvents).values({
     companyId: ctx.companyId,
@@ -229,15 +315,28 @@ export async function transitionSalesDoc(tx: Tx, ctx: SalesCtx, id: string, to: 
     reason: reason ?? null,
     createdBy: ctx.userId,
   });
-  await tx.update(salesOrders).set({ status: to, docNo, updatedAt: new Date() }).where(eq(salesOrders.id, id));
+  await tx
+    .update(salesOrders)
+    .set({ status: to, docNo, updatedAt: new Date() })
+    .where(eq(salesOrders.id, id));
+  if (kind === 'order' && to === 'cancelled') await releaseOrderAllocations(tx, ctx, id, reason!);
 }
 
 /** Kabul edilmiş teklifi siparişe dönüştürür: yeni taslak sipariş (satırlar kopyalanır, kaynak teklif satırına bağlanır); teklif "dönüştürüldü" olur. */
 export async function convertQuote(tx: Tx, ctx: SalesCtx, quoteId: string) {
   const quote = await lockDoc(tx, quoteId);
-  if (quote.kind !== 'quote') throw unprocessable('Yalnızca teklif siparişe dönüştürülür', 'SO_NOT_QUOTE');
-  if (quote.status !== 'accepted') throw unprocessable('Yalnızca kabul edilmiş teklif siparişe dönüştürülür', 'SO_QUOTE_NOT_ACCEPTED');
-  const qLines = await tx.select().from(salesOrderLines).where(eq(salesOrderLines.orderId, quoteId)).orderBy(asc(salesOrderLines.lineNo));
+  if (quote.kind !== 'quote')
+    throw unprocessable('Yalnızca teklif siparişe dönüştürülür', 'SO_NOT_QUOTE');
+  if (quote.status !== 'accepted')
+    throw unprocessable(
+      'Yalnızca kabul edilmiş teklif siparişe dönüştürülür',
+      'SO_QUOTE_NOT_ACCEPTED',
+    );
+  const qLines = await tx
+    .select()
+    .from(salesOrderLines)
+    .where(eq(salesOrderLines.orderId, quoteId))
+    .orderBy(asc(salesOrderLines.lineNo));
   const orderId = await writeDoc(
     tx,
     ctx,
@@ -294,10 +393,17 @@ const LINE_SELECT = sql`
   from sales_order_lines l left join items it on it.id = l.item_id`;
 
 /** Teslim sayılan miktar: irsaliyeli teslim + stoğu faturada hareket eden doğrudan faturalama. */
-const effectiveDelivered = (u: ReturnType<typeof zeroUsage> | undefined) => (u ? u.delivered.plus(u.direct) : dec(0));
+const effectiveDelivered = (u: ReturnType<typeof zeroUsage> | undefined) =>
+  u ? u.delivered.plus(u.direct) : dec(0);
 
 function lineConsumption(l: LineOut, u = zeroUsage()) {
-  const c = { quantity: l.quantity, isGoods: l.isGoods, delivered: u.delivered, invoiced: u.invoiced, directInvoiced: u.direct };
+  const c = {
+    quantity: l.quantity,
+    isGoods: l.isGoods,
+    delivered: u.delivered,
+    invoiced: u.invoiced,
+    directInvoiced: u.direct,
+  };
   return {
     delivered: u.delivered.toFixed(4),
     invoiced: u.invoiced.toFixed(4),
@@ -323,9 +429,16 @@ export async function getSalesDoc(tx: Tx, id: string) {
     where o.id = ${id}`);
   const doc = head.rows[0];
   if (!doc) throw notFound('Teklif/sipariş');
-  const lines = (await tx.execute<LineOut>(sql`${LINE_SELECT} where l.order_id = ${id} order by l.line_no`)).rows;
+  const lines = (
+    await tx.execute<LineOut>(sql`${LINE_SELECT} where l.order_id = ${id} order by l.line_no`)
+  ).rows;
   const isOrder = doc.kind === 'order';
-  const usage = isOrder ? await orderLineUsage(tx, lines.map((l) => l.id)) : new Map();
+  const usage = isOrder
+    ? await orderLineUsage(
+        tx,
+        lines.map((l) => l.id),
+      )
+    : new Map();
 
   const events = await tx.execute<Record<string, unknown>>(sql`
     select e.from_status as "fromStatus", e.to_status as "toStatus", e.reason, e.created_at as "createdAt", u.full_name as "userName"
@@ -350,12 +463,30 @@ export async function getSalesDoc(tx: Tx, id: string) {
         where ol.order_id = ${id} order by "invoiceDate", "invoiceNo"`)
     ).rows;
   }
-  const outLines = lines.map((l) => ({ ...l, ...(isOrder ? lineConsumption(l, usage.get(l.id)) : {}) }));
+  const outLines = lines.map((l) => ({
+    ...l,
+    ...(isOrder ? lineConsumption(l, usage.get(l.id)) : {}),
+  }));
   const fulfilment = isOrder
-    ? orderFulfilment(lines.map((l) => ({ quantity: l.quantity, isGoods: l.isGoods, delivered: effectiveDelivered(usage.get(l.id)), invoiced: usage.get(l.id)?.invoiced ?? dec(0) })))
+    ? orderFulfilment(
+        lines.map((l) => ({
+          quantity: l.quantity,
+          isGoods: l.isGoods,
+          delivered: effectiveDelivered(usage.get(l.id)),
+          invoiced: usage.get(l.id)?.invoiced ?? dec(0),
+        })),
+      )
     : null;
   return {
-    doc: { ...doc, expired: doc.kind === 'quote' && doc.status === 'sent' && !!doc.validUntil && String(doc.validUntil) < todayIso(), fulfilment },
+    doc: {
+      ...doc,
+      expired:
+        doc.kind === 'quote' &&
+        doc.status === 'sent' &&
+        !!doc.validUntil &&
+        String(doc.validUntil) < todayIso(),
+      fulfilment,
+    },
     lines: outLines,
     events: events.rows,
     notes,
@@ -396,19 +527,38 @@ export async function listSalesDocs(tx: Tx, q: ListSalesDocsQuery) {
     ${where}
     order by o.doc_date desc, o.doc_no desc nulls first, o.created_at desc
     limit ${q.limit} offset ${q.offset}`);
-  const total = await tx.execute<{ n: number }>(sql`select count(*)::int as n from sales_orders o join parties p on p.id = o.party_id ${where}`);
+  const total = await tx.execute<{ n: number }>(
+    sql`select count(*)::int as n from sales_orders o join parties p on p.id = o.party_id ${where}`,
+  );
 
   // Siparişlerin türetilmiş karşılanma durumu (sayfadaki siparişler için tek sorgu)
   const orderIds = rows.rows.filter((r) => r.kind === 'order').map((r) => r.id);
   const fulfil = new Map<string, ReturnType<typeof orderFulfilment>>();
   if (orderIds.length > 0) {
-    const lines = (await tx.execute<LineOut & { orderId: string }>(sql`${LINE_SELECT} where l.order_id in (${sql.join(orderIds.map((i) => sql`${i}::uuid`), sql`, `)})`)).rows;
-    const usage = await orderLineUsage(tx, lines.map((l) => l.id));
+    const lines = (
+      await tx.execute<LineOut & { orderId: string }>(
+        sql`${LINE_SELECT} where l.order_id in (${sql.join(
+          orderIds.map((i) => sql`${i}::uuid`),
+          sql`, `,
+        )})`,
+      )
+    ).rows;
+    const usage = await orderLineUsage(
+      tx,
+      lines.map((l) => l.id),
+    );
     for (const id of orderIds) {
       fulfil.set(
         id,
         orderFulfilment(
-          lines.filter((l) => l.orderId === id).map((l) => ({ quantity: l.quantity, isGoods: l.isGoods, delivered: effectiveDelivered(usage.get(l.id)), invoiced: usage.get(l.id)?.invoiced ?? dec(0) })),
+          lines
+            .filter((l) => l.orderId === id)
+            .map((l) => ({
+              quantity: l.quantity,
+              isGoods: l.isGoods,
+              delivered: effectiveDelivered(usage.get(l.id)),
+              invoiced: usage.get(l.id)?.invoiced ?? dec(0),
+            })),
         ),
       );
     }
@@ -416,7 +566,8 @@ export async function listSalesDocs(tx: Tx, q: ListSalesDocsQuery) {
   return {
     docs: rows.rows.map((r) => ({
       ...r,
-      expired: r.kind === 'quote' && r.status === 'sent' && !!r.validUntil && r.validUntil < todayIso(),
+      expired:
+        r.kind === 'quote' && r.status === 'sent' && !!r.validUntil && r.validUntil < todayIso(),
       fulfilment: fulfil.get(r.id) ?? null,
     })),
     total: total.rows[0]?.n ?? 0,
@@ -425,8 +576,13 @@ export async function listSalesDocs(tx: Tx, q: ListSalesDocsQuery) {
 
 /** Karşılanma için satır başına kalan miktarlar (irsaliye/fatura dönüşümü kullanır). */
 export async function orderLinesWithUsage(tx: Tx, orderId: string) {
-  const lines = (await tx.execute<LineOut>(sql`${LINE_SELECT} where l.order_id = ${orderId} order by l.line_no`)).rows;
-  const usage = await orderLineUsage(tx, lines.map((l) => l.id));
+  const lines = (
+    await tx.execute<LineOut>(sql`${LINE_SELECT} where l.order_id = ${orderId} order by l.line_no`)
+  ).rows;
+  const usage = await orderLineUsage(
+    tx,
+    lines.map((l) => l.id),
+  );
   return lines.map((l) => ({ line: l, usage: usage.get(l.id)! }));
 }
 

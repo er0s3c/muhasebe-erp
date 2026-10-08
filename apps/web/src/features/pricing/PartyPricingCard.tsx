@@ -6,6 +6,7 @@ import { Card, CardHeader } from '../../components/ui/Card';
 import { Field, Select } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
+import { currencySymbol } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { PartyPricing } from '../../lib/types';
 import { PRICING_INVALIDATE, trimNum, usePriceLists } from './common';
@@ -48,7 +49,7 @@ export function PartyPricingCard({ partyId, kind }: { partyId: string; kind: 'cu
   const listOptions = (rows: { id: string; code: string; name: string; currencyCode: string; isActive: boolean }[] | undefined, current: string) =>
     (rows ?? []).filter((l) => l.isActive || l.id === current).map((l) => (
       <option key={l.id} value={l.id}>
-        {l.code} — {l.name} ({l.currencyCode})
+        {l.code} — {l.name} ({currencySymbol(l.currencyCode)})
       </option>
     ));
 

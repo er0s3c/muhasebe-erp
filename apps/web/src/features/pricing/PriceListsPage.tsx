@@ -13,7 +13,7 @@ import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
-import { formatDateTR } from '../../lib/format';
+import { currencySymbol, formatDateTR } from '../../lib/format';
 import { useCan, useCMutation, useCompanyApi } from '../../lib/queries';
 import type { PriceKind, PriceListRow } from '../../lib/types';
 import { KindBadge, PRICING_INVALIDATE, usePriceLists } from './common';
@@ -116,7 +116,7 @@ export function PriceListsPage() {
                   <Td>
                     <KindBadge kind={l.kind} />
                   </Td>
-                  <Td>{l.currencyCode}</Td>
+                  <Td>{currencySymbol(l.currencyCode)}</Td>
                   <Td className="text-muted">{l.validFrom || l.validTo ? `${l.validFrom ? formatDateTR(l.validFrom) : '…'} – ${l.validTo ? formatDateTR(l.validTo) : '…'}` : t('pricing.lists.always')}</Td>
                   <Td num>{l.itemCount}</Td>
                   <Td num>{l.partyCount}</Td>

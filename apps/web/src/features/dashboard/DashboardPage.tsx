@@ -42,12 +42,12 @@ function CounterBand({ metrics, label }: { metrics: Metric[]; label: string }) {
           const body = (
             <>
               <p className="text-caption uppercase tracking-[0.05em] text-muted">{m.label}</p>
-              <p className={cn('mt-2 truncate text-heading', m.tone === 'warning' && 'text-warning', m.tone === 'danger' && 'text-danger')}>{m.value}</p>
+              <p className={cn('mt-2 text-[clamp(1rem,10cqw,1.75rem)] leading-tight [overflow-wrap:anywhere]', m.tone === 'warning' && 'text-warning', m.tone === 'danger' && 'text-danger')}>{m.value}</p>
             </>
           );
-          const cell = 'block h-full p-5';
+          const cell = 'block h-full p-5 [container-type:inline-size]';
           return (
-            <li key={m.key} className="-ml-px -mt-px grow basis-[200px] border-l border-t border-border">
+            <li key={m.key} className="-ml-px -mt-px min-w-0 grow basis-[240px] border-l border-t border-border">
               {m.to ? (
                 <Link to={m.to} aria-label={m.label} className={cn(cell, 'transition-colors hover:bg-surface-2')}>
                   {body}

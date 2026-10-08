@@ -4,7 +4,7 @@ import { Card, CardHeader } from '../../components/ui/Card';
 import { PageLoading } from '../../components/ui/Feedback';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { moneyIn } from '../../lib/format';
+import { currencySymbol, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { Badge } from '../../components/ui/Badge';
 import type { FeeEstimate, ProjectDetail, SalesSummary } from '../../lib/types';
@@ -49,7 +49,7 @@ export function SalesTab({ project }: { project: ProjectDetail }) {
                 <tbody>
                   {data.byCurrency.map((r) => (
                     <Tr key={r.currencyCode}>
-                      <Td>{r.currencyCode}</Td>
+                      <Td>{currencySymbol(r.currencyCode)}</Td>
                       <Td num>{r.contracts}</Td>
                       <Td num>{moneyIn(r.price, r.currencyCode)}</Td>
                       <Td num>{moneyIn(r.collected, r.currencyCode)}</Td>

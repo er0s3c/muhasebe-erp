@@ -137,7 +137,7 @@ export function ProjectLineRow({ projectId, wbsId, onChange, label, className, d
       <span className="text-xs text-muted" title={t('projects.picker.hint')}>
         {t('projects.picker.label')}
       </span>
-      <div className="min-w-72 flex-1">
+      <div className="min-w-0 basis-full sm:min-w-72 sm:flex-1 sm:basis-0">
         <ProjectWbsFields projectId={projectId} wbsId={wbsId} onChange={onChange} label={label} disabled={disabled} compact />
       </div>
     </div>
