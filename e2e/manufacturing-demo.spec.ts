@@ -3,7 +3,6 @@ import { test, expect } from '@playwright/test';
 const password = 'Demo-Sifre-123',
   companyName = 'Ada Üretim ve Toptan Ticaret Demo';
 test.skip('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ page }) => {
-  test.setTimeout(180_000);
   await page.goto('/');
   await page.getByLabel('E-posta').fill('demo@ornek.local');
   await page.getByLabel('Şifre', { exact: true }).fill(password);
