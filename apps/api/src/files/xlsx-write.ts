@@ -13,11 +13,12 @@ const NS_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const NS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
+const XML_CONTROL_CHARS_REGEX = new RegExp(String.raw`[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]`, 'g');
+
 /** XML'de geçersiz denetim karakterlerini atar ve özel karakterleri kaçırır. */
 export const xmlEscape = (s: string) =>
   s
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '')
+    .replace(XML_CONTROL_CHARS_REGEX, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
