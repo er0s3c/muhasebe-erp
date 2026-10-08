@@ -328,7 +328,7 @@ function CompanySwitcher({ collapsed }: { collapsed: boolean }) {
     <Dropdown.Root>
       <Dropdown.Trigger
         className={cn(
-          'flex w-full items-center gap-2.5 rounded-lg border border-border bg-bg p-2 text-left transition-colors hover:border-border-strong',
+          'flex w-full items-center gap-2.5 rounded-lg border border-border bg-bg p-2 text-left transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2',
           collapsed && 'lg:justify-center lg:border-transparent lg:bg-transparent lg:p-1',
         )}
         aria-label={t('shell.switchCompany')}
