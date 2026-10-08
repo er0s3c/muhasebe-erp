@@ -9,7 +9,7 @@ import { forbidden } from '../../http/errors';
 import { all, one, mapped, type LeatherCtx } from './common';
 import { listModels, createModel, listRevisions, createRevision, updateRevision, approveRevision, listVariants, createVariant } from './catalog';
 import { listLots, listPieces, receiveMaterial, acceptPiece, cutMaterial } from './materials';
-import { createProduction, getProduction, documentsFor, releaseProduction, issueProduction, returnMaterial, completeProduction, recordOperation, productionFromSales, cancelProduction } from './production';
+import { createProduction, getProduction, getProductions, documentsFor, releaseProduction, issueProduction, returnMaterial, completeProduction, recordOperation, productionFromSales, cancelProduction } from './production';
 import { allocateCost } from './costs';
 import { createSubcontract, subcontractAction, customAction, serviceAction } from './advanced';
 import { redactLeatherCosts } from './access';
@@ -82,7 +82,7 @@ export function productionCoreRoutes(generic = false): FastifyPluginAsync { retu
  register('post','/api/leather/materials/receipts',route(materialManage,async c=>{const lot=await receiveMaterial(c.tx,ctx(c),leatherReceiptSchema.parse(c.req.body));void c.reply.code(201);return{lot};}));
  register('post','/api/leather/materials/pieces/:id/accept',route(qualityApprove,async c=>({piece:await acceptPiece(c.tx,ctx(c),id(c),leatherPieceAcceptanceSchema.parse(c.req.body))})));
  register('post','/api/leather/materials/cuts',route(productionManage,async c=>{const d=await cutMaterial(c.tx,ctx(c),leatherCutSchema.parse(c.req.body));return {document:(await documentsFor(c.tx,d.order_id)).find(x=>x.id===d.id)};}));
- register('get','/api/leather/production/orders',route(productionRead,async c=>{const ids=await all(c.tx,sql`select id from leather_production_orders ${c.role==='operator'?sql`where coalesce(config->>'assignedUserId',created_by::text)=${c.user.id}`:sql``} order by created_at desc limit 300`);return {orders:await Promise.all(ids.map(o=>getProduction(c.tx,o.id)))};}));
+ register('get','/api/leather/production/orders',route(productionRead,async c=>{const ids=await all(c.tx,sql`select id from leather_production_orders ${c.role==='operator'?sql`where coalesce(config->>'assignedUserId',created_by::text)=${c.user.id}`:sql``} order by created_at desc limit 300`);return {orders:await getProductions(c.tx,ids.map(o=>o.id))};}));
  register('post','/api/leather/production/orders',route(productionManage,async c=>{const order=await createProduction(c.tx,ctx(c),leatherProductionSchema.parse(c.req.body));void c.reply.code(201);return{order};}));
  register('post','/api/leather/production/from-sales-order',route(productionManage,async c=>{const orders=await productionFromSales(c.tx,ctx(c),leatherProductionFromSalesSchema.parse(c.req.body));void c.reply.code(201);return {orders};}));
  register('get','/api/leather/production/orders/:id',route(productionRead,async c=>({order:await getProduction(c.tx,id(c)),documents:await documentsFor(c.tx,id(c))})));

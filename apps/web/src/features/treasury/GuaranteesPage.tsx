@@ -1,6 +1,6 @@
 import { BANK_GUARANTEE_STATUSES, todayIso, type GuaranteeDirection } from '@erp/shared';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
@@ -46,7 +46,12 @@ export function GuaranteesPage() {
   const [direction, setDirection] = useState('');
   const [status, setStatus] = useState('active');
   const [within, setWithin] = useState('');
+  const [text, setText] = useState('');
   const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const params = { direction, status, withinDays: within, q };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
   const lim = useListLimit(qs);
@@ -150,7 +155,7 @@ export function GuaranteesPage() {
           )}
         </Field>
         <Field label={t('guarantees.filters.within')} className="w-36">{(id) => <Input id={id} inputMode="numeric" value={within} onChange={(e) => setWithin(e.target.value.replace(/\D/g, ''))} />}</Field>
-        <Field label={t('guarantees.filters.search')} className="w-48">{(id) => <Input id={id} value={q} onChange={(e) => setQ(e.target.value)} />}</Field>
+        <Field label={t('guarantees.filters.search')} className="w-48">{(id) => <Input id={id} value={text} onChange={(e) => setText(e.target.value)} />}</Field>
       </div>
 
       {error && !editing && !resolving && <div className="mb-3"><Callout tone="danger">{errorMessage(error)}</Callout></div>}

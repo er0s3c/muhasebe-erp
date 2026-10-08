@@ -1,6 +1,6 @@
 import { todayIso } from '@erp/shared';
 import { Eye, EyeOff, History, Plus, RefreshCw, Trash2, Paperclip } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -61,7 +61,12 @@ function DocumentsTab() {
   const [within, setWithin] = useState('');
   const [nationality, setNationality] = useState('');
   const [typeId, setTypeId] = useState('');
+  const [text, setText] = useState('');
   const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const params = { status, withinDays: within, nationality, typeId, q };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
   const lim = useListLimit(qs);
@@ -147,7 +152,7 @@ function DocumentsTab() {
       </div>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
-          <Field label={t('foreign.filters.search')} className="w-44">{(id) => <Input id={id} value={q} onChange={(e) => setQ(e.target.value)} />}</Field>
+          <Field label={t('foreign.filters.search')} className="w-44">{(id) => <Input id={id} value={text} onChange={(e) => setText(e.target.value)} />}</Field>
           <Field label={t('foreign.filters.nationality')} className="w-36">{(id) => <Input id={id} value={nationality} onChange={(e) => setNationality(e.target.value)} />}</Field>
           <Field label={t('foreign.filters.type')} className="w-44">
             {(id) => (

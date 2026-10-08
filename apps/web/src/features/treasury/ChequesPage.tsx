@@ -1,6 +1,6 @@
 import { CHEQUE_STATUSES, MATURITY_BUCKETS, allowedChequeActions, todayIso, type ChequeAction, type ChequeDirection, type ChequeDocType } from '@erp/shared';
 import { History, Plus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -65,7 +65,12 @@ function PortfolioTab() {
   const [direction, setDirection] = useState('');
   const [docType, setDocType] = useState('');
   const [status, setStatus] = useState('open');
+  const [text, setText] = useState('');
   const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const [dueFrom, setDueFrom] = useState('');
   const [dueTo, setDueTo] = useState('');
   const params = { direction, docType, status, q, dueFrom, dueTo };
@@ -109,7 +114,7 @@ function PortfolioTab() {
               </Select>
             )}
           </Field>
-          <Field label={t('cheques.filters.search')} className="w-40">{(id) => <Input id={id} value={q} onChange={(e) => setQ(e.target.value)} />}</Field>
+          <Field label={t('cheques.filters.search')} className="w-40">{(id) => <Input id={id} value={text} onChange={(e) => setText(e.target.value)} />}</Field>
           <Field label={t('cheques.filters.dueFrom')} className="w-40">{(id) => <Input id={id} type="date" value={dueFrom} onChange={(e) => setDueFrom(e.target.value)} />}</Field>
           <Field label={t('cheques.filters.dueTo')} className="w-40">{(id) => <Input id={id} type="date" value={dueTo} onChange={(e) => setDueTo(e.target.value)} />}</Field>
         </div>

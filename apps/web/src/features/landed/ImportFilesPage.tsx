@@ -1,5 +1,5 @@
 import { Plus, Ship } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ImportFileRow, ImportFileStatus } from '../../lib/types';
@@ -53,7 +53,12 @@ export function ImportFilesPage() {
 function FilesTab() {
   const { t } = useTranslation();
   const [status, setStatus] = useState('');
+  const [text, setText] = useState('');
   const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const qs = new URLSearchParams();
   if (status) qs.set('status', status);
   if (q.trim()) qs.set('q', q.trim());
@@ -61,7 +66,7 @@ function FilesTab() {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <Input aria-label={t('common.search')} placeholder={t('landed.searchPlaceholder')} value={q} onChange={(e) => setQ(e.target.value)} className="w-72" />
+        <Input aria-label={t('common.search')} placeholder={t('landed.searchPlaceholder')} value={text} onChange={(e) => setText(e.target.value)} className="w-72" />
         <Select aria-label={t('common.status')} value={status} onChange={(e) => setStatus(e.target.value)} className="w-44">
           <option value="">{t('common.all')}</option>
           {STATUSES.map((s) => (

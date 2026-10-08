@@ -1,6 +1,6 @@
 import { dec, roundMoney, todayIso } from '@erp/shared';
 import { Plus, Receipt } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
@@ -86,7 +86,12 @@ export function ExpenseEntriesPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [cardId, setCardId] = useState('');
+  const [text, setText] = useState('');
   const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const qs = new URLSearchParams();
   if (from) qs.set('from', from);
   if (to) qs.set('to', to);
@@ -273,8 +278,8 @@ export function ExpenseEntriesPage() {
         <Input
           aria-label={t('common.search')}
           placeholder={t('expenses.entries.search')}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
           className="w-64"
         />
         <div className="ml-auto">

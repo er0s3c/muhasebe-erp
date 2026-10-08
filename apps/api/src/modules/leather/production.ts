@@ -41,17 +41,33 @@ import { stockAvailability } from '../manufacturing/availability';
 import { queueInventoryChanges } from '../manufacturing/channels';
 import { consumeMaterialHandoffs } from '../manufacturing/handoff';
 
-export async function getProduction(tx: Tx, id: string): Promise<Row> {
-  const o = await one(
+export async function getProductions(tx: Tx, ids: string[]): Promise<Row[]> {
+  if (ids.length === 0) return [];
+  const oRows = await all(
     tx,
-    sql`select o.*,i.name as "itemName",r.revision from leather_production_orders o join items i on i.id=o.item_id join leather_revisions r on r.id=o.revision_id where o.id=${id}::uuid`,
-    'Üretim emri',
+    sql`select o.*,i.name as "itemName",r.revision from leather_production_orders o join items i on i.id=o.item_id join leather_revisions r on r.id=o.revision_id where o.id = any(${ids}::uuid[])`,
   );
-  const reservations = await all(
+  const rRows = await all(
     tx,
-    sql`select r.id,r.item_id as "itemId",i.name as "itemName",r.piece_id as "pieceId",r.quantity,r.consumed_qty as "consumedQty",r.status from leather_reservations r join items i on i.id=r.item_id where r.order_id=${id}::uuid order by r.created_at`,
+    sql`select r.id,r.order_id as "orderId",r.item_id as "itemId",i.name as "itemName",r.piece_id as "pieceId",r.quantity,r.consumed_qty as "consumedQty",r.status from leather_reservations r join items i on i.id=r.item_id where r.order_id = any(${ids}::uuid[]) order by r.created_at`,
   );
-  return {
+
+  const resByOrder = new Map<string, Record<string, unknown>[]>();
+  for (const r of rRows) {
+    const arr = resByOrder.get(r.orderId as string) || [];
+    arr.push({
+      id: r.id,
+      itemId: r.itemId,
+      itemName: r.itemName,
+      pieceId: r.pieceId,
+      quantity: r.quantity,
+      consumedQty: r.consumedQty,
+      status: r.status,
+    });
+    resByOrder.set(r.orderId as string, arr);
+  }
+
+  return oRows.map((o) => ({
     id: o.id,
     code: o.code,
     variantId: o.variant_id,
@@ -68,7 +84,7 @@ export async function getProduction(tx: Tx, id: string): Promise<Row> {
     warehouseId: o.warehouse_id,
     outputWarehouseId: o.output_warehouse_id,
     assignedUserId: o.config.assignedUserId ?? o.created_by,
-    reservations,
+    reservations: (resByOrder.get(o.id as string) as unknown as Row['reservations']) || [],
     operations: o.config.operations ?? [],
     materials: o.config.materials ?? [],
     note: o.config.note ?? '',
@@ -76,7 +92,13 @@ export async function getProduction(tx: Tx, id: string): Promise<Row> {
     salesOrderLineId: o.config.salesOrderLineId ?? null,
     salesOrderId: o.config.salesOrderId ?? null,
     parentOrderId: o.config.parentOrderId ?? null,
-  };
+  }));
+}
+
+export async function getProduction(tx: Tx, id: string): Promise<Row> {
+  const list = await getProductions(tx, [id]);
+  if (!list[0]) throw fail('Üretim emri bulunamadı');
+  return list[0];
 }
 export async function documentsFor(tx: Tx, id: string): Promise<Row[]> {
   return all(
