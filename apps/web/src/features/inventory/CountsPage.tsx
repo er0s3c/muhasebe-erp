@@ -1,5 +1,5 @@
 import { ChevronRight, ClipboardCheck, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
@@ -32,14 +32,17 @@ export function CountsPage() {
   const [error, setError] = useState<string | null>(null);
   const warehouses = (wh?.warehouses ?? []).filter((w) => w.isActive);
 
-  const openCreateModal = () => {
-    setDate(todayIso());
-    setDescription('');
-    setPrefill('in_stock');
-    setError(null);
-    setWarehouseId((cur) => cur || (warehouses.find((w) => w.isDefault) ?? warehouses[0])?.id || '');
-    setCreating(true);
-  };
+  useEffect(() => {
+    if (creating) {
+      setDate(todayIso());
+      setDescription('');
+      setPrefill('in_stock');
+      setError(null);
+      setWarehouseId((cur) => cur || (warehouses.find((w) => w.isDefault) ?? warehouses[0])?.id || '');
+    }
+    // warehouses her render yeniden süzülür; yalnızca açılışta sıfırla
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creating]);
 
   const create = useCMutation(
     (_: void, call) =>
@@ -67,7 +70,7 @@ export function CountsPage() {
         description={t('inventory.counts.subtitle')}
         actions={
           canMove && (
-            <Button variant="primary" onClick={openCreateModal}>
+            <Button variant="primary" onClick={() => setCreating(true)}>
               <Plus className="size-4" aria-hidden />
               {t('inventory.counts.add')}
             </Button>
@@ -85,7 +88,7 @@ export function CountsPage() {
             description={t('inventory.counts.emptyDesc')}
             action={
               canMove ? (
-                <Button variant="primary" onClick={openCreateModal}>
+                <Button variant="primary" onClick={() => setCreating(true)}>
                   <Plus className="size-4" aria-hidden />
                   {t('inventory.counts.add')}
                 </Button>
