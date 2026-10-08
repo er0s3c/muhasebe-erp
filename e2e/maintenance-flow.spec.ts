@@ -24,7 +24,7 @@ test('bakım başlangıçla açılır, saatin tamamı tıklanır ve gerçekleşe
   const auth = { authorization: `Bearer ${(await registered.json()).accessToken}` };
   const companyResponse = await request.post('/api/companies', {
     headers: auth,
-    data: { name: `Bakım testi ${suffix}`, sector: 'MANUFACTURING_WHOLESALE' },
+    data: { name: `Bakım testi ${suffix}`, sector: 'CONSTRUCTION' },
   });
   expect(companyResponse.ok(), await companyResponse.text()).toBeTruthy();
   const headers = { ...auth, 'x-company-id': (await companyResponse.json()).company.id };
