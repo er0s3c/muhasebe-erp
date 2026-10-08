@@ -1,5 +1,5 @@
 import { ListTree, Plus, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currencySymbol } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
@@ -32,7 +32,12 @@ export function AccountsPage() {
   const toast = useToast();
   const canManage = useCan()('accounts.manage');
   const { data, isPending } = useCQuery<{ accounts: Account[] }>(['accounts'], '/api/accounts');
+  const [text, setText] = useState('');
   const [query, setQuery] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQuery(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const [onlyPostable, setOnlyPostable] = useState(false);
   const [adding, setAdding] = useState(false);
   const [code, setCode] = useState('');
@@ -97,7 +102,7 @@ export function AccountsPage() {
         <div className="flex flex-wrap items-center gap-4">
           <div className="relative w-full max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted" aria-hidden />
-            <Input className="pl-9" placeholder={t('ledger.accounts.searchPlaceholder')} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t('common.search')} />
+            <Input className="pl-9" placeholder={t('ledger.accounts.searchPlaceholder')} value={text} onChange={(e) => setText(e.target.value)} aria-label={t('common.search')} />
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input type="checkbox" className="size-4" checked={onlyPostable} onChange={(e) => setOnlyPostable(e.target.checked)} />

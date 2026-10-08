@@ -26,7 +26,12 @@ export function ProjectsPage() {
   const [adding, setAdding] = useState(false);
   const [status, setStatus] = useState('');
   const [kind, setKind] = useState('');
+  const [text, setText] = useState('');
   const [query, setQuery] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQuery(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const asOf = todayIso();
 
   // Komut paletinden ("Yeni proje") derin bağlantı
@@ -109,7 +114,7 @@ export function ProjectsPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-56 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
-              <Input className="pl-9" aria-label={t('common.search')} placeholder={t('projects.searchPlaceholder')} value={query} onChange={(e) => setQuery(e.target.value)} />
+              <Input className="pl-9" aria-label={t('common.search')} placeholder={t('projects.searchPlaceholder')} value={text} onChange={(e) => setText(e.target.value)} />
             </div>
             <Select aria-label={t('projects.filters.status')} value={status} onChange={(e) => setStatus(e.target.value)} className="w-44">
               <option value="">{t('projects.filters.allStatuses')}</option>

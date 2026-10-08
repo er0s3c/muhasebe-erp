@@ -1,6 +1,6 @@
 import { AllocationError, allocateAmount, dec, landedUnitCost, todayIso, type AllocLine, type LandedMethod } from '@erp/shared';
 import { Plus, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
@@ -685,7 +685,12 @@ function Editor({ detail }: { detail?: ImportFileDetail }) {
 
 function SourcePicker({ open, onClose, taken, onAdd }: { open: boolean; onClose: () => void; taken: Set<string>; onAdd: (list: ImportSource[]) => void }) {
   const { t } = useTranslation();
+  const [text, setText] = useState('');
   const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const [sel, setSel] = useState<Record<string, ImportSource>>({});
   const qs = new URLSearchParams({ limit: '100' });
   if (q.trim()) qs.set('q', q.trim());
@@ -706,7 +711,7 @@ function SourcePicker({ open, onClose, taken, onAdd }: { open: boolean; onClose:
       }
     >
       <div className="flex flex-col gap-3">
-        <Input aria-label={t('common.search')} placeholder={t('landed.goods.pickSearch')} value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input aria-label={t('common.search')} placeholder={t('landed.goods.pickSearch')} value={text} onChange={(e) => setText(e.target.value)} />
         {isPending ? (
           <PageLoading />
         ) : rows.length === 0 ? (

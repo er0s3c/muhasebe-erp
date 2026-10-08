@@ -1,5 +1,5 @@
 import { Barcode } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
@@ -26,7 +26,12 @@ export function SerialsPage() {
   const { t } = useTranslation();
   const [params] = useSearchParams();
   const itemId = params.get('itemId') ?? '';
+  const [text, setText] = useState('');
   const [query, setQuery] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQuery(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const [status, setStatus] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
   const [open, setOpen] = useState<SerialRow | null>(null);
@@ -49,7 +54,7 @@ export function SerialsPage() {
       />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <Field label={t('serials.search')}>
-          {(id) => <Input id={id} value={query} placeholder={t('serials.searchPlaceholder')} onChange={(e) => setQuery(e.target.value)} autoFocus />}
+          {(id) => <Input id={id} value={text} placeholder={t('serials.searchPlaceholder')} onChange={(e) => setText(e.target.value)} autoFocus />}
         </Field>
         <Field label={t('serials.statusLabel')}>
           {(id) => (

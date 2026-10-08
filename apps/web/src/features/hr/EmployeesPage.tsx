@@ -1,5 +1,5 @@
 import { Plus, Users } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -21,7 +21,12 @@ export function EmployeesPage() {
   const can = useCan();
   const [adding, setAdding] = useState(false);
   const [status, setStatus] = useState('');
+  const [text, setText] = useState('');
   const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(text.trim()), 250);
+    return () => clearTimeout(id);
+  }, [text]);
   const qs = useMemo(() => {
     const p = new URLSearchParams();
     if (status) p.set('status', status);
@@ -63,7 +68,7 @@ export function EmployeesPage() {
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            <Input aria-label={t('hr.search')} placeholder={t('hr.search')} value={q} onChange={(e) => setQ(e.target.value)} className="w-64" />
+            <Input aria-label={t('hr.search')} placeholder={t('hr.search')} value={text} onChange={(e) => setText(e.target.value)} className="w-64" />
             <Select aria-label={t('hr.cols.status')} value={status} onChange={(e) => setStatus(e.target.value)} className="w-44">
               <option value="">{t('hr.allStatuses')}</option>
               <option value="active">{t('hr.status.active')}</option>
