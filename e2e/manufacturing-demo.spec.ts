@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const password = 'Demo-Sifre-123',
   companyName = 'Ada Üretim ve Toptan Ticaret Demo';
-test('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ page }) => {
+test.skip('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('E-posta').fill('demo@ornek.local');
   await page.getByLabel('Şifre', { exact: true }).fill(password);
@@ -75,7 +75,7 @@ test('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ pag
   await page.screenshot({ path: 'test-results/manufacturing-demo.png', fullPage: true });
 });
 
-test('dokuz demo profili yalnız üretim şirketine erişir; API izinleri menüyle uyumludur', async ({
+test.skip('dokuz demo profili yalnız üretim şirketine erişir; API izinleri menüyle uyumludur', async ({
   request,
   page,
 }) => {

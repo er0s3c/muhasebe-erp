@@ -36,47 +36,9 @@ function page<K extends string>(
   return { handle, lazy: async () => ({ Component: (await load())[name] }) };
 }
 
-export const router = createBrowserRouter([
-  { path:'/field-offline', ...page(()=>import('../features/construction-control/OfflineFieldPage'),'OfflineFieldPage',null), errorElement:<RouteError/>, hydrateFallbackElement:<PageLoading/> },
-  { path: '/portal', ...page(() => import('../features/workspace/PortalPage'), 'PortalPage', null), errorElement: <RouteError />, hydrateFallbackElement: <PageLoading /> },
-  {
-    element: <PublicOnly />,
-    errorElement: <RouteError />,
-    hydrateFallbackElement: <PageLoading />,
-    children: [
-      { path: '/login', element: <LoginPage /> },
-      { path: '/register', element: <RegisterPage /> },
-      { path: '/forgot-password', element: <ForgotPasswordPage /> },
-    ],
-  },
-  {
-    // E-postadaki bağlantılar: oturum açıkken de çalışmalı (PublicOnly dışında)
-    errorElement: <RouteError />,
-    hydrateFallbackElement: <PageLoading />,
-    children: [
-      { path: '/reset-password', element: <ResetPasswordPage /> },
-      { path: '/verify-email', element: <VerifyEmailPage /> },
-    ],
-  },
-  {
-    element: <RequireAuth />,
-    errorElement: <RouteError />,
-    hydrateFallbackElement: <PageLoading />,
-    children: [
-      { path: '/password-change', element: <PasswordChangeRequiredPage /> },
-      { path: '/company/new', element: <CreateCompanyPage /> },
-      {
-        element: <RequireCompany />,
-        children: [
-          {
-            element: <AppShell />,
-            children: [
-              {
-                // Kabuk (menü, üst çubuk) ayakta kalır; sayfa hatası ve izin kapısı yalnızca içerik alanını etkiler
-                element: <RequireRoutePermission />,
-                errorElement: <RouteError />,
-                children: [
-                  { index: true, ...page(() => import('../features/dashboard/DashboardPage'), 'DashboardPage', null) },
+
+const appRoutes: RouteObject[] = [
+{ index: true, ...page(() => import('../features/dashboard/DashboardPage'), 'DashboardPage', null) },
                   { path: 'workspace', ...page(() => import('../features/workspace/WorkPage'), 'WorkPage', null) },
                   { path: 'workspace/portal', ...page(() => import('../features/workspace/PortalAdminPage'), 'PortalAdminPage', 'members.manage') },
                   { path: 'workspace/project-control', element:<RequireModule module="construction.projects"/>, children:[{index:true,...page(()=>import('../features/construction-control/ProjectControlPage'),'ProjectControlPage','projects.read')}] },
@@ -364,6 +326,50 @@ export const router = createBrowserRouter([
                     {path:'pos/sessions',...page(()=>import('../features/pos/PosPages'),'PosSessionsPage','pos.read')},
                     {path:'pos/sales/:id',...page(()=>import('../features/pos/PosPages'),'PosSalePage','pos.read')},
                   ]},
+
+];
+
+export const router = createBrowserRouter([
+  { path:'/field-offline', ...page(()=>import('../features/construction-control/OfflineFieldPage'),'OfflineFieldPage',null), errorElement:<RouteError/>, hydrateFallbackElement:<PageLoading/> },
+  { path: '/portal', ...page(() => import('../features/workspace/PortalPage'), 'PortalPage', null), errorElement: <RouteError />, hydrateFallbackElement: <PageLoading /> },
+  {
+    element: <PublicOnly />,
+    errorElement: <RouteError />,
+    hydrateFallbackElement: <PageLoading />,
+    children: [
+      { path: '/login', element: <LoginPage /> },
+      { path: '/register', element: <RegisterPage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
+    ],
+  },
+  {
+    // E-postadaki bağlantılar: oturum açıkken de çalışmalı (PublicOnly dışında)
+    errorElement: <RouteError />,
+    hydrateFallbackElement: <PageLoading />,
+    children: [
+      { path: '/reset-password', element: <ResetPasswordPage /> },
+      { path: '/verify-email', element: <VerifyEmailPage /> },
+    ],
+  },
+  {
+    element: <RequireAuth />,
+    errorElement: <RouteError />,
+    hydrateFallbackElement: <PageLoading />,
+    children: [
+      { path: '/password-change', element: <PasswordChangeRequiredPage /> },
+      { path: '/company/new', element: <CreateCompanyPage /> },
+      {
+        element: <RequireCompany />,
+        children: [
+          {
+            element: <AppShell />,
+            children: [
+              {
+                // Kabuk (menü, üst çubuk) ayakta kalır; sayfa hatası ve izin kapısı yalnızca içerik alanını etkiler
+                element: <RequireRoutePermission />,
+                errorElement: <RouteError />,
+                children: [
+                                    ...appRoutes,
                   { path: '*', element: <NotFoundPage /> },
                 ],
               },
