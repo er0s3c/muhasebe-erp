@@ -43,7 +43,7 @@ until_date="$(date -u -d '+2 years' +%F)"
 issue() { # $1 = müşteri, $2 = tür
   local out code
   out="$("${LIC[@]}" exec -T license node dist/cli.js license:issue --customer="$1" --kind="$2" \
-    --sectors=CONSTRUCTION,RETAIL_MARKET,COMMERCE --devices=500 --companies=500 --valid-until="$until_date")"
+    --sectors=CONSTRUCTION,RETAIL_MARKET,COMMERCE,MANUFACTURING_WHOLESALE --devices=500 --companies=500 --valid-until="$until_date")"
   code="$(printf '%s\n' "$out" | grep -oE '[0-9A-Z]{5}(-[0-9A-Z]{5}){4}' | head -1)"
   [ -n "$code" ] || { echo "etkinleştirme kodu okunamadı: $out" >&2; exit 1; }
   printf '%s' "$code"
