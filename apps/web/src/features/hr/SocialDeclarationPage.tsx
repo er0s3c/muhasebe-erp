@@ -28,17 +28,14 @@ type Dlg = null | 'finalize' | 'reopen' | 'delete';
 export function SocialDeclarationPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
-  const navigate = useNavigate();
   const toast = useToast();
   const manage = useCan()('hr.payroll_manage');
   const { data, isPending, error: loadError } = useCQuery<SocialDeclarationDetail>(['social', 'declaration', id], `/api/social-security/declarations/${id}`);
   const [dlg, setDlg] = useState<Dlg>(null);
-  const [text, setText] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const warningText = useSocialWarningText();
 
   const act = useCMutation((v: { path: string; body?: unknown }, call) => call<SocialDeclarationDetail>(`/api/social-security/declarations/${id}/${v.path}`, { method: 'POST', body: v.body ?? {} }), SOCIAL_INVALIDATE);
-  const remove = useCMutation((_: void, call) => call(`/api/social-security/declarations/${id}`, { method: 'DELETE' }), SOCIAL_INVALIDATE);
 
   if (isPending) return <PageLoading />;
   if (!data) return <Callout tone="danger">{errorMessage(loadError)}</Callout>;
@@ -46,10 +43,8 @@ export function SocialDeclarationPage() {
   const draft = d.status === 'draft';
   const open = (x: Dlg) => {
     setError(null);
-    setText('');
     setDlg(x);
   };
-  const done = (msg: string) => ({ onSuccess: () => { toast.success(msg); setDlg(null); }, onError: setError });
   const warned = lines.filter((l) => l.warnings.length > 0).length;
 
   return (
@@ -171,63 +166,98 @@ export function SocialDeclarationPage() {
       <PrintSignatures labels={[t('printDoc.prepared'), t('printDoc.approved')]} />
       <PrintNote>{t('social.detail.printNote')}</PrintNote>
 
-      <Modal
-        open={dlg === 'finalize'}
-        onOpenChange={(o) => !o && setDlg(null)}
-        title={t('social.detail.finalizeTitle')}
-        description={t('social.detail.finalizeDesc')}
-        footer={
-          <>
-            <Button onClick={() => setDlg(null)}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={act.isPending} onClick={() => act.mutate({ path: 'finalize', body: text.trim() ? { note: text.trim() } : {} }, done(t('social.detail.finalized')))}>
-              {t('social.detail.finalize')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
-          {d.hasUnverifiedParams && <Callout tone="warning">{t('social.detail.unverifiedWarn')}</Callout>}
-          <Field label={t('social.detail.finalizeNote')}>{(fid) => <Input id={fid} maxLength={300} value={text} onChange={(e) => setText(e.target.value)} />}</Field>
-        </div>
-      </Modal>
-
-      <Modal
-        open={dlg === 'reopen'}
-        onOpenChange={(o) => !o && setDlg(null)}
-        title={t('social.detail.reopenTitle')}
-        description={t('social.detail.reopenDesc')}
-        footer={
-          <>
-            <Button onClick={() => setDlg(null)}>{t('common.cancel')}</Button>
-            <Button variant="primary" loading={act.isPending} disabled={text.trim().length < 3} onClick={() => act.mutate({ path: 'reopen', body: { reason: text.trim() } }, done(t('social.detail.reopened')))}>
-              {t('social.detail.reopen')}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
-          <Field label={t('social.detail.reason')} required>{(fid) => <Textarea id={fid} rows={3} maxLength={300} value={text} onChange={(e) => setText(e.target.value)} />}</Field>
-        </div>
-      </Modal>
-
-      <Modal
-        open={dlg === 'delete'}
-        onOpenChange={(o) => !o && setDlg(null)}
-        title={t('social.detail.deleteTitle')}
-        description={t('social.detail.deleteDesc')}
-        footer={
-          <>
-            <Button onClick={() => setDlg(null)}>{t('common.cancel')}</Button>
-            <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(undefined, { onSuccess: () => { toast.success(t('social.detail.deleted')); navigate('/hr/social-security'); }, onError: setError })}>
-              {t('common.delete')}
-            </Button>
-          </>
-        }
-      >
-        {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
-      </Modal>
+      <FinalizeModal id={id} open={dlg === 'finalize'} onClose={() => setDlg(null)} hasUnverifiedParams={d.hasUnverifiedParams} />
+      <ReopenModal id={id} open={dlg === 'reopen'} onClose={() => setDlg(null)} />
+      <DeleteModal id={id} open={dlg === 'delete'} onClose={() => setDlg(null)} />
     </div>
+  );
+}
+
+
+function FinalizeModal({ id, open, onClose, hasUnverifiedParams }: { id: string; open: boolean; onClose: () => void; hasUnverifiedParams: boolean }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [text, setText] = useState('');
+  const [error, setError] = useState<Error | null>(null);
+  const act = useCMutation((v: { path: string; body?: unknown }, call) => call(`/api/social-security/declarations/${id}/${v.path}`, { method: 'POST', body: v.body ?? {} }), SOCIAL_INVALIDATE);
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={t('social.detail.finalizeTitle')}
+      description={t('social.detail.finalizeDesc')}
+      footer={
+        <>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={act.isPending} onClick={() => act.mutate({ path: 'finalize', body: text.trim() ? { note: text.trim() } : {} }, { onSuccess: () => { toast.success(t('social.detail.finalized')); onClose(); }, onError: setError })}>
+            {t('social.detail.finalize')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
+        {hasUnverifiedParams && <Callout tone="warning">{t('social.detail.unverifiedWarn')}</Callout>}
+        <Field label={t('social.detail.finalizeNote')}>{(fid) => <Input id={fid} maxLength={300} value={text} onChange={(e) => setText(e.target.value)} />}</Field>
+      </div>
+    </Modal>
+  );
+}
+
+function ReopenModal({ id, open, onClose }: { id: string; open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [text, setText] = useState('');
+  const [error, setError] = useState<Error | null>(null);
+  const act = useCMutation((v: { path: string; body?: unknown }, call) => call(`/api/social-security/declarations/${id}/${v.path}`, { method: 'POST', body: v.body ?? {} }), SOCIAL_INVALIDATE);
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={t('social.detail.reopenTitle')}
+      description={t('social.detail.reopenDesc')}
+      footer={
+        <>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="primary" loading={act.isPending} disabled={text.trim().length < 3} onClick={() => act.mutate({ path: 'reopen', body: { reason: text.trim() } }, { onSuccess: () => { toast.success(t('social.detail.reopened')); onClose(); }, onError: setError })}>
+            {t('social.detail.reopen')}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
+        <Field label={t('social.detail.reason')} required>{(fid) => <Textarea id={fid} rows={3} maxLength={300} value={text} onChange={(e) => setText(e.target.value)} />}</Field>
+      </div>
+    </Modal>
+  );
+}
+
+function DeleteModal({ id, open, onClose }: { id: string; open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [error, setError] = useState<Error | null>(null);
+  const remove = useCMutation((_: void, call) => call(`/api/social-security/declarations/${id}`, { method: 'DELETE' }), SOCIAL_INVALIDATE);
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={t('social.detail.deleteTitle')}
+      description={t('social.detail.deleteDesc')}
+      footer={
+        <>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(undefined, { onSuccess: () => { toast.success(t('social.detail.deleted')); navigate('/hr/social-security'); }, onError: setError })}>
+            {t('common.delete')}
+          </Button>
+        </>
+      }
+    >
+      {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
+    </Modal>
   );
 }
