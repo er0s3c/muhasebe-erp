@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { test, expect } from './fixtures';
+import { buildDisplayNavigation } from '../apps/web/src/components/layout/navigation';
 
 test('iki demo şirketindeki bütün menü sayfaları: tasarım, durum dili ve taşma', async ({
   page,
@@ -40,7 +41,8 @@ test('iki demo şirketindeki bütün menü sayfaları: tasarım, durum dili ve t
     ).json();
     const routes = [
       ...new Set<string>(
-        navigation.groups.flatMap((g: { items: { path: string }[] }) => g.items.map((i) => i.path)),
+        // Kullanıcının gördüğü menü: V3'te birleştirilen sayfalar (ör. Entegrasyonlar) yeni adresleriyle denetlenir
+        buildDisplayNavigation(navigation.groups).flatMap((g) => g.items.map((i) => i.path)),
       ),
     ].filter(
       (path) => !process.env.UI_AUDIT_FILTER || new RegExp(process.env.UI_AUDIT_FILTER).test(path),

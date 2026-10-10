@@ -100,6 +100,8 @@ test('fiyat listesi ve cari iskonto satıra yansır; seri takipli kart: giriş �
 
   // Satış faturası: seri no zorunlu; SN-100 satılır, kaynak/iskonto görünür
   await nav.getByRole('link', { name: 'Satış faturaları' }).click();
+  // Teklif kaydedilmeden çıkılıyor: taslak koruması onay ister
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
   await page.getByRole('button', { name: 'Yeni satış faturası' }).first().click();
   await pick('Müşteri', 'Ömer');
   await pick('Kart / hizmet 1', 'dizüstü');

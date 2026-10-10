@@ -35,8 +35,9 @@ test('yabancı işçi: personel (uyruklu) → belge (numara maskeli, gerekçeyle
   await expect(page.getByRole('heading', { name: /Ali Demir/, level: 1 })).toBeVisible();
 
   // Ayarlar: genel belge türleri hazır; parametre yok
-  await nav.getByRole('link', { name: 'Yabancı işçi ayarları' }).click();
-  await expect(page.getByRole('heading', { name: 'Yabancı işçi ayarları', level: 1 })).toBeVisible();
+  await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
+  await page.getByRole('tab', { name: 'Yabancı işçi' }).click();
+  await expect(page.getByRole('tab', { name: 'Yabancı işçi' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('cell', { name: 'Çalışma izni', exact: true })).toBeVisible();
   await expect(page.getByText('Henüz parametre yok')).toBeVisible();
   const form = page.locator('form').filter({ has: page.getByLabel('Kaynak notu') });

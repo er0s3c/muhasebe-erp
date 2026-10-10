@@ -84,7 +84,7 @@ test('çek/senet: alınan çek (fatura kalemi kapanır) → tahsile ver → taka
 
   // 5) Takas: toplu tahsil
   await page.getByRole('tab', { name: 'Takas' }).click();
-  await page.getByRole('tab', { name: 'Toplu tahsil', exact: true }).click();
+  await page.getByRole('button', { name: 'Toplu tahsil', exact: true }).click();
   await page.getByRole('checkbox', { name: 'C-1001' }).check();
   await expect(page.getByText(/1 belge seçili/)).toBeVisible();
   await page.getByRole('button', { name: 'Tahsil edildi olarak işle' }).click();

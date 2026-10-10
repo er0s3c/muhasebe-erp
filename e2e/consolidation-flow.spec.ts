@@ -107,7 +107,7 @@ test('konsolidasyon: iki şirket → grup → konsolide mizan (kur, eliminasyon)
 
   // Dışa aktarma (xlsx)
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Dışa aktar' }).click();
+  await page.getByRole('button', { name: 'Dışa aktar', exact: true }).click();
   await page.getByRole('menuitem', { name: /Excel \(\.xlsx\)/ }).click();
   expect((await downloadPromise).suggestedFilename()).toMatch(/^konsolide-\d{4}-01-01_\d{4}-\d{2}-\d{2}\.xlsx$/);
 

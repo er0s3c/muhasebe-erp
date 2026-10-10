@@ -51,7 +51,7 @@ test('gayrimenkul satışı: toplu birim → sözleşme + taksit planı → yür
   await dialog.getByRole('button', { name: '4 birim üret' }).click();
   await expect(page.getByText('4 birim eklendi, 0 atlandı')).toBeVisible();
   await expect(page.getByRole('row', { name: /A-101/ })).toBeVisible();
-  await page.getByRole('tab', { name: 'Kat planı' }).click();
+  await page.getByRole('button', { name: 'Kat planı' }).click();
   await expect(page.getByRole('button', { name: /^A-202 Satışa açık/ })).toBeVisible();
 
   // 2) Sözleşme: TL bedel 100.000, peşinat 20.000, 4 eşit taksit → plan 20.000 + 4 × 20.000

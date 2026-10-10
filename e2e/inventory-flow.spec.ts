@@ -57,6 +57,8 @@ test('stok: kart aç → giriş → çıkış → kritik seviye → stok durumu 
   await expect(dialog.getByText('Depoda yetersiz')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Hareketi kaydet' })).toBeDisabled();
   await page.keyboard.press('Escape');
+  // Kaydedilemeyen giriş taslak sayılır; kapatırken onay istenir
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
 
   // 5) Stok durumu: kritik rozeti, toplam değer ve muhasebe mutabakat uyarısı
   await nav.getByRole('link', { name: 'Stok durumu' }).click();

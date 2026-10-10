@@ -71,19 +71,19 @@ test('banka ekstresi: içe aktar → kesin eşleşmeleri uygula → eşleşmeyen
   await dialog.getByRole('button', { name: 'Tamam' }).click();
 
   // 3) Mutabakat: 3 açık satır, fark −12,00 (ekstre 953 − defter 965)
-  await expect(page.getByRole('tab', { name: /^Açık \(3\)/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Açık \(3\)/ })).toBeVisible();
   await expect(page.getByText('-₺12,00').first()).toBeVisible();
   await page.getByRole('button', { name: /Kesin eşleşmeleri uygula/ }).click();
   await expect(page.getByText('2 satır eşleştirildi')).toBeVisible();
-  await expect(page.getByRole('tab', { name: /^Açık \(1\)/ })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /^Eşleşen \(2\)/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Açık \(1\)/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Eşleşen \(2\)/ })).toBeVisible();
 
   // 4) Eşleşmeyen satırdan hareket oluştur: tarih/tutar/hesap kilitli, "Diğer ödeme" + karşı hesap 770
   await page.getByRole('row', { name: /Kart aidatı/ }).getByRole('button', { name: 'Hareket oluştur' }).click();
   await expect(dialog.getByText('Ekstre satırından hareket oluşturuluyor')).toBeVisible();
   await expect(dialog.getByLabel('Tarih')).toBeDisabled();
-  await expect(dialog.getByRole('tab', { name: 'Tahsilat', exact: true })).toHaveCount(0); // yalnızca çıkış türleri
-  await dialog.getByRole('tab', { name: 'Diğer ödeme' }).click();
+  await expect(dialog.getByRole('button', { name: 'Tahsilat', exact: true })).toHaveCount(0); // yalnızca çıkış türleri
+  await dialog.getByRole('button', { name: 'Diğer ödeme' }).click();
   const gl = dialog.getByRole('combobox', { name: 'Karşı hesap' });
   await gl.click();
   await gl.fill('770');
@@ -93,15 +93,15 @@ test('banka ekstresi: içe aktar → kesin eşleşmeleri uygula → eşleşmeyen
 
   // 5) Fark kapandı: mutabık, açık satır yok
   await expect(page.getByText('Mutabık')).toBeVisible();
-  await expect(page.getByRole('tab', { name: /^Açık \(0\)/ })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /^Eşleşen \(3\)/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Açık \(0\)/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Eşleşen \(3\)/ })).toBeVisible();
 
   // 6) Eşleşmiş hareket iptal edilemez; eşleşme kaldırılınca yeniden açık ve fark oluşur
-  await page.getByRole('tab', { name: /^Eşleşen/ }).click();
+  await page.getByRole('button', { name: /^Eşleşen \(/ }).click();
   await page.getByRole('row', { name: /Kart aidatı/ }).getByRole('button', { name: 'Eşleşmeyi kaldır' }).click();
   await expect(page.getByText('Eşleşme kaldırıldı')).toBeVisible();
-  await expect(page.getByRole('tab', { name: /^Açık \(1\)/ })).toBeVisible();
-  await page.getByRole('tab', { name: /^Açık/ }).click();
+  await expect(page.getByRole('button', { name: /^Açık \(1\)/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Açık \(/ }).click();
   // Defterde karşılığı var (önceki adım); aday olarak önerilir, tek tıkla yeniden eşleşir
   await page.getByRole('row', { name: /Kart aidatı/ }).getByRole('button', { name: 'Eşleştir' }).click();
   await expect(page.getByText('Satır eşleştirildi')).toBeVisible();

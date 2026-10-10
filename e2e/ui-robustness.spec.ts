@@ -144,29 +144,35 @@ test('dar ekran (375 px): tablo kendi kabında kayar, sayfa yatay kaymaz; menü 
   await expect(menuButton).toBeFocused();
 });
 
-test('sayfa parçası yüklenemezse (yeni sürüm/kopuk bağlantı) Türkçe hata sayfası ve "Sayfayı yenile" görünür; kabuk ayakta kalır', async ({ page, request }) => {
-  const { email } = await ownerWithCompany(request, 'parca');
-  await page.goto('/login');
-  await login(page, email);
-  await expect(page.getByRole('heading', { name: /Merhaba, Selin/ })).toBeVisible();
+test.describe('parça yükleme hatası', () => {
+  // field-sw.js bütün GET isteklerini kendisi yeniden çeker; Playwright'ın page.route engellemesi service worker
+  // isteklerine ulaşmaz. Ağ hatasında worker da 503 döndürdüğünden ürün davranışı aynıdır.
+  test.use({ serviceWorkers: 'block' });
 
-  // Yevmiye sayfasının parçası (geliştirmede kaynak modülü, üretimde hash'li chunk) inmesin
-  await page.route(/JournalPage[^/]*\.(tsx|js)(\?.*)?$/, (route) => route.abort());
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(String(e)));
-  await page.getByRole('navigation', { name: 'Ana menü' }).getByRole('link', { name: 'Yevmiye kayıtları' }).click();
+  test('sayfa parçası yüklenemezse (yeni sürüm/kopuk bağlantı) Türkçe hata sayfası ve "Sayfayı yenile" görünür; kabuk ayakta kalır', async ({ page, request }) => {
+    const { email } = await ownerWithCompany(request, 'parca');
+    await page.goto('/login');
+    await login(page, email);
+    await expect(page.getByRole('heading', { name: /Merhaba, Selin/ })).toBeVisible();
 
-  // İlk hatada bir kez kendiliğinden yenilenir; parça yine inmeyince açıklama ve yenileme düğmesi görünür
-  await expect(page.getByTestId('route-error')).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole('heading', { name: 'Yeni sürüm yüklendi' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sayfayı yenile' })).toBeVisible();
-  await expect(page.getByText('Unexpected Application Error')).toHaveCount(0);
-  await expect(page.getByRole('navigation', { name: 'Ana menü' })).toBeVisible();
-  await expect(page).toHaveURL(/\/accounting\/journal$/);
+    // Yevmiye sayfasının parçası (geliştirmede kaynak modülü, üretimde hash'li chunk) inmesin
+    await page.route(/JournalPage[^/]*\.(tsx|js)(\?.*)?$/, (route) => route.abort());
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.getByRole('navigation', { name: 'Ana menü' }).getByRole('link', { name: 'Yevmiye kayıtları' }).click();
 
-  // Bağlantı düzelince "Sayfayı yenile" sayfayı getirir
-  await page.unroute(/JournalPage[^/]*\.(tsx|js)(\?.*)?$/);
-  await page.getByRole('button', { name: 'Sayfayı yenile' }).click();
-  await expect(page.getByRole('heading', { name: 'Yevmiye kayıtları', level: 1 })).toBeVisible();
-  expect(errors).toEqual([]);
+    // İlk hatada bir kez kendiliğinden yenilenir; parça yine inmeyince açıklama ve yenileme düğmesi görünür
+    await expect(page.getByTestId('route-error')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: 'Yeni sürüm yüklendi' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sayfayı yenile' })).toBeVisible();
+    await expect(page.getByText('Unexpected Application Error')).toHaveCount(0);
+    await expect(page.getByRole('navigation', { name: 'Ana menü' })).toBeVisible();
+    await expect(page).toHaveURL(/\/accounting\/journal$/);
+
+    // Bağlantı düzelince "Sayfayı yenile" sayfayı getirir
+    await page.unroute(/JournalPage[^/]*\.(tsx|js)(\?.*)?$/);
+    await page.getByRole('button', { name: 'Sayfayı yenile' }).click();
+    await expect(page.getByRole('heading', { name: 'Yevmiye kayıtları', level: 1 })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
 });

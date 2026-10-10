@@ -58,7 +58,7 @@ test('rehber: kurum + kişi ekle → görüşme notu → takip görevi ajandada 
   await nav.getByRole('link', { name: 'Kişi rehberi' }).click();
   await expect(page.getByRole('row', { name: /Ahmet Yılmaz/ })).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Dışa aktar' }).click();
+  await page.getByRole('button', { name: 'Dışa aktar', exact: true }).click();
   await page.getByRole('menuitem', { name: /Excel \(\.xlsx\)/ }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^rehber-kisiler-.*\.xlsx$/);

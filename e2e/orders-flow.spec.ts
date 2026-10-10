@@ -16,6 +16,9 @@ async function signUpWithCompany(page: Page, tag: string) {
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
 
+/** Şirket saat diliminde (KKTC) bugün, gg.aa.yyyy: ülke vergi profili şirket kurulduğu günden geçerlidir. */
+const todayTr = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Nicosia' }).format(new Date()).split('-').reverse().join('.');
+
 /** Tutarlar YALNIZCA TEST AMAÇLIDIR; KDV oranı sistemin tohumladığı doğrulanmamış varsayılandır. */
 test('satış: teklif → kabul → sipariş → kısmi/tam teslim → toplu faturalama → iade irsaliyesi ve iade faturası; Excel ile fatura içe aktarma', async ({ page }) => {
   test.setTimeout(180_000); // uzun uçtan uca senaryo
@@ -151,7 +154,7 @@ test('satış: teklif → kabul → sipariş → kısmi/tam teslim → toplu fat
       plain: true,
       columns: ['Belge no', 'Fatura tarihi', 'Cari', 'Stok kartı', 'Miktar', 'Birim fiyat'].map((l) => ({ key: l, label: l, kind: 'text' as const })),
       rows: [
-        { 'Belge no': 'IM-1', 'Fatura tarihi': '15.03.2026', Cari: 'Ömer Çakır', 'Stok kartı': 'ST-000001', Miktar: '3', 'Birim fiyat': '110' },
+        { 'Belge no': 'IM-1', 'Fatura tarihi': todayTr(), Cari: 'Ömer Çakır', 'Stok kartı': 'ST-000001', Miktar: '3', 'Birim fiyat': '110' },
         { 'Belge no': 'IM-1', 'Fatura tarihi': '', Cari: '', 'Stok kartı': 'ST-000001', Miktar: '1', 'Birim fiyat': '110' },
       ],
     },

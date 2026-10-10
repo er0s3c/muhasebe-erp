@@ -176,13 +176,14 @@ export function AppShell() {
           {!posFocus && <div className="hidden min-w-0 flex-1 xl:block"><ShellBreadcrumbs compact /></div>}
           <button
             onClick={() => setPaletteOpen(true)}
-            className={cn('group flex h-10 min-w-0 w-full max-w-md items-center gap-2 rounded-lg border border-border bg-bg px-2.5 text-sm text-muted transition-colors hover:border-border-strong hover:text-text sm:px-3.5 xl:max-w-sm', posFocus && 'max-w-64')}
+            className={cn('group flex h-10 min-w-0 w-full max-w-md items-center gap-2 rounded-lg border border-border bg-bg px-2.5 text-sm text-muted transition-colors hover:border-border-strong hover:text-text max-[399px]:justify-center sm:px-3.5 xl:max-w-sm', posFocus && 'max-w-64')}
             aria-label={t('shell.commandPalette')}
             aria-keyshortcuts="Control+K Meta+K"
           >
             <Search className="size-4 shrink-0" aria-hidden />
             <span className="hidden flex-1 truncate text-left sm:inline">{t('shell.search')}</span>
-            <span className="flex-1 text-left sm:hidden">{t('shell.searchShort')}</span>
+            {/* Çok dar ekranda (ör. 320 px) yalnız simge kalır; erişilebilir ad aria-label'dan gelir */}
+            <span className="hidden flex-1 text-left min-[400px]:inline sm:hidden">{t('shell.searchShort')}</span>
             <kbd className="hidden rounded border border-border border-b-2 bg-surface px-1.5 py-0.5 font-sans text-[11px] sm:inline">
               Ctrl K
             </kbd>

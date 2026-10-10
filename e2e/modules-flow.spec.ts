@@ -19,7 +19,7 @@ test('modüller: bağımlılık korumalı kapatma, menü/panel/sayfa kapıları 
   await signUpWithCompany(page, 'moduller');
   const nav = page.getByRole('navigation', { name: 'Ana menü' });
   await expect(nav.getByRole('link', { name: 'Satış faturaları' })).toBeVisible();
-  await expect(page.getByText('Bu ay satışlar (net)')).toBeVisible();
+  await expect(page.getByText('Bu ay satış', { exact: true })).toBeVisible();
 
   await nav.getByRole('link', { name: 'Modüller' }).click();
   await expect(page.getByRole('heading', { name: 'Modüller', level: 1 })).toBeVisible();
@@ -75,7 +75,7 @@ test('modüller: bağımlılık korumalı kapatma, menü/panel/sayfa kapıları 
   await expect(page.getByRole('switch', { name: 'Fatura ve irsaliye: Aç' })).toBeEnabled();
   await page.getByRole('link', { name: 'Genel bakış' }).first().click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
-  await expect(page.getByText('Bu ay satışlar (net)')).toHaveCount(0);
+  await expect(page.getByText('Bu ay satış', { exact: true })).toHaveCount(0);
   await page.goto('/invoices/sales');
   await expect(page.getByText('Bu bölüm şirketinizde etkin değil')).toBeVisible();
 

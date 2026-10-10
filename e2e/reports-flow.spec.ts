@@ -18,7 +18,7 @@ async function signUpWithCompany(page: Page, tag: string) {
 
 /** "Dışa aktar" menüsünden bir biçim seçer ve inen dosyayı yerel yola kaydeder. */
 async function downloadVia(page: Page, itemName: RegExp) {
-  await page.getByRole('button', { name: 'Dışa aktar' }).click();
+  await page.getByRole('button', { name: 'Dışa aktar', exact: true }).click();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: itemName }).click()]);
   const path = await download.path();
   return { name: download.suggestedFilename(), path };
@@ -76,7 +76,7 @@ test('raporlar: yevmiye defteri, mizan dışa aktarma (xlsx/csv), yazdır başl�
   await page.emulateMedia({ media: 'print' });
   await expect(printedAt).toBeVisible();
   await expect(page.locator('main').getByText('Yücel İnşaat Ltd.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Dışa aktar' })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Dışa aktar', exact: true })).toBeHidden();
   await page.emulateMedia({ media: 'screen' });
   await expect(printedAt).toBeHidden();
 

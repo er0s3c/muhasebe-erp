@@ -86,7 +86,9 @@ test('değişiklik emri: yürürlükteki taşeron sözleşmesi → DE (ek kalem 
   await dialog.getByLabel('Gerekçe').selectOption('client_request');
   await dialog.getByLabel('Süre uzatımı (gün)').fill('15');
   await dialog.getByRole('button', { name: 'Oluştur' }).click();
-  await expect(page.getByRole('heading', { name: /DE-0001/, level: 1 })).toBeVisible();
+  // V3 başlığı: belge numarası başlığın üstünde, başlık belge türüdür
+  await expect(page.getByRole('heading', { name: 'Değişiklik emri', level: 1 })).toBeVisible();
+  await expect(page.getByText('DE-0001', { exact: true }).first()).toBeVisible();
 
   // BOQ: pano 10 → 12 (+1.000), yeni kalem 20 adet × 250 (+5.000)
   await page.getByLabel('Miktar 2').fill('12');

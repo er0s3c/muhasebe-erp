@@ -30,7 +30,8 @@ test('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ pag
     await expect(page.getByText('Beklenmeyen bir hata oluştu', { exact: false })).toHaveCount(0);
     if (path === 'planning') {
       await page.getByRole('button', { name: 'Yeni plan oluştur', exact: true }).click();
-      const plan = page.getByRole('dialog', { name: 'Yeni plan oluştur', exact: true });
+      // Not: CI anlık görüntüsünde kontrol adımından sonra pencerenin erişilebilir adı görünmüyordu; başlıkla bulunur
+      const plan = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Yeni plan oluştur', exact: true }) });
       const orderSelect = plan.getByLabel('Üretim emri', { exact: true });
       const [selectedOrder] = await orderSelect.selectOption({ label: 'URE-000001' });
       await plan.getByRole('button', { name: 'Ekle', exact: true }).click();

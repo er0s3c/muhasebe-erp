@@ -38,7 +38,7 @@ test('işveren hakedişi: contract projesi → işveren sözleşmesi + BOQ → a
   await nav.getByRole('link', { name: 'Projeler' }).click();
   await page.getByRole('button', { name: 'Yeni proje' }).first().click();
   await dialog.getByLabel('Proje adı').fill('Kuzey Villa');
-  await dialog.getByRole('tab', { name: 'İşverene yapılan iş' }).click();
+  await dialog.getByRole('button', { name: 'İşverene yapılan iş' }).click();
   await dialog.getByRole('combobox', { name: /İşveren/ }).click();
   await dialog.getByRole('combobox', { name: /İşveren/ }).fill('Deniz');
   await page.getByRole('listbox').getByRole('option').first().click();

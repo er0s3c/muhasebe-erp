@@ -99,6 +99,23 @@ describe('V2 anlamlı taslak koruması', () => {
     await act(async () => markFormSaved(host.querySelector('input')));
     expect(host.querySelector('output')?.textContent).toBe('false/false');
   });
+  it('aynı sayfada kaydedilen form yalnız kendi taslağını kapatır; diğer formun değişikliği korunur', async () => {
+    function TwoForms() {
+      const [first, setFirst] = useState(''), [second, setSecond] = useState('');
+      return <FormGuard>
+        <form><Input aria-label="Birinci" value={first} onChange={event => setFirst(event.target.value)} /></form>
+        <form><Input aria-label="İkinci" value={second} onChange={event => setSecond(event.target.value)} /></form>
+      </FormGuard>;
+    }
+    await mount(<UnsavedChangesProvider><TwoForms /><Probe /></UnsavedChangesProvider>);
+    const [first, second] = [...host.querySelectorAll('input')];
+    await enter(first!, 'eklenecek');
+    await enter(second!, 'yarım kalan');
+    await act(async () => markFormSaved(first));
+    expect(host.querySelector('output')?.textContent).toBe('true/false');
+    await act(async () => markFormSaved(second));
+    expect(host.querySelector('output')?.textContent).toBe('false/false');
+  });
   it('parasal alanın yalnız biçim değişimi kaydedilmemiş değişiklik oluşturmaz', async () => {
     function Amount() {
       const [value, setValue] = useState('100');

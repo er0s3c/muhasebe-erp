@@ -81,7 +81,7 @@ test('bildirim: veri oluşur → tarama → zil sayacı → liste → okundu/kap
   await expect(page.getByRole('button', { name: 'Bildirimler, 1 okunmamış' })).toBeVisible();
   // Okunmamış süzgeci yalnızca kalanı gösterir; "Etkin" ikisini birden
   await expect(rows).toHaveCount(1);
-  await page.getByRole('tab', { name: 'Etkin' }).click();
+  await page.getByRole('button', { name: 'Etkin' }).click();
   await expect(rows).toHaveCount(2);
 
   // Kapat → listeden kalkar (aynı durum yeniden bildirilmez)
@@ -91,7 +91,7 @@ test('bildirim: veri oluşur → tarama → zil sayacı → liste → okundu/kap
   await post('/api/notifications/scan', {}, 200);
   await page.reload();
   await expect(page.getByText('Okunmamış bildirim yok').first()).toBeVisible(); // varsayılan süzgeç: okunmamış
-  await page.getByRole('tab', { name: 'Etkin' }).click();
+  await page.getByRole('button', { name: 'Etkin' }).click();
   await expect(rows).toHaveCount(1);
 
   // Tıklayınca ilgili ekrana gider (ajanda)
@@ -124,7 +124,7 @@ test('bildirim: veri oluşur → tarama → zil sayacı → liste → okundu/kap
   // Kapatılan türden yeni bildirim üretilmez (tarama sonrası ajanda satırı yok)
   await post('/api/notifications/scan', {}, 200);
   await page.goto('/notifications');
-  await page.getByRole('tab', { name: 'Etkin' }).click();
+  await page.getByRole('button', { name: 'Etkin' }).click();
   await expect(page.getByTestId('notification-row')).toHaveCount(0);
 
   // İzleyici: yalnızca stok bildirimi (izni var); ajanda bildirimi (rehber izni yok) yok

@@ -17,6 +17,7 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { EmployeeRow, PayrollItemRow, PayrollParamRow, PayTermRow } from '../../lib/types';
 import { formatParamValue, PAYROLL_INVALIDATE, UnverifiedBadge } from './payroll-common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
 import { CountryPayrollSettings } from './CountryPayrollSettings';
 
 /** Bordro ayarları: tarihli parametreler (varsayılan kapalı, doğrulanmamış), ücret şartları ve ek ödeme/kesinti kalemleri. */
@@ -114,8 +115,9 @@ function ParamsCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1.4fr_8rem_10rem_1fr_auto_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setValue(''); setSource(''); setEnabled(false); toast.success(t('payroll.params.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setValue(''); setSource(''); setEnabled(false); toast.success(t('payroll.params.added')); }, onError: setError });
             }}
           >
             <Field label={t('payroll.params.key')}>
@@ -222,8 +224,9 @@ function TermsCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1.4fr_9rem_9rem_10rem_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setAmount(''); toast.success(t('payroll.terms.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setAmount(''); toast.success(t('payroll.terms.added')); }, onError: setError });
             }}
           >
             <Field label={t('payroll.line.employee')}>
@@ -333,8 +336,9 @@ function ItemsCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setCode(''); setName(''); toast.success(t('payroll.items.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setCode(''); setName(''); toast.success(t('payroll.items.added')); }, onError: setError });
             }}
           >
             <Field label={t('payroll.items.code')}>{(id) => <Input id={id} maxLength={30} value={code} onChange={(e) => setCode(e.target.value)} />}</Field>

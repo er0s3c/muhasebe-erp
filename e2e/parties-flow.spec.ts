@@ -84,7 +84,7 @@ test('cari: kart aç → cariye bağlı yevmiye (zorunlu) → ekstre ve yaşland
   const row = page.getByRole('row', { name: /Ömer Çakır/ });
   await expect(row).toBeVisible();
   await expect(row.getByRole('cell', { name: '1.000,00' }).first()).toBeVisible();
-  await page.getByRole('tab', { name: 'Borçlar' }).click();
+  await page.getByRole('button', { name: 'Borçlar' }).click();
   await expect(page.getByText('Bu tarihte açık kalem yok')).toBeVisible();
 
   // 6) Genel bakışta toplam alacak

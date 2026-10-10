@@ -118,7 +118,7 @@ test('projeler: iş kırılımı → bütçe onayı → yevmiye, gider faturası
   await pick('İş kalemi 1', '01.02');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByText(/Fatura kaydedildi: GF-\d{4}-000001/)).toBeVisible();
-  await expect(page.getByText(/Proje:.*PRJ-0001.*01\.02/)).toBeVisible();
+  await expect(page.getByText(/Proje:.*PRJ-0001.*01\.02/).first()).toBeVisible();
 
   // 6) Stok çıkışı: 4 çuval × 10 ₺ = 40 ₺ Temel iş kalemine (sarf anında projeye yazılır)
   await nav.getByRole('link', { name: 'Stok kartları' }).click();
@@ -158,7 +158,7 @@ test('projeler: iş kırılımı → bütçe onayı → yevmiye, gider faturası
 
   // 10) Excel dışa aktarma (proje maliyet raporu)
   await page.getByRole('tab', { name: 'Özet' }).click();
-  await page.getByRole('button', { name: 'Dışa aktar' }).click();
+  await page.getByRole('button', { name: 'Dışa aktar', exact: true }).click();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /\.xlsx/ }).click()]);
   expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
   const file = await download.path();

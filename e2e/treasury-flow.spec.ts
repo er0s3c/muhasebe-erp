@@ -22,7 +22,7 @@ test('kasa ve banka: dövizli fatura → farklı kurlu tahsilat (kur kârı) →
 
   // 1) Bugünün kuru: 1 GBP = 45 TRY (tahsilat günü kuru)
   await nav.getByRole('link', { name: 'Para birimi ve kurlar' }).click();
-  await page.getByLabel('Alış', { exact: true }).first().fill('45');
+  await page.getByLabel('Döviz alış', { exact: true }).first().fill('45');
   await page.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByText('Kur kaydedildi')).toBeVisible();
 

@@ -29,7 +29,7 @@ test('satış ve alış raporunda şube/kullanıcı kırılımı mobil ve temala
     try { await expect(page.getByRole('heading', { name: side === 'sales' ? 'Satış raporu' : 'Alış raporu', exact: true })).toBeVisible(); }
     catch (error) { throw new Error(await page.locator('body').textContent() ?? 'Rapor açılamadı', { cause: error }); }
     for (const group of ['Şube', 'Kaydı oluşturan kullanıcı', 'Fatura']) {
-      await page.getByRole('tab', { name: group, exact: true }).click();
+      await page.getByRole('button', { name: group, exact: true }).click();
       await expect(page.getByRole('columnheader', { name: group === 'Fatura' ? (side === 'sales' ? 'Müşteri' : 'Tedarikçi') : group, exact: true })).toBeVisible();
       expect(await page.locator('table').evaluate(table => {
         const cols = (selector: string) => [...table.querySelectorAll<HTMLTableCellElement>(selector)].reduce((sum, cell) => sum + cell.colSpan, 0);
@@ -39,7 +39,7 @@ test('satış ve alış raporunda şube/kullanıcı kırılımı mobil ve temala
         await page.setViewportSize({ width, height: 844 });
         await page.evaluate(value => document.documentElement.classList.toggle('dark', value), dark);
         expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)).toBe(false);
-        await expect(page.getByRole('tab', { name: group, exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: group, exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Dışa aktar', exact: true })).toBeVisible();
         await page.screenshot({ animations: 'disabled', path: `test-results/review-report-${side}-${group === 'Şube' ? 'branch' : group === 'Fatura' ? 'invoice' : 'creator'}-${width}-${dark ? 'dark' : 'light'}.png` });
       }

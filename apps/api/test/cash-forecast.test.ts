@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { readXlsx } from '../src/files/xlsx-read';
-import { accountIds, client, createCompany, makeApp, registerUser } from './helpers';
+import { TODAY_LOCAL, accountIds, client, createCompany, makeApp, registerUser } from './helpers';
 
-const iso = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+// Sunucunun "bugün"üyle aynı gün (şirket saat dilimi); UTC tarihi 21:00–24:00 arasında bir gün geride kalır
+const iso = (offset: number) => new Date(Date.parse(`${TODAY_LOCAL}T00:00:00Z`) + offset * 86_400_000).toISOString().slice(0, 10);
 
 describe('nakit projeksiyonu: açık alacak/borç vadeleri + elle kalemler → haftalık bakiye', async () => {
   const { app } = await makeApp();

@@ -172,5 +172,6 @@ test('çevrimdışı kapatıp açma, fotoğraflı kayıt, tek eşitleme ve şirk
   await offline.goto('/field-offline');
   await offline.getByLabel('Cihaz kodu', { exact: true }).fill('Saha-Test-12345');
   await offline.getByRole('button', { name: 'Saha paketini aç' }).click();
-  await expect(offline.getByText('Bu cihazda indirilmiş saha paketi yok.')).toBeVisible();
+  // Şirket değişince paket arka planda silinir; silme tamamlanmadan açılırsa sahiplik denetimi yine engeller.
+  await expect(offline.getByRole('alert')).toHaveText(/Bu cihazda indirilmiş saha paketi yok\.|Saha paketi farklı kullanıcı veya şirkete ait/);
 });

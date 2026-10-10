@@ -16,6 +16,7 @@ import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/que
 import { FeeSchedulesCard } from './FeeSchedulesCard';
 import type { ApprovalRuleRow, ConstructionParam, CostCode } from '../../lib/types';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
 
 const INV = [['cost-codes'], ['construction-params'], ['approval-rules']];
 
@@ -186,8 +187,9 @@ function ParamsCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_7rem_10rem_1fr_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setValue(''); setSourceNote(''); toast.success(t('constructionSettings.params.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setValue(''); setSourceNote(''); toast.success(t('constructionSettings.params.added')); }, onError: setError });
             }}
           >
             <Field label={t('constructionSettings.params.kind')}>
