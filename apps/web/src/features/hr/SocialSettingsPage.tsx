@@ -17,6 +17,7 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { EmployeeRow, SocialProfileRow, SupportEligibilityRow, SupportRuleRow } from '../../lib/types';
 import { SOCIAL_INVALIDATE, SocialUnverifiedBadge } from './social-common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Link } from 'react-router-dom';
 import { useCompany } from '../../lib/session';
 
@@ -142,8 +143,9 @@ function ProfilesCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1.4fr_9rem_1fr_9rem_9rem_1fr_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setSsn(''); setType(''); toast.success(t('social.profiles.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setSsn(''); setType(''); toast.success(t('social.profiles.added')); }, onError: setError });
             }}
           >
             <Field label={t('social.profiles.employee')}>
@@ -289,8 +291,9 @@ function RulesCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[6rem_1fr_9rem_9rem_9rem_9rem_7rem]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setCode(''); setName(''); setValue(''); setSource(''); setEnabled(false); toast.success(t('social.rules.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setCode(''); setName(''); setValue(''); setSource(''); setEnabled(false); toast.success(t('social.rules.added')); }, onError: setError });
             }}
           >
             <Field label={t('social.rules.code')}>{(id) => <Input id={id} maxLength={30} value={code} onChange={(e) => setCode(e.target.value)} />}</Field>
@@ -409,8 +412,9 @@ function EligibilityCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1.4fr_10rem_9rem_9rem_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => toast.success(t('social.eligibility.added')), onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); toast.success(t('social.eligibility.added')); }, onError: setError });
             }}
           >
             <Field label={t('social.eligibility.employee')}>

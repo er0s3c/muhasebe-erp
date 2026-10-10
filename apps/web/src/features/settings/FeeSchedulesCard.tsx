@@ -16,6 +16,7 @@ import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { FeeSchedule } from '../../lib/types';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
 
 const INV = [['fee-schedules'], ['sales-summary'], ['fee-estimate']];
 
@@ -93,8 +94,9 @@ export function FeeSchedulesCard() {
             className="grid grid-cols-2 items-end gap-3 sm:grid-cols-4"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setF((x) => ({ ...x, code: '', name: '', amount: '', sourceNote: '' })); toast.success(t('feeSchedules.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setF((x) => ({ ...x, code: '', name: '', amount: '', sourceNote: '' })); toast.success(t('feeSchedules.added')); }, onError: setError });
             }}
           >
             <Field label={t('feeSchedules.code')}>{(id) => <Input id={id} value={f.code} onChange={(e) => set('code', e.target.value)} maxLength={30} />}</Field>

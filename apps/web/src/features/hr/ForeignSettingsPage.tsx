@@ -81,8 +81,9 @@ function TypesCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[10rem_1fr_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setCode(''); setName(''); toast.success(t('foreign.settings.types.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setCode(''); setName(''); toast.success(t('foreign.settings.types.added')); }, onError: setError });
             }}
           >
             <Field label={t('foreign.settings.types.code')}>{(id) => <Input id={id} maxLength={30} value={code} onChange={(e) => setCode(e.target.value)} />}</Field>

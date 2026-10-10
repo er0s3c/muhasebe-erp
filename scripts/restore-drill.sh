@@ -86,14 +86,16 @@ fingerprint() { psql "$(owner_url "$1")" -q -v ON_ERROR_STOP=1 -f "$WORK/fingerp
 
 # Davranış denetimi (erp_app = uygulamanın çalışma zamanı rolü; RLS'e tabidir)
 behavior() {
-  local db="$1" org="$2" company="$3"
-  psql "$(app_url "$db")" -q -At -v ON_ERROR_STOP=1 -v org="$org" -v company="$company" <<'SQL'
+  local db="$1" org="$2" company="$3" user="$4"
+  psql "$(app_url "$db")" -q -At -v ON_ERROR_STOP=1 -v org="$org" -v company="$company" -v user="$user" <<'SQL'
 select 'BAĞLAMSIZ companies=' || count(*) from companies;
 select 'BAĞLAMSIZ journal_lines=' || count(*) from journal_lines;
 begin;
 select set_config('app.org_id', :'org', true) as _ \gset
 select 'ORG companies=' || count(*) from companies;
 select set_config('app.company_id', :'company', true) as _ \gset
+-- Şube kapsamı (0116) şirket üyesi bir kullanıcı ister; sahip bütün şubeleri görür
+select set_config('app.user_id', :'user', true) as _ \gset
 select 'ŞİRKET journal_lines=' || count(*) from journal_lines;
 select 'ŞİRKET parties=' || count(*) from parties;
 select set_config('app.company_id', '00000000-0000-7000-8000-000000000000', true) as _ \gset
@@ -149,9 +151,10 @@ step "5/6 Davranış denetimi (erp_app ile RLS, sahip rolüyle değiştirilemezl
 # Demo birden fazla şirket yükler (ör. üretim şirketi); defter satırı olan şirket ve onun kuruluşu seçilir
 COMPANY="$(psql "$(owner_url "$SRC")" -Atq -c "select company_id from journal_lines group by company_id order by count(*) desc limit 1")"
 ORG="$(psql "$(owner_url "$SRC")" -Atq -c "select organization_id from companies where id = '$COMPANY'")"
-[ -n "$ORG" ] && [ -n "$COMPANY" ] || fail "demo şirketi bulunamadı"
-behavior "$SRC" "$ORG" "$COMPANY" > "$WORK/bh.src"
-behavior "$DST" "$ORG" "$COMPANY" > "$WORK/bh.dst"
+OWNER="$(psql "$(owner_url "$SRC")" -Atq -c "select user_id from memberships where company_id = '$COMPANY' and role = 'owner' limit 1")"
+[ -n "$ORG" ] && [ -n "$COMPANY" ] && [ -n "$OWNER" ] || fail "demo şirketi veya sahibi bulunamadı"
+behavior "$SRC" "$ORG" "$COMPANY" "$OWNER" > "$WORK/bh.src"
+behavior "$DST" "$ORG" "$COMPANY" "$OWNER" > "$WORK/bh.dst"
 diff "$WORK/bh.src" "$WORK/bh.dst" || fail "RLS davranışı kaynak ile farklı"
 grep -q '^BAĞLAMSIZ companies=0$' "$WORK/bh.dst" || fail "bağlam yokken şirket verisi görünüyor (RLS çalışmıyor)"
 grep -q '^BAĞLAMSIZ journal_lines=0$' "$WORK/bh.dst" || fail "bağlam yokken defter satırları görünüyor (RLS çalışmıyor)"

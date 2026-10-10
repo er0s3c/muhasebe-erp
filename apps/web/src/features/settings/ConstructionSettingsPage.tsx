@@ -91,8 +91,9 @@ function CostCodesCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[8rem_1fr_12rem_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setCode(''); setName(''); toast.success(t('constructionSettings.costCodes.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setCode(''); setName(''); toast.success(t('constructionSettings.costCodes.added')); }, onError: setError });
             }}
           >
             <Field label={t('constructionSettings.costCodes.code')}>{(id) => <Input id={id} value={code} onChange={(e) => setCode(e.target.value)} maxLength={30} />}</Field>
@@ -304,8 +305,9 @@ function RulesCard() {
             className="flex flex-col gap-3 rounded-lg border border-border p-4"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { toast.success(t('constructionSettings.rules.added')); setSteps(['site_manager']); setMinAmount('0'); setMaxAmount(''); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); toast.success(t('constructionSettings.rules.added')); setSteps(['site_manager']); setMinAmount('0'); setMaxAmount(''); }, onError: setError });
             }}
           >
             <Field label={t('constructionSettings.rules.docType')}>
