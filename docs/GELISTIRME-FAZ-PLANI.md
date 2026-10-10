@@ -521,6 +521,14 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 
 ## Değişiklik kaydı
 
+**11 Ekim 2026 — Teslimat 0 durumu**
+
+- `claude/teslimat-0-ci` dalında CI'ın üç işi de yeşil: denetim ve testler (lint, tip, birim/entegrasyon, geri yükleme tatbikatı, lisans ve bağımlılık denetimi, derlemeler), Docker imajı ve compose duman testi, uçtan uca testler (88 geçti, 1 isteğe bağlı çevrimdışı üretim kontrolü atlandı).
+- Bulunan ürün hataları da düzeltildi: sıkıştırılmış `index.html` 5 dk önbellekte kalıyordu; başarılı kayıttan sonra yanlış "kaydedilmemiş değişiklikler" sorusu (bordro, SGK, yabancı işçi, inşaat, kampanya, ülke bordro kuralı); MFA kapatma ve içe aktarma "Geri" adımı kapatma sayılıyordu; 320/390 px üst çubuk taşması; cihazlar sayfasında sonsuz yükleme; lisans sunucusu imajı derlenmiyordu.
+- Bordro, SGK ve personel cari E2E senaryoları KKTC ülke motoruna göre yeniden yazıldı (TEST değerleri, resmî oran değildir).
+- Kalan: dalın main'e birleştirilmesi ve açık PR'ların (#12–#22) karara bağlanması. Üretim demosunda bir kez görülen "Uygun kaynak kapasitesi bulunamadı" hatası tekrar etmedi; izlenecek.
+
+
 **10 Ekim 2026 — kod karşılaştırmalı gözden geçirme**
 
 - Teslimat 0 eklendi: main CI son push'ta lint ve E2E işlerinde başarısız. Lint durduğu için tip denetimi, testler ve geri yükleme tatbikatı çalışmadı. #12–#22 PR'ları açık.
