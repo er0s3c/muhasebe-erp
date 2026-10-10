@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useCompany } from '../../lib/session';
 import { useNavigate } from 'react-router-dom';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
@@ -14,8 +14,9 @@ export function RfqsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const projectBased = useCompany().sector === 'CONSTRUCTION';
-  const { data, isPending } = useCQuery<{ rfqs: RfqListRow[] }>(['rfqs', 'list'], '/api/rfqs');
+  const { data, isPending, error: RfqsPageQueryError, refetch: RfqsPageQueryRetry, isFetching: RfqsPageQueryFetching } = useCQuery<{ rfqs: RfqListRow[] }>(['rfqs', 'list'], '/api/rfqs');
   const rows = data?.rfqs ?? [];
+  if (RfqsPageQueryError && !data) return <ErrorState error={RfqsPageQueryError} onRetry={() => void RfqsPageQueryRetry()} retrying={RfqsPageQueryFetching} />;
   return (
     <>
       <PageHeader title={t('procurement.rfqs.title')} description={t('procurement.rfqs.subtitle')} />

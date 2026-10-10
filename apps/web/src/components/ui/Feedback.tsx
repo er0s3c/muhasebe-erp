@@ -21,8 +21,6 @@ export function PageLoading() {
 }
 
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: string; description?: string; action?: ReactNode }) {
-  const failed = useQueryLoadFailed();
-  if (failed) return null;
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
       {icon && <div className="flex size-11 items-center justify-center rounded-xl bg-surface-2 text-text">{icon}</div>}

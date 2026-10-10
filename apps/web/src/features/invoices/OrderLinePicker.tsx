@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dec } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useCQuery } from '../../lib/queries';
@@ -24,7 +24,7 @@ interface Props {
 export function OrderLinePicker({ open, onOpenChange, partyId, currency, taken, onAdd }: Props) {
   const { t } = useTranslation();
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const { data, isPending } = useCQuery<{ lines: InvoiceableOrderLine[] }>(
+  const { data, isPending, error: OrderLinePickerQueryError, refetch: OrderLinePickerQueryRetry, isFetching: OrderLinePickerQueryFetching } = useCQuery<{ lines: InvoiceableOrderLine[] }>(
     ['procurement', 'invoiceable', partyId, currency],
     `/api/procurement/invoiceable?partyId=${partyId}&currency=${currency}`,
     { enabled: open && !!partyId },
@@ -48,6 +48,7 @@ export function OrderLinePicker({ open, onOpenChange, partyId, currency, taken, 
     setPicked(new Set());
     onOpenChange(false);
   };
+  
   return (
     <Sheet
       wide
@@ -73,7 +74,7 @@ export function OrderLinePicker({ open, onOpenChange, partyId, currency, taken, 
     >
       {!partyId ? (
         <Callout>{t('procurement.match.pickPartyFirst')}</Callout>
-      ) : isPending ? (
+      ) : OrderLinePickerQueryError && !data ? <ErrorState error={OrderLinePickerQueryError} onRetry={() => void OrderLinePickerQueryRetry()} retrying={OrderLinePickerQueryFetching} /> : isPending ? (
         <PageLoading />
       ) : rows.length === 0 ? (
         <Callout>{t('procurement.match.pickerEmpty')}</Callout>

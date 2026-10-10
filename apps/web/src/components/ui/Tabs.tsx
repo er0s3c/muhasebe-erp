@@ -45,7 +45,7 @@ export function SegmentedTabs<T extends string>({
           tabIndex={variant === 'tabs' && value !== it.key ? -1 : 0}
           onClick={() => onChange(it.key)}
           onKeyDown={(event) => {
-            let next = index;
+            let next: number;
             if (event.key === 'ArrowRight') next = (index + 1) % items.length;
             else if (event.key === 'ArrowLeft') next = (index - 1 + items.length) % items.length;
             else if (event.key === 'Home') next = 0;
@@ -68,6 +68,6 @@ export function SegmentedTabs<T extends string>({
   );
 }
 
-export function TabPanel({ id, labelledBy, children, hidden }: { id: string; labelledBy: string; children: ReactNode; hidden?: boolean }) {
-  return <div id={id} role="tabpanel" aria-labelledby={labelledBy} tabIndex={0} hidden={hidden} className="min-w-0">{children}</div>;
+export function TabPanel({ id, labelledBy, children, hidden }: { id: string; labelledBy?: string; children: ReactNode; hidden?: boolean }) {
+  return <div id={id} role={labelledBy ? 'tabpanel' : undefined} aria-labelledby={labelledBy} tabIndex={labelledBy ? 0 : undefined} hidden={hidden} className="min-w-0">{children}</div>;
 }

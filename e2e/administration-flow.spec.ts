@@ -400,7 +400,7 @@ test('görev sayacı, uyarı tasarımı, yönetim raporu ve işletim ayarları',
   });
   await page.goto('/settings/operations');
   await expect(
-    page.getByRole('heading', { name: 'İşletim ve güvenlik', exact: true }),
+    page.getByRole('heading', { name: 'Sistem ve güvenlik', exact: true }),
   ).toBeVisible();
   await page.getByLabel('Belge arşivi: dosya başına MB').fill('8');
   await page.getByRole('button', { name: 'Ayarları kaydet', exact: true }).click();

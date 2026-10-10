@@ -8,7 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Stat } from '../../components/ui/Stat';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
@@ -70,7 +70,7 @@ export function AgendaPage() {
   const [showClosed, setShowClosed] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<AgendaItem | null>(null);
-  const { data, isPending, error } = useCQuery<{ asOf: string; items: AgendaItem[] }>(['agenda', 'list', scope, from, to], `/api/agenda?scope=${scope}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`);
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ asOf: string; items: AgendaItem[] }>(['agenda', 'list', scope, from, to], `/api/agenda?scope=${scope}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`);
   const items = data?.items ?? [];
   const by = (b: AgendaBucketKey) => items.filter((i) => i.bucket === b);
   const addButton = (
@@ -84,7 +84,7 @@ export function AgendaPage() {
       <PageHeader title={t('agenda.title')} description={t('agenda.subtitle')} actions={<div className="flex flex-wrap gap-2"><ExportMenu exportKey="agenda" params={{ scope }} print={false} disabled={items.length === 0} />{addButton}</div>} />
       <div className="mb-4"><Callout tone="info">{t('agenda.reminderNote')}</Callout></div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <SegmentedTabs
+        <SegmentedTabs variant="filter"
           value={scope}
           onChange={setScope}
           items={[
@@ -99,9 +99,7 @@ export function AgendaPage() {
         {(from || to) && <Button size="sm" onClick={()=>{setFrom('');setTo('');}}>Tarih filtresini temizle</Button>}
         {can('settings.manage') && <Link className="link text-sm" to="/settings/recurring">Tekrar planları</Link>}
       </div>
-      {error ? (
-        <Callout tone="danger">{errorMessage(error)}</Callout>
-      ) : isPending ? (
+      {error ? <ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} /> : isPending ? (
         <PageLoading />
       ) : (
         <div className="flex flex-col gap-5">

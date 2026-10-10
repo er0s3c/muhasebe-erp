@@ -1,9 +1,10 @@
+import { errorMessage } from '../../lib/errors';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Stat } from '../../components/ui/Stat';
 import { moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
@@ -16,8 +17,9 @@ export function EmployerTab({ project }: { project: ProjectDetail }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const canManage = useCan()('subcontracts.manage');
-  const { data, isPending } = useCQuery<{ summary: EmployerSummary | null }>(['project', project.id, 'employer'], `/api/projects/${project.id}/employer-contract`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ summary: EmployerSummary | null }>(['project', project.id, 'employer'], `/api/projects/${project.id}/employer-contract`);
   const [creating, setCreating] = useState(false);
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending) return <PageLoading />;
   const s = data?.summary;
   if (!s) {

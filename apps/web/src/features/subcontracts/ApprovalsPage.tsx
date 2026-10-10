@@ -2,7 +2,7 @@ import { Inbox } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { money } from '../../lib/format';
 import { useCompany } from '../../lib/session';
@@ -15,8 +15,9 @@ export function ApprovalsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const base = useCompany().baseCurrency;
-  const { data, isPending } = useCQuery<{ requests: ApprovalRequestRow[] }>(['approvals', 'inbox'], '/api/approvals/inbox');
+  const { data, isPending, error: ApprovalsPageQueryError, refetch: ApprovalsPageQueryRetry, isFetching: ApprovalsPageQueryFetching } = useCQuery<{ requests: ApprovalRequestRow[] }>(['approvals', 'inbox'], '/api/approvals/inbox');
   const rows = data?.requests ?? [];
+  if (ApprovalsPageQueryError && !data) return <ErrorState error={ApprovalsPageQueryError} onRetry={() => void ApprovalsPageQueryRetry()} retrying={ApprovalsPageQueryFetching} />;
   return (
     <>
       <PageHeader title={t('subcontracts.approval.inboxTitle')} description={t('subcontracts.approval.inboxSubtitle')} />

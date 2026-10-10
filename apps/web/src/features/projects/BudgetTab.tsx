@@ -5,7 +5,7 @@ import { dec, sum } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -27,7 +27,7 @@ export function BudgetTab({ project }: { project: ProjectDetail }) {
   const toast = useToast();
   const base = useCompany().baseCurrency;
   const canBudget = useCan()('projects.budget') && project.status !== 'cancelled';
-  const { data, isPending } = useCQuery<{ budgets: ProjectBudgetRow[] }>(['project', project.id, 'budgets'], `/api/projects/${project.id}/budgets`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ budgets: ProjectBudgetRow[] }>(['project', project.id, 'budgets'], `/api/projects/${project.id}/budgets`);
   const { data: wbsData } = useCQuery<{ wbs: ProjectWbsRow[] }>(['project', project.id, 'wbs'], `/api/projects/${project.id}/wbs`);
   const [picked, setPicked] = useState<string | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
@@ -39,7 +39,7 @@ export function BudgetTab({ project }: { project: ProjectDetail }) {
   const selectedId = picked && budgets.some((b) => b.id === picked) ? picked : (draft ?? current ?? budgets[0])?.id ?? null;
   const selected = budgets.find((b) => b.id === selectedId) ?? null;
 
-  const { data: detail } = useCQuery<ProjectBudgetDetail>(['project', project.id, 'budget', selectedId], selectedId ? `/api/project-budgets/${selectedId}` : null);
+  const { data: detail, error: detailError, isPending: detailPending, refetch: retryDetail, isFetching: retryingDetail } = useCQuery<ProjectBudgetDetail>(['project', project.id, 'budget', selectedId], selectedId ? `/api/project-budgets/${selectedId}` : null);
   const { data: currentDetail } = useCQuery<ProjectBudgetDetail>(
     ['project', project.id, 'budget', current?.id],
     current ? `/api/project-budgets/${current.id}` : null,
@@ -50,6 +50,7 @@ export function BudgetTab({ project }: { project: ProjectDetail }) {
   const approve = useCMutation((id: string, call) => call(`/api/project-budgets/${id}/approve`, { method: 'POST' }), PROJECT_INVALIDATE);
   const remove = useCMutation((id: string, call) => call(`/api/project-budgets/${id}`, { method: 'DELETE' }), PROJECT_INVALIDATE);
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending) return <PageLoading />;
 
   const newButton = canBudget && !draft && (
@@ -122,7 +123,9 @@ export function BudgetTab({ project }: { project: ProjectDetail }) {
         )}
       </Card>
 
-      {selected && detail && (
+      {selected && detailError && <ErrorState description={errorMessage(detailError)} onRetry={() => void retryDetail()} retrying={retryingDetail} />}
+      {selected && !detailError && detailPending && <PageLoading />}
+      {selected && !detailError && detail && (
         <Card>
           <CardHeader
             title={t('projects.budget.detailTitle', { rev: selected.revisionNo })}

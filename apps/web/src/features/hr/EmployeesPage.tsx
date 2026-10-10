@@ -1,3 +1,4 @@
+import { errorMessage } from '../../lib/errors';
 import { Plus, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
@@ -6,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR } from '../../lib/format';
@@ -29,7 +30,7 @@ export function EmployeesPage() {
     return p.toString();
   }, [status, q]);
   const lim = useListLimit(qs);
-  const { data, isPending } = useCQuery<{ employees: EmployeeRow[] } & { truncated?: boolean }>(['employees', 'list', qs, lim.limit], `/api/employees?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ employees: EmployeeRow[] } & { truncated?: boolean }>(['employees', 'list', qs, lim.limit], `/api/employees?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.employees ?? [];
   const filtered = !!(status || q.trim());
   const addButton = can('hr.manage') && (
@@ -54,7 +55,7 @@ export function EmployeesPage() {
       <div className="mb-4">
         <Callout tone="info">{t('hr.privacyNote')}</Callout>
       </div>
-      {isPending ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : rows.length === 0 && !filtered ? (
         <Card>

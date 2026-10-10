@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { createBrowserRouter, Outlet, type RouteObject } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet, useLocation, type RouteObject } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { PageLoading } from '../components/ui/Feedback';
 import { NotFoundPage } from '../features/NotFoundPage';
@@ -9,7 +9,6 @@ import { PasswordChangeRequiredPage } from '../features/auth/PasswordChangeRequi
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { VerifyEmailPage } from '../features/auth/VerifyEmailPage';
-import { CreateCompanyPage } from '../features/onboarding/CreateCompanyPage';
 import type { Permission } from '@erp/shared';
 import {
   PublicOnly,
@@ -40,6 +39,21 @@ function page<K extends string>(
   return { handle, lazy: async () => ({ Component: (await load())[name] }) };
 }
 
+/** Birleşen eski ekran adresleri: yer imleri ve eski bağlantılar ilgili sekmeye gider; ek sorgu parametreleri korunur. */
+function MovedTo({ to }: { to: string }) {
+  const { search } = useLocation();
+  const [path, query = ''] = to.split('?');
+  const params = new URLSearchParams(query);
+  new URLSearchParams(search).forEach((value, key) => {
+    if (!params.has(key)) params.set(key, value);
+  });
+  const qs = params.toString();
+  return <Navigate to={qs ? `${path}?${qs}` : path!} replace />;
+}
+const moved = (path: string, to: string): RouteObject => ({ path, element: <MovedTo to={to} /> });
+const hub = (name: 'HrSettingsHub' | 'CashPlanningHub' | 'IntegrationsHub' | 'DataTransferHub' | 'ExpensesHub', permission: Permission | null) =>
+  page(() => import('../features/hubs/HubPages'), name, permission);
+
 const routes: RouteObject[] = [
   { path: '/offline-drafts', ...page(() => import('../features/offline/OfflineDraftPage'), 'OfflineDraftPage', null), errorElement: <RouteError />, hydrateFallbackElement: <PageLoading /> },
   { path:'/field-offline', ...page(()=>import('../features/construction-control/OfflineFieldPage'),'OfflineFieldPage',null), errorElement:<RouteError/>, hydrateFallbackElement:<PageLoading/> },
@@ -69,7 +83,8 @@ const routes: RouteObject[] = [
     hydrateFallbackElement: <PageLoading />,
     children: [
       { path: '/password-change', element: <PasswordChangeRequiredPage /> },
-      { path: '/company/new', element: <CreateCompanyPage /> },
+      // Nadiren açılır (ilk şirket/yeni şirket): ilk yükten ayrı parçada
+      { path: '/company/new', ...page(() => import('../features/onboarding/CreateCompanyPage'), 'CreateCompanyPage', null) },
       {
         element: <RequireCompany />,
         children: [
@@ -84,7 +99,19 @@ const routes: RouteObject[] = [
                   { index: true, ...page(() => import('../features/dashboard/DashboardPage'), 'DashboardPage', null) },
                   { path: 'workspace', ...page(() => import('../features/workspace/WorkPage'), 'WorkPage', null) },
                   { path: 'workspace/offline', ...page(() => import('../features/offline/OfflineSetupPage'), 'OfflineSetupPage', 'workspace.use') },
-                  { element: <RequireModule module="core.integrations" />, children: [{ path: 'settings/integrations', ...page(() => import('../features/settings/PlatformIntegrationsPage'), 'PlatformIntegrationsPage', 'core.integrations.read') }] },
+                  { element: <RequireModule module="core.integrations" />, children: [{ path: 'settings/integrations', ...hub('IntegrationsHub', 'core.integrations.read') }] },
+                  moved('integrations', '/settings/integrations?tab=channels'),
+                  // Sekmeler farklı izinlere bağlı: kapıyı merkez sayfa sekme başına uygular (izinsiz kullanıcı yetki ekranı görür)
+                  { path: 'hr/settings', ...hub('HrSettingsHub', null) },
+                  moved('hr/payroll/settings', '/hr/settings?tab=payroll'),
+                  moved('hr/social-security/settings', '/hr/settings?tab=social'),
+                  moved('hr/foreign-workers/settings', '/hr/settings?tab=foreign'),
+                  { path: 'settings/data-transfer', ...hub('DataTransferHub', null) },
+                  moved('reports/data-export', '/settings/data-transfer?tab=export'),
+                  moved('reports/file-exchange', '/settings/data-transfer?tab=exchange'),
+                  moved('workspace/scenarios', '/treasury/cash-planning?tab=scenarios'),
+                  moved('treasury/cash-forecast', '/treasury/cash-planning?tab=forecast'),
+                  moved('treasury/expense-cards', '/treasury/expenses?tab=cards'),
                   { path: 'workspace/portal', ...page(() => import('../features/workspace/PortalAdminPage'), 'PortalAdminPage', 'members.manage') },
                   { path: 'workspace/project-control', element:<RequireModule module="construction.projects"/>, children:[{index:true,...page(()=>import('../features/construction-control/ProjectControlPage'),'ProjectControlPage','projects.read')}] },
                   { path: 'workspace/construction', element: <RequireModule module="construction.projects" />, children: [{ index: true, ...page(() => import('../features/workspace/ConstructionPage'), 'ConstructionPage', 'projects.read') }] },
@@ -92,7 +119,6 @@ const routes: RouteObject[] = [
                   { path: 'reports/supplier-performance', ...page(() => import('../features/reports/SupplierPerformancePage'), 'SupplierPerformancePage', 'procurement.read') },
                   { path: 'purchasing/replenishment', ...page(() => import('../features/procurement/ReplenishmentPage'), 'ReplenishmentPage', 'procurement.read') },
                   { path: 'workspace/handover', ...page(() => import('../features/workspace/HandoverPage'), 'HandoverPage', 'realestate.read') },
-                  { path: 'workspace/scenarios', element: <RequireModule module="core.treasury" />, children: [{ index: true, ...page(() => import('../features/workspace/ScenariosPage'), 'ScenariosPage', 'treasury.read') }] },
                   { path: 'workspace/documents', ...page(() => import('../features/workspace/DocumentsPage'), 'DocumentsPage', null) },
                   {
                     element: <RequireModule module="core.ledger" />,
@@ -166,8 +192,7 @@ const routes: RouteObject[] = [
                   {
                     element: <RequireModule module="treasury.expenses" />,
                     children: [
-                      { path: 'treasury/expenses', ...page(() => import('../features/expenses/ExpenseEntriesPage'), 'ExpenseEntriesPage', 'treasury.read') },
-                      { path: 'treasury/expense-cards', ...page(() => import('../features/expenses/ExpenseCardsPage'), 'ExpenseCardsPage', 'treasury.read') },
+                      { path: 'treasury/expenses', ...hub('ExpensesHub', 'treasury.read') },
                       { path: 'treasury/expense-reports', ...page(() => import('../features/expenses/ExpenseReportPage'), 'ExpenseReportPage', 'treasury.read') },
                     ],
                   },
@@ -182,7 +207,7 @@ const routes: RouteObject[] = [
                     children: [
                       { path: 'treasury/accounts', ...page(() => import('../features/treasury/AccountsPage'), 'AccountsPage', 'treasury.read') },
                       { path: 'treasury/accounts/:id', ...page(() => import('../features/treasury/AccountDetailPage'), 'AccountDetailPage', 'treasury.read') },
-                      { path: 'treasury/cash-forecast', ...page(() => import('../features/treasury/CashForecastPage'), 'CashForecastPage', 'treasury.read') },
+                      { path: 'treasury/cash-planning', ...hub('CashPlanningHub', 'treasury.read') },
                       { path: 'treasury/transactions', ...page(() => import('../features/treasury/TransactionsPage'), 'TransactionsPage', 'treasury.read') },
                       { path: 'reports/fx-differences', ...page(() => import('../features/reports/FxDifferencePage'), 'FxDifferencePage', 'reports.read') },
                       { path: 'reports/fx-position', ...page(() => import('../features/reports/FxPositionPage'), 'FxPositionPage', 'reports.read') },
@@ -234,7 +259,6 @@ const routes: RouteObject[] = [
                     element: <RequireModule module="hr.payroll" />,
                     children: [
                       { path: 'hr/payroll', ...page(() => import('../features/hr/PayrollPage'), 'PayrollPage', 'hr.payroll') },
-                      { path: 'hr/payroll/settings', ...page(() => import('../features/hr/PayrollSettingsPage'), 'PayrollSettingsPage', 'hr.payroll') },
                       { path: 'hr/payroll/:id', ...page(() => import('../features/hr/PayrollRunPage'), 'PayrollRunPage', 'hr.payroll') },
                       { path: 'hr/payroll/:id/slip/:employeeId', ...page(() => import('../features/hr/PayrollSlipPage'), 'PayrollSlipPage', 'hr.payroll') },
                     ],
@@ -272,7 +296,6 @@ const routes: RouteObject[] = [
                     element: <RequireModule module="hr.socialsecurity" />,
                     children: [
                       { path: 'hr/social-security', ...page(() => import('../features/hr/SocialSecurityPage'), 'SocialSecurityPage', 'hr.payroll') },
-                      { path: 'hr/social-security/settings', ...page(() => import('../features/hr/SocialSettingsPage'), 'SocialSettingsPage', 'hr.payroll') },
                       { path: 'hr/social-security/:id', ...page(() => import('../features/hr/SocialDeclarationPage'), 'SocialDeclarationPage', 'hr.payroll') },
                     ],
                   },
@@ -280,7 +303,6 @@ const routes: RouteObject[] = [
                     element: <RequireModule module="hr.foreign" />,
                     children: [
                       { path: 'hr/foreign-workers', ...page(() => import('../features/hr/ForeignWorkersPage'), 'ForeignWorkersPage', 'hr.read') },
-                      { path: 'hr/foreign-workers/settings', ...page(() => import('../features/hr/ForeignSettingsPage'), 'ForeignSettingsPage', 'hr.read') },
                     ],
                   },
                   {
@@ -326,7 +348,6 @@ const routes: RouteObject[] = [
                       { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage', 'settings.read') },
                       { path: 'settings/branches', ...page(() => import('../features/settings/BranchesPage'), 'BranchesPage', 'company.manage') },
                       { path: 'settings/approvals', ...page(() => import('../features/settings/DocumentApprovalsPage'), 'DocumentApprovalsPage', 'settings.read') },
-                      { path: 'reports/file-exchange', ...page(() => import('../features/imports/FileExchangePage'), 'FileExchangePage', 'workspace.use') },
                       { path: 'settings/operations', ...page(() => import('../features/settings/OperationsSettingsPage'), 'OperationsSettingsPage', 'settings.manage') },
                       { path: 'settings/backups', ...page(() => import('../features/settings/BackupsPage'), 'BackupsPage', 'company.manage') },
                       { path: 'settings/recurring', ...page(() => import('../features/settings/RecurringPage'), 'RecurringPage', 'settings.manage') },
@@ -341,7 +362,6 @@ const routes: RouteObject[] = [
                       { path: 'settings/license', ...page(() => import('../features/settings/LicensePage'), 'LicensePage', 'settings.read') },
                       { path: 'settings/devices', ...page(() => import('../features/settings/DevicesPage'), 'DevicesPage', 'members.manage') },
                       { path: 'settings/account-mapping', ...page(() => import('../features/settings/AccountMappingPage'), 'AccountMappingPage', 'accounts.manage') },
-                      { path: 'reports/data-export', ...page(() => import('../features/reports/DataExportPage'), 'DataExportPage', 'data.export') },
                     ],
                   },
                   { path: 'account/security', ...page(() => import('../features/settings/SecurityPage'), 'SecurityPage', null) },
@@ -360,7 +380,6 @@ const routes: RouteObject[] = [
                   {element:<RequireModule module="manufacturing.catalog"/>,children:[{path:'manufacturing',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingOverviewPage','manufacturing.catalog.read')}]},
                   {element:<RequireModule module="inventory.wms"/>,children:[{path:'wms',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingWarehousePage','inventory.wms.read')}]},
                   {element:<RequireModule module="sales.logistics"/>,children:[{path:'logistics',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingLogisticsPage','sales.logistics.read')}]},
-                  {element:<RequireModule module="core.integrations"/>,children:[{path:'integrations',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingIntegrationsPage','core.integrations.read')}]},
                   { element: <RequireModule module="leather.catalog" />, children: [
                     {path:'leather',...page(()=>import('../features/leather/LeatherPages'),'LeatherOverviewPage','leather.catalog.read')},
                     {path:'leather/models',...page(()=>import('../features/leather/LeatherPages'),'LeatherModelsPage','leather.catalog.read')},

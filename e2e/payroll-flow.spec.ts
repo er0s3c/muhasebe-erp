@@ -40,8 +40,9 @@ test('bordro: ücret şartı → parametre (doğrulanmadı) → bordro → onay 
   await expect(page.getByText('Puantaj kaydedildi').first()).toBeVisible();
 
   // Bordro ayarları: parametre yokken uyarı; parametre (test değeri) açık ama doğrulanmadı; ücret şartı; kalem
-  await nav.getByRole('link', { name: 'Bordro ayarları' }).click();
-  await expect(page.getByRole('heading', { name: 'Bordro ayarları', level: 1 })).toBeVisible();
+  await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
+  await page.getByRole('tab', { name: 'Bordro' }).click();
+  await expect(page.getByRole('heading', { name: 'Bordro ayarları', level: 2 })).toBeVisible();
   await expect(page.getByText('Henüz parametre yok')).toBeVisible();
   const paramForm = page.locator('form').filter({ has: page.getByLabel('Kaynak notu') });
   await paramForm.getByLabel('Parametre', { exact: true }).selectOption('employee_social_pct');

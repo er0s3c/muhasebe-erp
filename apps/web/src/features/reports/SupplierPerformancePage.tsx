@@ -26,7 +26,7 @@ export function SupplierPerformancePage() {
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <Link className="link text-sm" to="/reports/insights">
-              Rapor panom
+              Analiz panosu
             </Link>
             <ExportMenu
               exportKey="supplier-performance"

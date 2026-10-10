@@ -6,7 +6,7 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -23,7 +23,7 @@ export function CountsPage() {
   const navigate = useNavigate();
   const canMove = useCan()('inventory.move');
   const { data: wh } = useWarehouses();
-  const { data, isPending } = useCQuery<{ counts: StockCountListRow[]; total: number }>(['stock-counts', 'list'], '/api/stock-counts?limit=200');
+  const { data, isPending, error: CountsPageQueryError, refetch: CountsPageQueryRetry, isFetching: CountsPageQueryFetching } = useCQuery<{ counts: StockCountListRow[]; total: number }>(['stock-counts', 'list'], '/api/stock-counts?limit=200');
   const [creating, setCreating] = useState(false);
   const [warehouseId, setWarehouseId] = useState('');
   const [date, setDate] = useState(todayIso());
@@ -63,6 +63,7 @@ export function CountsPage() {
       onError: (e) => setError(errorMessage(e)),
     });
 
+  if (CountsPageQueryError && !data) return <ErrorState error={CountsPageQueryError} onRetry={() => void CountsPageQueryRetry()} retrying={CountsPageQueryFetching} />;
   return (
     <>
       <PageHeader

@@ -142,7 +142,7 @@ function WorkContent() {
           <CardHeader title="Çalışma listesi" description={`${formatDateTR(tasks.data?.today ?? todayIso())} · ${scope === 'mine' ? 'Bana atanan işler' : 'Ekipteki tüm işler'}`}
             action={<Select aria-label="Görev kapsamı" className="w-auto" value={scope} onChange={e => { setScope(e.target.value); setOffset(0); }}><option value="mine">Benim işlerim</option><option value="team">Ekip işleri</option></Select>} />
           <div className="flex flex-wrap items-center gap-3 px-5 pt-4">
-            <SegmentedTabs
+            <SegmentedTabs variant="filter"
               items={[
                 { key: 'open', label: 'Açık işler' },
                 { key: 'done', label: 'Tamamlanan' },

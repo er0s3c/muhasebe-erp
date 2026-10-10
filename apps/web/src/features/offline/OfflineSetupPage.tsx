@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { OfflineDraftBootstrap } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
@@ -14,7 +14,10 @@ export function OfflineSetupPage() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false), [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pending = useRef(false);
   const prepare = async () => {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true); setError(null); setSuccess(false);
     try {
       const bootstrap = await call<OfflineDraftBootstrap>('/api/offline-drafts/bootstrap');
@@ -25,7 +28,7 @@ export function OfflineSetupPage() {
       await saveDraftPackage({ ...bootstrap, expiresAt: Date.now() + 24 * 60 * 60 * 1000, queue: previous?.queue ?? [], revision: previous?.revision }, password);
       setSuccess(true);
     } catch (cause) { setError(errorMessage(cause)); }
-    finally { setBusy(false); }
+    finally { pending.current = false; setBusy(false); }
   };
   return <>
     <PageHeader title="Çevrimdışı depo ve saha" description="İnternet yokken sayım taslağı veya saha görevi hazırlayın; bağlantı gelince kontrol ederek eşitleyin." />

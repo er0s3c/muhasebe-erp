@@ -52,7 +52,7 @@ function InsightsContent() {
   return (
     <>
       <PageHeader
-        title="Rapor panom"
+        title="Analiz panosu"
         description="ERP raporlarını aynı panoda izleyin; dönem, kırılım ve grafik seçimlerinizi kaydedin."
         actions={
           !!catalog.data?.items.length && (

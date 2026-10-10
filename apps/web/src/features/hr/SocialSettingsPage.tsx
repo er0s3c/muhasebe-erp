@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Switch } from '../../components/ui/Switch';
@@ -49,7 +49,7 @@ function ProfilesCard() {
   const toast = useToast();
   const can = useCan();
   const manage = can('hr.payroll_manage');
-  const { data } = useCQuery<{ profiles: SocialProfileRow[] }>(['social', 'profiles'], '/api/social-security/profiles');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ profiles: SocialProfileRow[] }>(['social', 'profiles'], '/api/social-security/profiles');
   const { data: emps } = useEmployees();
   const [employeeId, setEmployeeId] = useState('');
   const [from, setFrom] = useState(todayIso());
@@ -73,6 +73,8 @@ function ProfilesCard() {
   const reveal = useCMutation((v: { id: string; reason: string }, call) => call<{ value: string }>(`/api/social-security/profiles/${v.id}/reveal`, { method: 'POST', body: { reason: v.reason } }), [['privacy']]);
   const rows = data?.profiles ?? [];
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('social.profiles.title')} description={t('social.profiles.desc')} />
@@ -198,7 +200,7 @@ function RulesCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.payroll_manage');
-  const { data } = useCQuery<{ rules: SupportRuleRow[] }>(['social', 'rules'], '/api/social-security/support-rules');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ rules: SupportRuleRow[] }>(['social', 'rules'], '/api/social-security/support-rules');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [from, setFrom] = useState(todayIso());
@@ -224,6 +226,8 @@ function RulesCard() {
   const remove = useCMutation((id: string, call) => call(`/api/social-security/support-rules/${id}`, { method: 'DELETE' }), SOCIAL_INVALIDATE);
   const rows = data?.rules ?? [];
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('social.rules.title')} description={t('social.rules.desc')} />
@@ -346,7 +350,7 @@ function EligibilityCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.payroll_manage');
-  const { data } = useCQuery<{ eligibility: SupportEligibilityRow[] }>(['social', 'eligibility'], '/api/social-security/eligibility');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ eligibility: SupportEligibilityRow[] }>(['social', 'eligibility'], '/api/social-security/eligibility');
   const { data: rules } = useCQuery<{ rules: SupportRuleRow[] }>(['social', 'rules'], '/api/social-security/support-rules');
   const { data: emps } = useEmployees();
   const [employeeId, setEmployeeId] = useState('');
@@ -359,6 +363,8 @@ function EligibilityCard() {
   const rows = data?.eligibility ?? [];
   const codes = [...new Set((rules?.rules ?? []).map((r) => r.code))];
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('social.eligibility.title')} description={t('social.eligibility.desc')} />

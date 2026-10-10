@@ -41,7 +41,8 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await expect(page.getByText('Puantaj kaydedildi').first()).toBeVisible();
 
   // Bordro ayarları: iki test oranı (açık) ve ücret şartı
-  await nav.getByRole('link', { name: 'Bordro ayarları' }).click();
+  await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
+  await page.getByRole('tab', { name: 'Bordro' }).click();
   const paramForm = page.locator('form').filter({ has: page.getByLabel('Kaynak notu') });
   for (const [key, value] of [['employee_social_pct', '10'], ['employer_social_pct', '12']] as const) {
     await paramForm.getByLabel('Parametre', { exact: true }).selectOption(key);
@@ -73,8 +74,9 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await expect(page.getByText('Onaylı', { exact: true })).toBeVisible();
 
   // Sosyal güvenlik ayarları: profil (numara maskeli), destek kuralı (varsayılan kapalı), uygunluk
-  await nav.getByRole('link', { name: 'Sosyal güvenlik ayarları' }).click();
-  await expect(page.getByRole('heading', { name: 'Sosyal güvenlik ayarları', level: 1 })).toBeVisible();
+  await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
+  await page.getByRole('tab', { name: 'SGK' }).click();
+  await expect(page.getByRole('heading', { name: 'Sosyal güvenlik ayarları', level: 2 })).toBeVisible();
   await expect(page.getByText('Henüz profil yok')).toBeVisible();
   await expect(page.getByText('Henüz kural yok: prim desteği uygulanmaz')).toBeVisible();
   const profileForm = page.locator('form').filter({ has: page.getByLabel('Bordro tipi kodu') });
@@ -117,8 +119,8 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await expect(page.getByText('Beyan eklendi')).toBeVisible();
 
   // Bildirim: GENEL düzen notu, numara maskeli, prim bordrodan, destek yalnızca kural açık + uygunluk beyanı varken
-  await nav.getByRole('link', { name: 'Sosyal güvenlik', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Sosyal güvenlik çıktıları', level: 1 })).toBeVisible();
+  await nav.getByRole('link', { name: 'SGK bildirgeleri', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'SGK bildirgeleri', level: 1 })).toBeVisible();
   await expect(page.getByText(/resmî bildirim formatı değildir, doğrulanmadı/).first()).toBeVisible();
   await page.getByRole('button', { name: 'Yeni bildirim' }).first().click();
   await dialog.getByRole('button', { name: 'Bildirim üret' }).click();
@@ -156,7 +158,7 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await dialog.getByRole('button', { name: 'Vazgeç' }).click();
 
   // Prim özeti (kesinleşmiş): aya ve projeye göre
-  await nav.getByRole('link', { name: 'Sosyal güvenlik', exact: true }).click();
+  await nav.getByRole('link', { name: 'SGK bildirgeleri', exact: true }).click();
   await page.getByRole('tab', { name: 'Prim özeti' }).click();
   await expect(page.getByRole('heading', { name: 'Aya göre' })).toBeVisible();
   await expect(page.getByRole('row', { name: /SGB-/ })).toContainText('Kesinleşmiş');

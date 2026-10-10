@@ -8,6 +8,7 @@ import { startNotificationScheduler } from './modules/notifications/scheduler';
 import { startConstructionScheduler } from './modules/construction-control/jobs';
 import { startAdministrationScheduler } from './modules/administration/scheduler';
 import { startPlatformWebhookScheduler } from './modules/platform-integrations/events';
+import { startFxScheduler } from './modules/settings/fx-scheduler';
 
 const config = loadConfig();
 
@@ -68,6 +69,7 @@ const stopNotificationScheduler = startNotificationScheduler(app);
 const stopConstructionScheduler = startConstructionScheduler(app);
 const stopAdministrationScheduler = startAdministrationScheduler(app);
 const stopPlatformWebhookScheduler=startPlatformWebhookScheduler(app);
+const stopFxScheduler = startFxScheduler(app);
 
 let closing = false;
 const shutdown = async (signal: string) => {
@@ -85,6 +87,7 @@ const shutdown = async (signal: string) => {
     stopConstructionScheduler();
     stopAdministrationScheduler();
     stopPlatformWebhookScheduler();
+    stopFxScheduler();
     await app.close();
     await handle.close();
     process.exit(0);

@@ -11,7 +11,7 @@ import {
   options,
   type Values,
 } from '../leather/common';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState } from '../../components/ui/Feedback';
 import { displayDateTime, displayQuantity } from '../../lib/presentation';
 import { moneyIn } from '../../lib/format';
 import { useCompany } from '../../lib/session';
@@ -62,7 +62,7 @@ export function ChannelExecutionPanel({
       </Callout>
       <Records
         rows={mappings.data?.records ?? []}
-        loading={mappings.isPending}
+        loading={mappings.isPending} onRetry={() => void mappings.refetch()} retrying={mappings.isFetching}
         error={mappings.error}
         columns={[
           {
@@ -119,7 +119,7 @@ export function ChannelExecutionPanel({
       <h2 className="text-subheading">Stok yayın geçmişi</h2>
       <Records
         rows={outbox.data?.records ?? []}
-        loading={outbox.isPending}
+        loading={outbox.isPending} onRetry={() => void outbox.refetch()} retrying={outbox.isFetching}
         error={outbox.error}
         columns={[
           { label: 'Stok', render: (r) => r.itemName },
@@ -173,7 +173,7 @@ export function ProductionCostClosePanel({ orderId }: { orderId: string }) {
   return (
     <section className="my-6 space-y-4">
       <h2 className="text-subheading">Maliyet kapanış kontrolü</h2>
-      {report.error && <Callout tone="danger">{errorMessage(report.error)}</Callout>}
+      {report.error && <ErrorState description={errorMessage(report.error)} onRetry={() => void report.refetch()} retrying={report.isFetching} />}
       {report.data && (
         <>
           <Callout tone={report.data.canClose ? 'info' : 'warning'}>
@@ -263,7 +263,7 @@ export function ReworkExecutionPanel({
       <h2 className="text-subheading">Yeniden işleme ve tekrar kalite</h2>
       <Records
         rows={(data.data?.records ?? []).filter((r) => r.orderId === orderId)}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           { label: 'İş', render: (r) => r.code },

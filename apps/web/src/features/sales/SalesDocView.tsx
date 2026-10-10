@@ -6,7 +6,7 @@ import { dec } from '@erp/shared';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageTitle } from '../../components/ui/Card';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
@@ -148,7 +148,7 @@ export function SalesDocView({ data,approvalPending=false }: { data: SalesDocDet
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{doc.docNo ?? t(`sales.kind.${doc.kind}`)}</h1>
+            <PageTitle title={doc.docNo ?? t(`sales.kind.${doc.kind}`)} helpKey="sales-doc" recent={{ kind: t(`sales.kind.${doc.kind}`), title: `${doc.docNo ?? ''} ${doc.partyName}`.trim() }} />
             <Badge>{t(`sales.kind.${doc.kind}`)}</Badge>
             <SalesStatusBadge status={doc.status} kind={doc.kind} expired={doc.expired} />
             {isOrder && ['confirmed', 'closed'].includes(doc.status) && <FulfilmentBadges f={doc.fulfilment} />}

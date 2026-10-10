@@ -179,7 +179,7 @@
   },
   "nav": {
     "offlineDrafts": "Çevrimdışı depo ve saha",
-    "documentApprovals": "Belge onayları",
+    "documentApprovals": "Belge onay kuralları",
     "platformIntegrations": "API ve bildirim bağlantıları",
     "manufacturing.promise": "Sipariş taahhüdü",
     "manufacturing.shopFloor": "Atölye iş ekranı",
@@ -260,7 +260,7 @@
     "devices": "Cihazlar",
     "subcontracts": "Taşeron sözleşmeleri",
     "progressPayments": "Hakedişler",
-    "approvals": "Onay kutusu",
+    "approvals": "Hakediş onayları",
     "constructionSettings": "İnşaat ayarları",
     "employerContracts": "İşveren sözleşmeleri",
     "employerClaims": "İşveren hakedişleri",
@@ -278,7 +278,7 @@
     "attendance": "Puantaj",
     "payroll": "Bordro",
     "payrollSettings": "Bordro ayarları",
-    "socialSecurity": "Sosyal güvenlik",
+    "socialSecurity": "SGK bildirgeleri",
     "employeeLedger": "Avans ve maaş cari",
     "directoryContacts": "Kişi rehberi",
     "directoryOrgs": "Kurum rehberi",
@@ -289,7 +289,7 @@
     "cheques": "Çek/senet portföyü",
     "bankGuarantees": "Teminat mektupları",
     "privacy": "Veri koruma",
-    "importFiles": "İthalat dosyaları",
+    "importFiles": "İthalat maliyet dosyaları",
     "expenseEntries": "Gider fişleri",
     "expenseCards": "Gider kartları",
     "expenseReports": "Gider raporları",
@@ -301,11 +301,11 @@
     "portalAccess": "Portal erişimleri",
     "notifications": "Bildirimler",
     "constructionCenter": "İnşaat kontrol merkezi",
-    "operationsSettings": "İşletim ve güvenlik",
+    "operationsSettings": "Sistem ve güvenlik",
     "activityReport": "Faaliyet raporu",
     "backups": "Yedekleme",
     "recurring": "Tekrarlayan işler",
-    "insights": "Rapor panom",
+    "insights": "Analiz panosu",
     "campaigns": "Kampanya ve promosyon",
     "leatherCenter": "Deri iş merkezi",
     "leatherModels": "Modeller ve koleksiyonlar",
@@ -3615,7 +3615,7 @@
       "materialOver": "Mahsup, kalan malzeme bakiyesini ({{balance}}) aşamaz"
     },
     "approval": {
-      "inboxTitle": "Onay kutusu",
+      "inboxTitle": "Hakediş onayları",
       "inboxSubtitle": "Sırası size gelen onay talepleri",
       "inboxEmpty": "Bekleyen onay yok",
       "inboxEmptyDesc": "Sırası size gelen talepler burada görünür.",
@@ -4228,7 +4228,7 @@
     }
   },
   "social": {
-    "title": "Sosyal güvenlik çıktıları",
+    "title": "SGK bildirgeleri",
     "subtitle": "Onaylı ya da ödenmiş bordrodan aylık bildirim üretir; personel başına prim matrahı, prim ve (varsa) destek tutarları. GENEL bir düzendir.",
     "notice": "Genel düzen — resmî bildirim formatı değildir, doğrulanmadı. Hiçbir kurumun dosya biçimini taklit etmez; prim tutarları bordro parametrelerinden, prim desteği yalnızca sizin girdiğiniz tarihli kurallardan gelir. Resmî bildirimi ilgili kurumun kendi sisteminden yapın.",
     "unverifiedBadge": "Doğrulanmadı",
@@ -5543,7 +5543,7 @@
     }
   },
   "landed": {
-    "title": "İthalat dosyaları",
+    "title": "İthalat maliyet dosyaları",
     "subtitle": "İthal malların alış faturası/irsaliye satırlarını ve navlun, sigorta, gümrük vergisi gibi ek maliyetleri bir dosyada toplayın; ek maliyetleri stok maliyetine dağıtın.",
     "notice": "Ek maliyet tutarları ve oranları sizin girdiğiniz verilerdir; uygulama gümrük vergisi/oran hesabı yapmaz. Dağıtım ve muhasebeleştirme varsayılanları (aktarım hesabı 632 vb.) mali müşavirce doğrulanmamıştır; Ayarlar > Hesap eşlemesi bölümünden değiştirilir.",
     "add": "Yeni ithalat dosyası",

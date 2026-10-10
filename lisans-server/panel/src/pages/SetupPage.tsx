@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, KeyRound } from 'lucide-react';
-import { useState, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@ui/Button';
 import { Brand } from '@ui/Brand';
 import { Callout, ErrorState, PageLoading } from '@ui/Feedback';
 import { Field, Input } from '@ui/Field';
 import { useToast } from '@ui/Toast';
+import { FormGuard } from '@ui/UnsavedChanges';
 import { api, ApiError, errorText } from '../api';
 import { QrCode } from '../components/QrCode';
 import { addPasskey, passkeyErrorText, passkeysSupported } from '../passkey';
@@ -55,6 +56,7 @@ export function SetupPage() {
   const [passkeyName, setPasskeyName] = useState('Vaultwarden');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const operationPending = useRef(false);
 
   if (status.isPending) return <PageLoading />;
   if (status.error) return <div className="mx-auto max-w-xl p-6"><ErrorState title="Kurulum durumu yüklenemedi" description={errorText(status.error)} onRetry={() => void status.refetch()} retrying={status.isFetching} /></div>;
@@ -66,6 +68,8 @@ export function SetupPage() {
   const accountValid = form.setupToken.trim() && form.email.includes('@') && form.password.length >= MIN_PASSWORD && form.password === form.passwordConfirm;
 
   const run = async (fn: () => Promise<void>) => {
+    if (operationPending.current) return;
+    operationPending.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -74,6 +78,7 @@ export function SetupPage() {
       setError(errorText(e));
       if (e instanceof ApiError && e.code === 'INVALID_SETUP_TOKEN') setStep(0);
     } finally {
+      operationPending.current = false;
       setBusy(false);
     }
   };
@@ -94,6 +99,8 @@ export function SetupPage() {
     });
 
   const registerPasskey = async () => {
+    if (operationPending.current) return;
+    operationPending.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -103,12 +110,13 @@ export function SetupPage() {
     } catch (e) {
       setError(passkeyErrorText(e));
     } finally {
+      operationPending.current = false;
       setBusy(false);
     }
   };
 
   return (
-    <div className="flex min-h-full items-center justify-center px-4 py-12">
+    <FormGuard captureAll dirty={step < 2 && Object.values(form).some((value) => value.length > 0)} pending={busy} className="flex min-h-full items-center justify-center px-4 py-12">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 sm:p-8">
         <Brand className="mb-6 h-9" />
         <h1 className="text-heading">İlk kurulum</h1>
@@ -191,7 +199,7 @@ export function SetupPage() {
               )}
             </Field>
             <div className="flex gap-2">
-              <Button onClick={() => setStep(0)}>Geri</Button>
+              <Button disabled={busy} onClick={() => setStep(0)}>Geri</Button>
               <Button type="submit" variant="primary" className="flex-1" loading={busy} disabled={totp.length !== 6}>
                 Hesabı oluştur
               </Button>
@@ -219,12 +227,12 @@ export function SetupPage() {
             ) : (
               <Callout tone="warning">Bu tarayıcı giriş anahtarlarını desteklemiyor.</Callout>
             )}
-            <Button variant="ghost" onClick={() => navigate('/', { replace: true })}>
+            <Button variant="ghost" disabled={busy} onClick={() => navigate('/', { replace: true })}>
               Şimdilik geç, panele git
             </Button>
           </div>
         )}
       </div>
-    </div>
+    </FormGuard>
   );
 }

@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Select } from '../../components/ui/Field';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -30,8 +30,9 @@ export function SalesInstallmentsPage() {
     return q.toString();
   }, [projectId, mode]);
   const lim = useListLimit(qs);
-  const { data, isPending } = useCQuery<{ asOf: string; installments: DueInstallmentRow[] } & { truncated?: boolean }>(['sales-installments', 'list', qs, lim.limit], `/api/real-estate/installments?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
+  const { data, isPending, error: SalesInstallmentsPageQueryError, refetch: SalesInstallmentsPageQueryRetry, isFetching: SalesInstallmentsPageQueryFetching } = useCQuery<{ asOf: string; installments: DueInstallmentRow[] } & { truncated?: boolean }>(['sales-installments', 'list', qs, lim.limit], `/api/real-estate/installments?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.installments ?? [];
+  if (SalesInstallmentsPageQueryError && !data) return <ErrorState error={SalesInstallmentsPageQueryError} onRetry={() => void SalesInstallmentsPageQueryRetry()} retrying={SalesInstallmentsPageQueryFetching} />;
   return (
     <>
       <PageHeader
@@ -46,7 +47,7 @@ export function SalesInstallmentsPage() {
             <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
           ))}
         </Select>
-        <SegmentedTabs items={[{ key: 'all', label: t('realEstate.installments.all') }, { key: 'overdue', label: t('realEstate.installments.overdue') }]} value={mode} onChange={setMode} />
+        <SegmentedTabs variant="filter" items={[{ key: 'all', label: t('realEstate.installments.all') }, { key: 'overdue', label: t('realEstate.installments.overdue') }]} value={mode} onChange={setMode} />
       </div>
       {isPending ? (
         <PageLoading />

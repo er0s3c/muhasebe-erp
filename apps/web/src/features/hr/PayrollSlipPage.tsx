@@ -1,9 +1,10 @@
-import { ArrowLeft, Printer } from 'lucide-react';
+import { Printer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { Button } from '../../components/ui/Button';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { PageHeader } from '../../components/ui/Card';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Table, TableWrap, Td, Th } from '../../components/ui/Table';
 import { errorMessage } from '../../lib/errors';
 import { formatDateTR, money } from '../../lib/format';
@@ -18,8 +19,9 @@ import { PayrollStatusBadge, UnverifiedBadge, useWarningText } from './payroll-c
 export function PayrollSlipPage() {
   const { t } = useTranslation();
   const { id = '', employeeId = '' } = useParams();
-  const { data, isPending, error } = useCQuery<PayrollSlip>(['payroll', 'slip', id, employeeId], `/api/payroll/runs/${id}/slips/${employeeId}`);
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<PayrollSlip>(['payroll', 'slip', id, employeeId], `/api/payroll/runs/${id}/slips/${employeeId}`);
   const warningText = useWarningText();
+  if (error) return <ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending) return <PageLoading />;
   if (!data) return <Callout tone="danger">{errorMessage(error)}</Callout>;
   const { run, line: l } = data;
@@ -36,25 +38,26 @@ export function PayrollSlipPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <Link to={`/hr/payroll/${run.id}`} className="inline-flex items-center gap-1 text-sm text-muted hover:text-text">
-          <ArrowLeft className="size-4" aria-hidden />
-          {run.number}
-        </Link>
-        <Button onClick={() => window.print()}>
-          <Printer className="size-4" aria-hidden />
-          {t('payroll.slip.print')}
-        </Button>
-      </div>
-
-      <div>
-        <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-          {t('payroll.slip.title')}
-          <PayrollStatusBadge status={run.status} />
-          {run.hasUnverifiedParams && <UnverifiedBadge />}
-        </h1>
-        <p className="mt-1 text-sm font-medium text-warning">{t('payroll.slip.draftNote')}</p>
-      </div>
+      <PageHeader
+        className="mb-0"
+        title={t('payroll.slip.title')}
+        helpKey="payroll-slip"
+        back={{ to: `/hr/payroll/${run.id}`, label: run.number }}
+        recent={{ kind: 'Ücret pusulası', title: `${l.employeeName} · ${run.month}` }}
+        meta={
+          <>
+            <PayrollStatusBadge status={run.status} />
+            {run.hasUnverifiedParams && <UnverifiedBadge />}
+          </>
+        }
+        actions={
+          <Button onClick={() => window.print()}>
+            <Printer className="size-4" aria-hidden />
+            {t('payroll.slip.print')}
+          </Button>
+        }
+      />
+      <p className="-mt-2 text-sm font-medium text-warning">{t('payroll.slip.draftNote')}</p>
       {run.hasUnverifiedParams && <Callout tone="warning">{t('payroll.slip.unverifiedWarn')}</Callout>}
       {!run.jurisdiction && !run.hasUnverifiedParams && run.paramsSnapshot.length === 0 && <Callout tone="info">{t('payroll.slip.noParams')}</Callout>}
       {l.legalCalculationSnapshot && <div className="rounded-md border border-border p-4"><p className="mb-3 text-sm font-medium">{run.jurisdiction === 'TR' ? 'Türkiye / standart 4/a' : 'KKTC'} — {l.legalCalculationSnapshot.rulePackVersion}</p><dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">

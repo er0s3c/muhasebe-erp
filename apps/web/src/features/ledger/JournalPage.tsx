@@ -6,10 +6,10 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal, Sheet } from '../../components/ui/Sheet';
-import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { Table, TableWrap, Td, Th, Tr, ProgressiveRows } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
@@ -43,7 +43,7 @@ export function JournalPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const query = new URLSearchParams({ from, to, limit: '100', ...(status ? { status } : {}) });
-  const { data, isPending } = useCQuery<{ entries: JournalListItem[] }>(['journal', from, to, status], `/api/journal-entries?${query}`);
+  const { data, isPending, error: JournalPageQueryError, refetch: JournalPageQueryRetry, isFetching: JournalPageQueryFetching } = useCQuery<{ entries: JournalListItem[] }>(['journal', from, to, status], `/api/journal-entries?${query}`);
   const canPost = can('ledger.post');
 
   // Fatura/stok belgesinden (?open=<id>) gelindiyse ilgili yevmiyeyi aç
@@ -64,6 +64,7 @@ export function JournalPage() {
     }
   }, [params, setParams, canPost]);
 
+  if (JournalPageQueryError && !data) return <ErrorState error={JournalPageQueryError} onRetry={() => void JournalPageQueryRetry()} retrying={JournalPageQueryFetching} />;
   return (
     <>
       <PageHeader
@@ -139,7 +140,7 @@ export function JournalPage() {
               </tr>
             </thead>
             <tbody>
-              {data.entries.map((e) => (
+              <ProgressiveRows rows={data.entries}>{(e) => (
                 <Tr
                   key={e.id}
                   clickable
@@ -160,7 +161,7 @@ export function JournalPage() {
                     <StatusBadge e={e} />
                   </Td>
                 </Tr>
-              ))}
+              )}</ProgressiveRows>
             </tbody>
           </Table>
         </TableWrap>
@@ -235,7 +236,7 @@ function JournalDetail({
   const canPost = useCan()('ledger.post');
   const partiesOn = useModuleEnabled('core.parties');
   const projectsOn = useModuleEnabled('construction.projects');
-  const { data, isPending } = useCQuery<{ entry: JournalEntry }>(['journal-entry', id], id ? `/api/journal-entries/${id}` : null);
+  const { data, isPending, error: JournalDetailQueryError, refetch: JournalDetailQueryRetry, isFetching: JournalDetailQueryFetching } = useCQuery<{ entry: JournalEntry }>(['journal-entry', id], id ? `/api/journal-entries/${id}` : null);
   const entry = data?.entry;
   const [reversing, setReversing] = useState(false);
   const [revDate, setRevDate] = useState(todayIso());
@@ -257,6 +258,7 @@ function JournalDetail({
 
   const showForeign = entry?.lines.some((l) => l.currencyCode !== company.baseCurrency) ?? false;
 
+  
   return (
     <>
       <Sheet
@@ -304,7 +306,7 @@ function JournalDetail({
           ) : undefined
         }
       >
-        {isPending || !entry ? (
+        {JournalDetailQueryError && !data ? <ErrorState error={JournalDetailQueryError} onRetry={() => void JournalDetailQueryRetry()} retrying={JournalDetailQueryFetching} /> : isPending || !entry ? (
           <PageLoading />
         ) : (
           <div className="flex flex-col gap-5">

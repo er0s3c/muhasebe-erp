@@ -6,7 +6,7 @@ import { dec } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Stat } from '../../components/ui/Stat';
@@ -75,13 +75,14 @@ export function VariationsTab({ detail }: { detail: SubcontractDetail }) {
   const can = useCan();
   const navigate = useNavigate();
   const sc = detail.subcontract;
-  const { data, isPending } = useCQuery<{ variations: VariationRow[] }>(['variations', 'contract', sc.id], `/api/subcontracts/${sc.id}/variations`);
+  const { data, isPending, error: VariationsTabQueryError, refetch: VariationsTabQueryRetry, isFetching: VariationsTabQueryFetching } = useCQuery<{ variations: VariationRow[] }>(['variations', 'contract', sc.id], `/api/subcontracts/${sc.id}/variations`);
   const [open, setOpen] = useState(false);
   const rows = data?.variations ?? [];
   const openDraft = rows.find((r) => r.status === 'draft' || r.status === 'rejected' || r.status === 'submitted' || r.status === 'awaiting_client');
   const canCreate = sc.status === 'active' && can('subcontracts.manage');
   const cur = sc.currencyCode;
 
+  if (VariationsTabQueryError && !data) return <ErrorState error={VariationsTabQueryError} onRetry={() => void VariationsTabQueryRetry()} retrying={VariationsTabQueryFetching} />;
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

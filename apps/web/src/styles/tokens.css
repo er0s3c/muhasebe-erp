@@ -9,6 +9,8 @@
   --bg: #f4f2f0; /* Bone: sayfa zemini */
   --surface: #ffffff; /* kart */
   --surface-2: #f4f2f0; /* yıkama: hover, tablo başlığı, alt kart */
+  --surface-3: #ebe8e5; /* V3: seçili satır, basılı kontrol, sekme rayı */
+  --surface-raised: #ffffff; /* V3: popover/sheet yüzeyi */
   --border: #e5e7eb; /* hairline */
   --border-strong: #d3d3d3;
   --text: #0c0a08; /* Ink */
@@ -16,6 +18,7 @@
   --brand: #e4f222; /* sarı: yalnızca dolgu (birincil eylem, aktif durum) */
   --brand-hover: #d6e41a;
   --brand-soft: #f4f2f0; /* sarı yıkama YOK: nötr yıkama */
+  --brand-tint: #f6fad0; /* V3: yalnız seçili menü öğesi/favori zemini; üstünde Ink metin (≈18:1) */
   --brand-contrast: #0c0a08; /* sarı üstünde metin (≈17:1) */
   --inverted: #1a1919; /* Obsidian: koyu şerit/panel */
   --on-inverted: #ffffff;
@@ -43,18 +46,28 @@
   --layer-accessibility: 70;
   --motion-fast: 120ms;
   --motion-normal: 180ms;
+  /* V3: tek ince yükselti yalnız yüzen katmanlarda (popover, menü, sheet); kartlar gölgesiz kalır */
+  --elevation-pop: 0 1px 2px rgb(12 10 8 / 0.06), 0 8px 24px -8px rgb(12 10 8 / 0.16);
+  --row-h: 44px;
+  --topbar-h: 56px;
+}
+:root[data-density='compact'] {
+  --row-h: 34px;
 }
 .dark {
   --bg: #131211;
   --surface: #1a1919;
   --surface-2: #242322;
-  --border: #2e2c2b;
-  --border-strong: #3d3b3a;
+  --surface-3: #2c2a29;
+  --surface-raised: #201f1e;
+  --border: #33302f;
+  --border-strong: #46423f;
   --text: #f4f2f0;
-  --muted: #a3a19f;
+  --muted: #b0aeab;
   --brand: #e4f222;
   --brand-hover: #eef65a;
   --brand-soft: #242322;
+  --brand-tint: rgb(228 242 34 / 0.12);
   --brand-contrast: #0c0a08;
   --inverted: #262524;
   --on-inverted: #f4f2f0;
@@ -73,6 +86,7 @@
   --scroll-thumb-hover: rgb(244 242 240 / 0.38);
   --info: #a2c4e6;
   --info-soft: #1a2837;
+  --elevation-pop: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -8px rgb(0 0 0 / 0.6);
 }
 
 @theme inline {
@@ -80,6 +94,9 @@
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-raised: var(--surface-raised);
+  --color-brand-tint: var(--brand-tint);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-text: var(--text);
@@ -104,7 +121,7 @@
   --color-focus: var(--focus);
   /* Yükseklik gölgeyle değil hairline ve yüzey tonuyla ifade edilir */
   --shadow-card: none;
-  --shadow-pop: none;
+  --shadow-pop: var(--elevation-pop);
 }
 
 @theme {

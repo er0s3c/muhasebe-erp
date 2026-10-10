@@ -494,5 +494,9 @@
   "0123_portal_document_scopes": {
     "sha256": "7fe815b38070ed8561f63db031d3680c0f5df1e5e5590e81fbc62ce93f1e9896",
     "when": 1791541797735
+  },
+  "0124_ui_preferences_fx_auto": {
+    "sha256": "0df26253eb1ed19c5553a8ac68ab71310538ab4eed9f15410b0acf429a6a4776",
+    "when": 1791637558451
   }
 }

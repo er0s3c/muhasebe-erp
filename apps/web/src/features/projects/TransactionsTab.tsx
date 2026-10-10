@@ -1,10 +1,11 @@
+import { errorMessage } from '../../lib/errors';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -35,7 +36,7 @@ export function TransactionsTab({ project }: { project: ProjectDetail }) {
     if (to) q.set('to', to);
     return q.toString();
   }, [wbs, from, to, limit]);
-  const { data, isPending } = useCQuery<ProjectTransactionsData>(['project', project.id, 'transactions', qs], `/api/projects/${project.id}/transactions?${qs}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<ProjectTransactionsData>(['project', project.id, 'transactions', qs], `/api/projects/${project.id}/transactions?${qs}`);
 
   return (
     <div className="flex flex-col gap-5">
@@ -57,7 +58,7 @@ export function TransactionsTab({ project }: { project: ProjectDetail }) {
         <Field label={t('common.to')}>{(id) => <Input id={id} type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />}</Field>
       </div>
 
-      {isPending || !data ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending || !data ? (
         <PageLoading />
       ) : data.total === 0 ? (
         <Card>

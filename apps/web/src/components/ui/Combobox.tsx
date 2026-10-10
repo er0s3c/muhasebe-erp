@@ -109,7 +109,7 @@ export function Combobox({ options, value, onChange, placeholder, disabled, clas
         <Popover.Portal><Popover.Content align="start" sideOffset={6} collisionPadding={12}
           onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}
           onInteractOutside={(event) => { if (rootRef.current?.contains(event.target as Node)) event.preventDefault(); }}
-          className="z-[60] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] rounded-xl border border-border bg-surface py-1">
+          className="z-[60] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] rounded-xl border border-border bg-surface py-1 shadow-pop">
         <ul id={listId} role="listbox" className="max-h-[min(16rem,var(--radix-popover-content-available-height))] overflow-y-auto">
           {filtered.length === 0 && <li className="px-3 py-2 text-sm text-muted">{t('common.noResults')}</li>}
           {filtered.map((o, i) => (

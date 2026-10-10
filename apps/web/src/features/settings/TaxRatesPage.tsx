@@ -8,7 +8,7 @@ import { createTaxRateSchema, parseTR, todayIso, type CreateTaxRateInput } from 
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { PageHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal, Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -26,7 +26,7 @@ export function TaxRatesPage() {
   const toast = useToast();
   const can = useCan();
   const canManage = can('settings.manage');
-  const { data, isPending } = useCQuery<{ taxRates: TaxRate[] }>(['tax-rates'], '/api/tax-rates');
+  const { data, isPending, error: TaxRatesPageQueryError, refetch: TaxRatesPageQueryRetry, isFetching: TaxRatesPageQueryFetching } = useCQuery<{ taxRates: TaxRate[] }>(['tax-rates'], '/api/tax-rates');
   const [adding, setAdding] = useState(false);
   const [verifying, setVerifying] = useState<TaxRate | null>(null);
   const [verifier, setVerifier] = useState('');
@@ -68,6 +68,7 @@ export function TaxRatesPage() {
     );
   });
 
+  if (TaxRatesPageQueryError && !data) return <ErrorState error={TaxRatesPageQueryError} onRetry={() => void TaxRatesPageQueryRetry()} retrying={TaxRatesPageQueryFetching} />;
   return (
     <>
       <PageHeader

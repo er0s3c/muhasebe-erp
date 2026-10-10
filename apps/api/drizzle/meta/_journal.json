@@ -869,6 +869,13 @@
       "when": 1791541797735,
       "tag": "0123_portal_document_scopes",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1791637558451,
+      "tag": "0124_ui_preferences_fx_auto",
+      "breakpoints": true
     }
   ]
 }

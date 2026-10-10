@@ -15,6 +15,8 @@ export async function registerWebApp(app: FastifyInstance, webDir: string): Prom
     root: resolve(webDir),
     prefix: '/',
     index: 'index.html',
+    // Derlemede üretilen .br/.gz kopyaları (apps/web/scripts/precompress.mjs) tarayıcı kabul ediyorsa doğrudan sunulur
+    preCompressed: true,
     cacheControl: false,
     setHeaders(reply, filePath) {
       const normalized = filePath.replaceAll('\\', '/');

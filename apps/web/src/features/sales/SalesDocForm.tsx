@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { calcInvoice, dec, todayIso, type SalesDocKind } from '@erp/shared';
 import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageTitle } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -206,7 +206,9 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
         <ArrowLeft className="size-4" aria-hidden />
         {t(`sales.${kind}.title`)}
       </Link>
-      <h1 className="mb-6 text-heading">{initial ? t('sales.form.editTitle', { type: t(`sales.kind.${kind}`) }) : t(`sales.new.${kind}`)}</h1>
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <PageTitle title={initial ? t('sales.form.editTitle', { type: t(`sales.kind.${kind}`) }) : t(`sales.new.${kind}`)} helpKey="sales-doc" favorite={false} />
+      </div>
 
       <div className="flex flex-col gap-5">
         {(error || fieldError) && <Callout tone="danger">{error ? errorMessage(error) : fieldError}</Callout>}

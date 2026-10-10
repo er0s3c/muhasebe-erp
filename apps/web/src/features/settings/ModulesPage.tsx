@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ModuleDescription } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Switch } from '../../components/ui/Switch';
 import { useToast } from '../../components/ui/Toast';
@@ -15,7 +15,7 @@ export function ModulesPage() {
   const toast = useToast();
   const can = useCan();
   const editable = can('settings.manage');
-  const { data, isPending } = useCQuery<{ modules: ModuleDescription[] }>(['modules'], '/api/company/modules');
+  const { data, isPending, error: ModulesPageQueryError, refetch: ModulesPageQueryRetry, isFetching: ModulesPageQueryFetching } = useCQuery<{ modules: ModuleDescription[] }>(['modules'], '/api/company/modules');
   const [pending, setPending] = useState<string | null>(null);
 
   const toggle = useCMutation(
@@ -25,6 +25,7 @@ export function ModulesPage() {
     [['modules'], ['navigation'], ['dashboard']],
   );
 
+  if (ModulesPageQueryError && !data) return <ErrorState error={ModulesPageQueryError} onRetry={() => void ModulesPageQueryRetry()} retrying={ModulesPageQueryFetching} />;
   if (isPending || !data) return <PageLoading />;
   const nameOf = moduleName;
   const list = (keys: string[]) => keys.map(nameOf).join(', ');

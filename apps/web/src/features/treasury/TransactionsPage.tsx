@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { EmptyState, ErrorState, ListSkeleton } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
-import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { Table, TableWrap, Td, Th, Tr, ProgressiveRows } from '../../components/ui/Table';
 import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import type { TreasuryTxnListRow, TreasuryTxnStatus, TreasuryTxnType } from '../../lib/types';
@@ -151,7 +151,7 @@ export function TransactionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.transactions.map((r) => (
+                <ProgressiveRows rows={data.transactions}>{(r) => (
                   <Tr
                     key={r.id}
                     clickable
@@ -194,7 +194,7 @@ export function TransactionsPage() {
                       <TxnStatusBadge status={r.status} />
                     </Td>
                   </Tr>
-                ))}
+                )}</ProgressiveRows>
               </tbody>
             </Table>
           </TableWrap>

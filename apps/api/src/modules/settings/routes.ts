@@ -17,8 +17,9 @@ import {
   fxPurposeSchema,
   fxRateTypeSchema,
 } from '@erp/shared';
-import { currencies, customCodes, exchangeRates, taxRates } from '../../db/schema';
+import { companies, currencies, customCodes, exchangeRates, taxRates, users } from '../../db/schema';
 import { tenantRoute } from '../../http/context';
+import type { Tx } from '../../db/client';
 import { badRequest, notFound } from '../../http/errors';
 import { closePeriod, generatePeriods, listPeriods, reopenPeriod } from './periods';
 import { lookupRate } from './rates';
@@ -219,6 +220,52 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
         });
       },
     ),
+  );
+
+  /** Otomatik resmî kur çekimi: durum (herkes okur) ve aç/kapat (kur yöneticisi; zamanlayıcı açan kullanıcının bağlamında yazar). */
+  const autoStatus = async (tx: Tx, company: { id: string; jurisdiction?: 'TR' | 'KKTC' | null; fxProvider?: 'tcmb' | 'kktcmb' | null }) => {
+    const [row] = await tx
+      .select({ enabled: companies.fxAutoImport, lastAttemptAt: companies.fxAutoLastAttemptAt, lastError: companies.fxAutoLastError, enabledBy: companies.fxAutoEnabledBy })
+      .from(companies)
+      .where(eq(companies.id, company.id));
+    const [enabledBy] = row?.enabledBy
+      ? await tx.select({ fullName: users.fullName }).from(users).where(eq(users.id, row.enabledBy))
+      : [];
+    const provider = companyFxProvider(company);
+    const [last] = provider
+      ? await tx
+          .select({ date: exchangeRates.rateDate, fetchedAt: exchangeRates.fetchedAt, source: exchangeRates.source })
+          .from(exchangeRates)
+          .where(and(eq(exchangeRates.provider, provider), sql`${exchangeRates.fetchedAt} is not null`))
+          .orderBy(desc(exchangeRates.fetchedAt))
+          .limit(1)
+      : [];
+    return {
+      enabled: row?.enabled ?? false,
+      provider,
+      providerLabel: provider ? FX_PROVIDER_REGISTRY[provider].label : null,
+      enabledByName: row?.enabled ? (enabledBy?.fullName ?? null) : null,
+      lastAttemptAt: row?.lastAttemptAt ?? null,
+      lastError: row?.lastError ?? null,
+      lastImport: last ?? null,
+      publishAfter: provider ? (provider === 'tcmb' ? app.config.FX_AUTO_TCMB_AFTER : app.config.FX_AUTO_KKTCMB_AFTER) : null,
+    };
+  };
+  app.get(
+    '/api/exchange-rates/auto',
+    tenantRoute(app, settings('settings.read'), async ({ tx, company }) => autoStatus(tx, company)),
+  );
+  app.put(
+    '/api/exchange-rates/auto',
+    tenantRoute(app, settings('rates.manage'), async ({ tx, req, user, company }) => {
+      const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+      if (enabled) requireCompanyFxProvider(company);
+      await tx
+        .update(companies)
+        .set(enabled ? { fxAutoImport: true, fxAutoEnabledBy: user.id, fxAutoLastError: null } : { fxAutoImport: false, fxAutoEnabledBy: null, fxAutoLastError: null })
+        .where(eq(companies.id, company.id));
+      return autoStatus(tx, company);
+    }),
   );
 
   // ---- KDV / vergi oranları --------------------------------------------

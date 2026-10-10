@@ -27,7 +27,8 @@ const PanoramaViewer = lazy(() =>
   import('./ModelViewer').then((m) => ({ default: m.PanoramaViewer })),
 );
 import { DrawingCanvas } from './DrawingCanvas';
-import { fileBase64, prepareOfflineShell, prepareFieldPackage } from './offline';
+import { fileBase64, prepareFieldPackage } from './offline';
+import { prepareOfflineShell } from './offline-shell';
 
 const tabs = [
   { key: 'overview', label: 'Özet' },

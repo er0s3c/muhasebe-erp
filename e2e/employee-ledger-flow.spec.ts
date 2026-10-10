@@ -46,7 +46,8 @@ test('personel cari ve avans: avans ver → bordrodan kesinti → onay → maaş
   await page.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByText('Puantaj kaydedildi').first()).toBeVisible();
 
-  await nav.getByRole('link', { name: 'Bordro ayarları' }).click();
+  await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
+  await page.getByRole('tab', { name: 'Bordro' }).click();
   const termForm = page.locator('form').filter({ has: page.getByLabel('Ücret tutarı') });
   const empSelect = termForm.getByLabel('Personel', { exact: true });
   await empSelect.selectOption((await empSelect.locator('option', { hasText: 'Mehmet Kaya' }).getAttribute('value'))!);

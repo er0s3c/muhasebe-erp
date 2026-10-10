@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@ui/Button';
 import { PageHeader } from '@ui/Card';
@@ -27,6 +27,9 @@ export function CustomersPage() {
   const pending = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (Object.keys(fieldErrors).length > 0) focusValidationError(formRef.current);
+  }, [fieldErrors]);
   const [removing, setRemoving] = useState<Customer | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -58,7 +61,6 @@ export function CustomersPage() {
       await Promise.all([queryClient.invalidateQueries({ queryKey: ['customers'] }), queryClient.invalidateQueries({ queryKey: ['dashboard'] })]);
     } catch (e) {
       setFieldErrors(validationErrors(e));
-      focusValidationError(formRef.current);
       setError(errorText(e));
     } finally {
       pending.current = false;

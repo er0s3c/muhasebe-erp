@@ -1,3 +1,4 @@
+import { errorMessage } from '../../lib/errors';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -5,9 +6,9 @@ import { todayIso } from '@erp/shared';
 import { useCQuery, useCan, useCompanyApi } from '../../lib/queries';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Stat } from '../../components/ui/Stat';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState } from '../../components/ui/Feedback';
 import { Status } from '../leather/common';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import {
   displayDateTime,
   displayQuantity,
@@ -60,6 +61,8 @@ function Records({
   actions,
   loading,
   error,
+  onRetry,
+  retrying,
 }: {
   title: string;
   rows: Row[];
@@ -67,6 +70,8 @@ function Records({
   actions?: (r: Row) => ReactNode;
   loading?: boolean;
   error?: Error | null;
+  onRetry?: () => void;
+  retrying?: boolean;
 }) {
   return (
     <>
@@ -75,6 +80,8 @@ function Records({
         rows={rows}
         loading={loading}
         error={error}
+        onRetry={onRetry}
+        retrying={retrying}
         columns={columns.map((c) => ({
           label: c.label,
           formatted: true,
@@ -313,7 +320,7 @@ function MaintenanceOperationsPage() {
       />
       <Records
         title="Bakım kayıtları"
-        loading={records.isPending}
+        loading={records.isPending} onRetry={() => void records.refetch()} retrying={records.isFetching}
         error={records.error}
         rows={(records.data?.records ?? []).map((r) => ({
           ...r,
@@ -364,6 +371,10 @@ function MaintenanceOperationsPage() {
       />
       <Records
         title="Bakım ve verimlilik göstergeleri"
+        loading={metrics.isPending}
+        error={metrics.error}
+        onRetry={() => void metrics.refetch()}
+        retrying={metrics.isFetching}
         rows={metrics.data?.metrics.map((r) => ({ ...r, id: String(r.resourceId) })) ?? []}
         columns={[
           { key: 'name', label: 'Kaynak' },
@@ -432,7 +443,7 @@ function MaintenanceOperationsPage() {
           }
         />
       )}
-      {records.error && <Callout tone="danger">{records.error.message}</Callout>}
+      {records.error && <ErrorState description={errorMessage(records.error)} onRetry={() => void records.refetch()} retrying={records.isFetching} />}
     </>
   );
 }
@@ -464,7 +475,7 @@ export function ManufacturingWarehousePage() {
         <Stat label="Raf">{bins.data?.records.length ?? '—'}</Stat>
         <Stat label="Yerleştirme">{placements.data?.records.length ?? '—'}</Stat>
       </div>
-      <SegmentedTabs
+      <SegmentedTabs id="warehouse-tabs" panelId={() => "warehouse-panel"}
         className="mb-4"
         items={[
           { key: 'lots', label: 'Partiler' },
@@ -474,11 +485,12 @@ export function ManufacturingWarehousePage() {
         value={selection}
         onChange={setSelection}
       />
+      <TabPanel id="warehouse-panel" labelledBy={`warehouse-tabs-${selection}`}>
       <Records
         title="Depo kayıtları"
         loading={
           (selection === 'bins' ? bins : selection === 'placements' ? placements : lots).isPending
-        }
+        } onRetry={() => void (selection === 'bins' ? bins : selection === 'placements' ? placements : lots).refetch()} retrying={(selection === 'bins' ? bins : selection === 'placements' ? placements : lots).isFetching}
         error={(selection === 'bins' ? bins : selection === 'placements' ? placements : lots).error}
         rows={(
           (selection === 'bins' ? bins : selection === 'placements' ? placements : lots).data
@@ -600,6 +612,7 @@ export function ManufacturingWarehousePage() {
           )}
         </>
       )}
+      </TabPanel>
     </>
   );
 }
@@ -624,7 +637,7 @@ export function ManufacturingLogisticsPage() {
       <PageHeader title="Paketleme ve sevkiyat" />
       <Records
         title="Sevkiyatlar"
-        loading={records.isPending}
+        loading={records.isPending} onRetry={() => void records.refetch()} retrying={records.isFetching}
         error={records.error}
         rows={records.data?.records ?? []}
         columns={[
@@ -739,13 +752,13 @@ export function ManufacturingIntegrationsPage() {
   return (
     <>
       <PageHeader
-        title="Entegrasyonlar"
+        title="Kanal bağlantıları"
         description="Bağlantı bilgileri girilene kadar kanallar bağlı değil görünür. Demo şirketi dış sistemlere veri göndermez."
       />
       <ChannelExecutionPanel connections={records.data?.records ?? []} />
       <Records
         title="Bağlantılar"
-        loading={records.isPending}
+        loading={records.isPending} onRetry={() => void records.refetch()} retrying={records.isFetching}
         error={records.error}
         rows={records.data?.records ?? []}
         columns={[

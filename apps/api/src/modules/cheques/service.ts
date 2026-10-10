@@ -480,12 +480,12 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
     createdBy: ctx.userId,
   });
 
-  let firstEventId = '';
-  for (const c of rows) {
-    const eventId = uuidv7();
-    if (!firstEventId) firstEventId = eventId;
-    await tx.insert(chequeEvents).values({
-      id: eventId,
+  // Toplu işlem: olaylar tek çok satırlı insert, belge durumu tek update (değerler tüm belgeler için aynı).
+  // Belge başına sıra korunur: önce olay, sonra durum.
+  const eventIds = rows.map(() => uuidv7());
+  await tx.insert(chequeEvents).values(
+    rows.map((c, i) => ({
+      id: eventIds[i]!,
       companyId: ctx.companyId,
       chequeId: c.id,
       fromStatus: tr.from,
@@ -497,20 +497,20 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
       bankAccountId: bank?.id ?? null,
       note: input.note?.trim() || null,
       createdBy: ctx.userId,
-    });
-    await tx
-      .update(cheques)
-      .set({
-        status: tr.to,
-        holderPartyId: input.action === 'endorse' ? endorsee!.id : null,
-        ...(input.action === 'deposit' || input.action === 'pay' ? { bankAccountId: bank!.id } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(cheques.id, c.id));
-    // Ciro: eşleştirme ilk belgenin olayına bağlanır (kalemler toplamı kapatır; belge başına bölünmez)
-    if (input.action === 'endorse' && c === rows[0]) {
-      await insertAllocations(tx, ctx, { chequeId: c.id, eventId, partyId: endorsee!.id, control: 'payable', entryId: entry.id, items: settleItems, plan: plan!, itemLineIndex });
-    }
+    })),
+  );
+  await tx
+    .update(cheques)
+    .set({
+      status: tr.to,
+      holderPartyId: input.action === 'endorse' ? endorsee!.id : null,
+      ...(input.action === 'deposit' || input.action === 'pay' ? { bankAccountId: bank!.id } : {}),
+      updatedAt: new Date(),
+    })
+    .where(inArray(cheques.id, rows.map((c) => c.id)));
+  // Ciro: eşleştirme ilk belgenin olayına bağlanır (kalemler toplamı kapatır; belge başına bölünmez)
+  if (input.action === 'endorse' && rows[0]) {
+    await insertAllocations(tx, ctx, { chequeId: rows[0].id, eventId: eventIds[0]!, partyId: endorsee!.id, control: 'payable', entryId: entry.id, items: settleItems, plan: plan!, itemLineIndex });
   }
 
   const detail = await tx.execute<ChequeView>(sql`select ${COLS} ${FROM} where c.id in (${uuidList(ids)}) order by c.due_date, c.doc_no`);

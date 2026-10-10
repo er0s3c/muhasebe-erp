@@ -67,7 +67,7 @@ export function NotificationBell() {
           sideOffset={8}
           collisionPadding={12}
           aria-label={t('notifications.title')}
-          className="z-50 w-[min(26rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-surface [animation:pop-in_0.12s_ease-out] print:hidden"
+          className="z-50 w-[min(26rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-surface shadow-pop [animation:pop-in_0.12s_ease-out] print:hidden"
         >
           <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <h2 className="text-sm">{t('notifications.title')}</h2>

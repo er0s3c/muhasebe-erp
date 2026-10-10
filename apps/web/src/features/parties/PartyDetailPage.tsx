@@ -1,4 +1,4 @@
-import { ArrowLeft, Banknote, Pencil, Power, Trash2 } from 'lucide-react';
+import { Banknote, Pencil, Power, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -6,12 +6,12 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Stat } from '../../components/ui/Stat';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { useCurrencyLabel } from '../../components/ui/CurrencyOptions';
@@ -71,23 +71,21 @@ export function PartyDetailPage() {
 
   return (
     <>
-      <Link to="/parties" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t('parties.detail.back')}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{party.name}</h1>
+      <PageHeader
+        title={party.name}
+        helpKey="party-detail"
+        back={{ to: '/parties', label: t('parties.detail.back') }}
+        recent={{ kind: 'Cari' }}
+        eyebrow={<span className="font-mono normal-case tracking-normal">{party.code}</span>}
+        meta={
+          <>
             <Badge tone={party.kind === 'customer' ? 'brand' : party.kind === 'supplier' ? 'warning' : 'neutral'}>{t(`parties.kinds.${party.kind}`)}</Badge>
             {!party.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
-            {overLimit && <Badge tone="danger">{t('parties.detail.limitExceeded')}</Badge>}
-          </div>
-          <p className="mt-1 font-mono text-sm text-muted">{party.code}</p>
-        </div>
-        {(canManage || canCollect) && (
-          <div className="flex flex-wrap items-center gap-2">
+            {overLimit && <Badge tone="danger" dot>{t('parties.detail.limitExceeded')}</Badge>}
+          </>
+        }
+        actions={(canManage || canCollect) && (
+          <>
             {canCollect && party.isActive && party.kind !== 'supplier' && (
               <Button variant="primary" onClick={() => navigate(`/treasury/transactions?new=receipt&party=${party.id}`)}>
                 <Banknote className="size-4" aria-hidden />
@@ -106,9 +104,9 @@ export function PartyDetailPage() {
                 {t('common.edit')}
               </Button>
             )}
-          </div>
+          </>
         )}
-      </div>
+      />
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Stat
@@ -140,14 +138,15 @@ export function PartyDetailPage() {
         <Stat label={t('parties.detail.totalCredit')}>{money(summary.credit)}</Stat>
       </div>
 
-      <SegmentedTabs
+      <SegmentedTabs id="parties-PartyDetailPage-0" panelId={() => 'parties-PartyDetailPage-0-panel'}
         className="mb-5"
         value={tab}
         onChange={setTab}
         items={(['statement', 'openItems', 'card'] as const).map((k) => ({ key: k, label: t(`parties.detail.tabs.${k}`) }))}
       />
 
-      {tab === 'statement' && <StatementTab partyId={party.id} />}
+      <TabPanel id="parties-PartyDetailPage-0-panel" labelledBy={"parties-PartyDetailPage-0-" + (tab)}>
+{tab === 'statement' && <StatementTab partyId={party.id} />}
       {tab === 'openItems' && <OpenItemsTab partyId={party.id} />}
       {tab === 'card' && (
         <Card>
@@ -236,6 +235,7 @@ export function PartyDetailPage() {
       >
         {null}
       </Modal>
+</TabPanel>
     </>
   );
 }

@@ -241,3 +241,19 @@ Denetim sırasında, V2 kaynak değişikliklerinden önce web paketinin 8 test d
 - [ ] Son tur ekran görüntüleri görsel olarak incelendi; yatay taşma, ikinci dikey kaydırma, kırpılmış işlem ve console/pageerror bulunmadı.
 
 Tekrarlanabilir tarama kaynakları: `e2e/ui-audit.spec.ts`, `ui-details.spec.ts`, `ui-robustness.spec.ts`, `review-ui.spec.ts`, `planning-ui.spec.ts`, `lisans-server/e2e/license-admin.spec.ts`. Görsel sonuçlar ve başarısız testler ancak gerçekten çalıştırıldıktan sonra bu kabul kaydına eklenmelidir.
+
+## V3 birleşen ekranlar ve yönlendirmeler (10 Ekim 2026)
+
+Aşağıdaki eski adresler kaldırılmadı; sorgu parametreleri korunarak yeni merkez sayfanın ilgili sekmesine yönlenir. Menüde her konu için tek öğe görünür (`apps/web/src/components/layout/navigation.ts` → `NAV_MERGES`). Sunucu izinleri değişmedi; merkez sayfa yalnız kullanıcının izinli olduğu sekmeleri gösterir.
+
+| Yeni merkez | Sekme | Eski adres(ler) | Rota izni |
+| --- | --- | --- | --- |
+| `/hr/settings` İK ve bordro ayarları | Bordro / SGK / Yabancı işçi | `/hr/payroll/settings`, `/hr/social-security/settings`, `/hr/foreign-workers/settings` | sekme başına (`hr.payroll`, `hr.payroll`, `hr.read`) |
+| `/treasury/cash-planning` Nakit planlama | Projeksiyon / Senaryolar | `/treasury/cash-forecast`, `/workspace/scenarios` | `treasury.read` |
+| `/settings/integrations` Entegrasyonlar | Kanal bağlantıları / API ve webhook | `/integrations` | `core.integrations.read` |
+| `/settings/data-transfer` Veri aktarımı | İçe ve dışa aktarma / Tüm veriyi dışa aktar | `/reports/file-exchange`, `/reports/data-export` | sekme başına (`workspace.use`, `data.export`) |
+| `/treasury/expenses` Giderler | Gider fişleri / Gider türleri | `/treasury/expense-cards` | `treasury.read` |
+
+Yeniden adlandırılan menü/başlıklar: "İthalat dosyaları" → "İthalat maliyet dosyaları", "Onay kutusu" → "Hakediş onayları", "Belge onayları" → "Belge onay kuralları", "İşletim ve güvenlik" → "Sistem ve güvenlik", "Rapor panom" → "Analiz panosu", "Sosyal güvenlik" → "SGK bildirgeleri". `/manufacturing/costs` artık üretim ekranını maliyet dağıtımı üstte ve "Üretim maliyetleri" başlığıyla açar.
+
+Ham `<h1>` kullanan 22 detay/editör ekranı `PageHeader`/`PageTitle`'a geçirildi; hepsinde sayfa rehberi ("i"), favori ve son ziyaret kaydı vardır. Görsel QA bu revizyonda pano, cari detayı, satış faturaları, veri aktarımı ve İK ayarları için masaüstü (açık/koyu) ve 375px'te yapıldı; diğer rotalar için "Bekliyor" durumu geçerlidir.

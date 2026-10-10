@@ -76,7 +76,7 @@ export function Sheet({ open, onOpenChange, title, description, wide, footer, ch
           onCloseAutoFocus={returnFocus}
           onKeyDown={enterSubmits(footerRef)}
           className={cn(
-            'fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-surface [animation:sheet-in_0.2s_ease-out]',
+            'fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-surface shadow-pop [animation:sheet-in_0.2s_ease-out]',
             wide ? 'max-w-4xl' : 'max-w-md',
           )}
         >
@@ -128,7 +128,7 @@ export function Modal({ open, onOpenChange, title, description, footer, children
         <Dialog.Content
           onCloseAutoFocus={returnFocus}
           onKeyDown={enterSubmits(footerRef)}
-          className="fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-border bg-surface [animation:pop-in_0.15s_ease-out]"
+          className="fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-border bg-surface shadow-pop [animation:pop-in_0.15s_ease-out]"
         >
           <FormGuard captureAll scopeKey={open ? title : 'closed'} onStateChange={setDraft} className="flex min-h-0 flex-1 flex-col">
           <div className="shrink-0 px-6 pt-5">

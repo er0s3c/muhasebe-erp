@@ -39,8 +39,11 @@ export function PortalPage() {
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const requestGeneration = useRef(0);
-  const accessLost = useCallback((message: string) => { requestGeneration.current++; setData(null); setPassword(''); setError(message); setBusy(false); }, []);
+  const pending = useRef(false);
+  const accessLost = useCallback((message: string) => { requestGeneration.current++; pending.current = false; setData(null); setPassword(''); setError(message); setBusy(false); }, []);
   async function login() {
+    if (pending.current) return;
+    pending.current = true;
     const generation = ++requestGeneration.current;
     setBusy(true);
     setError('');
@@ -57,7 +60,7 @@ export function PortalPage() {
       setError((e as Error).message);
       setData(null);
     } finally {
-      if (requestGeneration.current === generation) setBusy(false);
+      if (requestGeneration.current === generation) { pending.current = false; setBusy(false); }
     }
   }
   return (
@@ -99,7 +102,7 @@ export function PortalPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
-            <Button type="submit" variant="primary" disabled={busy || !token}>
+            <Button type="submit" variant="primary" loading={busy} disabled={!token}>
               Giriş yap
             </Button>
             {!token && <p className="text-sm">Size verilen tam portal bağlantısını açın.</p>}
@@ -108,12 +111,13 @@ export function PortalPage() {
       ) : (
         <>
           <div className="flex gap-3">
-            <Button onClick={() => void login()} disabled={busy}>
+            <Button onClick={() => void login()} loading={busy}>
               Yenile
             </Button>
             <Button
               onClick={() => {
                 requestGeneration.current++;
+                pending.current = false;
                 setData(null);
                 setPassword('');
                 setBusy(false);

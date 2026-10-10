@@ -28,7 +28,7 @@ import { Callout, PageLoading, EmptyState } from '../../components/ui/Feedback';
 import { RecordPicker } from './RecordPicker';
 import {RecordLocationLinks} from '../construction-control/RecordLocationLinks';
 
-import { labels, optionLabels, permissions, writePermissions, fields } from './config';
+import { labels, optionLabels, permissions, writePermissions, fields, operationsReturnDestination } from './config';
 const siteDraftSchema = z.object({
   body: z.object({
     id: z.uuid(),
@@ -68,10 +68,11 @@ export function OperationsPage() {
   const company = useCompany();
   const [params] = useSearchParams();
   const parsed = operationKindSchema.safeParse(params.get('kind'));
+  const kind = parsed.success ? parsed.data : company.sector === 'CONSTRUCTION' ? 'site_report' : 'collection';
   return (
     <OperationsContent
-      key={`${company.id}:${parsed.success ? parsed.data : 'site_report'}:${params.get('projectId') ?? ''}`}
-      kind={parsed.success ? parsed.data : 'site_report'}
+      key={`${company.id}:${kind}:${params.get('projectId') ?? ''}`}
+      kind={kind}
     />
   );
 }
@@ -90,6 +91,7 @@ function OperationsContent({ kind }: { kind: OperationKind }) {
   const projectsOn = useModuleEnabled('construction.projects');
   const partiesOn = useModuleEnabled('core.parties');
   const realestateOn = useModuleEnabled('construction.realestate');
+  const returnTo = operationsReturnDestination(company.sector, projectsOn && can('projects.read'));
   const enabled = (k: OperationKind) =>
     can(permissions[k]) &&
     (k === 'collection' ? partiesOn : k === 'defect' ? realestateOn : projectsOn);
@@ -272,9 +274,9 @@ function OperationsContent({ kind }: { kind: OperationKind }) {
         }
       />
       <div className="mb-5 flex flex-wrap items-center gap-3 print:hidden">
-        <Link className="link inline-flex items-center gap-2 text-sm" to="/workspace/construction">
+        <Link className="link inline-flex items-center gap-2 text-sm" to={returnTo.path}>
           <ArrowLeft className="size-4" />
-          İnşaat kontrol merkezi
+          {returnTo.label}
         </Link>
         <Select
           aria-label="Operasyon ekranı"

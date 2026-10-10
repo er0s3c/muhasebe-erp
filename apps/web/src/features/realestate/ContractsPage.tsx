@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR, moneyIn } from '../../lib/format';
@@ -29,7 +29,7 @@ export function SalesContractsPage() {
     return q.toString();
   }, [projectId, status]);
   const lim = useListLimit(qs);
-  const { data, isPending } = useCQuery<{ contracts: SalesContractRow[] } & { truncated?: boolean }>(['sales-contracts', 'list', qs, lim.limit], `/api/sales-contracts?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
+  const { data, isPending, error: SalesContractsPageQueryError, refetch: SalesContractsPageQueryRetry, isFetching: SalesContractsPageQueryFetching } = useCQuery<{ contracts: SalesContractRow[] } & { truncated?: boolean }>(['sales-contracts', 'list', qs, lim.limit], `/api/sales-contracts?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.contracts ?? [];
   const filtered = !!(projectId || status);
   const add = canManage && (
@@ -38,6 +38,7 @@ export function SalesContractsPage() {
       {t('realEstate.contracts.add')}
     </Button>
   );
+  if (SalesContractsPageQueryError && !data) return <ErrorState error={SalesContractsPageQueryError} onRetry={() => void SalesContractsPageQueryRetry()} retrying={SalesContractsPageQueryFetching} />;
   return (
     <>
       <PageHeader

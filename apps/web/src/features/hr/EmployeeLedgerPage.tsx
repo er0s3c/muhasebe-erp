@@ -8,12 +8,12 @@ import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal } from '../../components/ui/Sheet';
 import { Stat } from '../../components/ui/Stat';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
@@ -43,7 +43,7 @@ export function EmployeeLedgerPage() {
         <Callout tone="warning">{t('employeeLedger.notice')}</Callout>
       </div>
       <div className="mb-4">
-        <SegmentedTabs
+        <SegmentedTabs id="hr-employeeledgerpage-tabs" panelId={() => 'hr-employeeledgerpage-tabs-panel'}
           value={tab}
           onChange={setTab}
           items={[
@@ -54,10 +54,12 @@ export function EmployeeLedgerPage() {
           ]}
         />
       </div>
+      <TabPanel id="hr-employeeledgerpage-tabs-panel" labelledBy={`hr-employeeledgerpage-tabs-${tab}`}>
       {tab === 'balances' && <BalancesTab />}
       {tab === 'advances' && <AdvancesTab canManage={can('hr.payroll_manage')} />}
       {tab === 'payments' && <PaymentsTab canManage={can('hr.payroll_manage')} />}
       {tab === 'settings' && <SettingsTab canManage={can('hr.payroll_manage')} />}
+      </TabPanel>
     </>
   );
 }
@@ -66,7 +68,8 @@ export function EmployeeLedgerPage() {
 
 function BalancesTab() {
   const { t } = useTranslation();
-  const { data, isPending, error } = useCQuery<EmployeeBalances>(['employee-ledger', 'balances'], '/api/employee-ledger/balances');
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<EmployeeBalances>(['employee-ledger', 'balances'], '/api/employee-ledger/balances');
+  if (error) return <ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending) return <PageLoading />;
   if (!data) return <Callout tone="danger">{errorMessage(error)}</Callout>;
   return (
@@ -133,7 +136,7 @@ type AdvDlg = { kind: 'give' } | { kind: 'detail' | 'repay' | 'cancel'; row: Adv
 function AdvancesTab({ canManage }: { canManage: boolean }) {
   const { t } = useTranslation();
   const [status, setStatus] = useState('outstanding');
-  const { data, isPending, error } = useCQuery<AdvanceRegister>(['employee-ledger', 'advances', status], `/api/employee-ledger/advances?status=${status}`);
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<AdvanceRegister>(['employee-ledger', 'advances', status], `/api/employee-ledger/advances?status=${status}`);
   const [dlg, setDlg] = useState<AdvDlg>(null);
   const buckets = ['notDue', 'd1_30', 'd31_60', 'd61_90', 'd90plus'] as const;
   return (
@@ -160,7 +163,7 @@ function AdvancesTab({ canManage }: { canManage: boolean }) {
           )}
         </div>
       </div>
-      {isPending ? (
+      {error ? (<ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : !data ? (
         <Callout tone="danger">{errorMessage(error)}</Callout>
@@ -313,10 +316,10 @@ function GiveAdvanceModal({ onClose }: { onClose: () => void }) {
 
 function AdvanceDetailModal({ row, onClose }: { row: AdvanceRegisterRow; onClose: () => void }) {
   const { t } = useTranslation();
-  const { data, isPending } = useCQuery<AdvanceDetail>(['employee-ledger', 'advance', row.id], `/api/employee-ledger/advances/${row.id}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<AdvanceDetail>(['employee-ledger', 'advance', row.id], `/api/employee-ledger/advances/${row.id}`);
   return (
     <Modal open onOpenChange={(o) => !o && onClose()} title={t('employeeLedger.detail.title', { no: row.number })} description={`${row.employeeName} — ${row.purpose}`} footer={<Button onClick={onClose}>{t('common.close')}</Button>}>
-      {isPending || !data ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending || !data ? (
         <PageLoading />
       ) : (
         <div className="flex flex-col gap-4 text-sm">
@@ -443,7 +446,7 @@ function CancelAdvanceModal({ row, onClose }: { row: AdvanceRegisterRow; onClose
 
 function PaymentsTab({ canManage }: { canManage: boolean }) {
   const { t } = useTranslation();
-  const { data, isPending, error } = useCQuery<{ payments: SalaryPaymentRow[] }>(['employee-ledger', 'payments'], '/api/employee-ledger/salary-payments');
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ payments: SalaryPaymentRow[] }>(['employee-ledger', 'payments'], '/api/employee-ledger/salary-payments');
   const [paying, setPaying] = useState(false);
   return (
     <div className="flex flex-col gap-4">
@@ -456,7 +459,7 @@ function PaymentsTab({ canManage }: { canManage: boolean }) {
           </Button>
         </div>
       )}
-      {isPending ? (
+      {error ? (<ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : !data ? (
         <Callout tone="danger">{errorMessage(error)}</Callout>
@@ -563,12 +566,13 @@ function PayModal({ onClose }: { onClose: () => void }) {
 function SettingsTab({ canManage }: { canManage: boolean }) {
   const { t } = useTranslation();
   const toast = useToast();
-  const { data, isPending, error: loadError } = useCQuery<{ settings: LedgerSettings }>(['employee-ledger', 'settings'], '/api/employee-ledger/settings');
+  const { data, isPending, error: loadError , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ settings: LedgerSettings }>(['employee-ledger', 'settings'], '/api/employee-ledger/settings');
   const [cap, setCap] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const save = useCMutation((v: { deductionCapPct: string | null; sourceNote: string | null }, call) => call('/api/employee-ledger/settings', { method: 'PUT', body: v }), [['employee-ledger']]);
   const verify = useCMutation((_: void, call) => call('/api/employee-ledger/settings/verify', { method: 'POST', body: {} }), [['employee-ledger']]);
+  if (loadError) return <ErrorState description={errorMessage(loadError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending) return <PageLoading />;
   if (!data) return <Callout tone="danger">{errorMessage(loadError)}</Callout>;
   const s = data.settings;

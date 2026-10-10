@@ -10,7 +10,7 @@ import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { PrintHeader } from '../../components/ui/PrintHeader';
@@ -696,8 +696,9 @@ function SourcePicker({ open, onClose, taken, onAdd }: { open: boolean; onClose:
   const [sel, setSel] = useState<Record<string, ImportSource>>({});
   const qs = new URLSearchParams({ limit: '100' });
   if (q.trim()) qs.set('q', q.trim());
-  const { data, isPending } = useCQuery<{ sources: ImportSource[] }>(['import-sources', qs.toString()], `/api/import-files/sources?${qs}`, { enabled: open });
+  const { data, isPending, error: SourcePickerQueryError, refetch: SourcePickerQueryRetry, isFetching: SourcePickerQueryFetching } = useCQuery<{ sources: ImportSource[] }>(['import-sources', qs.toString()], `/api/import-files/sources?${qs}`, { enabled: open });
   const rows = (data?.sources ?? []).filter((s) => !taken.has(s.sourceLineId));
+  
   return (
     <Modal
       open={open}
@@ -714,7 +715,7 @@ function SourcePicker({ open, onClose, taken, onAdd }: { open: boolean; onClose:
     >
       <div className="flex flex-col gap-3">
         <Input aria-label={t('common.search')} placeholder={t('landed.goods.pickSearch')} value={q} onChange={(e) => setQ(e.target.value)} />
-        {isPending ? (
+        {SourcePickerQueryError && !data ? <ErrorState error={SourcePickerQueryError} onRetry={() => void SourcePickerQueryRetry()} retrying={SourcePickerQueryFetching} /> : isPending ? (
           <PageLoading />
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted">{t('landed.goods.pickEmpty')}</p>

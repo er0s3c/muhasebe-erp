@@ -20,7 +20,7 @@ const trigger =
 
 const content =
   'z-50 max-h-[min(20rem,var(--radix-dropdown-menu-content-available-height))] min-w-[var(--radix-dropdown-menu-trigger-width)] max-w-[min(28rem,92vw)] ' +
-  'overflow-y-auto rounded-xl border border-border bg-surface p-1.5 [animation:pop-in_0.12s_ease-out] print:hidden';
+  'overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-pop [animation:pop-in_0.12s_ease-out] print:hidden';
 
 const item =
   'flex cursor-pointer select-none items-center justify-between gap-3 rounded-md px-3 py-2 text-sm outline-none ' +

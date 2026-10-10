@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { Modal } from '../../components/ui/Sheet';
@@ -38,7 +38,7 @@ export function CountryPayrollSettings() {
   const company = useCompany();
   const manage = useCan()('hr.payroll_manage');
   const initialCountry = company.jurisdiction ?? 'TR';
-  const { data } = useCQuery<{ configs: ConfigRow[] }>(['payroll', 'country-configs'], '/api/payroll/country-configs');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ configs: ConfigRow[] }>(['payroll', 'country-configs'], '/api/payroll/country-configs');
   const [config, setConfig] = useState<CountryPayrollConfig>(() => suggestion(initialCountry));
   const [from, setFrom] = useState('2026-01-01');
   const [sourceNote, setSourceNote] = useState('');
@@ -69,6 +69,8 @@ export function CountryPayrollSettings() {
     } catch (err) { return { result: null, error: err instanceof Error ? err.message : 'Hesaplanamadı' }; }
   }, [config, valid, month, gross, socialDays, cumulative, exemptCumulative, minimumExemption, additionalAllowance, taxCreditPct]);
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return <>
     <Card>
       <CardHeader title="Ülkeye göre bordro kuralları" description="Tarihli tarife, prim ve istisna paketi. Kaydedilen yeni paket önce doğrulanır, sonra etkinleştirilir." />
@@ -115,7 +117,7 @@ export function CountryPayrollBreakdown({ result }: { result: CountryPayrollResu
 
 function PayrollTaxProfiles({ configs }: { configs: ConfigRow[] }) {
   const manage = useCan()('hr.payroll_manage');
-  const { data } = useCQuery<{ profiles: ProfileRow[] }>(['payroll', 'tax-profiles'], '/api/payroll/tax-profiles');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ profiles: ProfileRow[] }>(['payroll', 'tax-profiles'], '/api/payroll/tax-profiles');
   const { data: emps } = useCQuery<{ employees: EmployeeRow[] }>(['employees', 'list', ''], '/api/employees?');
   const [employeeId, setEmployeeId] = useState('');
   const [configId, setConfigId] = useState('');
@@ -128,6 +130,8 @@ function PayrollTaxProfiles({ configs }: { configs: ConfigRow[] }) {
   const [error, setError] = useState<Error | null>(null);
   const selected = configs.find((row) => row.id === configId);
   const add = useCMutation((_: void, call) => call('/api/payroll/tax-profiles', { method: 'POST', body: { employeeId, effectiveFrom: from, profile: { jurisdiction: selected!.jurisdiction, regime: selected!.config.regime, openingBalancesAsOf: from.slice(0, 7), openingTaxBase: opening, openingExemptionBase: exemption, minimumWageExemption: selected!.jurisdiction === 'TR' && minimum, additionalAnnualAllowance: selected!.jurisdiction === 'KKTC' ? allowance : '0', taxCreditPct: selected!.jurisdiction === 'KKTC' ? credit : '0' } } }), PAYROLL_INVALIDATE);
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return <Card><CardHeader title="Personel vergi rejimi ve açılış matrahları" description="Türkiye kümülatif matrahı yıl başında sıfırlanır. Yıl ortasında geçişte önceki bordrolardan devreden tutarları açıkça girin." /><div className="flex flex-col gap-4 p-4">
     <Callout tone="info">Açılış tutarları yürürlük ayından önceki dönemlere aittir; aynı dönem için yeniden toplam yazmayın. Çok işverende Türkiye asgari ücret istisnasını yalnız uygun işveren uygular. KKTC aile ve kişisel ek indirimleri resmî belgeye göre yıllık tutar olarak girilir.</Callout>
     {error && <Callout tone="danger">{errorMessage(error)}</Callout>}

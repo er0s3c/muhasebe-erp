@@ -1,11 +1,11 @@
-import { ArrowLeft, Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DELIVERY_NOTE_TYPE_META, dec, todayIso } from '@erp/shared';
 import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
@@ -235,16 +235,12 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
 
   return (<FormGuard captureAll scopeKey="DeliveryNoteForm" pending={save.isPending || remove.isPending}>{(
     <>
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t(`deliveries.${side}.title`)}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-heading">
-          {initial ? t('deliveries.form.editTitle', { type: t(`deliveries.types.${type}`) }) : t('deliveries.form.newTitle', { type: t(`deliveries.types.${type}`) })}
-        </h1>
-      </div>
+      <PageHeader
+        title={initial ? t('deliveries.form.editTitle', { type: t(`deliveries.types.${type}`) }) : t('deliveries.form.newTitle', { type: t(`deliveries.types.${type}`) })}
+        helpKey="delivery-note-editor"
+        back={{ to: listPath, label: t(`deliveries.${side}.title`) }}
+        favorite={false}
+      />
 
       <div className="flex flex-col gap-5">
         {(error || fieldError) && <Callout tone="danger">{error ? errorMessage(error) : fieldError}</Callout>}

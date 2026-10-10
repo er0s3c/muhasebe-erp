@@ -571,13 +571,18 @@ export async function processConstructionMaintenance(app: FastifyInstance) {
             sql`select id,project_id as "projectId",title,payload,owner_id as "ownerId",location_id as "locationId",linked_id as "linkedId" from construction_workflows where kind='concrete' and status='approved' and linked_id is null order by created_at for update skip locked limit 100`,
           )
         ).rows;
+        // Her numunenin son laboratuvar sonucu tek sorguda (numune başına ayrı sorgu yok)
+        const latest = samples.length
+          ? (
+              await tx.execute<{ workflowId: string; data: Record<string, unknown> }>(
+                sql`select distinct on (workflow_id) workflow_id as "workflowId", data from construction_workflow_events where action='lab_results' and workflow_id in (${sql.join(samples.map((r) => sql`${r.id}::uuid`), sql`, `)}) order by workflow_id, at desc, id desc`,
+              )
+            ).rows
+          : [];
+        const lastBy = new Map(latest.map((row) => [row.workflowId, row.data]));
         for (const r of samples) {
-          const last = (
-            await tx.execute<{ data: Record<string, unknown> }>(
-              sql`select data from construction_workflow_events where workflow_id=${r.id}::uuid and action='lab_results' order by at desc,id desc limit 1`,
-            )
-          ).rows[0];
-          if (last) r.payload = { ...r.payload, samples: last.data.samples };
+          const last = lastBy.get(r.id);
+          if (last) r.payload = { ...r.payload, samples: last.samples };
           await ensureConcreteAction(c, r);
         }
       },

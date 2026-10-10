@@ -1,3 +1,5 @@
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { ListToolbar } from '../../components/ui/ListTools';
 import { ClipboardCheck, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
@@ -5,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR, money } from '../../lib/format';
@@ -31,7 +33,7 @@ export function PurchaseRequestsPage() {
     return q.toString();
   }, [projectId, status]);
   const lim = useListLimit(qs);
-  const { data, isPending } = useCQuery<{ requests: PurchaseRequestRow[] } & { truncated?: boolean }>(['purchase-requests', 'list', qs, lim.limit], `/api/purchase-requests?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
+  const { data, isPending, error: PurchaseRequestsPageQueryError, refetch: PurchaseRequestsPageQueryRetry, isFetching: PurchaseRequestsPageQueryFetching } = useCQuery<{ requests: PurchaseRequestRow[] } & { truncated?: boolean }>(['purchase-requests', 'list', qs, lim.limit], `/api/purchase-requests?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.requests ?? [];
   const filtered = !!(projectId || status);
 
@@ -41,9 +43,12 @@ export function PurchaseRequestsPage() {
       {t('procurement.requests.add')}
     </Button>
   );
+  if (PurchaseRequestsPageQueryError && !data) return <ErrorState error={PurchaseRequestsPageQueryError} onRetry={() => void PurchaseRequestsPageQueryRetry()} retrying={PurchaseRequestsPageQueryFetching} />;
   return (
     <>
       <PageHeader title={t('procurement.requests.title')} description={t('procurement.requests.subtitle')} actions={add || undefined} />
+      <ListToolbar onReset={() => { setProjectId(''); setStatus(''); lim.reset(); }}><CompanySavedViews page={'purchase-requests'} filters={{ projectId, status }} onApply={view => { setProjectId(view.projectId as typeof projectId); setStatus(view.status as typeof status); lim.reset(); }} /></ListToolbar>
+
       {isPending ? (
         <PageLoading />
       ) : rows.length === 0 && !filtered ? (

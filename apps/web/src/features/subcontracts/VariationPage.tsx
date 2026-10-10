@@ -6,7 +6,7 @@ import { todayIso } from '@erp/shared';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageTitle } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
@@ -109,11 +109,12 @@ export function VariationPage() {
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="flex flex-wrap items-center gap-3 text-2xl">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-[15px] text-muted">{vo.code}</span>
-              {t('variations.docTitle')}
-              <VariationStatusBadge status={vo.status} />
-            </h1>
+              <PageTitle title={t('variations.docTitle')} helpKey="variation-detail" recent={{ kind: 'Değişiklik emri', title: `${vo.code} · ${vo.projectCode}` }}>
+                <VariationStatusBadge status={vo.status} />
+              </PageTitle>
+            </div>
             <p className="mt-1 text-sm text-muted">
               {vo.partyName} ({receivable ? t('variations.direction.receivable') : t('variations.direction.payable')}) · {vo.projectCode} {vo.projectName}
               {vo.revisionNo ? ` · ${t('variations.revisionInfo', { base: vo.baseRevisionNo, rev: vo.revisionNo })}` : ''}

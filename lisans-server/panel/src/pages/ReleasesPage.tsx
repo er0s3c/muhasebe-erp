@@ -107,8 +107,8 @@ export function ReleasesPage() {
         title="Sürümler ve uzaktan güncelleme"
         description="Kit arşivlerini (npm run release) yükleyin, yayımlayın ve müşterilere tek tıkla gönderin. Müşteride kurulum sahibi onaylayınca güncelleyici yedek alıp uygular; sorun çıkarsa önceki sürüme döner."
       />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="flex flex-col gap-6">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="flex min-w-0 flex-col gap-6">
           {data.releases.length === 0 ? (
             <TableWrap>
               <EmptyState title="Henüz sürüm yok" description="Sağdaki formdan ilk sürümü oluşturun." />
@@ -146,7 +146,7 @@ export function ReleasesPage() {
           {current && <ReleaseDetail key={current.id} release={current} chunkBytes={data.chunkBytes} onChange={() => void refresh()} />}
         </div>
 
-        <Card className="h-fit">
+        <Card className="min-w-0 h-fit">
           <CardHeader title="Yeni sürüm" />
           <form
             ref={createForm}
@@ -264,11 +264,11 @@ function ReleaseDetail({ release, chunkBytes, onChange }: { release: Release; ch
             const f = release.files.find((x) => x.target === t);
             const name = fileName(release.version, t);
             return (
-              <li key={t} className="flex flex-wrap items-center gap-2">
+              <li key={t} className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="w-24 text-muted">{t === 'win-x64' ? 'Windows' : 'Linux/WSL'}</span>
                 {f ? (
                   <>
-                    <span className="font-mono text-[13px]">{f.name}</span>
+                    <span className="min-w-0 max-w-full break-all font-mono text-[13px]">{f.name}</span>
                     <span className="text-muted">{mb(f.size)}</span>
                     <code className="text-xs text-muted" title={f.sha256}>
                       {f.sha256.slice(0, 12)}…
@@ -277,7 +277,7 @@ function ReleaseDetail({ release, chunkBytes, onChange }: { release: Release; ch
                 ) : progress[name] !== undefined ? (
                   <span>yükleniyor… %{Math.round((progress[name] ?? 0) * 100)}</span>
                 ) : (
-                  <span className="text-muted">yüklenmedi ({name})</span>
+                  <span className="min-w-0 max-w-full break-all text-muted">yüklenmedi ({name})</span>
                 )}
               </li>
             );

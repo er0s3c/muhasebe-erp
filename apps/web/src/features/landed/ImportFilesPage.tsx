@@ -1,3 +1,5 @@
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { ListToolbar } from '../../components/ui/ListTools';
 import { Plus, Ship } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -6,9 +8,9 @@ import type { ImportFileRow, ImportFileStatus } from '../../lib/types';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Input, Select } from '../../components/ui/Field';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
@@ -43,9 +45,11 @@ export function ImportFilesPage() {
         <Callout tone="warning">{t('landed.notice')}</Callout>
       </div>
       <div className="mb-4">
-        <SegmentedTabs value={tab} onChange={setTab} items={[{ key: 'files', label: t('landed.tabs.files') }, { key: 'items', label: t('landed.tabs.items') }]} />
+        <SegmentedTabs id="landed-ImportFilesPage-0" panelId={() => 'landed-ImportFilesPage-0-panel'} value={tab} onChange={setTab} items={[{ key: 'files', label: t('landed.tabs.files') }, { key: 'items', label: t('landed.tabs.items') }]} />
       </div>
-      {tab === 'files' ? <FilesTab /> : <ItemsTab />}
+      <TabPanel id="landed-ImportFilesPage-0-panel" labelledBy={"landed-ImportFilesPage-0-" + (tab)}>
+{tab === 'files' ? <FilesTab /> : <ItemsTab />}
+</TabPanel>
     </>
   );
 }
@@ -57,9 +61,12 @@ function FilesTab() {
   const qs = new URLSearchParams();
   if (status) qs.set('status', status);
   if (q.trim()) qs.set('q', q.trim());
-  const { data, isPending } = useCQuery<{ files: ImportFileRow[]; total: number }>(['import-files', qs.toString()], `/api/import-files?${qs}`);
+  const { data, isPending, error: FilesTabQueryError, refetch: FilesTabQueryRetry, isFetching: FilesTabQueryFetching } = useCQuery<{ files: ImportFileRow[]; total: number }>(['import-files', qs.toString()], `/api/import-files?${qs}`);
+  if (FilesTabQueryError && !data) return <ErrorState error={FilesTabQueryError} onRetry={() => void FilesTabQueryRetry()} retrying={FilesTabQueryFetching} />;
   return (
     <>
+      <ListToolbar onReset={() => { setStatus(''); setQ(''); }}><CompanySavedViews page={'import-files'} filters={{ status }} onApply={view => { setStatus(view.status as typeof status); setQ(''); }} /></ListToolbar>
+
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <Input aria-label={t('common.search')} placeholder={t('landed.searchPlaceholder')} value={q} onChange={(e) => setQ(e.target.value)} className="w-72" />
         <Select aria-label={t('common.status')} value={status} onChange={(e) => setStatus(e.target.value)} className="w-44">
@@ -139,7 +146,8 @@ interface ItemRow {
 function ItemsTab() {
   const { t } = useTranslation();
   const base = useCompany().baseCurrency;
-  const { data, isPending } = useCQuery<{ items: ItemRow[] }>(['import-report', 'by-item'], '/api/import-files/reports/by-item');
+  const { data, isPending, error: ItemsTabQueryError, refetch: ItemsTabQueryRetry, isFetching: ItemsTabQueryFetching } = useCQuery<{ items: ItemRow[] }>(['import-report', 'by-item'], '/api/import-files/reports/by-item');
+  if (ItemsTabQueryError && !data) return <ErrorState error={ItemsTabQueryError} onRetry={() => void ItemsTabQueryRetry()} retrying={ItemsTabQueryFetching} />;
   return (
     <>
       <p className="mb-3 text-sm text-muted">{t('landed.itemsReport.hint')}</p>

@@ -1,4 +1,10 @@
 import type { OperationKind } from '@erp/shared';
+
+export function operationsReturnDestination(sector: string, canReadProjects: boolean) {
+  return sector === 'CONSTRUCTION' && canReadProjects
+    ? { path: '/workspace/construction', label: 'İnşaat kontrol merkezi' }
+    : { path: '/workspace', label: 'Çalışma alanı' };
+}
 export const labels: Record<OperationKind, string> = {
   collection: 'Tahsilat takibi',
   site_report: 'Şantiye günlük raporu',

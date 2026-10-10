@@ -289,6 +289,8 @@ export function FeedbackPage() {
       />
       <div className="mb-5 space-y-4">
         <SegmentedTabs<Filter>
+          variant="filter"
+          label="Geri bildirim durumu"
           className="w-full sm:w-fit"
           value={filter}
           onChange={(next) => {

@@ -1,11 +1,11 @@
-import { ArrowLeft, Ban, Printer, Undo2, Paperclip, Eye } from 'lucide-react';
+import { Ban, Printer, Undo2, Paperclip, Eye } from 'lucide-react';
 import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DELIVERY_NOTE_TYPE_META, INVOICE_TYPES, INVOICE_TYPE_META, INVOICE_PRINT_TEMPLATES, INVOICE_PRINT_TEMPLATE_LABELS, dec, todayIso, type InvoicePrintTemplate } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
@@ -100,26 +100,24 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
   return (
     <>
       <div className="print:hidden">
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t(`invoices.${meta.side}.title`)}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{inv.invoiceNo}</h1>
+      <PageHeader
+        title={inv.invoiceNo ?? t('invoices.form.editTitle', { type: t(`invoices.types.${inv.type}`) })}
+        helpKey="invoice-editor"
+        back={{ to: listPath, label: t(`invoices.${meta.side}.title`) }}
+        recent={{ kind: 'Fatura', title: `${inv.invoiceNo ?? ''} ${inv.partyName}`.trim() }}
+        meta={
+          <>
             <InvoiceTypeBadge type={inv.type} />
             <InvoiceStatusBadge status={inv.status} />
-          </div>
-          <p className="mt-1 text-sm text-muted">
-            <Link to={`/parties/${inv.partyId}`} className="link">
-              {inv.partyName}
-            </Link>{' '}
-            · {formatDateTR(inv.invoiceDate)}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          </>
+        }
+        eyebrow={
+          <span className="normal-case tracking-normal">
+            <Link to={`/parties/${inv.partyId}`} className="link">{inv.partyName}</Link> · {formatDateTR(inv.invoiceDate)}
+          </span>
+        }
+        actions={
+          <>
           <Field label="Çıktı şablonu" className="w-36">{id => <Select id={id} value={printTemplate} onChange={event => setSelectedTemplate(event.target.value as InvoicePrintTemplate)}>{INVOICE_PRINT_TEMPLATES.map(value => <option key={value} value={value}>{INVOICE_PRINT_TEMPLATE_LABELS[value]}</option>)}</Select>}</Field>
           <Link className="link inline-flex items-center gap-2 text-sm" to={`/workspace/documents?kind=invoice&id=${inv.id}`}><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>
           <Button onClick={() => setPrintPreview(value => !value)} aria-pressed={printPreview}><Eye className="size-4" aria-hidden />{printPreview ? 'Önizlemeyi kapat' : 'Çıktıyı önizle'}</Button>
@@ -140,8 +138,9 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
               {t('invoices.view.cancel')}
             </Button>
           )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="flex flex-col gap-4">
         <DocumentApprovalPanel type="invoice" id={inv.id} status={inv.status}/>

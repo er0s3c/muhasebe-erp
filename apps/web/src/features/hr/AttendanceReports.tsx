@@ -1,10 +1,11 @@
+import { errorMessage } from '../../lib/errors';
 import { ATTENDANCE_DAY_TYPES } from '@erp/shared';
 import { CalendarCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th } from '../../components/ui/Table';
 import { formatDateTR, money } from '../../lib/format';
@@ -18,7 +19,8 @@ const hrs = (v: string) => money(v, 2);
 /** Aylık özet: personel başına gün türüne göre gün sayıları, toplam saatler ve kaydı olmayan günler. */
 export function AttendanceSummaryTab({ month }: { month: string }) {
   const { t } = useTranslation();
-  const { data, isPending } = useCQuery<AttendanceSummary>(['attendance', 'summary', month], `/api/attendance/reports/summary?month=${month}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<AttendanceSummary>(['attendance', 'summary', month], `/api/attendance/reports/summary?month=${month}`);
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   return (
     <div className="flex flex-col gap-4">
@@ -91,7 +93,7 @@ export function AttendanceLaborTab({ month }: { month: string }) {
   const { projects } = useProjectOptions();
   const valid = !!from && !!to && from <= to;
   const qs = new URLSearchParams({ from, to, ...(projectId ? { projectId } : {}) }).toString();
-  const { data, isPending } = useCQuery<AttendanceLabor>(['attendance', 'labor', qs], valid ? `/api/attendance/reports/labor?${qs}` : null);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<AttendanceLabor>(['attendance', 'labor', qs], valid ? `/api/attendance/reports/labor?${qs}` : null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -123,7 +125,7 @@ export function AttendanceLaborTab({ month }: { month: string }) {
       <p className="text-sm text-muted">{t('attendance.labor.hint')}</p>
       {!valid ? (
         <Callout tone="warning">{t('attendance.labor.invalidRange')}</Callout>
-      ) : isPending || !data ? (
+      ) : queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending || !data ? (
         <PageLoading />
       ) : data.rows.length === 0 ? (
         <Card>

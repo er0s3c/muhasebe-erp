@@ -43,6 +43,19 @@ const TARGETS: Record<string, string> = {
 const LABELS: Record<string, string> = {
   'core.integrations': 'Kanal bağlantıları', 'platform-integrations': 'API ve webhook',
 };
+
+/**
+ * Aynı konuyu bölen menü öğeleri tek "merkez" sayfada sekme olur. Sunucu izinleri değişmez: kaynak öğelerden en az biri
+ * kullanıcıya görünüyorsa birleşik öğe görünür; merkez sayfa yalnız izinli sekmeleri gösterir.
+ */
+export const NAV_MERGES: ReadonlyArray<{ key: string; label: string; path: string; group: string; from: readonly string[] }> = [
+  { key: 'hr-settings', label: 'İK ve bordro ayarları', path: '/hr/settings', group: 'hr', from: ['payroll-settings', 'social-settings', 'foreign-settings'] },
+  { key: 'cash-planning', label: 'Nakit planlama', path: '/treasury/cash-planning', group: 'treasury', from: ['cash-forecast', 'cash-scenarios'] },
+  { key: 'integrations', label: 'Entegrasyonlar', path: '/settings/integrations', group: 'settings', from: ['core.integrations', 'platform-integrations'] },
+  { key: 'data-transfer', label: 'Veri aktarımı', path: '/settings/data-transfer', group: 'settings', from: ['file-exchange', 'data-export'] },
+  { key: 'expenses', label: 'Giderler', path: '/treasury/expenses', group: 'treasury', from: ['expense-entries', 'expense-cards'] },
+];
+const MERGE_OF = new Map(NAV_MERGES.flatMap(m => m.from.map(key => [key, m] as const)));
 const ORDER: Record<string, readonly string[]> = {
   overview: ['/', '/workspace', '/workspace/documents', '/notifications'],
   sales: ['/sales/quotes', '/sales/orders', '/price-lists', '/party-prices', '/sales/campaigns', '/pos', '/logistics'],
@@ -61,11 +74,13 @@ export function buildDisplayNavigation(source: SourceGroups = []): DisplayNavGro
   const targets = new Map<string, DisplayNavItem[]>();
   const seen = new Set<string>();
   for (const group of source) {
-    for (const item of group.items) {
+    for (const source of group.items) {
+      const merge = MERGE_OF.get(source.key);
+      const item: DisplayNavItem = merge ? { ...source, key: merge.key, path: merge.path, label: merge.label } : source;
       const destination = navigationDestination(item.path);
       if (seen.has(destination)) continue;
       seen.add(destination);
-      const key = TARGETS[item.key] ?? group.key;
+      const key = merge?.group ?? TARGETS[item.key] ?? group.key;
       const items = targets.get(key) ?? [];
       items.push({ ...item, ...(LABELS[item.key] ? { label: LABELS[item.key] } : {}) });
       targets.set(key, items);
@@ -89,8 +104,10 @@ export function buildDisplayNavigation(source: SourceGroups = []): DisplayNavGro
 }
 
 /** Pick only the most specific destination (e.g. /leather/models over /leather). */
-export function findActiveNavigation(groups: DisplayNavGroup[], pathname: string, search: string) {
+export function findActiveNavigation(groups: DisplayNavGroup[], pathname: string, search: string, defaultOperationKind: 'collection' | 'site_report' = 'collection') {
   const current = new URLSearchParams(search);
+  // Keep direct links aligned with OperationsPage's sector-specific default.
+  if (pathname === '/workspace/operations' && !current.get('kind')) current.set('kind', defaultOperationKind);
   let match: { group: DisplayNavGroup; item: DisplayNavItem } | undefined;
   let score = -1;
   for (const group of groups) {

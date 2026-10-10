@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
@@ -30,7 +30,7 @@ export function EmployeePage() {
   const navigate = useNavigate();
   const toast = useToast();
   const can = useCan();
-  const { data, isPending, error } = useCQuery<{ employee: EmployeeRow }>(['employee', id], id ? `/api/employees/${id}` : null);
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ employee: EmployeeRow }>(['employee', id], id ? `/api/employees/${id}` : null);
   const [editing, setEditing] = useState(false);
   const [revealed, setRevealed] = useState<Partial<Record<SensitiveField, string>>>({});
   const [askField, setAskField] = useState<SensitiveField | null>(null);
@@ -48,6 +48,7 @@ export function EmployeePage() {
   if (error instanceof ApiError && error.status === 404) {
     return <EmptyState title={t('hr.notFound')} action={<Button onClick={() => navigate('/hr/employees')}><ArrowLeft className="size-4" aria-hidden />{t('hr.back')}</Button>} />;
   }
+  if (error) return <ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   const e = data.employee;
   const canManage = can('hr.manage');
@@ -66,38 +67,29 @@ export function EmployeePage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <Link to="/hr/employees" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
-          <ArrowLeft className="size-4" aria-hidden />
-          {t('hr.back')}
-        </Link>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-              <span className="font-mono text-[15px] text-muted">{e.code}</span>
-              {e.fullName}
-              <EmployeeStatusBadge status={e.status} />
-            </h1>
-            <p className="mt-1 text-sm text-muted">
-              {[e.jobTitle, e.department].filter(Boolean).join(' · ') || '—'}
-              {e.projectCode ? ` · ${e.projectCode}` : ''}
-            </p>
-          </div>
-          {canManage && (
-            <div className="flex flex-wrap gap-2 print:hidden">
-              <Button onClick={() => setEditing(true)}>
-                <Pencil className="size-4" aria-hidden />
-                {t('common.edit')}
-              </Button>
-              {e.status === 'active' ? (
-                <Button variant="danger" onClick={() => { setLeaveDate(todayIso()); setActionError(null); setLeaveOpen(true); }}>{t('hr.terminate')}</Button>
-              ) : (
-                <Button loading={rehire.isPending} onClick={() => rehire.mutate(undefined, { onSuccess: () => toast.success(t('hr.rehired')), onError: setActionError })}>{t('hr.rehire')}</Button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        className="mb-0"
+        title={e.fullName}
+        helpKey="employee-detail"
+        back={{ to: '/hr/employees', label: t('hr.back') }}
+        recent={{ kind: 'Personel' }}
+        eyebrow={<span className="font-mono normal-case tracking-normal">{e.code}</span>}
+        meta={<EmployeeStatusBadge status={e.status} />}
+        description={`${[e.jobTitle, e.department].filter(Boolean).join(' · ') || '—'}${e.projectCode ? ` · ${e.projectCode}` : ''}`}
+        actions={canManage && (
+          <>
+            <Button onClick={() => setEditing(true)}>
+              <Pencil className="size-4" aria-hidden />
+              {t('common.edit')}
+            </Button>
+            {e.status === 'active' ? (
+              <Button variant="danger" onClick={() => { setLeaveDate(todayIso()); setActionError(null); setLeaveOpen(true); }}>{t('hr.terminate')}</Button>
+            ) : (
+              <Button loading={rehire.isPending} onClick={() => rehire.mutate(undefined, { onSuccess: () => toast.success(t('hr.rehired')), onError: setActionError })}>{t('hr.rehire')}</Button>
+            )}
+          </>
+        )}
+      />
 
       {actionError && !askField && !leaveOpen && <Callout tone="danger">{errorMessage(actionError)}</Callout>}
 

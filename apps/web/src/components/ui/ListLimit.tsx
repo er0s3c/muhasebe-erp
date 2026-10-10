@@ -15,6 +15,7 @@ export function useListLimit(resetKey: string, page = LIST_PAGE, max = LIST_MAX)
     limit,
     atMax: limit >= max,
     more: () => setState({ key: resetKey, limit: Math.min(max, limit * 2) }),
+    reset: () => setState({ key: resetKey, limit: page }),
   };
 }
 

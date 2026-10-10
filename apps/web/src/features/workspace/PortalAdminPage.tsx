@@ -2,7 +2,8 @@ import { Plus, Link2, Copy, ShieldCheck } from 'lucide-react';
 import { Sheet } from '../../components/ui/Sheet';
 import { Stat } from '../../components/ui/Stat';
 import { Badge } from '../../components/ui/Badge';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, ErrorState, PageLoading } from '../../components/ui/Feedback';
+import { errorMessage } from '../../lib/errors';
 import { useState } from 'react';
 import { EMPTY_PORTAL_SCOPES, PORTAL_SCOPE_LABELS, type PortalDocumentScopes, type SearchHit } from '@erp/shared';
 import { useCMutation, useCQuery } from '../../lib/queries';
@@ -76,8 +77,8 @@ function PortalAdminContent() {
         }
       />
       {links.data?.canShare === false && <Callout>Portal paylaşımı için tüm şubelere erişiminiz olmalı, tüm şubeler seçilmeli ve cari dışa aktarma yetkisi açık olmalı.</Callout>}
-      {(create.error || revoke.error || links.error) && (
-        <Callout tone="danger">{(create.error ?? revoke.error ?? links.error)?.message}</Callout>
+      {(create.error || revoke.error) && (
+        <Callout tone="danger">{(create.error ?? revoke.error)?.message}</Callout>
       )}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Stat label="Aktif erişim">
@@ -144,6 +145,7 @@ function PortalAdminContent() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
+              if (create.isPending) return;
               create.mutate(undefined, {
                 onSuccess: (r) => {
                   showLink(r.token);
@@ -198,7 +200,9 @@ function PortalAdminContent() {
             <PortalScopePicker value={scopes} available={available} onChange={setScopes} />
             <fieldset>
               <legend className="mb-2 text-sm">Cari arşivinden seçilen dosyalar</legend>
-              {documents.data?.items.map((d) => (
+              {record && documents.error && <ErrorState description={errorMessage(documents.error)} onRetry={() => void documents.refetch()} retrying={documents.isFetching} />}
+              {record && !documents.error && documents.isPending && <PageLoading />}
+              {!documents.error && documents.data?.items.map((d) => (
                 <label key={d.id} className="mb-2 flex gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -214,21 +218,22 @@ function PortalAdminContent() {
                   {d.filename}
                 </label>
               ))}
-              {!documents.data?.items.length && (
+              {record && !documents.error && !documents.isPending && !documents.data?.items.length && (
                 <p className="text-sm text-muted">Cariye bağlı paylaşılabilecek belge yok.</p>
               )}
             </fieldset>
           </form>
         </Sheet>
         <Sheet open={!!editing} onOpenChange={open => { if (!open) { setEditing(null); setPassword(''); } }} title={editing?.mode === 'rotate' ? 'Bağlantıyı ve parolayı yenile' : 'Belge kapsamını düzenle'} description={editing ? `${editing.link.label} · ${editing.link.partyName}` : undefined} footer={<><Button onClick={() => { setEditing(null); setPassword(''); }}>Vazgeç</Button><Button type="submit" form="portal-edit-form" variant="primary" loading={updateScopes.isPending || rotate.isPending}>Kaydet</Button></>}>
-          <form id="portal-edit-form" className="space-y-4" onSubmit={event => { event.preventDefault(); if (!editing) return; if (editing.mode === 'scopes') updateScopes.mutate(editing.link.id, { onSuccess: () => setEditing(null) }); else rotate.mutate(editing.link.id, { onSuccess: value => { showLink(value.token); setEditing(null); } }); }}>
+          <form id="portal-edit-form" className="space-y-4" onSubmit={event => { event.preventDefault(); if (!editing || updateScopes.isPending || rotate.isPending) return; if (editing.mode === 'scopes') updateScopes.mutate(editing.link.id, { onSuccess: () => setEditing(null) }); else rotate.mutate(editing.link.id, { onSuccess: value => { showLink(value.token); setEditing(null); } }); }}>
             {(updateScopes.error || rotate.error) && <Callout tone="danger">{(updateScopes.error ?? rotate.error)?.message}</Callout>}
             {editing?.mode === 'scopes' ? <PortalScopePicker value={scopes} available={available} onChange={setScopes} /> : <><Callout>Eski bağlantı ve parola hemen geçersiz olur. Yeni bağlantıyı ve parolayı alıcıya tekrar iletin.</Callout><label className="block text-sm">Yeni portal parolası<Input required type="password" autoComplete="new-password" minLength={12} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} /></label><label className="block text-sm">Yeni geçerlilik (gün)<Input required type="number" min={1} max={30} value={days} onChange={e => setDays(Number(e.target.value))} /></label></>}
           </form>
         </Sheet>
         <section className="space-y-3">
-          {links.isPending && <PageLoading />}
-          {links.data?.items.length === 0 && (
+          {links.error && <ErrorState description={errorMessage(links.error)} onRetry={() => void links.refetch()} retrying={links.isFetching} />}
+          {!links.error && links.isPending && <PageLoading />}
+          {!links.error && links.data?.items.length === 0 && (
             <Card>
               <EmptyState
                 icon={<Link2 className="size-5" />}
@@ -237,7 +242,7 @@ function PortalAdminContent() {
               />
             </Card>
           )}
-          {links.data?.items.map((l) => (
+          {!links.error && links.data?.items.map((l) => (
             <Card key={l.id} className="space-y-2 p-4">
               <div className="flex flex-wrap justify-between gap-3">
                 <h2 className="min-w-0 break-words text-base">

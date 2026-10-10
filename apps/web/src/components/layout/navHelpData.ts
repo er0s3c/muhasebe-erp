@@ -1,8 +1,6 @@
-export interface NavHelpEntry {
-  title: string;
-  description: string;
-  example: string;
-}
+import type { NavHelpEntry } from './helpTypes';
+
+export type { NavHelpEntry };
 
 export const NAV_GROUP_HELP: Record<string, NavHelpEntry> = {
   manufacturing: {
@@ -23,7 +21,7 @@ export const NAV_GROUP_HELP: Record<string, NavHelpEntry> = {
   invoices: {
     title: 'Fatura ve İrsaliye',
     description: 'Mal ve hizmet satış/alış faturaları, sevk irsaliyeleri, iade süreçleri, fiyat listeleri ve toplu faturalama işlemlerini yürütür.',
-    example: 'Örnek: Ay içinde müşteriye yapılan 15 ayrı sevk irsaliyesi ay sonunda tek ekrandan seçilerek toplu e-faturaya dönüştürülür ve muhasebeye işlenir.',
+    example: 'Örnek: Ay içinde müşteriye yapılan 15 ayrı sevk irsaliyesi ay sonunda tek ekrandan seçilerek toplu faturaya dönüştürülür ve muhasebeye işlenir.',
   },
   treasury: {
     title: 'Kasa ve Banka',
@@ -120,7 +118,7 @@ export const NAV_ITEM_HELP: Record<string, NavHelpEntry> = {
   // ---- Fatura ve İrsaliye Grubu ----
   'sales-invoices': {
     title: 'Satış Faturaları',
-    description: 'Müşterilere kesilen resmi e-fatura, e-arşiv ve kağıt satış faturalarını düzenler, KDV\'leri hesaplar ve cariyi borçlandırır.',
+    description: 'Müşterilere kesilen satış faturalarını düzenler, KDV\'leri hesaplar ve cariyi borçlandırır.',
     example: 'Örnek: Müşteriye 250.000 TL + KDV tutarında malzeme teslim edildiğinde satış faturası kesilir; carisine borç ve gelir tablosuna ciro işlenir.',
   },
   'purchase-invoices': {
@@ -171,7 +169,7 @@ export const NAV_ITEM_HELP: Record<string, NavHelpEntry> = {
   'batch-invoicing': {
     title: 'Toplu Faturalama',
     description: 'Dönem içinde kesilen onlarca sevk irsaliyesinin tek ekrandan seçilerek topluca resmi satış faturalarına dönüştürülmesidir.',
-    example: 'Örnek: Ay sonu bir zincir markete ait 50 farklı irsaliye tek tıkla seçilir ve 50 ayrı e-faturaya dönüştürülüp muhasebeleştirilir.',
+    example: 'Örnek: Ay sonu bir zincir markete ait 50 farklı irsaliye tek tıkla seçilir ve faturaya dönüştürülüp muhasebeleştirilir.',
   },
   'vat-summary': {
     title: 'KDV Özeti',
@@ -576,8 +574,8 @@ export const NAV_ITEM_HELP: Record<string, NavHelpEntry> = {
   },
   'platform-integrations': {
     title: 'API ve Bildirim Bağlantıları',
-    description: 'E-Fatura entegratörleri, banka API\'leri, SMS servisleri ve webhook entegrasyonlarının bağlantı anahtarlarıdır.',
-    example: 'Örnek: Gelir ve Vergi Dairesi e-fatura portalı API anahtarları tanımlanarak faturaların anında onaylanması sağlanır.',
+    description: 'Dış sistemlerin Ada ERP verisine güvenli erişmesi için API anahtarlarını ve olay bildirimlerini (webhook) yönetir.',
+    example: 'Örnek: Raporlama aracına yalnız okuma yetkili bir API anahtarı verilir; yeni fatura kesildiğinde webhook ile dış sisteme bildirim gönderilir.',
   },
   'operations-settings': {
     title: 'İşletim ve Güvenlik',
@@ -721,4 +719,195 @@ export const NAV_ITEM_HELP: Record<string, NavHelpEntry> = {
     description: 'Kamyon/tır yükleme planları, sevk rotaları, araç dolulukları ve müşteri teslimat çizelgelerini yönetir.',
     example: 'Örnek: Yarın Lefkoşa bölgesine gidecek 8 müşterinin siparişleri tek kamyona optimize edilerek sevk listesi basılır.',
   },
+
+  // ---- Deri, POS ve satın alma raporları ----
+  'leather-center': {
+    title: 'Deri İş Merkezi',
+    description: 'Deri üretiminin günlük özetidir: açık kesim emirleri, fasondaki işler, kalite bekleyen partiler ve gecikme riskleri tek ekranda toplanır.',
+    example: 'Örnek: Atölye sorumlusu sabah ekrana bakar; fasondan dönmesi geciken 2 iş emrini ve kalite onayı bekleyen 1 deri partisini görüp önceliklendirir.',
+  },
+  'leather-models': {
+    title: 'Modeller ve Koleksiyonlar',
+    description: 'Çanta, cüzdan, kemer gibi modellerin reçetesini (deri, astar, aksesuar), varyantlarını ve sezon koleksiyonlarını tanımlar.',
+    example: 'Örnek: Yeni sezon için "Kroko Omuz Çantası" modeli 3 renk varyantıyla açılır; her varyant için deri ve aksesuar sarfiyatı reçeteye yazılır.',
+  },
+  'leather-materials': {
+    title: 'Deri Parti ve Parçalar',
+    description: 'Gelen ham deri partilerini, desimetrekare ölçülerini, kalite sınıflarını ve kesimden artan parçaları izlenebilir şekilde stoklar.',
+    example: 'Örnek: Tedarikçiden gelen 120 dm² dana derisi partisi A/B kalite olarak ayrılır; kesimden kalan büyük parçalar küçük ürünlerde kullanılmak üzere ayrılır.',
+  },
+  'leather-production': {
+    title: 'Kesim ve Üretim',
+    description: 'Kesim planlarını, iş emirlerini, operasyon adımlarını ve fire oranlarını yönetir; hangi partiden hangi ürünün kesildiği kayıt altına alınır.',
+    example: 'Örnek: 200 adetlik cüzdan emri için kesim planı hazırlanır; gerçek fire %8 çıkınca maliyet ve sonraki planlar buna göre güncellenir.',
+  },
+  'leather-subcontracts': {
+    title: 'Fason Operasyonlar',
+    description: 'Dikiş, boya, baskı gibi dış atölyeye verilen işlerin gönderim, teslim alma, miktar farkı ve fason bedelini takip eder.',
+    example: 'Örnek: 300 adet kesilmiş parça dikim için fasoncuya gönderilir; 296 adet döner, 4 adet fark ve fason faturası aynı kayıtta eşleştirilir.',
+  },
+  'leather-quality': {
+    title: 'Kalite ve İzlenebilirlik',
+    description: 'Parti ve ürün bazında kalite kontrol sonuçlarını, hata türlerini ve satılan bir ürünün hangi deri partisinden geldiğini izler.',
+    example: 'Örnek: Müşteriden renk atması şikâyeti gelir; ürünün seri numarasından deri partisi bulunur ve aynı partiden üretilen diğer ürünler kontrole alınır.',
+  },
+  'leather-service': {
+    title: 'Garanti ve Onarım',
+    description: 'Satış sonrası garanti başvurularını, onarım iş emirlerini, kullanılan malzemeyi ve müşteriye teslim durumunu yönetir.',
+    example: 'Örnek: Fermuarı bozulan çanta garanti kapsamında kabul edilir; onarım emri açılır, değişen fermuar stoktan düşer ve teslimde müşteriye bilgi verilir.',
+  },
+  'sales-pos': {
+    title: 'Mağaza Kasası (POS)',
+    description: 'Perakende satışların barkodla hızlıca yapıldığı kasa ekranıdır; nakit/kart tahsilatı, iade ve gün sonu kasa kapanışı buradan yürür.',
+    example: 'Örnek: Kasiyer ürünleri barkodla okutur, müşteri kısmen nakit kısmen kartla öder; gün sonunda kasa sayımı ile sistem toplamı karşılaştırılır.',
+  },
+  'supplier-performance': {
+    title: 'Tedarikçi Performansı',
+    description: 'Tedarikçilerin zamanında teslim oranını, fiyat değişimini ve miktar sapmalarını ölçerek hangi tedarikçiyle çalışmaya devam edileceğine yardımcı olur.',
+    example: 'Örnek: Son 6 ayda siparişlerinin %30\'unu geç teslim eden tedarikçi listenin altına düşer; yeni teklif toplamada alternatif tedarikçiler öne alınır.',
+  },
+  replenishment: {
+    title: 'Stok Tamamlama Önerileri',
+    description: 'Minimum stok, açık siparişler ve tüketim hızına göre hangi malzemenin ne kadar sipariş edilmesi gerektiğini önerir; öneriden talep oluşturulur.',
+    example: 'Örnek: Kritik seviyenin altına düşen 6 malzeme listelenir; satın alma uzmanı önerilen miktarları kontrol edip satın alma talebine çevirir.',
+  },
+
+  // ---- Detay ve editör ekranları (menüde yok; route deseniyle eşlenir) ----
+  'party-detail': {
+    title: 'Cari Kartı',
+    description: 'Bir müşteri veya tedarikçinin bakiyesini, ekstresini, açık belgelerini, iletişim bilgilerini ve geçmiş hareketlerini tek yerde gösterir.',
+    example: 'Örnek: Müşteri aradığında cari kartı açılır; vadesi geçen 2 fatura, son tahsilat tarihi ve kalan bakiye görüşme sırasında önünüzdedir.',
+  },
+  'invoice-editor': {
+    title: 'Fatura Düzenleme',
+    description: 'Fatura satırlarını, KDV/tevkifat ve iskontoları girip taslak olarak saklar; kesinleştirildiğinde cari, stok ve muhasebe kayıtları oluşur.',
+    example: 'Örnek: Taslak fatura hazırlanıp onaya gönderilir; onaylandıktan sonra kesinleştirilir ve yazdırma/paylaşma açılır. PDF çıktısı resmî e-Fatura gönderimi değildir.',
+  },
+  'delivery-note-editor': {
+    title: 'İrsaliye Düzenleme',
+    description: 'Sevk veya kabul edilen malların miktarını, deposunu ve teslim bilgisini kaydeder; irsaliye daha sonra faturaya bağlanabilir.',
+    example: 'Örnek: Şantiyeye 40 torba çimento sevk edilir; irsaliye kesinleşince stok düşer ve ay sonunda toplu faturalamada listelenir.',
+  },
+  'sales-doc': {
+    title: 'Teklif / Sipariş',
+    description: 'Müşteriye verilen teklifi veya alınan siparişi satır, fiyat ve teslim tarihiyle tutar; kabul edilen teklif siparişe, sipariş faturaya dönüştürülür.',
+    example: 'Örnek: Müşteriye 3 kalem ürün için teklif hazırlanır; müşteri kabul edince siparişe, sevkten sonra faturaya çevrilir.',
+  },
+  'price-list-detail': {
+    title: 'Fiyat Listesi Ayrıntısı',
+    description: 'Listedeki ürün fiyatlarını, geçerlilik tarihlerini ve para birimini düzenler; satış belgelerinde bu liste fiyat kaynağı olur.',
+    example: 'Örnek: Bayi fiyat listesinde 50 ürünün fiyatı güncellenir ve yeni fiyatlar ayın 1\'inden geçerli olacak şekilde kaydedilir.',
+  },
+  'item-detail': {
+    title: 'Stok Kartı Ayrıntısı',
+    description: 'Ürünün depo bazlı miktarını, hareket geçmişini, maliyetini, fiyatlarını ve bağlı belgelerini gösterir.',
+    example: 'Örnek: Bir üründe stok farkı şüphesi olduğunda kartın hareket geçmişinden son giriş/çıkışlar ve sayım düzeltmeleri incelenir.',
+  },
+  'count-editor': {
+    title: 'Sayım Fişi',
+    description: 'Fiziki sayım sonuçlarının girildiği fiştir; sistem miktarıyla fark hesaplanır ve onaylanınca fark kadar stok düzeltmesi oluşur.',
+    example: 'Örnek: Ana depoda 120 kalem sayılır; 4 kalemde fark çıkar, sorumlu onayıyla sayım farkı stok hareketi olarak işlenir.',
+  },
+  'purchase-request-editor': {
+    title: 'Satın Alma Talebi',
+    description: 'İhtiyaç duyulan malzeme veya hizmetin miktar, tarih ve gerekçesiyle kaydedildiği taleptir; onaydan sonra teklif veya siparişe dönüşür.',
+    example: 'Örnek: Saha şefi 2 ton demir talep eder; talep onaylanınca satın alma ekibi 3 tedarikçiden teklif ister.',
+  },
+  'rfq-detail': {
+    title: 'Teklif Karşılaştırma',
+    description: 'Aynı talep için tedarikçilerden gelen fiyat, vade ve teslim sürelerini yan yana karşılaştırır; kazanan teklif siparişe dönüştürülür.',
+    example: 'Örnek: 3 tedarikçinin fiyatı ve teslim süresi karşılaştırılır; en uygun toplam maliyetli teklif seçilip sipariş açılır.',
+  },
+  'purchase-order-editor': {
+    title: 'Satın Alma Siparişi',
+    description: 'Tedarikçiye verilen siparişin satırlarını, fiyatlarını ve teslim planını tutar; teslim alınan miktar ve faturayla eşleştirilir.',
+    example: 'Örnek: 500 adet malzeme siparişi verilir; iki parti halinde teslim alınır ve fatura geldiğinde sipariş-irsaliye-fatura eşleşmesi kontrol edilir.',
+  },
+  'project-detail': {
+    title: 'Proje Ayrıntısı',
+    description: 'Projenin bütçesini, iş kırılımını, maliyet ve gelir hareketlerini, işveren hakedişlerini ve kârlılığını sekmeler halinde gösterir.',
+    example: 'Örnek: Proje müdürü bütçe sekmesinde betonarme kaleminin %12 aştığını görür ve değişiklik emri sürecini başlatır.',
+  },
+  'sales-contract-detail': {
+    title: 'Satış Sözleşmesi',
+    description: 'Gayrimenkul biriminin satış sözleşmesini, ödeme planını, taksitlerini ve tahsilat durumunu yönetir.',
+    example: 'Örnek: Daire satışı 24 taksitle yapılır; vadesi geçen taksit sözleşme ekranında öne çıkar ve tahsilat kaydı buradan girilir.',
+  },
+  'subcontract-detail': {
+    title: 'Taşeron Sözleşmesi',
+    description: 'Taşeronla yapılan sözleşmenin kalemlerini, birim fiyatlarını, avans ve teminat kesintilerini ve hakediş geçmişini gösterir.',
+    example: 'Örnek: Kaba inşaat taşeronunun sözleşme bedeli, ödenen hakedişler ve kalan iş miktarı tek ekranda izlenir.',
+  },
+  'progress-editor': {
+    title: 'Hakediş Düzenleme',
+    description: 'Dönem içinde yapılan imalat miktarlarının girildiği hakediştir; kümülatif miktar, kesintiler ve net ödenecek tutar hesaplanır.',
+    example: 'Örnek: Ay sonunda taşeronun yaptığı 320 m² sıva girilir; avans mahsubu ve teminat kesintisi düşülerek net hakediş onaya gönderilir.',
+  },
+  'variation-detail': {
+    title: 'Değişiklik Emri',
+    description: 'Sözleşme dışı ek iş veya miktar değişikliğinin gerekçesini, fiyatını ve onay durumunu kaydeder; onaylanınca sözleşme bedeline eklenir.',
+    example: 'Örnek: İşveren ek bir bodrum katı ister; değişiklik emri fiyatlandırılıp onaylanır ve sonraki hakedişlerde kullanılabilir hale gelir.',
+  },
+  'treasury-account-detail': {
+    title: 'Kasa / Banka Hesabı',
+    description: 'Seçili kasa veya banka hesabının bakiyesini, hareketlerini ve mutabakat durumunu gösterir.',
+    example: 'Örnek: Banka ekstresi içe aktarılır; sistemdeki hareketlerle eşleşmeyen 2 kayıt işaretlenip açıklaması bulunur.',
+  },
+  'employee-detail': {
+    title: 'Personel Kartı',
+    description: 'Çalışanın özlük bilgilerini, ücretini, izinlerini, puantajını ve belgelerini tutar; bordro bu karttaki bilgilere göre hesaplanır.',
+    example: 'Örnek: Personelin maaş artışı yeni geçerlilik tarihiyle karta girilir; sonraki bordro yeni ücretle hesaplanır.',
+  },
+  'employee-statement': {
+    title: 'Personel Cari Ekstresi',
+    description: 'Çalışana verilen avansları, maaş ödemelerini ve kesintileri tarih sırasıyla gösterir; kalan avans bakiyesi buradan izlenir.',
+    example: 'Örnek: Personele verilen 10.000 TL avansın 3 ay boyunca maaştan nasıl mahsup edildiği ekstrede görülür.',
+  },
+  'payroll-run': {
+    title: 'Bordro Dönemi',
+    description: 'Seçilen ayın tüm çalışanları için brüt-net hesabını, vergi ve SGK kesintilerini ve işveren maliyetini gösterir; onaylanınca muhasebeye işlenir.',
+    example: 'Örnek: Ekim bordrosu hesaplanır, fazla mesailer kontrol edilir, onaylanır ve banka maaş listesi hazırlanır.',
+  },
+  'payroll-slip': {
+    title: 'Ücret Pusulası',
+    description: 'Tek bir çalışanın o aya ait kazanç, kesinti ve net ödeme ayrıntısını gösteren, yazdırılabilir bordro pusulasıdır.',
+    example: 'Örnek: Çalışan net maaşını sorduğunda pusula açılır; brütten vergi ve SGK kesintilerine kadar her kalem tek tek gösterilir.',
+  },
+  'social-declaration': {
+    title: 'SGK Bildirgesi',
+    description: 'Seçili ayın sigortalı listesini, prim gün sayılarını, prime esas kazançları ve işçi/işveren prim tutarlarını gösterir.',
+    example: 'Örnek: Ay sonunda bildirge kontrol edilir; eksik gün nedeni girilmemiş çalışan düzeltilir ve bildirge hazır olarak işaretlenir.',
+  },
+
+  // ---- Birleşik merkez sayfalar ----
+  'hr-settings': {
+    title: 'İK ve Bordro Ayarları',
+    description: 'Bordro parametreleri, SGK prim oranları ve yabancı işçi belge kuralları tek ekranda sekmeler halinde toplanır. Tarihli parametreler yalnız doğrulandıktan sonra kullanılır.',
+    example: 'Örnek: Yeni yılın vergi dilimleri "Bordro" sekmesine geçerlilik tarihiyle girilir; SGK tavanı "SGK" sekmesinde güncellenir.',
+  },
+  'cash-planning': {
+    title: 'Nakit Planlama',
+    description: 'Vadeli alacak, borç, çek ve taksitlerden üretilen nakit projeksiyonunu ve "ya şöyle olursa" senaryolarını aynı yerde gösterir.',
+    example: 'Örnek: Projeksiyon 6 hafta sonra nakit açığı gösterir; senaryo sekmesinde büyük bir tahsilatın 30 gün gecikmesi denenerek risk ölçülür.',
+  },
+  'data-transfer': {
+    title: 'Veri Aktarımı',
+    description: 'Excel/CSV ile toplu veri içe aktarma ve kayıtları dışa aktarma işlemleri tek merkezde toplanır.',
+    example: 'Örnek: Eski programdan alınan 800 cari Excel ile içe aktarılır; ay sonunda fatura listesi muhasebeciye CSV olarak dışa aktarılır.',
+  },
+  integrations: {
+    title: 'Entegrasyonlar',
+    description: 'Pazaryeri/kanal bağlantıları ile API anahtarları ve webhook tanımları aynı ekranda sekmeler halinde yönetilir.',
+    example: 'Örnek: E-ticaret kanalı bağlanıp sipariş aktarımı açılır; muhasebe yazılımı için ayrı bir API anahtarı ve webhook adresi tanımlanır.',
+  },
 };
+
+// Genel (inşaat dışı) satın alma menüsü, inşaat ikizleriyle aynı ekranı açar.
+for (const [alias, source] of [
+  ['general-purchase-requests', 'purchase-requests'],
+  ['general-rfqs', 'rfqs'],
+  ['general-purchase-orders', 'purchase-orders'],
+  ['general-order-matching', 'order-matching'],
+] as const) {
+  NAV_ITEM_HELP[alias] = NAV_ITEM_HELP[source]!;
+}

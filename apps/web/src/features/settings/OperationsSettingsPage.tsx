@@ -66,7 +66,7 @@ function SettingsForm({ data }: { data: SettingsData }) {
   return (
     <>
       <PageHeader
-        title="İşletim ve güvenlik"
+        title="Sistem ve güvenlik"
         description="Belge serileri, çıktı şablonları, dosya yükleme, güvenlik ve otomatik kur işlemleri için şirket ayarları."
         actions={
           <Link to="/reports/activity" className="link inline-flex items-center gap-2 text-sm">

@@ -7,7 +7,7 @@ import { dec } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
@@ -28,8 +28,9 @@ export function OrderMatchingPage() {
   const projectBased = useCompany().sector === 'CONSTRUCTION';
   const toast = useToast();
   const can = useCan();
-  const { data, isPending } = useCQuery<{ orders: OrderMatchRow[] }>(['procurement', 'matching'], '/api/procurement/matching');
+  const { data, isPending, error: OrderMatchingPageQueryError, refetch: OrderMatchingPageQueryRetry, isFetching: OrderMatchingPageQueryFetching } = useCQuery<{ orders: OrderMatchRow[] }>(['procurement', 'matching'], '/api/procurement/matching');
   const rows = data?.orders ?? [];
+  if (OrderMatchingPageQueryError && !data) return <ErrorState error={OrderMatchingPageQueryError} onRetry={() => void OrderMatchingPageQueryRetry()} retrying={OrderMatchingPageQueryFetching} />;
   return (
     <>
       <PageHeader title={t('procurement.match.title')} description={t('procurement.match.subtitle')} />

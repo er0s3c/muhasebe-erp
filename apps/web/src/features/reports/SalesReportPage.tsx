@@ -57,7 +57,7 @@ function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
 
       <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <PeriodFields from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <SegmentedTabs value={groupBy} onChange={setGroupBy} items={GROUPS.map((g) => ({ key: g, label: t(`reports.sales.groups.${g}`) }))} />
+        <SegmentedTabs variant="filter" value={groupBy} onChange={setGroupBy} items={GROUPS.map((g) => ({ key: g, label: t(`reports.sales.groups.${g}`) }))} />
       </div>
       {groupBy === 'creator' && <div className="mb-4"><Callout>Kırılım, özgün faturayı oluşturan kullanıcıya göredir. İadeler özgün kaydın kullanıcısından düşülür.</Callout></div>}
 

@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal, Sheet } from '../../components/ui/Sheet';
@@ -25,7 +25,7 @@ export function WbsTab({ project }: { project: ProjectDetail }) {
   const { t } = useTranslation();
   const toast = useToast();
   const canManage = useCan()('projects.manage') && project.status !== 'cancelled';
-  const { data, isPending } = useCQuery<{ wbs: ProjectWbsRow[] }>(['project', project.id, 'wbs'], `/api/projects/${project.id}/wbs`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ wbs: ProjectWbsRow[] }>(['project', project.id, 'wbs'], `/api/projects/${project.id}/wbs`);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [progressOpen, setProgressOpen] = useState(false);
   const [deleting, setDeleting] = useState<ProjectWbsRow | null>(null);
@@ -33,6 +33,7 @@ export function WbsTab({ project }: { project: ProjectDetail }) {
   const toggle = useCMutation((v: { id: string; isActive: boolean }, call) => call(`/api/project-wbs/${v.id}`, { method: 'PATCH', body: { isActive: v.isActive } }), PROJECT_INVALIDATE);
   const remove = useCMutation((id: string, call) => call(`/api/project-wbs/${id}`, { method: 'DELETE' }), PROJECT_INVALIDATE);
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   const rows = data.wbs;
   const leaves = rows.filter((r) => r.isLeaf && r.isActive);
@@ -288,7 +289,7 @@ function ProgressSheet({ open, onOpenChange, projectId, leaves }: { open: boolea
   const [percent, setPercent] = useState<Record<string, string>>({});
   const [etc, setEtc] = useState<Record<string, string>>({});
   const [error, setError] = useState<Error | null>(null);
-  const { data } = useCQuery<ProjectProgressOverview>(['project', projectId, 'progress', asOfDate], `/api/projects/${projectId}/progress?asOf=${asOfDate}`, { enabled: open });
+  const { data, error: progressError, isPending: progressPending, refetch: retryProgress, isFetching: retryingProgress } = useCQuery<ProjectProgressOverview>(['project', projectId, 'progress', asOfDate], `/api/projects/${projectId}/progress?asOf=${asOfDate}`, { enabled: open });
   const latest = useMemo(() => new Map((data?.latest ?? []).map((l) => [l.wbsId, l])), [data]);
 
   useEffect(() => {
@@ -307,6 +308,7 @@ function ProgressSheet({ open, onOpenChange, projectId, leaves }: { open: boolea
   const items = leaves.filter((l) => percent[l.id] !== undefined && percent[l.id] !== '').map((l) => ({ wbsId: l.id, percent: percent[l.id]!, ...(etc[l.id] ? { etcOverride: etc[l.id] } : {}) }));
   const invalid = items.some((i) => Number(i.percent) > 100);
   const submit = () => {
+    if (save.isPending || progressPending || progressError) return;
     setError(null);
     save.mutate(items, {
       onSuccess: () => {
@@ -327,7 +329,7 @@ function ProgressSheet({ open, onOpenChange, projectId, leaves }: { open: boolea
       footer={
         <>
           <Button onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
-          <Button variant="primary" loading={save.isPending} disabled={items.length === 0 || invalid} onClick={submit}>
+          <Button variant="primary" loading={save.isPending} disabled={items.length === 0 || invalid || progressPending || !!progressError} onClick={submit}>
             {t('common.save')}
           </Button>
         </>
@@ -336,7 +338,7 @@ function ProgressSheet({ open, onOpenChange, projectId, leaves }: { open: boolea
       <div className="flex flex-col gap-5">
         {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
         <Field label={t('projects.progress.date')}>{(id) => <Input id={id} type="date" value={asOfDate} onChange={(e) => e.target.value && setAsOfDate(e.target.value)} className="w-44" />}</Field>
-        <TableWrap>
+        {progressError ? <ErrorState description={errorMessage(progressError)} onRetry={() => void retryProgress()} retrying={retryingProgress} /> : progressPending ? <PageLoading /> : <TableWrap>
           <Table>
             <thead>
               <tr>
@@ -374,7 +376,7 @@ function ProgressSheet({ open, onOpenChange, projectId, leaves }: { open: boolea
               })}
             </tbody>
           </Table>
-        </TableWrap>
+        </TableWrap>}
         {invalid && <Callout tone="danger">{t('projects.progress.over100')}</Callout>}
 
         {data && data.history.length > 0 && (

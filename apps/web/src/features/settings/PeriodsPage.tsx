@@ -5,7 +5,7 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { PageLoading } from '../../components/ui/Feedback';
+import { PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
@@ -22,7 +22,7 @@ export function PeriodsPage() {
   const { data: yearsData } = useCQuery<{ years: number[] }>(['period-years'], '/api/periods/years');
   const currentYear = Number(todayIso().slice(0, 4));
   const [year, setYear] = useState(currentYear);
-  const { data, isPending } = useCQuery<{ periods: Period[] }>(['periods', year], `/api/periods?year=${year}`);
+  const { data, isPending, error: PeriodsPageQueryError, refetch: PeriodsPageQueryRetry, isFetching: PeriodsPageQueryFetching } = useCQuery<{ periods: Period[] }>(['periods', year], `/api/periods?year=${year}`);
   const [confirm, setConfirm] = useState<{ period: Period; action: 'close' | 'reopen' } | null>(null);
 
   useEffect(() => {
@@ -38,6 +38,7 @@ export function PeriodsPage() {
   const maxYear = Math.max(currentYear, ...(yearsData?.years ?? []));
   const canClose = can('ledger.close_period');
 
+  if (PeriodsPageQueryError && !data) return <ErrorState error={PeriodsPageQueryError} onRetry={() => void PeriodsPageQueryRetry()} retrying={PeriodsPageQueryFetching} />;
   return (
     <>
       <PageHeader

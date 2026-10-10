@@ -127,6 +127,15 @@ const envSchema = z
     NOTIFY_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(90),
     /** E-posta özetinin gönderileceği ilk yerel saat (Europe/Nicosia, 0–23). */
     NOTIFY_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(8),
+    /**
+     * Otomatik resmî kur çekimi: yalnız ayarı açık şirketler, hafta içi. Yayın saati VARSAYILMAZ (docs/LEGAL-NOTES §6):
+     * bülten tarihi bugüne eşit olunca kaydedilir. İsteğe bağlı SS:DD eşiği yalnız gereksiz indirmeyi azaltmak içindir.
+     * Testlerde süreç başlatılmaz.
+     */
+    FX_AUTO_ENABLED: flag(true),
+    FX_AUTO_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
+    FX_AUTO_TCMB_AFTER: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('00:00'),
+    FX_AUTO_KKTCMB_AFTER: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('00:00'),
     /** Sürüm etiketi (imaj derlemesinde verilir); destek için `/api/public-config` döndürür. */
     APP_VERSION: z.string().default('dev'),
   })

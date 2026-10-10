@@ -1,4 +1,3 @@
-import { ArrowLeft } from 'lucide-react';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +6,7 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Textarea } from '../../components/ui/Field';
@@ -100,16 +99,15 @@ export function PurchaseRequestEditorPage() {
 
   return (<FormGuard captureAll scopeKey="PurchaseRequestEditorPage" pending={save.isPending || submit.isPending || act.isPending || remove.isPending || decide.isPending || createRfq.isPending}>{(
     <div className="flex flex-col gap-5">
-      <div>
-        <Link to="/purchasing/requests" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
-          <ArrowLeft className="size-4" aria-hidden />
-          {t('procurement.requests.title')}
-        </Link>
-        <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-          {isNew ? t('procurement.requests.newTitle') : r?.code}
-          {!isNew && <RequestStatusBadge status={status} />}
-        </h1>
-      </div>
+      <PageHeader
+        className="mb-0"
+        title={isNew ? t('procurement.requests.newTitle') : (r?.code ?? '…')}
+        helpKey="purchase-request-editor"
+        back={{ to: '/purchasing/requests', label: t('procurement.requests.title') }}
+        favorite={!isNew}
+        recent={!isNew && r?.code ? { kind: 'Satın alma talebi' } : false}
+        meta={!isNew && <RequestStatusBadge status={status} />}
+      />
 
       {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
       {r?.rejectionNote && status === 'rejected' && <Callout tone="warning" title={t('procurement.requests.rejected')}>{r.rejectionNote}</Callout>}

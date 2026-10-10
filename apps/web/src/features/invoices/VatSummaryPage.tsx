@@ -6,7 +6,7 @@ import { dec, todayIso } from '@erp/shared';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { PrintHeader } from '../../components/ui/PrintHeader';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -23,9 +23,10 @@ export function VatSummaryPage() {
   const today = todayIso();
   const [from, setFrom] = useState(`${today.slice(0, 7)}-01`);
   const [to, setTo] = useState(today);
-  const { data, isPending } = useCQuery<VatSummary>(['vat-summary', from, to], `/api/reports/vat-summary?from=${from}&to=${to}`);
+  const { data, isPending, error: VatSummaryPageQueryError, refetch: VatSummaryPageQueryRetry, isFetching: VatSummaryPageQueryFetching } = useCQuery<VatSummary>(['vat-summary', from, to], `/api/reports/vat-summary?from=${from}&to=${to}`);
   const payable = data ? dec(data.totals.payable) : null;
 
+  if (VatSummaryPageQueryError && !data) return <ErrorState error={VatSummaryPageQueryError} onRetry={() => void VatSummaryPageQueryRetry()} retrying={VatSummaryPageQueryFetching} />;
   return (
     <>
       <PageHeader title={t('invoices.vat.title')} description={t('invoices.vat.subtitle')} actions={<ExportMenu exportKey="vat-summary" params={{ from, to }} disabled={!data || data.rows.length === 0} />} />

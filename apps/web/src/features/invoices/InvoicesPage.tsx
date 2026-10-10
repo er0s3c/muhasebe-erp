@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { EmptyState, ErrorState, ListSkeleton } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
-import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { Table, TableWrap, Td, Th, Tr, ProgressiveRows } from '../../components/ui/Table';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { cn } from '../../lib/cn';
 import { formatDateTR, moneyIn } from '../../lib/format';
@@ -138,7 +138,7 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
                 </tr>
               </thead>
               <tbody>
-                {data.invoices.map((r) => (
+                <ProgressiveRows rows={data.invoices}>{(r) => (
                   <Tr
                     key={r.id}
                     clickable
@@ -170,7 +170,7 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
                       <InvoiceStatusBadge status={r.status} />
                     </Td>
                   </Tr>
-                ))}
+                )}</ProgressiveRows>
               </tbody>
             </Table>
           </TableWrap>

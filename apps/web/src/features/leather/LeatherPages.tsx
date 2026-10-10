@@ -25,7 +25,8 @@ import {
 import Decimal from 'decimal.js';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState, PageLoading } from '../../components/ui/Feedback';
+import { errorMessage } from '../../lib/errors';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { useProductionCan as useCan, useProductionQuery as useCQuery } from './production-context';
@@ -185,6 +186,8 @@ export function LeatherOverviewPage() {
     '/api/leather/overview',
   );
   const value = data.data?.overview;
+  if (data.error) return <ErrorState description={errorMessage(data.error)} onRetry={() => void data.refetch()} retrying={data.isFetching} />;
+  if (data.isPending) return <PageLoading />;
   const metrics: [string, number | string | undefined, string][] = [
     ['Model', value?.models, '/leather/models'],
     ['Aktif üretim', value?.activeOrders, '/leather/production'],
@@ -203,7 +206,6 @@ export function LeatherOverviewPage() {
   return (
     <>
       <LeatherHeader title={t('leather.title')} description={t('leather.subtitle')} />
-      {data.error && <Callout tone="danger">{data.error.message}</Callout>}
       <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {metrics.map(([label, amount, path]) => (
           <Link key={label} to={path}>
@@ -281,7 +283,7 @@ export function LeatherModelsPage() {
       )}
       <Records
         rows={models.data?.models}
-        loading={models.isPending}
+        loading={models.isPending} onRetry={() => void models.refetch()} retrying={models.isFetching}
         error={models.error}
         columns={[
           { label: 'Kod', render: (row) => row.code },
@@ -335,7 +337,7 @@ export function LeatherModelsPage() {
           )}
           <Records
             rows={revisions.data?.revisions}
-            loading={revisions.isPending}
+            loading={revisions.isPending} onRetry={() => void revisions.refetch()} retrying={revisions.isFetching}
             error={revisions.error}
             columns={[
               { label: 'Revizyon', render: (row) => `R${row.revision} · ${row.name}` },
@@ -419,7 +421,7 @@ export function LeatherModelsPage() {
       <div className="mt-5">
         <Records
           rows={variants.data?.variants.filter((row) => !modelId || row.modelId === modelId)}
-          loading={variants.isPending}
+          loading={variants.isPending} onRetry={() => void variants.refetch()} retrying={variants.isFetching}
           error={variants.error}
           columns={[
             { label: 'Ürün', render: (row) => row.itemName },
@@ -1358,7 +1360,7 @@ export function LeatherMaterialsPage() {
       <h2 className="mb-3 text-subheading">Deri partileri</h2>
       <Records
         rows={lots.data?.lots}
-        loading={lots.isPending}
+        loading={lots.isPending} onRetry={() => void lots.refetch()} retrying={lots.isFetching}
         error={lots.error}
         columns={[
           { label: 'Parti', render: (row) => row.code },
@@ -1379,7 +1381,7 @@ export function LeatherMaterialsPage() {
       <h2 className="mb-3 mt-6 text-subheading">Fiziksel parça ve kalanlar</h2>
       <Records
         rows={pieces.data?.pieces}
-        loading={pieces.isPending}
+        loading={pieces.isPending} onRetry={() => void pieces.refetch()} retrying={pieces.isFetching}
         error={pieces.error}
         columns={[
           {
@@ -1645,19 +1647,22 @@ export function LeatherProductionPage() {
   const customs = useCQuery<{ customOrders: LeatherCustomOrder[] }>(
     ['leather', 'custom-orders'],
     '/api/leather/custom-orders',
-    { enabled: can('leather.catalog.read') },
+    { enabled: !generic && can('leather.catalog.read') },
   );
   const [variantId, setVariantId] = useState('');
   const variant = variants.data?.variants.find((row) => row.id === variantId);
   const [reservations, setReservations] = useState<ReservationDraft[]>([]);
   const [selected, setSelected] = useState('');
   useFocusedRecord(orders.data?.orders, (row) => setSelected(row.id));
+  // Menüdeki "Maliyetler" aynı ekranı açar: o adreste maliyet dağıtımı en üstte ve başlık ona göre (rota değişince sayfa yeniden kurulur)
+  const costsFirst = typeof window !== 'undefined' && window.location.pathname.endsWith('/manufacturing/costs');
   return (
     <>
       <LeatherHeader
-        title={t('leather.production')}
-        description="Reçete revizyonuyla üretimi planlayın, malzemeyi rezerve edin ve gerçekleşen üretim maliyetini izleyin."
+        title={costsFirst ? 'Üretim maliyetleri' : t('leather.production')}
+        description={costsFirst ? 'Gerçekleşen malzeme, işçilik ve genel üretim giderlerini üretim emirlerine dağıtın; emirlerin maliyetini aşağıda izleyin.' : 'Reçete revizyonuyla üretimi planlayın, malzemeyi rezerve edin ve gerçekleşen üretim maliyetini izleyin.'}
       />
+      {costsFirst && can('leather.costs.read') && <div className="mb-6"><CostPanel /></div>}
       {can('leather.production.manage') && (
         <>
           <div className="mb-4 max-w-lg">
@@ -1699,7 +1704,7 @@ export function LeatherProductionPage() {
                   options(lookups.warehouses, (row) => row.name),
                 ),
                 { name: 'dueDate', label: 'Üretim termin tarihi', type: 'date' },
-                selectField(
+                ...(!generic ? [selectField(
                   'customOrderId',
                   'Bağlı özel sipariş',
                   options(
@@ -1709,7 +1714,7 @@ export function LeatherProductionPage() {
                     (row) => `${row.partyName} · ${row.quantity} adet · ${row.monogram}`,
                   ),
                   false,
-                ),
+                )] : []),
                 textField('note', 'Planlama notu'),
                 selectField(
                   'assignedUserId',
@@ -1747,7 +1752,7 @@ export function LeatherProductionPage() {
       )}
       <Records
         rows={orders.data?.orders}
-        loading={orders.isPending}
+        loading={orders.isPending} onRetry={() => void orders.refetch()} retrying={orders.isFetching}
         error={orders.error}
         columns={[
           { label: 'Üretim emri', render: (row) => row.code },
@@ -1778,7 +1783,7 @@ export function LeatherProductionPage() {
           <ProductionDetail key={selected} orderId={selected} />
         </div>
       )}
-      {can('leather.costs.read') && <CostPanel />}
+      {!costsFirst && can('leather.costs.read') && <CostPanel />}
       {generic && <PieceRatePanel />}
     </>
   );
@@ -1820,7 +1825,8 @@ function ProductionDetail({ orderId }: { orderId: string }) {
   );
   const [issueItemId, setIssueItemId] = useState('');
   const order = data.data?.order;
-  if (data.error) return <Callout tone="danger">{data.error.message}</Callout>;
+  if (data.error) return <ErrorState description={errorMessage(data.error)} onRetry={() => void data.refetch()} retrying={data.isFetching} />;
+  if (data.isPending) return <PageLoading />;
   if (!order) return null;
   const inProgress = ['released', 'in_progress'].includes(order.status);
   const acceptedChecks = checks.data?.checks.filter(
@@ -2238,7 +2244,7 @@ function CostPanel() {
       )}
       <Records
         rows={data.data?.allocations}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           { label: 'Tarih', render: (row) => row.date },
@@ -2469,7 +2475,7 @@ export function LeatherQualityPage() {
       )}
       <Records
         rows={data.data?.checks}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           {
@@ -2645,7 +2651,7 @@ export function LeatherSubcontractsPage() {
       )}
       <Records
         rows={data.data?.jobs}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           {
@@ -2804,7 +2810,7 @@ export function LeatherCustomOrdersPage() {
       )}
       <Records
         rows={data.data?.customOrders}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           { label: 'Müşteri', render: (row) => row.partyName },
@@ -2973,7 +2979,7 @@ export function LeatherServicePage() {
       )}
       <Records
         rows={data.data?.cases}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           { label: 'Müşteri', render: (row) => row.partyName },

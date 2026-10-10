@@ -8,7 +8,7 @@ import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageTitle } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -151,10 +151,16 @@ export function SalesContractPage() {
           {t('realEstate.contracts.title')}
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-            {isNew ? t('realEstate.contracts.newTitle') : c?.code}
-            {!isNew && <ContractStatusBadge status={status} />}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <PageTitle
+              title={isNew ? t('realEstate.contracts.newTitle') : (c?.code ?? '…')}
+              helpKey="sales-contract-detail"
+              favorite={!isNew}
+              recent={!isNew && c ? { kind: 'Satış sözleşmesi', title: `${c.code} · ${c.partyName}` } : false}
+            >
+              {!isNew && <ContractStatusBadge status={status} />}
+            </PageTitle>
+          </div>
           {!isNew && <ExportMenu exportKey="sales-schedule" params={{ contractId: id }} />}
         </div>
         {c && <p className="mt-1 text-sm text-muted">{c.projectCode} · {unitLabel(c)} · {c.partyName}</p>}

@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PROJECT_TRANSITIONS } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { PageTitle } from '../../components/ui/Card';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Modal } from '../../components/ui/Sheet';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
@@ -39,7 +40,7 @@ export function ProjectDetailPage() {
   const subcontractsOn = useModuleEnabled('construction.subcontracts');
   const realEstateOn = useModuleEnabled('construction.realestate');
   const canReadSales = useCan()('realestate.read');
-  const { data, isPending, error } = useCQuery<{ project: ProjectDetail }>(['project', id], id ? `/api/projects/${id}` : null);
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ project: ProjectDetail }>(['project', id], id ? `/api/projects/${id}` : null);
   const [tab, setTab] = useState<Tab>('overview');
   const [editing, setEditing] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<ProjectStatus | null>(null);
@@ -61,6 +62,7 @@ export function ProjectDetailPage() {
       />
     );
   }
+  if (error) return <ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   if (!id) return null;
 
@@ -89,7 +91,7 @@ export function ProjectDetailPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{p.name}</h1>
+            <PageTitle title={p.name} helpKey="project-detail" recent={{ kind: 'Proje' }} />
             <ProjectKindBadge kind={p.kind} />
             <ProjectStatusBadge status={p.status} />
           </div>
@@ -144,7 +146,7 @@ export function ProjectDetailPage() {
       {p.status === 'completed' && <div className="mb-5"><Callout tone="info">{t('projects.completedNote')}</Callout></div>}
       {p.status === 'cancelled' && <div className="mb-5"><Callout tone="warning">{t('projects.cancelledNote')}</Callout></div>}
 
-      <SegmentedTabs
+      <SegmentedTabs id="projects-projectdetailpage-tabs" panelId={() => 'projects-projectdetailpage-tabs-panel'}
         className="mb-5"
         value={tab}
         onChange={setTab}
@@ -158,12 +160,14 @@ export function ProjectDetailPage() {
         ]}
       />
 
+      <TabPanel id="projects-projectdetailpage-tabs-panel" labelledBy={`projects-projectdetailpage-tabs-${tab}`}>
       {tab === 'overview' && <OverviewTab project={p} onOpenBudget={() => setTab('budget')} onOpenWbs={() => setTab('wbs')} />}
       {tab === 'wbs' && <WbsTab project={p} />}
       {tab === 'budget' && <BudgetTab project={p} />}
       {tab === 'transactions' && <TransactionsTab project={p} />}
       {tab === 'employer' && <EmployerTab project={p} />}
       {tab === 'sales' && <SalesTab project={p} />}
+      </TabPanel>
 
       <ProjectFormSheet open={editing} onOpenChange={setEditing} project={p} onSaved={() => undefined} />
 

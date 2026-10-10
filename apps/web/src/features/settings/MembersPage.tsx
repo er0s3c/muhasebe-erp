@@ -9,7 +9,7 @@ import { Badge } from '../../components/ui/Badge';
 import { useConfirmation } from '../../components/ui/useConfirmation';
 import { Button } from '../../components/ui/Button';
 import { PageHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal, Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -32,7 +32,7 @@ export function MembersPage() {
   const [accessFor, setAccessFor] = useState<Member | null>(null);
   // Rütbe kuralları (sunucu da denetler): kimse kendi erişimini, kimse sahibin erişimini değiştiremez; yöneticininkini yalnızca sahip
   const canEditAccess = (m: Member) => m.userId !== user?.id && m.role !== 'owner' && (callerRole === 'owner' || m.role !== 'admin');
-  const { data, isPending } = useCQuery<{ members: Member[] }>(['members'], '/api/company/members');
+  const { data, isPending, error: MembersPageQueryError, refetch: MembersPageQueryRetry, isFetching: MembersPageQueryFetching } = useCQuery<{ members: Member[] }>(['members'], '/api/company/members');
   const roles = useCQuery<CompanyRolesResponse>(['company-roles'], '/api/company/roles');
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Member | null>(null);
@@ -75,6 +75,7 @@ export function MembersPage() {
     );
   });
 
+  if (MembersPageQueryError && !data) return <ErrorState error={MembersPageQueryError} onRetry={() => void MembersPageQueryRetry()} retrying={MembersPageQueryFetching} />;
   return (
     <>
       {dialog}

@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR, moneyIn } from '../../lib/format';
@@ -36,7 +36,7 @@ function ContractsPage({ direction }: { direction: ContractDirection }) {
     if (status) q.set('status', status);
     return q.toString();
   }, [direction, projectId, status]);
-  const { data, isPending } = useCQuery<{ subcontracts: SubcontractRow[] }>(['subcontracts', 'list', qs], `/api/subcontracts?${qs}`);
+  const { data, isPending, error: ContractsPageQueryError, refetch: ContractsPageQueryRetry, isFetching: ContractsPageQueryFetching } = useCQuery<{ subcontracts: SubcontractRow[] }>(['subcontracts', 'list', qs], `/api/subcontracts?${qs}`);
   const rows = data?.subcontracts ?? [];
   const filtered = !!(projectId || status);
 
@@ -47,6 +47,7 @@ function ContractsPage({ direction }: { direction: ContractDirection }) {
     </Button>
   );
 
+  if (ContractsPageQueryError && !data) return <ErrorState error={ContractsPageQueryError} onRetry={() => void ContractsPageQueryRetry()} retrying={ContractsPageQueryFetching} />;
   return (
     <>
       <PageHeader

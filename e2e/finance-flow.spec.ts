@@ -19,8 +19,9 @@ test('finans: nakit projeksiyonu (elle kalem), proje kârlılığı raporu, fon/
   const dialog = page.getByRole('dialog');
 
   // 1) Nakit projeksiyonu: 13 haftalık tablo, elle çıkış kalemi
-  await nav.getByRole('link', { name: 'Nakit projeksiyonu' }).click();
-  await expect(page.getByRole('heading', { name: 'Nakit projeksiyonu', level: 1 })).toBeVisible();
+  await nav.getByRole('link', { name: 'Nakit planlama' }).click();
+  await expect(page.getByRole('heading', { name: 'Nakit planlama', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nakit projeksiyonu', level: 2 })).toBeVisible();
   await expect(page.getByText('Açılış bakiyesi').first()).toBeVisible();
   await expect(page.getByRole('row', { name: /^13 / })).toBeVisible();
   await page.getByRole('button', { name: 'Kalem ekle' }).click();

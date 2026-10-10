@@ -1,3 +1,5 @@
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { ListToolbar } from '../../components/ui/ListTools';
 import { dec, roundMoney, todayIso } from '@erp/shared';
 import { Plus, Receipt } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -8,7 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal } from '../../components/ui/Sheet';
@@ -95,7 +97,7 @@ export function ExpenseEntriesPage() {
   if (to) qs.set('to', to);
   if (cardId) qs.set('cardId', cardId);
   if (q.trim()) qs.set('q', q.trim());
-  const { data, isPending } = useCQuery<{
+  const { data, isPending, error: ExpenseEntriesPageQueryError, refetch: ExpenseEntriesPageQueryRetry, isFetching: ExpenseEntriesPageQueryFetching } = useCQuery<{
     entries: ExpenseEntry[];
     total: number;
     totals: { net: string; gross: string };
@@ -210,6 +212,7 @@ export function ExpenseEntriesPage() {
           (!form.advanceId || !!selectedAdvance) &&
           (reimbursement.lte(0) || !!form.treasuryAccountId));
 
+  if (ExpenseEntriesPageQueryError && !data) return <ErrorState error={ExpenseEntriesPageQueryError} onRetry={() => void ExpenseEntriesPageQueryRetry()} retrying={ExpenseEntriesPageQueryFetching} />;
   return (
     <>
       <PageHeader
@@ -230,6 +233,8 @@ export function ExpenseEntriesPage() {
           )
         }
       />
+      <ListToolbar onReset={() => { setCardId(''); setFrom(''); setTo(''); setQ(''); }}><CompanySavedViews page={'expense-entries'} filters={{ cardId, from, to }} onApply={view => { setCardId(view.cardId as typeof cardId); setFrom(view.from as typeof from); setTo(view.to as typeof to); setQ(''); }} /></ListToolbar>
+
       <div className="mb-4">
         <Callout tone="warning">{t('expenses.notice')}</Callout>
       </div>

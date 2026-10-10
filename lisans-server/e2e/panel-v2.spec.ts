@@ -22,7 +22,7 @@ async function fixtures(page: Page, options: { adminId?: () => string; unauthori
   });
 }
 
-test('panel V2: all existing page URLs, Ada ERP identity and desktop/mobile themes stay usable', async ({ page }) => {
+test('panel V2: all existing page URLs, Ada ERP identity and desktop/mobile themes stay usable', async ({ page }, testInfo) => {
   await fixtures(page);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -30,27 +30,36 @@ test('panel V2: all existing page URLs, Ada ERP identity and desktop/mobile them
     await page.goto(path);
     await expect(page.getByRole('heading', { name: title, exact: true, level: 1 })).toBeVisible();
     await expect(page.getByRole('img', { name: 'Ada ERP', exact: true })).toBeVisible();
-    for (const width of [1440, 390]) {
+    for (const width of [1440, 1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `${path}, ${width}`).toBe(true);
-      await page.getByRole('button', { name: 'Temayı değiştir' }).click();
-      await expect(page.getByRole('heading', { name: title, exact: true, level: 1 })).toBeVisible();
+      for (const theme of ['light', 'dark']) {
+        const dark = await page.evaluate(() => document.documentElement.classList.contains('dark'));
+        if (dark !== (theme === 'dark')) await page.getByRole('button', { name: 'Temayı değiştir' }).click();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `${path}, ${width}, ${theme}`).toBe(true);
+        await expect(page.getByRole('heading', { name: title, exact: true, level: 1 })).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath(`${path.replaceAll('/', '-') || 'dashboard'}-${width}-${theme}.png`), fullPage: true });
+      }
     }
   }
   expect(errors).toEqual([]);
 });
 
-test('panel V2: authentication redirect and setup URL preserve compulsory TOTP fields', async ({ page }) => {
+test('panel V2: authentication redirect and setup URL preserve compulsory TOTP fields', async ({ page }, testInfo) => {
   await fixtures(page, { unauthorized: true });
   await page.goto('/licenses');
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByLabel('Doğrulama kodu')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Giriş yap', exact: true })).toBeDisabled();
+  await page.setViewportSize({ width: 320, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('login-320.png'), fullPage: true });
   await page.unroute('**/admin/api/**');
   await fixtures(page, { setup: true });
   await page.goto('/login');
   await expect(page).toHaveURL(/\/setup$/);
   await expect(page.getByRole('heading', { name: 'İlk kurulum', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('setup-320.png'), fullPage: true });
 });
 
 test('panel V2: a failed session query shows retry and successfully recovers', async ({ page }) => {
@@ -60,7 +69,7 @@ test('panel V2: a failed session query shows retry and successfully recovers', a
   await page.goto('/customers');
   await expect(page.getByText('Yönetici oturumu yüklenemedi')).toBeVisible();
   failing = false;
-  await page.getByRole('button', { name: 'Yeniden dene', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Tekrar dene', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Müşteriler', exact: true, level: 1 })).toBeVisible();
 });
 
@@ -80,7 +89,7 @@ test('panel V2: dirty sheet confirmation, server validation, pending lock and su
   await page.getByRole('button', { name: 'Yeni müşteri', exact: true }).click();
   await page.getByLabel('Ad / unvan').fill('Kaybolmayan taslak');
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'Kaydedilmemiş değişiklikler' })).toBeVisible();
+  await expect(page.getByRole('alertdialog', { name: 'Kaydedilmemiş değişiklikler' })).toBeVisible();
   await page.getByRole('button', { name: 'Düzenlemeye devam et' }).click();
   await page.getByLabel('E-posta', { exact: true }).fill('invalid@example.com');
   await page.getByRole('button', { name: 'Ekle', exact: true }).click();
@@ -97,7 +106,7 @@ test('panel V2: dirty sheet confirmation, server validation, pending lock and su
   await expect(page.getByRole('dialog', { name: 'Yeni müşteri', exact: true })).toHaveCount(0);
   await page.getByRole('navigation', { name: 'Ana menü' }).getByRole('link', { name: 'Lisanslar', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Lisanslar', exact: true, level: 1 })).toBeVisible();
-  await expect(page.getByRole('dialog', { name: 'Kaydedilmemiş değişiklikler' })).toHaveCount(0);
+  await expect(page.getByRole('alertdialog', { name: 'Kaydedilmemiş değişiklikler' })).toHaveCount(0);
 });
 
 test('panel V2: saved license filters stay local to the administrator and avoid customer data', async ({ page }) => {
@@ -117,12 +126,21 @@ test('panel V2: saved license filters stay local to the administrator and avoid 
   await expect(page.getByRole('combobox', { name: 'Kayıtlı görünüm uygula' })).toHaveCount(0);
 });
 
-test('panel V2: release deletion requires concrete confirmation before the API call', async ({ page }) => {
+test('panel V2: release deletion requires concrete confirmation before the API call', async ({ page }, testInfo) => {
   await fixtures(page);
   let deletes = 0;
   await page.route('**/admin/api/releases/release-fixture', async route => { deletes++; await route.fulfill({ contentType: 'application/json', body: '{}' }); });
   await page.goto('/releases');
   await page.getByRole('row', { name: /1.2.3/ }).click();
+  for (const width of [1440, 1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ['light', 'dark']) {
+      const dark = await page.evaluate(() => document.documentElement.classList.contains('dark'));
+      if (dark !== (theme === 'dark')) await page.getByRole('button', { name: 'Temayı değiştir' }).click();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `release detail ${width}, ${theme}`).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`release-detail-${width}-${theme}.png`), fullPage: true });
+    }
+  }
   await page.getByRole('button', { name: 'Taslağı sil', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Sürüm taslağı silinsin mi?' });
   await expect(dialog).toBeVisible();
@@ -133,4 +151,63 @@ test('panel V2: release deletion requires concrete confirmation before the API c
   await dialog.getByRole('button', { name: 'Taslağı sil', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(deletes).toBe(1);
+});
+
+test('panel V2: setup draft survives cancellation and repeated Enter cannot start duplicate TOTP setup', async ({ page }) => {
+  await fixtures(page, { setup: true });
+  let starts = 0;
+  let complete: (() => void) | undefined;
+  await page.route('**/admin/api/setup/totp', async route => {
+    starts++;
+    await new Promise<void>(resolve => { complete = resolve; });
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/Ada%20ERP%20Lisans:fixture?secret=JBSWY3DPEHPK3PXP&issuer=Ada%20ERP%20Lisans', pending: 'fixture-totp-setup' }) });
+  });
+  await page.goto('/setup');
+  await page.getByLabel('Kurulum kodu').fill('FIXTURE-SETUP-CODE');
+  await page.getByLabel('E-posta', { exact: true }).fill('setup@example.com');
+  await page.getByLabel('Parola', { exact: true }).fill('fixture-strong-password');
+  await page.getByLabel('Parola (tekrar)', { exact: true }).fill('fixture-strong-password');
+  page.once('dialog', dialog => { expect(dialog.type()).toBe('beforeunload'); void dialog.dismiss(); });
+  await page.goto('/login').catch(() => undefined);
+  await expect(page.getByLabel('Kurulum kodu')).toHaveValue('FIXTURE-SETUP-CODE');
+  await page.getByRole('button', { name: 'Devam', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Devam', exact: true })).toBeDisabled();
+  await page.getByLabel('E-posta', { exact: true }).press('Enter');
+  expect(starts).toBe(1);
+  complete?.();
+  await expect(page.getByTestId('totp-secret')).toBeVisible();
+});
+
+test('panel V2: offline signing draft is guarded and each regenerated code must be acknowledged anew', async ({ page, context }, testInfo) => {
+  await fixtures(page);
+  await page.route('**/admin/api/licenses/license-fixture', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ license: { ...license, offlineAllowed: true }, activations: [] }) }));
+  let regenerated = 0;
+  await page.route('**/admin/api/licenses/license-fixture/regenerate-code', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ activationCode: `FIXTURE-SECRET-CODE-${++regenerated}` }) }));
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/licenses/license-fixture');
+  await page.getByLabel('İstek kodu').fill('fixture-offline-signing-request');
+  await page.getByRole('navigation', { name: 'Ana menü' }).getByRole('link', { name: 'Lisanslar', exact: true }).click();
+  const warning = page.getByRole('alertdialog', { name: 'Kaydedilmemiş değişiklikler' });
+  await expect(warning).toBeVisible();
+  await warning.getByRole('button', { name: 'Düzenlemeye devam et' }).click();
+  await expect(page.getByLabel('İstek kodu')).toHaveValue('fixture-offline-signing-request');
+  await page.getByRole('navigation', { name: 'Ana menü' }).getByRole('link', { name: 'Lisanslar', exact: true }).click();
+  await warning.getByRole('button', { name: 'Değişiklikleri bırak' }).click();
+  await expect(page.getByRole('heading', { name: 'Lisanslar', exact: true, level: 1 })).toBeVisible();
+  await page.goto('/licenses/license-fixture');
+  const generate = async () => {
+    await page.getByRole('button', { name: 'Yeni kod üret', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Yeni etkinleştirme kodu üretilsin mi?' }).getByRole('button', { name: 'Kodu üret', exact: true }).click();
+    await expect(page.getByTestId('activation-code')).toBeVisible();
+  };
+  await generate();
+  await page.getByRole('dialog', { name: 'Etkinleştirme kodu', exact: true }).getByRole('button', { name: 'Kopyala', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Kopyalandı', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Kodu kaydettim, kapat' }).click();
+  await generate();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Etkinleştirme kodu', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('one-time-code-320.png'), fullPage: true });
 });

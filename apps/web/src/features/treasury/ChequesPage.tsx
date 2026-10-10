@@ -1,3 +1,5 @@
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { ListToolbar } from '../../components/ui/ListTools';
 import { CHEQUE_STATUSES, MATURITY_BUCKETS, allowedChequeActions, todayIso, type ChequeAction, type ChequeDirection, type ChequeDocType } from '@erp/shared';
 import { History, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -8,13 +10,13 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { Modal, Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
@@ -41,7 +43,7 @@ export function ChequesPage() {
         <Callout tone="warning">{t('cheques.notice')}</Callout>
       </div>
       <div className="mb-4">
-        <SegmentedTabs
+        <SegmentedTabs id="treasury-ChequesPage-0" panelId={() => 'treasury-ChequesPage-0-panel'}
           value={tab}
           onChange={setTab}
           items={[
@@ -51,7 +53,9 @@ export function ChequesPage() {
           ]}
         />
       </div>
-      {tab === 'portfolio' ? <PortfolioTab /> : tab === 'clearing' ? <ClearingTab /> : <ReportsTab />}
+      <TabPanel id="treasury-ChequesPage-0-panel" labelledBy={"treasury-ChequesPage-0-" + (tab)}>
+{tab === 'portfolio' ? <PortfolioTab /> : tab === 'clearing' ? <ClearingTab /> : <ReportsTab />}
+</TabPanel>
     </>
   );
 }
@@ -71,15 +75,18 @@ function PortfolioTab() {
   const params = { direction, docType, status, q, dueFrom, dueTo };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
   const lim = useListLimit(qs);
-  const { data, isPending } = useCQuery<ChequeList & { truncated?: boolean }>(['cheques', 'list', qs, lim.limit], `/api/cheques?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
+  const { data, isPending, error: PortfolioTabQueryError, refetch: PortfolioTabQueryRetry, isFetching: PortfolioTabQueryFetching } = useCQuery<ChequeList & { truncated?: boolean }>(['cheques', 'list', qs, lim.limit], `/api/cheques?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const [creating, setCreating] = useState<ChequeDirection | null>(null);
   const [acting, setActing] = useState<{ action: ChequeAction; cheque: ChequeRow } | null>(null);
   const [detail, setDetail] = useState<ChequeRow | null>(null);
   const rows = data?.cheques ?? [];
   const today = todayIso();
 
+  if (PortfolioTabQueryError && !data) return <ErrorState error={PortfolioTabQueryError} onRetry={() => void PortfolioTabQueryRetry()} retrying={PortfolioTabQueryFetching} />;
   return (
     <>
+      <ListToolbar onReset={() => { setDirection(''); setDocType(''); setStatus('open'); setDueFrom(''); setDueTo(''); setQ(''); lim.reset(); }}><CompanySavedViews page={'cheque-portfolio'} filters={{ direction, docType, status, dueFrom, dueTo }} onApply={view => { setDirection(view.direction as typeof direction); setDocType(view.docType as typeof docType); setStatus(view.status as typeof status); setDueFrom(view.dueFrom as typeof dueFrom); setDueTo(view.dueTo as typeof dueTo); setQ(''); lim.reset(); }} /></ListToolbar>
+
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap items-end gap-3">
           <Field label={t('cheques.filters.direction')} className="w-36">
@@ -452,7 +459,7 @@ function ClearingTab() {
   const [currency,setCurrency]=useState<string>(base),[fxRate,setFxRate]=useState('');
   const [action, setAction] = useState<ClearingAction>('deposit');
   const { direction, status } = CLEARING[action];
-  const { data, isPending } = useCQuery<ChequeList>(['cheques', 'clearing', action], `/api/cheques?${new URLSearchParams({ direction, status })}`);
+  const { data, isPending, error: ClearingTabQueryError, refetch: ClearingTabQueryRetry, isFetching: ClearingTabQueryFetching } = useCQuery<ChequeList>(['cheques', 'clearing', action], `/api/cheques?${new URLSearchParams({ direction, status })}`);
   const { data: acc } = useTreasuryAccounts();
   const { data: batches } = useCQuery<{ batches: ChequeBatchRow[] }>(['cheques', 'batches'], '/api/cheques/batches');
   const banks = (acc?.accounts ?? []).filter((a) => a.kind === 'bank' && a.isActive && a.currencyCode === currency);
@@ -481,12 +488,13 @@ function ClearingTab() {
   const valid = chosen.length > 0 && !!date && (!needsBank || !!bankId) && (action !== 'collect' || (collectBanks.size === 1 && !collectBanks.has(null)));
   const switchAction = (a: ClearingAction) => { setAction(a); setSel({}); setError(null); setFilterBank(''); };
 
+  if (ClearingTabQueryError && !data) return <ErrorState error={ClearingTabQueryError} onRetry={() => void ClearingTabQueryRetry()} retrying={ClearingTabQueryFetching} />;
   return (
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader title={t('cheques.clearing.title')} description={t('cheques.clearing.desc')} />
         <div className="flex flex-col gap-3 px-5 pb-5">
-          <SegmentedTabs
+          <SegmentedTabs variant="filter"
             value={action}
             onChange={switchAction}
             items={[

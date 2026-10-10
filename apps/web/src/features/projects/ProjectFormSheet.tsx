@@ -116,7 +116,7 @@ export function ProjectFormSheet({ open, onOpenChange, project, onSaved }: Props
           {editing ? (
             <p className="text-sm text-muted">{t(`projects.kinds.${kind}`)} — {t('projects.form.kindLocked')}</p>
           ) : (
-            <SegmentedTabs
+            <SegmentedTabs variant="filter"
               value={kind}
               onChange={setKind}
               items={[

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Switch } from '../../components/ui/Switch';
@@ -39,13 +39,15 @@ function TypesCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.manage');
-  const { data } = useCQuery<{ types: ForeignDocTypeRow[] }>(['foreign', 'types'], '/api/foreign-workers/doc-types');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ types: ForeignDocTypeRow[] }>(['foreign', 'types'], '/api/foreign-workers/doc-types');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const add = useCMutation((_: void, call) => call('/api/foreign-workers/doc-types', { method: 'POST', body: { code: code.trim(), name: name.trim() } }), FOREIGN_INVALIDATE);
   const toggle = useCMutation((v: { id: string; active: boolean }, call) => call(`/api/foreign-workers/doc-types/${v.id}`, { method: 'PATCH', body: { active: v.active } }), FOREIGN_INVALIDATE);
   const rows = data?.types ?? [];
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('foreign.settings.types.title')} description={t('foreign.settings.types.desc')} />
@@ -99,7 +101,7 @@ function ParamsCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.manage');
-  const { data } = useCQuery<{ params: ForeignParamRow[] }>(['foreign', 'params'], '/api/foreign-workers/params');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ params: ForeignParamRow[] }>(['foreign', 'params'], '/api/foreign-workers/params');
   const [key, setKey] = useState<ForeignParamKey>('expiry_warning_days');
   const [value, setValue] = useState('');
   const [currency, setCurrency] = useState<string>('EUR');
@@ -124,6 +126,8 @@ function ParamsCard() {
   const rows = data?.params ?? [];
   const valid = isAmount ? /^\d{1,13}([.,]\d{1,4})?$/.test(value.trim()) : /^\d{1,4}$/.test(value.trim());
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('foreign.settings.params.title')} description={t('foreign.settings.params.desc')} />

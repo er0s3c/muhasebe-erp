@@ -1,286 +1,241 @@
-import { useQueries } from '@tanstack/react-query';
-import { ArrowRight, CheckCircle2, Circle } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ArrowDown, ArrowUp, GripVertical, LayoutGrid, Plus, RotateCcw, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
-import { CURRENCY_CODES, dec, todayIso } from '@erp/shared';
-import { Badge } from '../../components/ui/Badge';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { PageHeader } from '../../components/ui/Card';
+import { ErrorState } from '../../components/ui/Feedback';
+import { useToast } from '../../components/ui/Toast';
 import { cn } from '../../lib/cn';
-import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
-import { useCan, useCQuery, useCompanyApi, useModuleEnabled } from '../../lib/queries';
+import { formatDateTR } from '../../lib/format';
+import { usePreference } from '../../lib/personal';
 import { useSession } from '../../lib/session';
-import { NotificationsCard } from '../notifications/NotificationsCard';
-import { PageHelpTooltip } from '../../components/layout/PageHelpTooltip';
-import { ErrorState, ListSkeleton } from '../../components/ui/Feedback';
-import type { AgingReport, DeliverySummary, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData, TreasurySummary } from '../../lib/types';
+import { useDashboardSummary, useSectionAccess, type SummarySection } from './summary';
+import { WIDGET_BY_ID, WIDGETS, type WidgetDef, type WidgetSize } from './widgets';
 
-interface Step {
-  key: string;
-  title: string;
-  description: string;
-  done: boolean;
-  to: string;
+interface LayoutItem {
+  id: string;
+  size: WidgetSize;
+}
+interface Layout {
+  version: 1;
+  widgets: LayoutItem[];
 }
 
-interface Metric {
-  key: string;
-  label: string;
-  value: ReactNode;
-  to?: string;
-  /** Dikkat gerektiren değer (koyu zeminde okunur uyarı/hata rengi) */
-  tone?: 'warning' | 'danger';
+function parseLayout(value: unknown): Layout | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as { version?: unknown; widgets?: unknown };
+  if (v.version !== 1 || !Array.isArray(v.widgets)) return null;
+  const widgets = v.widgets.filter(
+    (w): w is LayoutItem => !!w && typeof w.id === 'string' && WIDGET_BY_ID.has(w.id) && (w.size === 's' || w.size === 'm' || w.size === 'l'),
+  );
+  return { version: 1, widgets };
 }
+
+const SIZE_CLASS: Record<WidgetSize, string> = {
+  s: 'col-span-1',
+  m: 'col-span-2',
+  l: 'col-span-2 xl:col-span-4',
+};
+const SIZE_LABEL: Record<WidgetSize, string> = { s: 'Küçük', m: 'Orta', l: 'Geniş' };
 
 /**
- * Sayaç şeridi: tema yüzeyinde (açık temada beyaz, koyu temada koyu) tek şerit; 10px büyük harf etiket, 28px tek ağırlıklı değer.
- * Bağlantılı göstergeler tıklanabilir.
+ * Kişiselleştirilebilir pano: widget'lar eklenir/çıkarılır, sürükle-bırak veya ok düğmeleriyle sıralanır, boyutu değiştirilir.
+ * Düzen kullanıcı + şirket bazında sunucuda saklanır. Göstergeler tek `/api/dashboard/summary` isteğiyle gelir.
  */
-function CounterBand({ metrics, label }: { metrics: Metric[]; label: string }) {
+export function DashboardPage() {
+  const { t } = useTranslation();
+  const { user, activeCompany } = useSession();
+  const toast = useToast();
+  const { ready, access, can } = useSectionAccess();
+  const available = useMemo(
+    () => WIDGETS.filter(w => w.sections.every(s => access[s]) && (w.requires?.(can) ?? true)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ready, JSON.stringify(access)],
+  );
+  const defaults = useMemo<Layout>(() => ({ version: 1, widgets: available.map(w => ({ id: w.id, size: w.defaultSize })) }), [available]);
+  const pref = usePreference<Layout | null>('dashboard.layout', parseLayout, null);
+  const saved = pref.value ?? defaults;
+  const [draft, setDraft] = useState<Layout | null>(null);
+  const editing = draft !== null;
+  const layout = (draft ?? saved).widgets.filter(w => available.some(a => a.id === w.id));
+  const hidden = available.filter(w => !layout.some(l => l.id === w.id));
+
+  const sections = useMemo(() => {
+    const out = new Set<SummarySection>();
+    for (const item of layout) {
+      const def = WIDGET_BY_ID.get(item.id)!;
+      def.sections.forEach(s => out.add(s));
+      def.extraSections?.forEach(s => access[s] && out.add(s));
+    }
+    return [...out];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout.map(l => l.id).join(','), JSON.stringify(access)]);
+  const summary = useDashboardSummary(sections, ready && !pref.loading);
+
+  const update = (fn: (items: LayoutItem[]) => LayoutItem[]) => setDraft(d => ({ version: 1, widgets: fn((d ?? saved).widgets.filter(w => available.some(a => a.id === w.id))) }));
+  const move = (id: string, delta: -1 | 1) =>
+    update(items => {
+      const list = [...items];
+      const from = list.findIndex(i => i.id === id);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= list.length) return list;
+      [list[from], list[to]] = [list[to]!, list[from]!];
+      return list;
+    });
+  const [dragging, setDragging] = useState<string | null>(null);
+  const dropOn = (targetId: string) =>
+    update(items => {
+      if (!dragging || dragging === targetId) return items;
+      const list = items.filter(i => i.id !== dragging);
+      const dragged = items.find(i => i.id === dragging)!;
+      list.splice(list.findIndex(i => i.id === targetId), 0, dragged);
+      return list;
+    });
+  const finish = () => {
+    if (!draft) return;
+    pref.save(draft).then(
+      () => {
+        setDraft(null);
+        toast.success('Pano düzeni kaydedildi.');
+      },
+      () => toast.error('Pano düzeni kaydedilemedi. Bağlantınızı kontrol edip tekrar deneyin.'),
+    );
+  };
+
+  const today = summary.data?.today;
   return (
-    <section aria-label={label} className="overflow-hidden rounded-2xl border border-border bg-surface text-text">
-      <ul className="flex flex-wrap">
-        {metrics.map((m) => {
-          const body = (
+    <>
+      <PageHeader
+        title={t('dashboard.greeting', { name: user?.fullName.split(' ')[0] ?? '' })}
+        helpKey="dashboard"
+        favorite={false}
+        description={`${t('dashboard.subtitle', { company: activeCompany?.name ?? '' })}${today ? ` · ${formatDateTR(today)}` : ''}`}
+        actions={
+          editing ? (
             <>
-              <p className="text-caption uppercase tracking-[0.05em] text-muted">{m.label}</p>
-              <p className={cn('mt-2 text-right font-semibold tabular-nums text-[clamp(1rem,10cqw,1.75rem)] leading-tight [overflow-wrap:anywhere]', m.tone === 'warning' && 'text-warning', m.tone === 'danger' && 'text-danger')}>{m.value}</p>
+              <Button size="sm" variant="ghost" onClick={() => setDraft(defaults)}>
+                <RotateCcw className="size-4" aria-hidden />
+                Varsayılana dön
+              </Button>
+              <Button size="sm" onClick={() => setDraft(null)}>Vazgeç</Button>
+              <Button size="sm" variant="primary" loading={pref.saving} onClick={finish}>Düzeni kaydet</Button>
             </>
-          );
-          const cell = 'block h-full p-5 [container-type:inline-size]';
-          return (
-            <li key={m.key} className="-ml-px -mt-px min-w-0 grow basis-[240px] border-l border-t border-border">
-              {m.to ? (
-                <Link to={m.to} aria-label={m.label} className={cn(cell, 'transition-colors hover:bg-surface-2')}>
-                  {body}
-                </Link>
-              ) : (
-                <div className={cell}>{body}</div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+          ) : (
+            <Button size="sm" onClick={() => setDraft(saved)} aria-label="Panoyu düzenle: widget ekle, çıkar ve sırala">
+              <LayoutGrid className="size-4" aria-hidden />
+              Panoyu düzenle
+            </Button>
+          )
+        }
+      />
+
+      {editing && (
+        <section aria-label="Widget ekle" className="mb-5 rounded-2xl border border-dashed border-border-strong bg-surface p-4">
+          <p className="mb-2 text-sm font-medium">Widget ekle</p>
+          {hidden.length ? (
+            <div className="flex flex-wrap gap-2">
+              {hidden.map(w => (
+                <button
+                  key={w.id}
+                  type="button"
+                  onClick={() => update(items => [...items, { id: w.id, size: w.defaultSize }])}
+                  title={w.help}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg px-3 py-1.5 text-sm transition-colors hover:border-border-strong hover:bg-surface-2"
+                >
+                  <Plus className="size-3.5" aria-hidden />
+                  {w.title}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted">Kullanabileceğiniz tüm widget’lar panoda. Kaldırmak için widget üzerindeki × düğmesini kullanın.</p>
+          )}
+          <p className="mt-3 text-xs text-muted">Sıralamak için widget’ı sürükleyin ya da ok düğmelerini kullanın. Düzen yalnız sizin için ve bu şirkette saklanır.</p>
+        </section>
+      )}
+
+      {summary.error && !summary.data && (
+        <div className="mb-5">
+          <ErrorState onRetry={() => void summary.refetch()} retrying={summary.isFetching} />
+        </div>
+      )}
+      {summary.data && summary.data.errors.length > 0 && (
+        <p role="status" className="mb-4 text-xs text-warning">Bazı göstergeler hesaplanamadı; ilgili kartlar “—” gösterir.</p>
+      )}
+
+      {layout.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border-strong bg-surface p-10 text-center">
+          <p className="text-sm text-muted">Panonuzda widget yok.</p>
+          {!editing && <Button className="mt-3" size="sm" onClick={() => setDraft(saved)}><Plus className="size-4" aria-hidden />Widget ekle</Button>}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+          {layout.map((item, index) => {
+            const def = WIDGET_BY_ID.get(item.id)!;
+            return (
+              <div
+                key={item.id}
+                className={cn('min-w-0', SIZE_CLASS[item.size], editing && 'flex flex-col rounded-2xl border border-dashed border-border-strong p-1.5', dragging === item.id && 'opacity-50')}
+                draggable={editing}
+                onDragStart={e => { setDragging(item.id); e.dataTransfer.effectAllowed = 'move'; }}
+                onDragEnd={() => setDragging(null)}
+                onDragOver={e => { if (editing && dragging && dragging !== item.id) e.preventDefault(); }}
+                onDrop={e => { e.preventDefault(); dropOn(item.id); setDragging(null); }}
+              >
+                {editing && <WidgetToolbar def={def} item={item} first={index === 0} last={index === layout.length - 1} onMove={d => move(item.id, d)} onResize={size => update(items => items.map(i => (i.id === item.id ? { ...i, size } : i)))} onRemove={() => update(items => items.filter(i => i.id !== item.id))} />}
+                <div className={cn('h-full min-h-0', editing && 'pointer-events-none flex-1 select-none opacity-80')} aria-hidden={editing || undefined}>
+                  {def.render({ data: summary.data, size: item.size })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }
 
-export function DashboardPage() {
-  const { t } = useTranslation();
-  const { user } = useSession();
-  const can = useCan();
-  const { company, call } = useCompanyApi();
-  const today = todayIso();
-  const year = today.slice(0, 4);
-  const foreign = CURRENCY_CODES.filter((c) => c !== company.baseCurrency);
-
-  // Kapalı modülün uçları 403 verir ve kartları anlamsızdır: sorgu da kart da modül açıkken çalışır.
-  const ledgerOn = useModuleEnabled('core.ledger');
-  const partiesOn = useModuleEnabled('core.parties');
-  const inventoryOn = useModuleEnabled('core.inventory');
-  const invoicesOn = useModuleEnabled('core.invoices');
-  const treasuryOn = useModuleEnabled('core.treasury');
-  const canLedger = can('ledger.read') && ledgerOn;
-  const canReports = can('reports.read') && ledgerOn;
-  const canMembers = can('members.manage');
-  const canParties = can('parties.read') && partiesOn;
-  const canInventory = can('inventory.read') && inventoryOn;
-  const { data: stockSummary } = useCQuery<InventorySummary>(['dashboard', 'stock'], '/api/inventory/summary', { enabled: canInventory });
-  const canInvoices = can('invoices.read') && invoicesOn;
-  const { data: invSummary } = useCQuery<InvoiceSummary>(['dashboard', 'invoices'], '/api/invoices/summary', { enabled: canInvoices });
-  const canDeliveries = can('deliveries.read') && invoicesOn;
-  const { data: delSummary } = useCQuery<DeliverySummary>(['dashboard', 'deliveries'], '/api/delivery-notes/summary', { enabled: canDeliveries });
-  const unbilled = delSummary ? delSummary.sales.openCount + delSummary.purchases.openCount : null;
-  const canTreasury = can('treasury.read') && treasuryOn;
-  const { data: treasury } = useCQuery<TreasurySummary>(['dashboard', 'treasury'], '/api/treasury/summary', { enabled: canTreasury });
-
-  const postedQuery = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'posted'], `/api/journal-entries?status=posted&limit=200&from=${year}-01-01`, { enabled: canLedger });
-  const posted = postedQuery.data;
-  const { data: drafts } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'drafts'], '/api/journal-entries?status=draft&limit=200', { enabled: canLedger });
-  const { data: tb } = useCQuery<TrialBalanceData>(['dashboard', 'tb'], `/api/reports/trial-balance?from=${year}-01-01&to=${today}&currency=base`, { enabled: canReports });
-  const { data: recv } = useCQuery<AgingReport>(['dashboard', 'recv'], `/api/reports/party-aging?type=receivable&asOf=${today}`, { enabled: canParties });
-  const { data: pay } = useCQuery<AgingReport>(['dashboard', 'pay'], `/api/reports/party-aging?type=payable&asOf=${today}`, { enabled: canParties });
-  const { data: taxes } = useCQuery<{ taxRates: TaxRate[] }>(['dashboard', 'tax'], '/api/tax-rates');
-  const { data: members } = useCQuery<{ members: Member[] }>(['dashboard', 'members'], '/api/company/members', { enabled: canMembers });
-
-  const rateQueries = useQueries({
-    queries: foreign.map((cur) => ({
-      queryKey: [company.id, 'dashboard', 'rate', cur, today],
-      queryFn: () => call<{ rate: string | null }>(`/api/exchange-rates/lookup?from=${cur}&to=${company.baseCurrency}&date=${today}`),
-    })),
-  });
-  const ratesLoaded = rateQueries.every((q) => q.data !== undefined);
-  const ratesDone = ratesLoaded && rateQueries.every((q) => q.data?.rate);
-
-  const steps: Step[] = [];
-  const setup = useCQuery<{ steps: Step[] }>(['workspace-setup'], '/api/workspace/setup');
-  steps.push(...(setup.data?.steps ?? []));
-  if (can('rates.manage')) {
-    steps.push({ key: 'rates', title: t('dashboard.stepRates'), description: t('dashboard.stepRatesDesc'), done: ratesDone, to: '/settings/currencies' });
-  }
-  if (can('settings.manage')) {
-    steps.push({
-      key: 'vat',
-      title: t('dashboard.stepVat'),
-      description: t('dashboard.stepVatDesc'),
-      done: !!taxes && taxes.taxRates.every((r) => r.verifiedAt),
-      to: '/settings/tax-rates',
-    });
-  }
-  if (can('ledger.post') && ledgerOn) {
-    steps.push({ key: 'journal', title: t('dashboard.stepJournal'), description: t('dashboard.stepJournalDesc'), done: (posted?.entries.length ?? 0) > 0, to: '/accounting/journal?new=1' });
-  }
-  if (canMembers) {
-    steps.push({ key: 'team', title: t('dashboard.stepTeam'), description: t('dashboard.stepTeamDesc'), done: (members?.members.length ?? 0) > 1, to: '/settings/members' });
-  }
-  const doneCount = steps.filter((s) => s.done).length;
-  const allDone = steps.length > 0 && doneCount === steps.length;
-
-  const balanced = tb ? Number(tb.totals.difference) === 0 : null;
-  const overdue = recv ? dec(recv.totals.d1_30).plus(recv.totals.d31_60).plus(recv.totals.d61_90).plus(recv.totals.d90plus).toFixed(2) : null;
-  const limitedCount = (count: number) => count >= 200 ? `En az ${count}` : count;
-
+function WidgetToolbar({
+  def,
+  item,
+  first,
+  last,
+  onMove,
+  onResize,
+  onRemove,
+}: {
+  def: WidgetDef;
+  item: LayoutItem;
+  first: boolean;
+  last: boolean;
+  onMove: (delta: -1 | 1) => void;
+  onResize: (size: WidgetSize) => void;
+  onRemove: () => void;
+}) {
+  const btn = 'flex size-7 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-text disabled:opacity-40';
   return (
-    <>
-      <div className="mb-8">
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-heading font-semibold">{t('dashboard.greeting', { name: user?.fullName.split(' ')[0] ?? '' })}</h1>
-          <PageHelpTooltip title="Genel Bakış" helpKey="dashboard" />
+    <div className="mb-1.5 flex min-w-0 items-center gap-1 rounded-lg border border-border bg-surface-raised px-1.5 py-1">
+      <GripVertical className="size-4 shrink-0 cursor-grab text-muted" aria-hidden />
+      <span className="min-w-0 flex-1 truncate text-xs font-medium">{def.title}</span>
+      {def.sizes.length > 1 && (
+        <div role="group" aria-label={`${def.title} boyutu`} className="flex rounded-md bg-surface-2 p-0.5">
+          {def.sizes.map(size => (
+            <button
+              key={size}
+              type="button"
+              aria-pressed={item.size === size}
+              aria-label={`${SIZE_LABEL[size]} boyut`}
+              onClick={() => onResize(size)}
+              className={cn('h-6 rounded px-1.5 text-[11px] font-medium text-muted', item.size === size && 'bg-surface text-text')}
+            >
+              {size.toUpperCase()}
+            </button>
+          ))}
         </div>
-        <p className="mt-2 text-sm text-muted">{t('dashboard.subtitle', { company: company.name })}</p>
-        <p className="mt-1 text-xs text-muted">Bakiye ve stok: {formatDateTR(today)} · Faturalar: {invSummary?.month ?? today.slice(0, 7)} · Muhasebe: {year}</p>
-      </div>
-
-      <div className="flex flex-col gap-6">
-        <CounterBand
-          label={t('dashboard.summary')}
-          metrics={[
-            ...(canTreasury
-              ? [{ key: 'treasury', label: t('dashboard.treasuryBalance'), value: treasury ? moneyIn(treasury.equivalent, company.baseCurrency) : '—', to: '/treasury/accounts' }]
-              : []),
-            ...(canParties
-              ? [
-                  { key: 'recv', label: t('dashboard.receivables'), value: recv ? moneyIn(recv.totals.total, company.baseCurrency) : '—', to: '/parties/aging' },
-                  { key: 'overdue', label: 'Geciken alacaklar', value: overdue === null ? '—' : moneyIn(overdue, company.baseCurrency), to: '/parties/aging', tone: overdue && dec(overdue).gt(0) ? ('warning' as const) : undefined },
-                  { key: 'pay', label: t('dashboard.payables'), value: pay ? moneyIn(pay.totals.total, company.baseCurrency) : '—', to: '/parties/aging' },
-                ]
-              : []),
-            ...(canInvoices
-              ? [
-                  { key: 'monthSales', label: t('dashboard.monthSales'), value: invSummary ? moneyIn(invSummary.salesNet, company.baseCurrency) : '—', to: '/invoices/sales' },
-                  { key: 'monthPurchases', label: t('dashboard.monthPurchases'), value: invSummary ? moneyIn(invSummary.purchasesNet, company.baseCurrency) : '—', to: '/invoices/purchases' },
-                  { key: 'draftInvoices', label: t('dashboard.draftInvoices'), value: invSummary ? invSummary.draftCount : '—', to: '/invoices/sales', tone: invSummary && invSummary.draftCount > 0 ? ('warning' as const) : undefined },
-                ]
-              : []),
-            ...(canDeliveries
-              ? [
-                  {
-                    key: 'unbilled',
-                    label: t('dashboard.unbilledDeliveries'),
-                    value: unbilled === null ? '—' : unbilled,
-                    to: delSummary && delSummary.sales.openCount === 0 && delSummary.purchases.openCount > 0 ? '/delivery-notes/purchases?invoicing=open' : '/delivery-notes/sales?invoicing=open',
-                    tone: unbilled ? ('warning' as const) : undefined,
-                  },
-                ]
-              : []),
-            ...(canInventory
-              ? [
-                  { key: 'stock', label: t('dashboard.stockValue'), value: stockSummary ? moneyIn(stockSummary.stockValue, company.baseCurrency) : '—', to: '/inventory/status' },
-                  { key: 'low', label: t('dashboard.lowStock'), value: stockSummary ? stockSummary.lowCount : '—', to: '/inventory/status?low=1', tone: stockSummary && stockSummary.lowCount > 0 ? ('warning' as const) : undefined },
-                ]
-              : []),
-            ...(canLedger ? [
-              { key: 'posted', label: `${t('dashboard.postedEntries')} · ${year}`, value: posted ? limitedCount(posted.entries.length) : '—', to: '/accounting/journal' },
-              { key: 'drafts', label: t('dashboard.draftEntries'), value: drafts ? limitedCount(drafts.entries.length) : '—', to: '/accounting/journal?status=draft', tone: drafts && drafts.entries.length > 0 ? ('warning' as const) : undefined },
-            ] : []),
-            ...(canLedger && canReports ? [{ key: 'balance', label: t('dashboard.ledgerBalance'), value: balanced === null ? '—' : balanced ? t('dashboard.balanced') : t('dashboard.unbalanced'), tone: balanced === false ? ('danger' as const) : undefined }] : []),
-          ]}
-        />
-
-        <NotificationsCard />
-
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          {steps.length > 0 && !allDone && (
-            <Card>
-              <CardHeader
-                title={t('dashboard.setupTitle')}
-                action={
-                  <span className="text-sm text-muted">
-                    {doneCount}/{steps.length}
-                  </span>
-                }
-              />
-              <div className="h-1 bg-surface-2" role="progressbar" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={doneCount}>
-                <div className="h-full bg-brand transition-all" style={{ width: `${(doneCount / steps.length) * 100}%` }} />
-              </div>
-              <ul>
-                {steps.map((s) => (
-                  <li key={s.key} className="border-b border-border last:border-b-0">
-                    <Link to={s.to} className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-surface-2/60">
-                      {s.done ? <CheckCircle2 className="size-5 shrink-0 text-success" aria-label={t('dashboard.setupDone')} /> : <Circle className="size-5 shrink-0 text-border-strong" aria-hidden />}
-                      <span className="min-w-0 flex-1">
-                        <span className={cn('block text-sm', s.done && 'text-muted line-through')}>{s.title}</span>
-                        <span className="block text-[13px] text-muted">{s.description}</span>
-                      </span>
-                      <ArrowRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-
-          {canLedger && (
-            <Card className={cn(steps.length === 0 || allDone ? 'lg:col-span-2' : '')}>
-              <CardHeader
-                title={t('dashboard.recentEntries')}
-                action={
-                  <Link to="/accounting/journal" className="text-sm link">
-                    {t('dashboard.viewAll')}
-                  </Link>
-                }
-              />
-              {postedQuery.isError && !posted ? <ErrorState onRetry={() => void postedQuery.refetch()} retrying={postedQuery.isFetching} /> : !posted ? <ListSkeleton rows={3} /> : !posted.entries.length ? (
-                <p className="px-5 py-8 text-center text-sm text-muted">{t('dashboard.noEntries')}</p>
-              ) : (
-                <ul>
-                  {posted.entries.slice(0, 6).map((e) => (
-                    <li key={e.id} className="flex items-center gap-3 border-b border-border px-5 py-3 last:border-b-0">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm">{e.description}</p>
-                        <p className="text-xs text-muted">
-                          {formatDateTR(e.entryDate)} · <span className="font-mono">{e.entryNo}</span>
-                        </p>
-                      </div>
-                      {e.reversalOfId ? <Badge>{t('ledger.journal.reversal')}</Badge> : e.reversedById ? <Badge tone="danger">{t('ledger.journal.reversed')}</Badge> : null}
-                      <span className="num text-sm">{money(e.totalBase)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-          )}
-        </div>
-
-        {foreign.length > 0 && ratesLoaded && (
-          <Card>
-            <CardHeader title={t('dashboard.todayRates')} action={<Link to="/settings/currencies" className="text-sm link">{t('settings.currencies.quickEntry')}</Link>} />
-            <div className="grid grid-cols-1 gap-px bg-border sm:grid-cols-3">
-              {foreign.map((cur, i) => {
-                const rate = rateQueries[i]?.data?.rate;
-                return (
-                  <div key={cur} className="bg-surface p-5">
-                    <p className="text-sm text-muted">
-                      {currencySymbol(cur)}/{currencySymbol(company.baseCurrency)}
-                    </p>
-                    <p className="mt-1 text-heading">{rate ? money(rate, 4) : <span className="text-base text-warning">{t('dashboard.rateMissing')}</span>}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        )}
-      </div>
-    </>
+      )}
+      <button type="button" className={btn} disabled={first} onClick={() => onMove(-1)} aria-label={`${def.title} öne al`}><ArrowUp className="size-3.5" aria-hidden /></button>
+      <button type="button" className={btn} disabled={last} onClick={() => onMove(1)} aria-label={`${def.title} geriye al`}><ArrowDown className="size-3.5" aria-hidden /></button>
+      <button type="button" className={btn} onClick={onRemove} aria-label={`${def.title} widget’ını kaldır`}><X className="size-3.5" aria-hidden /></button>
+    </div>
   );
 }

@@ -5,7 +5,7 @@ import type { ImportKind } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useCan, useNavigation } from '../../lib/queries';
 import { ImportWizard } from './ImportWizard';
 
@@ -41,12 +41,13 @@ export function OpeningBalancesPage() {
         <Callout tone="warning">{t('openings.noAccess')}</Callout>
       ) : (
         <div className="flex flex-col gap-5">
-          <SegmentedTabs
+          <SegmentedTabs id="imports-OpeningBalancesPage-0" panelId={() => 'imports-OpeningBalancesPage-0-panel'}
             value={active.kind}
             onChange={setSelected}
             items={available.map((o) => ({ key: o.kind, label: t(`openings.tabs.${o.kind}`) }))}
           />
-          <Card>
+          <TabPanel id="imports-OpeningBalancesPage-0-panel" labelledBy={"imports-OpeningBalancesPage-0-" + (active.kind)}>
+<Card>
             <CardHeader
               title={t(`openings.tabs.${active.kind}`)}
               description={t(`imports.descriptions.${active.kind}`)}
@@ -69,6 +70,7 @@ export function OpeningBalancesPage() {
           <p className="text-xs text-muted">{t('openings.order')}</p>
           <p className="text-xs text-muted">{t('openings.reverseHint')}</p>
           <ImportWizard kind={active.kind} open={importing} onOpenChange={setImporting} />
+</TabPanel>
         </div>
       )}
     </>

@@ -10,7 +10,7 @@ import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { PrintHeader } from '../../components/ui/PrintHeader';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { api } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
@@ -195,7 +195,7 @@ export function ConsolidationPage() {
       />
       <PrintHeader subtitle={group ? `${group.name} (${currencySymbol(group.reportingCurrency)})` : undefined} note={t('consolidation.unverified')} />
       <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
-        <SegmentedTabs items={tabs} value={tab} onChange={setTab} />
+        <SegmentedTabs id="consolidation-ConsolidationPage-0" panelId={() => 'consolidation-ConsolidationPage-0-panel'} items={tabs} value={tab} onChange={setTab} />
         {needsGroup && groups.length > 0 && (
           <Field label={t('consolidation.group')}>
             {(id) => (
@@ -207,7 +207,8 @@ export function ConsolidationPage() {
         )}
       </div>
 
-      {tab === 'groups' && <GroupsPanel groups={data?.groups ?? []} />}
+      <TabPanel id="consolidation-ConsolidationPage-0-panel" labelledBy={"consolidation-ConsolidationPage-0-" + (tab)}>
+{tab === 'groups' && <GroupsPanel groups={data?.groups ?? []} />}
 
       {needsGroup && !group && (
         <Card>
@@ -287,6 +288,7 @@ export function ConsolidationPage() {
           ) : null}
         </>
       )}
+</TabPanel>
     </div>
   );
 }

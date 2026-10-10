@@ -5,11 +5,12 @@ import { Link, useParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { PageTitle } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
@@ -83,7 +84,7 @@ export function AccountDetailPage() {
           </span>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-heading">{a.name}</h1>
+              <PageTitle title={a.name} helpKey="treasury-account-detail" recent={{ kind: a.kind === 'bank' ? 'Banka hesabı' : 'Kasa' }} />
               <Badge tone="brand">{t(`treasury.kinds.${a.kind}`)}</Badge>
               <Badge>{currencySymbol(a.currencyCode)}</Badge>
               {!a.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
@@ -157,7 +158,7 @@ export function AccountDetailPage() {
       )}
 
       {a.kind === 'bank' && (
-        <SegmentedTabs
+        <SegmentedTabs id="treasury-AccountDetailPage-0" panelId={() => 'treasury-AccountDetailPage-0-panel'}
           className="mb-5"
           value={tab}
           onChange={setTab}
@@ -168,7 +169,8 @@ export function AccountDetailPage() {
         />
       )}
 
-      {a.kind === 'bank' && tab === 'bank' ? (
+      <TabPanel id="treasury-AccountDetailPage-0-panel" labelledBy={a.kind === 'bank' ? "treasury-AccountDetailPage-0-" + tab : undefined}>
+{a.kind === 'bank' && tab === 'bank' ? (
         <ReconciliationTab account={a} />
       ) : (
         <>
@@ -268,6 +270,7 @@ export function AccountDetailPage() {
         onSaved={(res) => setOpenTxn(res.transaction.id)}
       />
       <TransactionDetailSheet id={openTxn} onClose={() => setOpenTxn(null)} />
+</TabPanel>
     </>
   );
 }

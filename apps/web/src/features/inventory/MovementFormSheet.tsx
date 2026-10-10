@@ -225,7 +225,7 @@ export function MovementFormSheet({ open, onOpenChange, initialType = 'receipt',
 
         <div>
           <p className="mb-1.5 text-[13px]">{t('inventory.mform.type')}</p>
-          <SegmentedTabs
+          <SegmentedTabs variant="filter"
             value={type}
             onChange={(k) => {
               setType(k);

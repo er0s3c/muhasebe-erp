@@ -11,7 +11,7 @@ import { useCQuery } from '../../lib/queries';
 import { Button } from './Button';
 import { useToast } from './Toast';
 
-const menuContent = 'z-50 min-w-60 rounded-xl border border-border bg-surface p-1.5 [animation:pop-in_0.12s_ease-out] print:hidden';
+const menuContent = 'z-50 min-w-60 rounded-xl border border-border bg-surface p-1.5 shadow-pop [animation:pop-in_0.12s_ease-out] print:hidden';
 const menuItem = 'flex cursor-pointer select-none items-center gap-2.5 rounded-md px-3 py-2 text-sm outline-none data-[highlighted]:bg-surface-2 data-[disabled]:opacity-50';
 
 interface Props {

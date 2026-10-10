@@ -1,75 +1,12 @@
 import * as Popover from '@radix-ui/react-popover';
-import { NAV_ITEMS } from '@erp/shared';
 import { Info, Lightbulb, BookOpen } from 'lucide-react';
+import { useState } from 'react';
 import { useInRouterContext, useLocation } from 'react-router-dom';
 import { cn } from '../../lib/cn';
-import { NAV_GROUP_HELP, NAV_ITEM_HELP, type NavHelpEntry } from './navHelpData';
+import { loadHelpData, type NavHelpEntry } from './helpTypes';
+import { resolveHelpEntry, type HelpQuery } from './helpResolve';
 
-// Navigation is the route source of truth, including query-specific screens.
-const PATH_TO_HELP_KEY = Object.fromEntries(NAV_ITEMS.map(item => [item.path, item.key]));
-
-function normalizeText(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/i̇/g, 'i')
-    .replace(/ı/g, 'i')
-    .replace(/ğ/g, 'g')
-    .replace(/ü/g, 'u')
-    .replace(/ş/g, 's')
-    .replace(/ö/g, 'o')
-    .replace(/ç/g, 'c')
-    .trim();
-}
-
-export function resolveHelpEntry(
-  pathname: string,
-  search: string,
-  title?: string,
-  description?: string,
-  helpKey?: string,
-  explicitHelp?: NavHelpEntry | null,
-): NavHelpEntry {
-  if (explicitHelp) return explicitHelp;
-
-  // 1. Direct helpKey
-  if (helpKey) {
-    if (NAV_ITEM_HELP[helpKey]) return NAV_ITEM_HELP[helpKey];
-    if (NAV_GROUP_HELP[helpKey]) return NAV_GROUP_HELP[helpKey];
-  }
-
-  // 2. Exact pathname + search or pathname match
-  const fullPath = search ? `${pathname}${search}` : pathname;
-  const matchedKey = PATH_TO_HELP_KEY[fullPath] || PATH_TO_HELP_KEY[pathname];
-  if (matchedKey && NAV_ITEM_HELP[matchedKey]) {
-    return NAV_ITEM_HELP[matchedKey];
-  }
-
-  // 3. Search in NAV_ITEM_HELP by title
-  if (title) {
-    const norm = normalizeText(title);
-    for (const entry of Object.values(NAV_ITEM_HELP)) {
-      if (normalizeText(entry.title) === norm) {
-        return entry;
-      }
-    }
-    for (const entry of Object.values(NAV_ITEM_HELP)) {
-      const entryNorm = normalizeText(entry.title);
-      if (entryNorm.includes(norm) || norm.includes(entryNorm)) {
-        return entry;
-      }
-    }
-  }
-
-  // 4. Fallback based on provided title & description
-  const safeTitle = title || 'Modül Bilgisi';
-  return {
-    title: safeTitle,
-    description:
-      description ||
-      `${safeTitle} modülü işletmenizin ilgili operasyonel süreçlerini ve kayıtlarını yönetmenizi sağlar.`,
-    example: `Bu ekrandaki kayıt ve işlem ayrıntılarını inceleyin. Kullanılabilen işlemler şirketinizin modülleri ve kullanıcı yetkilerinize göre değişir.`,
-  };
-}
+export { resolveHelpEntry } from './helpResolve';
 
 export interface PageHelpTooltipProps {
   title?: string;
@@ -89,67 +26,107 @@ function RoutedHelpTooltip(props: PageHelpTooltipProps) {
   return <HelpTooltip {...props} pathname={pathname} search={search} />;
 }
 
-function HelpTooltip({
-  title,
-  description,
-  helpKey,
-  help,
+function HelpTooltip({ className, ...query }: PageHelpTooltipProps & { pathname: string; search: string }) {
+  return (
+    <HelpPopover
+      label={query.title ?? 'Bu ekran'}
+      className={className}
+      heading="Modül Kullanım Rehberi"
+      resolve={async () => resolveHelpEntry(await loadHelpData(), query satisfies HelpQuery)}
+    />
+  );
+}
+
+/** Kart/bölüm başlığı için küçük "i": metin satır içinde verilir, rehber verisi indirilmez. */
+export function SectionHelp({ title, help, className }: { title: string; help: string | NavHelpEntry; className?: string }) {
+  const entry = typeof help === 'string' ? { title, description: help } : help;
+  return <HelpPopover label={title} size="sm" heading="Bölüm Rehberi" entry={entry} className={className} />;
+}
+
+function HelpPopover({
+  label,
+  heading,
+  entry,
+  resolve,
+  size = 'md',
   className,
-  pathname,
-  search,
-}: PageHelpTooltipProps & { pathname: string; search: string }) {
-  const helpData = resolveHelpEntry(pathname, search, title, description, helpKey, help);
+}: {
+  label: string;
+  heading: string;
+  entry?: NavHelpEntry;
+  resolve?: () => Promise<NavHelpEntry>;
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const [loaded, setLoaded] = useState<NavHelpEntry | null>(entry ?? null);
+  const [failed, setFailed] = useState(false);
+  const data = entry ?? loaded;
+  const load = () => {
+    if (entry || loaded || !resolve) return;
+    resolve().then(setLoaded, () => setFailed(true));
+  };
 
   return (
-    <Popover.Root>
+    <Popover.Root onOpenChange={open => open && load()}>
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label={`${helpData.title} hakkında rehber`}
+          aria-label={`${label} hakkında rehber`}
+          onPointerEnter={load}
+          onFocus={load}
           className={cn(
-            'inline-flex items-center justify-center size-6 rounded-full text-muted hover:text-text hover:bg-surface-2 transition-colors border border-border shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text print:hidden',
+            'inline-flex shrink-0 items-center justify-center rounded-full border border-border text-muted transition-colors hover:border-border-strong hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus print:hidden',
+            size === 'sm' ? 'size-5' : 'size-6',
             className,
           )}
         >
-          <Info className="size-3.5" aria-hidden="true" />
+          <Info className={size === 'sm' ? 'size-3' : 'size-3.5'} aria-hidden="true" />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
-          aria-label={`${helpData.title} kullanım rehberi`}
+          aria-label={`${label} kullanım rehberi`}
           side="bottom"
           align="start"
           sideOffset={8}
-          className="z-50 w-84 max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-border bg-surface p-3.5 text-xs text-text"
+          collisionPadding={12}
+          className="z-50 w-84 max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-border bg-surface p-3.5 text-xs text-text shadow-pop animate-[pop-in_120ms_ease-out]"
         >
-          <div className="flex items-start gap-2.5 border-b border-border pb-2.5 mb-2.5">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-text">
-              <BookOpen className="size-3.5" />
+          <div className="mb-2.5 flex items-start gap-2.5 border-b border-border pb-2.5">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-contrast">
+              <BookOpen className="size-3.5" aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <h4 className="font-semibold text-text text-sm leading-tight">{helpData.title}</h4>
-              <span className="text-[12px] text-muted uppercase tracking-wider font-medium">
-                Modül Kullanım Rehberi
-              </span>
+              <h4 className="text-sm font-semibold leading-tight text-text">{data?.title ?? label}</h4>
+              <span className="text-[12px] font-medium uppercase tracking-wider text-muted">{heading}</span>
             </div>
           </div>
 
-          <div className="space-y-2.5">
-            <div>
-              <p className="mb-1 text-xs text-text">
-                Ne İşe Yarar?
-              </p>
-              <p className="text-xs leading-relaxed text-muted">{helpData.description}</p>
-            </div>
-
-            <div className="rounded-lg bg-surface-2/80 p-2.5 border border-border/70">
-              <div className="mb-1 flex items-center gap-1.5 text-xs text-text">
-                <Lightbulb className="size-3.5 shrink-0" />
-                <span>Kullanım Durumu & Örnek</span>
+          {data ? (
+            <div className="space-y-2.5">
+              <div>
+                <p className="mb-1 text-xs font-medium text-text">Ne işe yarar?</p>
+                <p className="text-xs leading-relaxed text-muted">{data.description}</p>
               </div>
-              <p className="text-xs leading-relaxed text-text">{helpData.example}</p>
+              {data.example && (
+                <div className="rounded-lg border border-border/70 bg-surface-2/80 p-2.5">
+                  <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-text">
+                    <Lightbulb className="size-3.5 shrink-0" aria-hidden />
+                    <span>Kullanım durumu ve örnek</span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-text">{data.example}</p>
+                </div>
+              )}
             </div>
-          </div>
+          ) : failed ? (
+            <p className="text-xs text-danger">Rehber yüklenemedi. Bağlantınızı kontrol edip tekrar açın.</p>
+          ) : (
+            <div className="space-y-2" aria-busy="true" aria-label="Rehber yükleniyor">
+              <div className="ui-skeleton h-3 w-3/4 rounded" />
+              <div className="ui-skeleton h-3 w-full rounded" />
+              <div className="ui-skeleton h-10 w-full rounded-lg" />
+            </div>
+          )}
 
           <Popover.Arrow className="fill-border" />
         </Popover.Content>

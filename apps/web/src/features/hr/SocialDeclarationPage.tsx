@@ -1,13 +1,13 @@
 import { dec } from '@erp/shared';
-import { ArrowLeft, CheckCircle2, RefreshCw } from 'lucide-react';
+import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Textarea } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Stat } from '../../components/ui/Stat';
@@ -32,7 +32,7 @@ export function SocialDeclarationPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const manage = useCan()('hr.payroll_manage');
-  const { data, isPending, error: loadError } = useCQuery<SocialDeclarationDetail>(['social', 'declaration', id], `/api/social-security/declarations/${id}`);
+  const { data, isPending, error: loadError , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<SocialDeclarationDetail>(['social', 'declaration', id], `/api/social-security/declarations/${id}`);
   const [dlg, setDlg] = useState<Dlg>(null);
   const [text, setText] = useState('');
   const [error, setError] = useState<Error | null>(null);
@@ -41,6 +41,7 @@ export function SocialDeclarationPage() {
   const act = useCMutation((v: { path: string; body?: unknown }, call) => call<SocialDeclarationDetail>(`/api/social-security/declarations/${id}/${v.path}`, { method: 'POST', body: v.body ?? {} }), SOCIAL_INVALIDATE);
   const remove = useCMutation((_: void, call) => call(`/api/social-security/declarations/${id}`, { method: 'DELETE' }), SOCIAL_INVALIDATE);
 
+  if (loadError) return <ErrorState description={errorMessage(loadError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending) return <PageLoading />;
   if (!data) return <Callout tone="danger">{errorMessage(loadError)}</Callout>;
   const { declaration: d, lines, totals } = data;
@@ -56,17 +57,21 @@ export function SocialDeclarationPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <Link to="/hr/social-security" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
-          <ArrowLeft className="size-4" aria-hidden />
-          {t('social.detail.back')}
-        </Link>
-        <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-          <span className="print:hidden">{t('social.detail.title', { month: d.month })}</span>
-          <span className="hidden print:inline">{t('social.detail.printTitle')} — {d.month}</span>
-          <span className="font-mono text-[15px] text-muted">{d.number}</span>
-          <SocialStatusBadge status={d.status} />
-          {d.hasUnverifiedParams && <SocialUnverifiedBadge />}
-        </h1>
+        <PageHeader
+          className="mb-0 print:hidden"
+          title={t('social.detail.title', { month: d.month })}
+          helpKey="social-declaration"
+          back={{ to: '/hr/social-security', label: t('social.detail.back') }}
+          recent={{ kind: 'SGK bildirgesi' }}
+          eyebrow={<span className="font-mono normal-case tracking-normal">{d.number}</span>}
+          meta={
+            <>
+              <SocialStatusBadge status={d.status} />
+              {d.hasUnverifiedParams && <SocialUnverifiedBadge />}
+            </>
+          }
+        />
+        <h1 className="hidden text-heading print:block">{t('social.detail.printTitle')} — {d.month} <span className="font-mono text-[15px] text-muted">{d.number}</span></h1>
         <p className="mt-1 text-sm font-medium text-warning">{t('social.detail.printNote')}</p>
       </div>
 

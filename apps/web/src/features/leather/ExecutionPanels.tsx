@@ -197,7 +197,7 @@ export function LeatherCutPlanningPanel({
       <h2 className="text-subheading">Kalıplar ve elle kesim planı</h2>
       <Records
         rows={data.data?.plans ?? []}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           { label: 'Plan', render: (r) => r.code },
@@ -372,7 +372,7 @@ export function ServiceTimePanel({ serviceId, members }: { serviceId: string; me
       <h3 className="text-subheading">Teknisyen ve gerçek çalışma süresi</h3>
       <Records
         rows={(data.data?.records ?? []).filter((r) => r.serviceId === serviceId)}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           {

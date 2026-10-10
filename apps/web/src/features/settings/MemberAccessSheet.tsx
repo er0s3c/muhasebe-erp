@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Modal, Sheet } from '../../components/ui/Sheet';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
@@ -186,7 +186,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                 <span className="text-xs text-muted">Seçim aşağıdaki erişimleri hazırlar. Kaydetmeden önce değişiklikleri kontrol edin; onay ve maliyet yetkileri role bağlıdır.</span>
               </label>
             )}
-            <SegmentedTabs
+            <SegmentedTabs id="settings-MemberAccessSheet-0" panelId={() => 'settings-MemberAccessSheet-0-panel'}
               items={[
                 { key: 'edit', label: t('settings.members.access.tabEdit') },
                 { key: 'effective', label: t('settings.members.access.tabEffective') },
@@ -307,7 +307,8 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
         )}
       </Sheet>
 
-      <Modal
+      <TabPanel id="settings-MemberAccessSheet-0-panel" labelledBy={"settings-MemberAccessSheet-0-" + (tab)}>
+<Modal
         open={confirming}
         onOpenChange={setConfirming}
         title={t('settings.members.access.confirmTitle')}
@@ -332,6 +333,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
           {resourceChanges.map(p => <li key={p.key}>{moduleName(p.area)} — {p.label}: {operationLabel(p.override ?? 'default')} → {operationLabel(resourceDraft[p.key] ?? 'default')}</li>)}
         </ul>
       </Modal>
+</TabPanel>
     </>
   );
 }

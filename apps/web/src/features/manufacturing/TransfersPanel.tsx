@@ -36,7 +36,7 @@ export function TransfersPanel({
       <h3 className="mb-3 mt-5">Operasyonlar arası transferler</h3>
       <Records
         rows={records.data?.records.filter((r) => r.orderId === orderId)}
-        loading={records.isPending}
+        loading={records.isPending} onRetry={() => void records.refetch()} retrying={records.isFetching}
         error={records.error}
         columns={[
           {

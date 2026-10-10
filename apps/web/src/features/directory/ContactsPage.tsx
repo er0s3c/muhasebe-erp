@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
@@ -50,7 +50,7 @@ export function ContactsPage() {
     if (organizationId) p.set('organizationId', organizationId);
     return p.toString();
   }, [q, tag, organizationId, archived]);
-  const { data, isPending } = useCQuery<{ contacts: DirContact[] }>(['directory', 'contacts', qs], `/api/directory/contacts?${qs}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ contacts: DirContact[] }>(['directory', 'contacts', qs], `/api/directory/contacts?${qs}`);
   const rows = data?.contacts ?? [];
   const filtered = !!(q || tag || organizationId || archived === 'archived');
 
@@ -92,7 +92,7 @@ export function ContactsPage() {
         }
       />
       <div className="mb-4"><Callout tone="info">{t('directory.privacyBanner')}</Callout></div>
-      {isPending ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : rows.length === 0 && !filtered ? (
         <Card><EmptyState icon={<BookUser className="size-5" />} title={t('directory.contacts.empty')} description={t('directory.contacts.emptyDesc')} action={addButton || undefined} /></Card>

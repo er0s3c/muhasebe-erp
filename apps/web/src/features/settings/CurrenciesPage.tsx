@@ -28,6 +28,7 @@ import { errorMessage } from '../../lib/errors';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
+import { AutoFxCard } from './AutoFxCard';
 import type { Rate } from '../../lib/types';
 
 type PublishedRate = Rate & {
@@ -179,6 +180,7 @@ export function CurrenciesPage() {
             </p>
           )}
         </Callout>
+        <AutoFxCard />
         {canEdit && (
           <Card>
             <CardHeader

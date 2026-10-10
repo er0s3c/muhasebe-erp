@@ -586,7 +586,7 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
             <UnmatchedPanel kind={kind} unmatched={preview.unmatched} busy={busy} onPick={resolve} />
           )}
 
-          <SegmentedTabs
+          <SegmentedTabs variant="filter"
             value={filter}
             onChange={setFilter}
             items={[

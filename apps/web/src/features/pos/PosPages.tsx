@@ -4,12 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { useCan, useCompanyApi, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import { moneyIn } from '../../lib/format';
+import { errorMessage } from '../../lib/errors';
 import { Camera } from 'lucide-react';
 import { BarcodeCameraSheet } from './BarcodeCameraSheet';
 import type { InvoiceDetail } from '../../lib/types';
@@ -243,10 +244,10 @@ export function PosSettingsPage() {
           </fieldset>
         </OperationForm>
       )}
-      {data.error && <Callout tone="danger">{data.error.message}</Callout>}
+      {data.error && <ErrorState description={errorMessage(data.error)} onRetry={() => void data.refetch()} retrying={data.isFetching} />}
       <Records
         rows={tills.data?.tills}
-        loading={tills.isPending}
+        loading={tills.isPending} onRetry={() => void tills.refetch()} retrying={tills.isFetching}
         error={tills.error}
         columns={[
           { label: 'Satış noktası', render: (row) => row.name },
@@ -303,7 +304,7 @@ export function PosSessionsPage() {
       )}
       <Records
         rows={sessions.data?.sessions}
-        loading={sessions.isPending}
+        loading={sessions.isPending} onRetry={() => void sessions.refetch()} retrying={sessions.isFetching}
         error={sessions.error}
         columns={[
           {
@@ -385,7 +386,7 @@ export function PosSessionsPage() {
           />
         </div>
       )}
-      {detail.error && <Callout tone="danger">{detail.error.message}</Callout>}
+      {detail.error && <ErrorState description={errorMessage(detail.error)} onRetry={() => void detail.refetch()} retrying={detail.isFetching} />}
     </>
   );
 }
@@ -490,11 +491,12 @@ export function PosPage() {
   return (
     <>
       <PosHeader title={t('pos.title')} description={t('pos.subtitle')} />
-      {sessions.isPending || tills.isPending ? (
+      {sessions.error || tills.error ? (
+        <ErrorState description={errorMessage(sessions.error ?? tills.error)} onRetry={() => { void sessions.refetch(); void tills.refetch(); }} retrying={sessions.isFetching || tills.isFetching} />
+      ) : sessions.isPending || tills.isPending ? (
         <PageLoading />
       ) : (
         <>
-          {sessions.error && <Callout tone="danger">{sessions.error.message}</Callout>}
           {!sessions.data?.sessions.some((row) => row.status === 'open') ? (
             <Callout
               title="Açık kasa oturumu bulunmuyor"
@@ -586,7 +588,7 @@ export function PosPage() {
                   <BarcodeCameraSheet key={scanScope} open={cameraOpen} onOpenChange={setCameraOpen} onDetected={barcode => { setSearch(barcode); void scan(barcode); }} />
                   <Records
                     rows={catalog.data?.items}
-                    loading={catalog.isPending}
+                    loading={catalog.isPending} onRetry={() => void catalog.refetch()} retrying={catalog.isFetching}
                     error={catalog.error}
                     empty="Ürün bulunamadı"
                     columns={[
@@ -941,7 +943,7 @@ function PosReturns({
             )}
           </Field>
         </div>
-        {data.error && <Callout tone="danger">{data.error.message}</Callout>}
+        {data.error && <ErrorState description={errorMessage(data.error)} onRetry={() => void data.refetch()} retrying={data.isFetching} />}
         {sale && (
           <form
             aria-label="Satış iadesi"
@@ -1123,10 +1125,10 @@ export function PosSalePage() {
         title="Mağaza satış belgesi"
         description="Kaydedilen ürünler, ödemeler ve iade bağlantısı."
       />
-      {data.isPending ? (
+      {data.error ? (
+        <ErrorState description={errorMessage(data.error)} onRetry={() => void data.refetch()} retrying={data.isFetching} />
+      ) : data.isPending ? (
         <PageLoading />
-      ) : data.error ? (
-        <Callout tone="danger">{data.error.message}</Callout>
       ) : (
         data.data && (
           <>

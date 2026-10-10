@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
@@ -18,7 +18,7 @@ export function AccountMappingPage() {
   const { t } = useTranslation();
   const toast = useToast();
   const canEdit = useCan()('accounts.manage');
-  const { data, isPending } = useCQuery<{ mappings: AccountMapping[] }>(['account-mappings'], '/api/account-mappings');
+  const { data, isPending, error: AccountMappingPageQueryError, refetch: AccountMappingPageQueryRetry, isFetching: AccountMappingPageQueryFetching } = useCQuery<{ mappings: AccountMapping[] }>(['account-mappings'], '/api/account-mappings');
   const { data: accData } = useCQuery<{ accounts: Account[] }>(['accounts'], '/api/accounts');
   const [draft, setDraft] = useState<Record<string, string>>({});
 
@@ -31,6 +31,7 @@ export function AccountMappingPage() {
     [['account-mappings']],
   );
 
+  if (AccountMappingPageQueryError && !data) return <ErrorState error={AccountMappingPageQueryError} onRetry={() => void AccountMappingPageQueryRetry()} retrying={AccountMappingPageQueryFetching} />;
   if (isPending || !data || !accData) return <PageLoading />;
 
   // Cari kontrol hesabı gerektiren eşlemeler ayrı, diğerleri kontrol hesabı olmayanlardan seçilir

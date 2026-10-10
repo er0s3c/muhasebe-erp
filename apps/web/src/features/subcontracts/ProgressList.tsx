@@ -2,9 +2,9 @@ import { Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
@@ -17,7 +17,7 @@ export function ProgressList({ subcontractId, canCreate, direction }: { subcontr
   const navigate = useNavigate();
   const can = useCan();
   const qs = subcontractId ? `?subcontractId=${subcontractId}` : direction ? `?direction=${direction}` : '';
-  const { data, isPending } = useCQuery<{ payments: ProgressRow[] }>(['progress', 'list', subcontractId ?? direction ?? 'all'], `/api/progress-payments${qs}`);
+  const { data, isPending, error: ProgressListQueryError, refetch: ProgressListQueryRetry, isFetching: ProgressListQueryFetching } = useCQuery<{ payments: ProgressRow[] }>(['progress', 'list', subcontractId ?? direction ?? 'all'], `/api/progress-payments${qs}`);
   const rows = data?.payments ?? [];
   const add =
     subcontractId && canCreate && can('subcontracts.manage') ? (
@@ -27,6 +27,7 @@ export function ProgressList({ subcontractId, canCreate, direction }: { subcontr
       </Button>
     ) : undefined;
 
+  if (ProgressListQueryError && !data) return <ErrorState error={ProgressListQueryError} onRetry={() => void ProgressListQueryRetry()} retrying={ProgressListQueryFetching} />;
   if (isPending) return <PageLoading />;
   return (
     <div className="flex flex-col gap-4">
@@ -78,13 +79,13 @@ function PaymentsPage({ direction }: { direction: ContractDirection }) {
   const receivable = direction === 'receivable';
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl">{receivable ? t('subcontracts.employer.claimsTitle') : t('subcontracts.progress.title')}</h1>
-          <p className="mt-1 text-sm text-muted">{receivable ? t('subcontracts.employer.claimsSubtitle') : t('subcontracts.progress.subtitle')}</p>
-        </div>
-        <ExportMenu exportKey="progress-payments" params={{ direction }} print={false} />
-      </div>
+      <PageHeader
+        className="mb-5"
+        title={receivable ? t('subcontracts.employer.claimsTitle') : t('subcontracts.progress.title')}
+        helpKey={receivable ? 'employer-claims' : 'progress-payments'}
+        description={receivable ? t('subcontracts.employer.claimsSubtitle') : t('subcontracts.progress.subtitle')}
+        actions={<ExportMenu exportKey="progress-payments" params={{ direction }} print={false} />}
+      />
       <ProgressList direction={direction} />
     </>
   );

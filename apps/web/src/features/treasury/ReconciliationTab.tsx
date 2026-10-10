@@ -153,7 +153,7 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
             </Stat>
           </div>
 
-          <SegmentedTabs
+          <SegmentedTabs variant="filter"
             value={filter}
             onChange={setFilter}
             items={(['open', 'matched', 'ignored', 'all'] as const).map((k) => ({ key: k, label: `${t(`treasury.recon.filter.${k}`)} (${counts[k]})` }))}

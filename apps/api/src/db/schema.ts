@@ -261,6 +261,13 @@ export const companies = pgTable(
     activityCode: text(),
     /** Stokta olmayan malın çıkışına izin (perakende). Kapalıyken çıkış depo bakiyesini aşamaz. */
     allowNegativeStock: boolean().notNull().default(false),
+    /** Resmî kur bülteni (fxProvider) her iş günü yayın saatinden sonra otomatik çekilir; varsayılan kapalı. */
+    fxAutoImport: boolean().notNull().default(false),
+    /** Otomatik çekimi açan kullanıcı: zamanlayıcı yalnız onun bağlamında ve `rates.manage` izni sürdükçe yazar. */
+    fxAutoEnabledBy: uuid().references(() => users.id),
+    /** Son otomatik deneme (başarılı/başarısız) ve sonucu: ayar ekranı ve pano bunu gösterir. */
+    fxAutoLastAttemptAt: timestamp({ withTimezone: true }),
+    fxAutoLastError: text(),
     createdAt: createdAt(),
   },
   (t) => [
@@ -5916,6 +5923,30 @@ export const notificationPreferences = pgTable(
     primaryKey({ columns: [t.companyId, t.userId, t.kind] }),
     check('notification_preferences_kind_ck', sql`${t.kind} ~ '^[a-z][a-z_]{1,40}$'`),
     check('notification_preferences_lead_ck', sql`${t.leadDays} is null or ${t.leadDays} between 0 and 365`),
+  ],
+);
+
+/**
+ * Kişisel arayüz tercihi (kullanıcı + şirket + anahtar): favoriler, pano düzeni, tablo yoğunluğu. İş verisi taşımaz;
+ * anahtarlar API'de beyaz listelidir, değer boyutu veritabanında da sınırlıdır. Satır yalnız sahibine görünür (RLS).
+ */
+export const userUiPreferences = pgTable(
+  'user_ui_preferences',
+  {
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    key: text().notNull(),
+    value: jsonb().$type<unknown>().notNull(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.companyId, t.userId, t.key] }),
+    check('user_ui_preferences_key_ck', sql`${t.key} ~ '^[a-z][a-z.]{1,40}$'`),
+    check('user_ui_preferences_size_ck', sql`octet_length(${t.value}::text) <= 16384`),
   ],
 );
 

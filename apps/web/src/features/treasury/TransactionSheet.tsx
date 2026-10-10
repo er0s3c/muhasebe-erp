@@ -387,7 +387,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
 
         <div>
           <p className="mb-1.5 text-[13px]">{t('treasury.sheet.type')}</p>
-          <SegmentedTabs value={type} onChange={changeType} items={allowedTypes.map((k) => ({ key: k, label: t(`treasury.types.${k}`) }))} />
+          <SegmentedTabs variant="filter" value={type} onChange={changeType} items={allowedTypes.map((k) => ({ key: k, label: t(`treasury.types.${k}`) }))} />
           <p className="mt-2 text-[13px] text-muted">{t(`treasury.sheet.hints.${type}`)}</p>
         </div>
 

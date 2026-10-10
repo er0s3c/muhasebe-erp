@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CustomValuesPanel } from '../manufacturing/SupportPanels';
 import { useTranslation } from 'react-i18next';
 import { INVENTORY_ROLES, ITEM_KINDS, ITEM_UNITS, type InventoryRole } from '@erp/shared';
+import { FormSection } from '../../components/ui/FormSection';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
@@ -146,6 +147,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
   );
 
   const submit = () => {
+    if (save.isPending) return;
     setError(null);
     setErrors({});
     save.mutate(undefined, {
@@ -190,6 +192,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
         noValidate
       >
         {error && <Callout tone="danger">{error}</Callout>}
+        <FormSection title="Temel bilgiler">
         <Field label={t('inventory.form.name')} error={errors.name} required>
           {(id) => <Input id={id} value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus />}
         </Field>
@@ -257,6 +260,8 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           </Field>
         </div>
 
+        </FormSection>
+        <FormSection title="Fiyatlar" description="Alış ve satış fiyatları kendi para birimlerinde saklanır.">
         <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-x-3 gap-y-5">
           <Field label={t('inventory.form.purchasePrice')} error={errors.purchasePrice}>
             {(id) => <MoneyInput id={id} value={f.purchasePrice} onChange={(v) => set('purchasePrice', v)} maxDecimals={6} />}
@@ -269,6 +274,8 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           <p className="col-span-full -mt-2 text-xs text-muted">{t('inventory.form.pricesHint')}</p>
         </div>
 
+        </FormSection>
+        <FormSection title="Stok ve gelişmiş bilgiler">
         {goods && (<>
           <Field label={t('inventory.form.minLevel')} hint={t('inventory.form.minLevelHint')} error={errors.minLevel}>
             {(id) => <MoneyInput id={id} value={f.minLevel} onChange={(v) => set('minLevel', v)} decimals={0} maxDecimals={4} />}
@@ -289,6 +296,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
         <Field label={t('inventory.form.notes')} error={errors.notes}>
           {(id) => <Textarea id={id} value={f.notes} onChange={(e) => set('notes', e.target.value)} maxLength={1000} />}
         </Field>
+        </FormSection>
       </form>
       {open&&item&&['MANUFACTURING_WHOLESALE','LEATHER_FASHION'].includes(company.sector)&&<CustomValuesPanel entity="item" id={item.id}/>}
     </Sheet>

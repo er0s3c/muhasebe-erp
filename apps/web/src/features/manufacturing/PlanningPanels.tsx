@@ -362,7 +362,7 @@ export function PlanningScenarioPanel() {
           </p>
           <Records
             rows={schedules.data?.records ?? []}
-            loading={schedules.isPending}
+            loading={schedules.isPending} onRetry={() => void schedules.refetch()} retrying={schedules.isFetching}
             error={schedules.error}
             empty="Karşılaştırılacak plan yok"
             columns={[

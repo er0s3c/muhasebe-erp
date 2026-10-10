@@ -247,7 +247,7 @@ export function LicenseDetailPage() {
 
         <Card>
           <CardHeader title="Çevrimdışı lisans imzala" description="İnternet erişimi olmayan bir sunucu için: müşterinin uygulamasından aldığı istek kodunu yapıştırın." />
-          <div className="flex flex-col gap-4 px-5 py-4">
+          <form className="flex flex-col gap-4 px-5 py-4" aria-busy={busy} onSubmit={(event) => { event.preventDefault(); if (requestCode.trim().length >= 20 && l.offlineAllowed) void signOffline(); }}>
             {!l.offlineAllowed && <Callout tone="warning">Bu lisans çevrimdışı etkinleştirmeye izin vermiyor; önce “Düzenle” ile izin verin.</Callout>}
             {offlineError && <Callout tone="danger">{offlineError}</Callout>}
             <Field label="İstek kodu">
@@ -257,7 +257,7 @@ export function LicenseDetailPage() {
               {(fid) => <Input id={fid} type="number" min={1} max={400} value={days} onChange={(e) => setDays(e.target.value)} />}
             </Field>
             <div>
-              <Button variant="primary" loading={busy} disabled={requestCode.trim().length < 20 || !l.offlineAllowed} onClick={() => void signOffline()}>
+              <Button type="submit" variant="primary" loading={busy} disabled={requestCode.trim().length < 20 || !l.offlineAllowed}>
                 İmzala
               </Button>
             </div>
@@ -270,7 +270,7 @@ export function LicenseDetailPage() {
                 </div>
               </div>
             )}
-          </div>
+          </form>
         </Card>
       </fieldset>
 

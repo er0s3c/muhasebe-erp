@@ -7,7 +7,7 @@ import { computeProgress, dec, todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageTitle } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
@@ -188,11 +188,17 @@ export function ProgressEditorPage() {
           <ArrowLeft className="size-4" aria-hidden />
           {basis.subcontract.code} — {basis.subcontract.title}
         </Link>
-        <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-          {isNew ? (receivable ? t('subcontracts.employer.claimNew') : t('subcontracts.progress.newTitle')) : receivable ? t('subcontracts.employer.claimEdit', { no: p?.paymentNo }) : t('subcontracts.progress.editTitle', { no: p?.paymentNo })}
-          {p?.number && <span className="font-mono text-[15px] text-muted">{p.number}</span>}
-          <ProgressStatusBadge status={status} />
-        </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <PageTitle
+            title={isNew ? (receivable ? t('subcontracts.employer.claimNew') : t('subcontracts.progress.newTitle')) : receivable ? t('subcontracts.employer.claimEdit', { no: p?.paymentNo }) : t('subcontracts.progress.editTitle', { no: p?.paymentNo })}
+            helpKey="progress-editor"
+            favorite={!isNew}
+            recent={!isNew && p?.number ? { kind: receivable ? 'İşveren hakedişi' : 'Hakediş', title: `${p.number} · ${basis.subcontract.title}` } : false}
+          >
+            {p?.number && <span className="font-mono text-[15px] text-muted">{p.number}</span>}
+            <ProgressStatusBadge status={status} />
+          </PageTitle>
+        </div>
       </div>
 
       {error && <Callout tone="danger">{errorMessage(error)}</Callout>}

@@ -73,3 +73,28 @@ Hedef WCAG AA metin kontrastı 4.5:1, kontrol/odak kontrastı 3:1'dir. Mevcut re
 Bir ekran yalnız derlendiği için tamamlanmış sayılmaz. Son değişikliklerde typecheck, lint, ilgili unit/regresyon testleri ve üretim build; ardından gerçek iş akışları, yetki profilleri, light/dark, 1440/1280/390px ve gerekli 320px görsel kontrolü yapılır. Sonuçlar gerçek çalıştırma ve ekran görüntüsü incelemesine dayanmalıdır.
 
 Mevcut tarihsel kontroller `UI-AUDIT.md`, V2 route ve yapılmış/bekleyen kabul ayrımı `UI-V2-INVENTORY.md` içindedir. Yeni revizyonda tüm route'lar gözden geçirilmediyse geçmiş sonuçlar tekrar geçmiş olarak işaretlenmez.
+
+## V3 güncellemesi (10 Ekim 2026)
+
+V3, V2 kimliğini (sarı A, limon sarısı eylem rengi, sıcak nötr yüzeyler, gölgesiz kartlar) korur; yoğun kullanım için kabuk, başlık ve gösterge desenlerini sadeleştirir.
+
+**Belirteçler.** `--surface-3` (seçili satır/basılı kontrol), `--surface-raised` (yüzen yüzey), `--brand-tint` (yalnız seçili menü öğesi ve favori zemini; üstünde Ink metin) eklendi. Kartlar gölgesiz kalır; yalnız yüzen katmanlar (popover, açılır menü, seçici, sheet, modal, komut paleti) tek ince `--elevation-pop` (`shadow-pop`) alır. Koyu temada çizgi ve sönük metin kontrastı artırıldı. Tablo yoğunluğu kullanıcı tercihidir (`html[data-density="compact"]`); kontrol yüksekliği ve dokunma hedefi değişmez.
+
+**Kabuk.** Kenar çubuğu: şirket seçici altında menü içi arama, "Favoriler" bölümü (sürükle-bırak ve Alt+↑/↓ ile sıralama), aktif öğede sarı sol gösterge çubuğu, grup başlığında grubun ne kapsadığını anlatan "i" ipucu, altta daraltma, tablo yoğunluğu ve kısayol rehberi düğmeleri. Üst çubuk 56px ve yapışkandır; ≥1280px'te gezinti yolu üst çubukta, daha dar ekranlarda içerikte görünür. Rota değişiminde 160ms opaklık geçişi (reduced-motion'da kapalı).
+
+| Desen | Kullanım |
+| --- | --- |
+| `PageHeader` v3 | `back` (liste dönüşü), `eyebrow` (belge kodu/bağlam), `meta` (durum rozetleri), `favorite` (yıldız, varsayılan açık), `recent` (kayıt ekranları son ziyaretlere yazar), `sticky` (editörlerde başlık ve eylemler kaydırırken kalır). Başlık her zaman `text-heading`; ham `<h1>` kullanılmaz. Sayfadaki "Yeni …" eylemi N kısayoluna bağlanır (`data-hotkey="new"` ile açıkça işaretlenebilir). |
+| `PageTitle` | Kendine özgü başlık düzeni olan detay ekranlarında yalnız başlık satırı (h1 + "i" + favori + son ziyaret). |
+| `CardHeader` / `FormSection` `help` | Bölüm başlığının yanında küçük "i"; metin satır içi verilir, ek indirme yapılmaz. |
+| Sayfa rehberi ("i") | Metinler (`navHelpData.ts`) ilk açılışta/üzerine gelindiğinde tembel yüklenir. Eşleşme sırası: açık `help` → `helpKey` → menü yolu → detay rota deseni → başlığın birebir eşi → grup rehberi. Bulanık "içerir" eşleşmesi yoktur. Her menü öğesi ve kaynakta geçen her `helpKey` için metin bulunması testle zorunludur (`helpResolve.test.ts`). |
+| `Stat` (KPI) | Etiket, değer, alt satır; isteğe bağlı `trend` (önceki döneme göre yüzde; `goodWhen` ile iyi/kötü yönü), bağımlılıksız SVG `spark`, `to` (kartın tamamı bağlantı) ve `help`. Gerçek veri yoksa değer uydurulmaz. |
+| `Badge` | `info` tonu ve `dot` (durum yalnız renge bağlı kalmasın). |
+| Uzun listeler | `ProgressiveRows` / `useProgressiveRows`: ilk 120 satır hemen, kalanı boşta kademeli çizilir (`content-visibility` tablo satırlarına uygulanmadığı için). Liste uzarsa çizilmiş satırlar korunur. |
+| Merkez sayfa (`HubPage`) | Aynı konuyu bölen ekranlar tek sayfada sekme olur; sekme içeriği mevcut sayfadır ve gömülüyken başlığını h2 çizer. Sekmeler izin/modül/kullanıcı erişimine göre süzülür; eski adresler sorgu parametresi korunarak yönlendirilir. |
+
+**Klavye.** Merkezi kayıt (`lib/hotkeys.ts`): Ctrl/⌘+K komut paleti, Ctrl/⌘+J Ada AI, `?` kısayol rehberi, `g` + harf gezinme (yalnız kullanıcının menüsündeki hedefler), `/` listedeki aramaya odak, `n` sayfanın "Yeni" eylemi, Ctrl/⌘+S açık formu kaydet (açık paneldeki tek birincil düğme → odaktaki form → içerikteki tek form). Yazı alanındayken yalnız Ctrl/⌘ kısayolları çalışır; açık modal varken sayfa kısayolları susar.
+
+**Kişisel tercihler.** Favoriler, pano düzeni ve tablo yoğunluğu `user_ui_preferences` tablosunda kullanıcı + şirket bazında saklanır (RLS: yalnız sahibi). Son ziyaretler yalnız bu tarayıcıda tutulur (en çok 15). Komut paleti sorgu boşken favorileri ve son açılanları gösterir.
+
+**Pano.** Widget kaydı (`features/dashboard/widgets.tsx`) ve düzenleme modu: ekle/çıkar, sürükle-bırak veya ok düğmeleriyle sırala, boyut (S/M/L), varsayılana dön. Göstergeler tek `/api/dashboard/summary?sections=` isteğiyle gelir; sunucu yalnız modülü açık ve izinli bölümleri hesaplar, bir bölümün hatası diğerlerini düşürmez.

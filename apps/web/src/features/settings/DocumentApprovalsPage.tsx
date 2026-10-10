@@ -203,7 +203,7 @@ export function DocumentApprovalsPage() {
   return (
     <>
       <PageHeader
-        title="Belge onayları"
+        title="Belge onay kuralları"
         description="Fatura, satış teklifi, ödeme ve gider için tutara göre sıralı onay adımları belirleyin."
         actions={
           canManage && (

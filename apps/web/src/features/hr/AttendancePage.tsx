@@ -6,10 +6,10 @@ import { Link } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { PageHeader } from '../../components/ui/Card';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Textarea } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
@@ -28,7 +28,7 @@ export function AttendancePage() {
   const [tab, setTab] = useState<Tab>('grid');
   const thisMonth = todayIso().slice(0, 7);
   const [month, setMonth] = useState(thisMonth);
-  const { data, isPending, dataUpdatedAt, error } = useCQuery<AttendanceSheetData>(['attendance', 'month', month], `/api/attendance/month?month=${month}`);
+  const { data, isPending, dataUpdatedAt, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<AttendanceSheetData>(['attendance', 'month', month], `/api/attendance/month?month=${month}`);
   const manage = can('hr.manage');
   const closed = data?.lock.closed ?? false;
 
@@ -51,7 +51,7 @@ export function AttendancePage() {
           </div>
         }
       />
-      {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
+
       {data && closed && (
         <div className="mb-4">
           <Callout tone="warning" title={t('attendance.lock.closedTitle', { month })}>
@@ -75,6 +75,8 @@ export function AttendancePage() {
       )}
       <div className="mb-4">
         <SegmentedTabs
+          id="attendance-tabs"
+          panelId={key => `attendance-panel-${key}`}
           value={tab}
           onChange={setTab}
           items={[
@@ -85,19 +87,19 @@ export function AttendancePage() {
           ]}
         />
       </div>
-      {isPending || !data ? (
+      {error ? (<ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending || !data ? (
         <PageLoading />
       ) : (
         <>
           {/* Çizelge ve günlük giriş bağlı kalır (gizlenir): sekme değişince kaydedilmemiş taslak kaybolmaz */}
-          <div hidden={tab !== 'grid'}>
+          <TabPanel id="attendance-panel-grid" labelledBy="attendance-tabs-grid" hidden={tab !== 'grid'}>
             <AttendanceGrid key={month} sheet={data} canEdit={manage && !closed} />
-          </div>
-          <div hidden={tab !== 'day'}>
+          </TabPanel>
+          <TabPanel id="attendance-panel-day" labelledBy="attendance-tabs-day" hidden={tab !== 'day'}>
             <AttendanceDaySheet key={month} sheet={data} canEdit={manage && !closed} dataKey={dataUpdatedAt} />
-          </div>
-          {tab === 'summary' && <AttendanceSummaryTab month={month} />}
-          {tab === 'labor' && <AttendanceLaborTab key={month} month={month} />}
+          </TabPanel>
+          <TabPanel id="attendance-panel-summary" labelledBy="attendance-tabs-summary" hidden={tab !== 'summary'}>{tab === 'summary' && <AttendanceSummaryTab month={month} />}</TabPanel>
+          <TabPanel id="attendance-panel-labor" labelledBy="attendance-tabs-labor" hidden={tab !== 'labor'}>{tab === 'labor' && <AttendanceLaborTab key={month} month={month} />}</TabPanel>
         </>
       )}
     </>

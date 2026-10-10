@@ -79,7 +79,8 @@ test('raporlar: yevmiye defteri, mizan dışa aktarma (xlsx/csv), yazdır başl�
   await expect(printedAt).toBeHidden();
 
   // 6) Veri dışa aktarma: tüm veriler tek xlsx
-  await nav.getByRole('link', { name: 'Veri dışa aktarma' }).click();
+  await nav.getByRole('link', { name: 'Veri aktarımı' }).click();
+  await page.getByRole('tab', { name: 'Tüm veriyi dışa aktar' }).click();
   await expect(page.getByText('Dosya şirketin tüm verisini içerir')).toBeVisible();
   const all = await downloadVia(page, /\.xlsx/);
   expect(all.name).toMatch(/^tum-veriler-\d{4}-\d{2}-\d{2}\.xlsx$/);

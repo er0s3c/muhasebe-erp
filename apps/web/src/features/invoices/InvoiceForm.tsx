@@ -1,10 +1,10 @@
-import { ArrowLeft, ClipboardList, Plus, Trash2, Truck, X, Paperclip } from 'lucide-react';
+import { ClipboardList, Plus, Trash2, Truck, X, Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, ITEM_UNITS, calcInvoice, calculateDocumentTaxes, calculateDocumentStamp, applyRate, dec, formatTR, todayIso, type DocumentTaxRuleSnapshot, type DocumentTaxCalculation, type MoneyValue } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
@@ -234,6 +234,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const [error, setError] = useState<Error | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState(initial?.invoice.matchOverrideReason ?? '');
   const [orderPickerOpen, setOrderPickerOpen] = useState(false);
 
@@ -520,16 +521,19 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
 
   return (
     <FormGuard captureAll scopeKey="invoice-editor" pending={save.isPending || remove.isPending}>
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t(`invoices.${meta.side}.title`)}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-heading">{initial ? t('invoices.form.editTitle', { type: t(`invoices.types.${type}`) }) : t('invoices.form.newTitle', { type: t(`invoices.types.${type}`) })}</h1>
-        {initial&&<Link to={`/workspace/documents?kind=invoice&id=${initial.invoice.id}`} className="link inline-flex items-center gap-2 text-sm"><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>}
-        {initial&&type==='sales'&&<Link to="/sales/campaigns" className="link text-sm">Kampanya uygula</Link>}
-      </div>
+      <PageHeader
+        title={initial ? t('invoices.form.editTitle', { type: t(`invoices.types.${type}`) }) : t('invoices.form.newTitle', { type: t(`invoices.types.${type}`) })}
+        helpKey="invoice-editor"
+        back={{ to: listPath, label: t(`invoices.${meta.side}.title`) }}
+        favorite={false}
+        recent={initial?.invoice.invoiceNo ? { kind: 'Fatura taslağı', title: `${initial.invoice.invoiceNo} ${initial.invoice.partyName ?? ''}`.trim() } : false}
+        actions={initial && (
+          <>
+            <Link to={`/workspace/documents?kind=invoice&id=${initial.invoice.id}`} className="link inline-flex items-center gap-2 text-sm"><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>
+            {type === 'sales' && <Link to="/sales/campaigns" className="link text-sm">Kampanya uygula</Link>}
+          </>
+        )}
+      />
 
       <div className="flex flex-col gap-5">
         {(error || fieldError) && (
@@ -849,8 +853,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                     navigate(listPath, { replace: true });
                   },
                   onError: (e) => {
-                    setConfirmDelete(false);
-                    toast.error(errorMessage(e));
+                    setDeleteError(errorMessage(e));
                   },
                 })
               }
@@ -860,7 +863,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           </>
         }
       >
-        {null}
+        {deleteError && <Callout tone="danger">{deleteError}</Callout>}
       </Modal>
     </FormGuard>
   );

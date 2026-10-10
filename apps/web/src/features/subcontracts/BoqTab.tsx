@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Select } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
@@ -31,7 +31,7 @@ export function BoqTab({ detail }: { detail: SubcontractDetail }) {
     setSelected((cur) => (detail.revisions.some((r) => r.id === cur) ? cur : (sc.status === 'draft' ? draftRev : currentRev ?? draftRev ?? detail.revisions[0])?.id ?? ''));
   }, [detail.revisions, draftRev, currentRev, sc.status]);
 
-  const { data, isPending } = useCQuery<SubcontractRevisionDetail>(['subcontract', sc.id, 'revision', selected], selected ? `/api/subcontract-revisions/${selected}` : null);
+  const { data, isPending, error: BoqTabQueryError, refetch: BoqTabQueryRetry, isFetching: BoqTabQueryFetching } = useCQuery<SubcontractRevisionDetail>(['subcontract', sc.id, 'revision', selected], selected ? `/api/subcontract-revisions/${selected}` : null);
   const revision = data?.revision;
   const selectedRow = detail.revisions.find((r) => r.id === selected);
   const editable = revision?.status === 'draft' && !selectedRow?.variationId && can('subcontracts.manage');
@@ -50,6 +50,7 @@ export function BoqTab({ detail }: { detail: SubcontractDetail }) {
     m.mutate(v, { onSuccess: () => toast.success(done), onError: setError });
   };
 
+  if (BoqTabQueryError && !data) return <ErrorState error={BoqTabQueryError} onRetry={() => void BoqTabQueryRetry()} retrying={BoqTabQueryFetching} />;
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">

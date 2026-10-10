@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { useCurrencyLabel } from '../../components/ui/CurrencyOptions';
@@ -32,7 +32,7 @@ export function CompanyPage() {
   const can = useCan();
   const { reload } = useSession();
   const { data: nav } = useNavigation();
-  const { data, isPending } = useCQuery<{ company: CompanyRow }>(['company'], '/api/company');
+  const { data, isPending, error: CompanyPageQueryError, refetch: CompanyPageQueryRetry, isFetching: CompanyPageQueryFetching } = useCQuery<{ company: CompanyRow }>(['company'], '/api/company');
   const [name, setName] = useState('');
   const [taxNumber, setTaxNumber] = useState('');
   const [taxOffice, setTaxOffice] = useState('');
@@ -57,6 +57,7 @@ export function CompanyPage() {
     [['company'], ['navigation']],
   );
 
+  if (CompanyPageQueryError && !data) return <ErrorState error={CompanyPageQueryError} onRetry={() => void CompanyPageQueryRetry()} retrying={CompanyPageQueryFetching} />;
   if (isPending || !data) return <PageLoading />;
   const c = data.company;
 

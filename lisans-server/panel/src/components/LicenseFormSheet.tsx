@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@ui/Button';
 import { Callout, ErrorState } from '@ui/Feedback';
 import { Field, Input, Select, Textarea } from '@ui/Field';
@@ -85,6 +85,10 @@ export function LicenseFormSheet({
   const pending = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const sectorMessageId = useId();
+  useEffect(() => {
+    if (Object.keys(fieldErrors).length > 0) focusValidationError(formRef.current);
+  }, [fieldErrors]);
   const customers = useQuery({ queryKey: ['customers', ''], queryFn: () => api<{ customers: Customer[] }>('/admin/api/customers'), enabled: open && !editing });
 
   useEffect(() => {
@@ -106,7 +110,7 @@ export function LicenseFormSheet({
     if (!editing && !form.customerId) errors.customerId = 'Müşteri seçin.';
     if (form.sectors.length === 0) errors.sectors = 'En az bir sektör seçin.';
     setFieldErrors(errors);
-    if (Object.keys(errors).length) { focusValidationError(formRef.current); return; }
+    if (Object.keys(errors).length) return;
     if (formRef.current && !formRef.current.reportValidity()) return;
     const body = {
       ...(editing ? {} : { customerId: form.customerId }),
@@ -138,7 +142,6 @@ export function LicenseFormSheet({
       onOpenChange(false);
     } catch (e) {
       setFieldErrors(validationErrors(e));
-      focusValidationError(formRef.current);
       setError(errorText(e));
     } finally {
       pending.current = false;
@@ -191,12 +194,12 @@ export function LicenseFormSheet({
           </legend>
           {SECTORS.map((s) => (
             <label key={s} className="flex items-center gap-2.5 text-sm">
-              <input type="checkbox" aria-invalid={!!fieldErrors.sectors} checked={form.sectors.includes(s)} onChange={() => toggleSector(s)} />
+              <input type="checkbox" aria-invalid={!!fieldErrors.sectors} aria-describedby={fieldErrors.sectors ? sectorMessageId : undefined} checked={form.sectors.includes(s)} onChange={() => toggleSector(s)} />
               {SECTOR_LABELS[s]}
             </label>
           ))}
           <p className="text-xs text-muted">Müşteri yalnızca seçtiğiniz sektörlerde şirket açabilir.</p>
-          {fieldErrors.sectors && <p role="alert" className="text-xs text-danger">{fieldErrors.sectors}</p>}
+          {fieldErrors.sectors && <p id={sectorMessageId} role="alert" className="text-xs text-danger">{fieldErrors.sectors}</p>}
         </fieldset>
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Tür" error={fieldErrors.kind}>

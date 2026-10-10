@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PARTY_TAX_STATUSES, PARTY_TAX_STATUS_LABELS } from '@erp/shared';
+import { FormSection } from '../../components/ui/FormSection';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
@@ -135,6 +136,7 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
   );
 
   const submit = () => {
+    if (save.isPending) return;
     setError(null);
     setErrors({});
     save.mutate(undefined, {
@@ -173,6 +175,7 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
         noValidate
       >
         {error && <Callout tone="danger">{error}</Callout>}
+        <FormSection title="Temel bilgiler">
         <Field label={t('parties.form.name')} error={errors.name} required>
           {(id) => <Input id={id} value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus />}
         </Field>
@@ -192,6 +195,8 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
             {(id) => <Input id={id} value={f.code} onChange={(e) => set('code', e.target.value)} disabled={editing} placeholder="CR-000001" />}
           </Field>
         </div>
+        </FormSection>
+        <FormSection title="İletişim ve vergi">
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label={t('parties.form.phone')} error={errors.phone}>
             {(id) => <Input id={id} value={f.phone} onChange={(e) => set('phone', e.target.value)} inputMode="tel" />}
@@ -216,6 +221,8 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
         <Field label={t('parties.form.address')} error={errors.address}>
           {(id) => <Input id={id} value={f.address} onChange={(e) => set('address', e.target.value)} />}
         </Field>
+        </FormSection>
+        <FormSection title="Finansal koşullar">
         <div className="grid gap-5 sm:grid-cols-3">
           <Field label={t('parties.form.currency')}>
             {(id) => (
@@ -233,9 +240,12 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
             )}
           </Field>
         </div>
+        </FormSection>
+        <FormSection title="Gelişmiş bilgiler">
         <Field label={t('parties.form.notes')} error={errors.notes}>
           {(id) => <Textarea id={id} value={f.notes} onChange={(e) => set('notes', e.target.value)} maxLength={1000} />}
         </Field>
+        </FormSection>
       </form>
     </Sheet>
   );

@@ -7,11 +7,11 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, moneyIn } from '../../lib/format';
@@ -34,7 +34,7 @@ export function ForeignWorkersPage() {
         <Callout tone="warning">{t('foreign.notice')}</Callout>
       </div>
       <div className="mb-4">
-        <SegmentedTabs
+        <SegmentedTabs id="hr-foreignworkerspage-tabs" panelId={() => 'hr-foreignworkerspage-tabs-panel'}
           value={tab}
           onChange={setTab}
           items={[
@@ -43,7 +43,9 @@ export function ForeignWorkersPage() {
           ]}
         />
       </div>
+      <TabPanel id="hr-foreignworkerspage-tabs-panel" labelledBy={`hr-foreignworkerspage-tabs-${tab}`}>
       {tab === 'documents' ? <DocumentsTab /> : <GuaranteesTab />}
+      </TabPanel>
     </>
   );
 }
@@ -65,7 +67,7 @@ function DocumentsTab() {
   const params = { status, withinDays: within, nationality, typeId, q };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
   const lim = useListLimit(qs);
-  const { data, isPending } = useCQuery<ForeignDocList & { truncated?: boolean }>(['foreign', 'docs', qs, lim.limit], `/api/foreign-workers/documents?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<ForeignDocList & { truncated?: boolean }>(['foreign', 'docs', qs, lim.limit], `/api/foreign-workers/documents?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const { data: types } = useCQuery<{ types: ForeignDocTypeRow[] }>(['foreign', 'types'], '/api/foreign-workers/doc-types');
   const { data: emps } = useEmployees();
   const [error, setError] = useState<Error | null>(null);
@@ -167,7 +169,7 @@ function DocumentsTab() {
         </div>
       </div>
       {error && !asking && !renewing && !revoking && <div className="mb-3"><Callout tone="danger">{errorMessage(error)}</Callout></div>}
-      {isPending ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : docs.length === 0 ? (
         <Card>
@@ -399,7 +401,7 @@ function GuaranteesTab() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.manage');
-  const { data, isPending } = useCQuery<{ guarantees: GuaranteeRow[] }>(['foreign', 'guarantees'], '/api/foreign-workers/guarantees');
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ guarantees: GuaranteeRow[] }>(['foreign', 'guarantees'], '/api/foreign-workers/guarantees');
   const { data: rep } = useCQuery<GuaranteeReport>(['foreign', 'guarantee-report'], '/api/foreign-workers/reports/guarantees');
   const { data: params } = useCQuery<{ params: { key: string; enabled: boolean }[] }>(['foreign', 'params'], '/api/foreign-workers/params');
   const { data: emps } = useEmployees();
@@ -450,7 +452,7 @@ function GuaranteesTab() {
           {rep.unverified && <ForeignUnverifiedBadge />}
         </div>
       )}
-      {isPending ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : rows.length === 0 ? (
         <Card><EmptyState title={t('foreign.guarantees.empty')} /></Card>

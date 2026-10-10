@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Switch } from '../../components/ui/Switch';
@@ -39,7 +39,7 @@ function ParamsCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.payroll_manage');
-  const { data } = useCQuery<{ params: PayrollParamRow[] }>(['payroll', 'params'], '/api/payroll/params');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ params: PayrollParamRow[] }>(['payroll', 'params'], '/api/payroll/params');
   const [key, setKey] = useState<PayrollParamKey>('overtime_multiplier');
   const [value, setValue] = useState('');
   const [from, setFrom] = useState(todayIso());
@@ -58,6 +58,8 @@ function ParamsCard() {
   const rows = data?.params ?? [];
   const unit = PAYROLL_PARAM_META[key].unit;
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('payroll.params.title')} description={t('payroll.params.desc')} />
@@ -162,7 +164,7 @@ function TermsCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.payroll_manage');
-  const { data } = useCQuery<{ terms: PayTermRow[] }>(['payroll', 'terms'], '/api/payroll/pay-terms');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ terms: PayTermRow[] }>(['payroll', 'terms'], '/api/payroll/pay-terms');
   const { data: emps } = useCQuery<{ employees: EmployeeRow[] }>(['employees', 'list', ''], '/api/employees?');
   const [employeeId, setEmployeeId] = useState('');
   const [basis, setBasis] = useState<(typeof PAY_BASES)[number]>('monthly');
@@ -173,6 +175,8 @@ function TermsCard() {
   const remove = useCMutation((id: string, call) => call(`/api/payroll/pay-terms/${id}`, { method: 'DELETE' }), PAYROLL_INVALIDATE);
   const rows = data?.terms ?? [];
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('payroll.terms.title')} description={t('payroll.terms.desc')} />
@@ -258,7 +262,7 @@ function ItemsCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.payroll_manage');
-  const { data } = useCQuery<{ items: PayrollItemRow[] }>(['payroll', 'items'], '/api/payroll/items');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ items: PayrollItemRow[] }>(['payroll', 'items'], '/api/payroll/items');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'earning' | 'deduction'>('earning');
@@ -275,6 +279,8 @@ function ItemsCard() {
   const setStampFlag = useCMutation((v: { id: string; affectsStampBase: boolean }, call) => call(`/api/payroll/items/${v.id}`, { method: 'PATCH', body: { affectsStampBase: v.affectsStampBase } }), PAYROLL_INVALIDATE);
   const rows = data?.items ?? [];
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('payroll.items.title')} description={t('payroll.items.desc')} />

@@ -1,7 +1,8 @@
+import { errorMessage } from '../../lib/errors';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader } from '../../components/ui/Card';
-import { PageLoading } from '../../components/ui/Feedback';
+import { PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { currencySymbol, moneyIn } from '../../lib/format';
@@ -13,8 +14,9 @@ import { UNIT_STATUSES } from '../realestate/common';
 /** Kendi projesinde satış özeti: birim durumları, para birimi bazında sözleşme, tahsil edilen, kalan ve geciken tutar. */
 export function SalesTab({ project }: { project: ProjectDetail }) {
   const { t } = useTranslation();
-  const { data, isPending } = useCQuery<SalesSummary>(['sales-summary', project.id], `/api/projects/${project.id}/sales-summary`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<SalesSummary>(['sales-summary', project.id], `/api/projects/${project.id}/sales-summary`);
   const fees = useCQuery<FeeEstimate>(['fee-estimate', project.id], `/api/projects/${project.id}/fee-estimate`);
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   const total = UNIT_STATUSES.reduce((s, k) => s + data.units[k].count, 0);
   return (

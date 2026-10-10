@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, Trash2 } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -6,7 +6,7 @@ import { dec } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { MoneyInput } from '../../components/ui/MoneyInput';
@@ -146,24 +146,16 @@ export function CountEditorPage() {
 
   return (<FormGuard captureAll scopeKey="CountEditorPage" pending={save.isPending || post.isPending || remove.isPending}>{(
     <>
-      <Link to="/inventory/counts" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t('inventory.count.back')}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{count.countNo ?? t('inventory.count.draftTitle')}</h1>
-            <Badge tone={draft ? 'warning' : 'success'}>{t(draft ? 'inventory.counts.draft' : 'inventory.counts.posted')}</Badge>
-          </div>
-          <p className="mt-1 text-sm text-muted">
-            {count.warehouseName} · {formatDateTR(count.countDate)}
-            {count.description && ` · ${count.description}`}
-          </p>
-        </div>
-        {editable && (
-          <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title={count.countNo ?? t('inventory.count.draftTitle')}
+        helpKey="count-editor"
+        back={{ to: '/inventory/counts', label: t('inventory.count.back') }}
+        recent={{ kind: 'Sayım' }}
+        sticky={editable}
+        meta={<Badge tone={draft ? 'warning' : 'success'}>{t(draft ? 'inventory.counts.draft' : 'inventory.counts.posted')}</Badge>}
+        description={`${count.warehouseName} · ${formatDateTR(count.countDate)}${count.description ? ` · ${count.description}` : ''}`}
+        actions={editable && (
+          <>
             <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="size-4 text-danger" aria-hidden />
               {t('inventory.count.delete')}
@@ -175,9 +167,9 @@ export function CountEditorPage() {
             <Button variant="primary" disabled={rows.every((r) => r.counted === '')} onClick={() => setConfirmPost(true)}>
               {t('inventory.count.post')}
             </Button>
-          </div>
+          </>
         )}
-      </div>
+      />
 
       {zeroCost.length > 0 && (
         <div className="mb-4">

@@ -1,4 +1,4 @@
-import { ArrowLeft, Ban, FileText, Printer, Undo2 } from 'lucide-react';
+import { Ban, FileText, Printer, Undo2 } from 'lucide-react';
 import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -6,7 +6,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DELIVERY_NOTE_TYPES, DELIVERY_NOTE_TYPE_META, dec, todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
@@ -78,27 +78,25 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
 
   return (
     <>
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t(`deliveries.${side}.title`)}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{note.noteNo}</h1>
+      <PageHeader
+        title={note.noteNo ?? t(`deliveries.types.${note.type}`)}
+        helpKey="delivery-note-editor"
+        back={{ to: listPath, label: t(`deliveries.${side}.title`) }}
+        recent={{ kind: 'İrsaliye', title: `${note.noteNo ?? ''} ${note.partyName}`.trim() }}
+        meta={
+          <>
             <Badge>{t(`deliveries.types.${note.type}`)}</Badge>
             <DeliveryStatusBadge status={note.status} />
             <DeliveryInvoicingBadge state={note.invoicing} />
-          </div>
-          <p className="mt-1 text-sm text-muted">
-            <Link to={`/parties/${note.partyId}`} className="link">
-              {note.partyName}
-            </Link>{' '}
-            · {formatDateTR(note.noteDate)}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          </>
+        }
+        eyebrow={
+          <span className="normal-case tracking-normal">
+            <Link to={`/parties/${note.partyId}`} className="link">{note.partyName}</Link> · {formatDateTR(note.noteDate)}
+          </span>
+        }
+        actions={
+          <>
           <Button onClick={() => window.print()}>
             <Printer className="size-4" aria-hidden />
             {t('deliveries.view.print')}
@@ -121,8 +119,9 @@ function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {
               {t('deliveries.view.cancel')}
             </Button>
           )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="flex flex-col gap-4">
         {note.status === 'cancelled' && (

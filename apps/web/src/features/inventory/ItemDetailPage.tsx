@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Pencil, Power, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, Pencil, Power, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -6,13 +6,13 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Stat } from '../../components/ui/Stat';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
@@ -69,15 +69,19 @@ export function ItemDetailPage() {
 
   return (
     <>
-      <Link to="/inventory/items" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t('inventory.detail.back')}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{item.name}</h1>
+      <PageHeader
+        title={item.name}
+        helpKey="item-detail"
+        back={{ to: '/inventory/items', label: t('inventory.detail.back') }}
+        recent={{ kind: 'Stok kartı' }}
+        eyebrow={
+          <span className="normal-case tracking-normal">
+            <span className="font-mono">{item.code}</span>
+            {item.categoryName && <span> · {item.categoryName}</span>}
+          </span>
+        }
+        meta={
+          <>
             {!goods && <Badge>{t('inventory.kinds.service')}</Badge>}
             {item.tracksSerial && (
               <Link to={`/inventory/serials?itemId=${item.id}`} aria-label={t('serials.tracked')}>
@@ -85,14 +89,11 @@ export function ItemDetailPage() {
               </Link>
             )}
             {!item.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
-            {stock.isLow && <Badge tone="warning">{t('inventory.detail.lowBadge')}</Badge>}
-          </div>
-          <p className="mt-1 font-mono text-sm text-muted">
-            {item.code}
-            {item.categoryName && <span className="font-sans"> · {item.categoryName}</span>}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+            {stock.isLow && <Badge tone="warning" dot>{t('inventory.detail.lowBadge')}</Badge>}
+          </>
+        }
+        actions={
+          <>
           {canMove && goods && item.isActive && (
             <>
               <Button onClick={() => setMove('receipt')}>
@@ -111,8 +112,9 @@ export function ItemDetailPage() {
               {t('common.edit')}
             </Button>
           )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {goods && (
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -131,14 +133,15 @@ export function ItemDetailPage() {
         </div>
       )}
 
-      <SegmentedTabs
+      <SegmentedTabs id="inventory-ItemDetailPage-0" panelId={() => 'inventory-ItemDetailPage-0-panel'}
         className="mb-5"
         value={goods ? tab : 'card'}
         onChange={setTab}
         items={(goods ? (['statement', 'warehouses', 'card'] as const) : (['card'] as const)).map((k) => ({ key: k, label: t(`inventory.detail.tabs.${k}`) }))}
       />
 
-      {goods && tab === 'statement' && <StatementTab itemId={item.id} unit={unit} onOpenDoc={setOpenDoc} />}
+      <TabPanel id="inventory-ItemDetailPage-0-panel" labelledBy={"inventory-ItemDetailPage-0-" + (goods ? tab : 'card')}>
+{goods && tab === 'statement' && <StatementTab itemId={item.id} unit={unit} onOpenDoc={setOpenDoc} />}
       {goods && tab === 'warehouses' && (
         <TableWrap>
           <Table>
@@ -246,6 +249,7 @@ export function ItemDetailPage() {
       >
         {null}
       </Modal>
+</TabPanel>
     </>
   );
 }

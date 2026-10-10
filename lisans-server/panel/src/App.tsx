@@ -121,7 +121,7 @@ function Shell() {
                 end={l.end}
                 className={({ isActive }) =>
                   cn(
-                    'whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors',
+                    'inline-flex min-h-10 items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors max-md:min-h-11',
                     isActive
                       ? 'bg-brand text-brand-contrast'
                       : 'text-muted hover:bg-surface-2 hover:text-text',

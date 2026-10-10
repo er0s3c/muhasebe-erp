@@ -1,4 +1,3 @@
-import { ArrowLeft } from 'lucide-react';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +6,7 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -124,18 +123,21 @@ export function PurchaseOrderEditorPage() {
 
   return (<FormGuard captureAll scopeKey="PurchaseOrderEditorPage" pending={save.isPending || act.isPending || cancel.isPending || remove.isPending || cancelReceipt.isPending}>{(
     <div className="flex flex-col gap-5">
-      <div>
-        <Link to="/purchasing/orders" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
-          <ArrowLeft className="size-4" aria-hidden />
-          {t('procurement.orders.title')}
-        </Link>
-        <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-          {isNew ? t('procurement.orders.newTitle') : order?.code}
-          {!isNew && <OrderStatusBadge status={status} />}
-          {order && order.receiptState !== 'none' && <Badge tone={order.receiptState === 'complete' ? 'success' : 'warning'}>{t(`procurement.orders.receiptState.${order.receiptState}`)}</Badge>}
-        </h1>
-        {order?.requestId && <p className="mt-1 text-sm text-muted"><Link className="link" to={`/purchasing/requests/${order.requestId}`}>{order.requestCode}</Link></p>}
-      </div>
+      <PageHeader
+        className="mb-0"
+        title={isNew ? t('procurement.orders.newTitle') : (order?.code ?? '…')}
+        helpKey="purchase-order-editor"
+        back={{ to: '/purchasing/orders', label: t('procurement.orders.title') }}
+        favorite={!isNew}
+        recent={!isNew && order?.code ? { kind: 'Satın alma siparişi' } : false}
+        meta={
+          <>
+            {!isNew && <OrderStatusBadge status={status} />}
+            {order && order.receiptState !== 'none' && <Badge tone={order.receiptState === 'complete' ? 'success' : 'warning'}>{t(`procurement.orders.receiptState.${order.receiptState}`)}</Badge>}
+          </>
+        }
+        eyebrow={order?.requestId ? <Link className="link normal-case tracking-normal" to={`/purchasing/requests/${order.requestId}`}>{order.requestCode}</Link> : undefined}
+      />
 
       {error && <Callout tone="danger">{errorMessage(error)}</Callout>}
       {order?.status === 'cancelled' && <Callout tone="danger" title={t('procurement.orders.cancelledTitle')}>{order.cancelReason}</Callout>}

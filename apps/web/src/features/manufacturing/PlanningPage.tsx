@@ -1,3 +1,4 @@
+import { errorMessage } from '../../lib/errors';
 import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { todayIso } from '@erp/shared';
@@ -7,9 +8,9 @@ import { Stat } from '../../components/ui/Stat';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Field, Select } from '../../components/ui/Field';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Sheet } from '../../components/ui/Sheet';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import {
   displayDateTime,
   displayQuantity,
@@ -239,7 +240,7 @@ export function PlanningPage() {
             : '—'}
         </Stat>
       </div>
-      <SegmentedTabs
+      <SegmentedTabs id="manufacturing-planningpage-tabs" panelId={() => 'manufacturing-planningpage-tabs-panel'}
         className="mb-5"
         items={[
           { key: 'plans', label: 'Planlar' },
@@ -249,6 +250,7 @@ export function PlanningPage() {
         value={tab}
         onChange={setTab}
       />
+      <TabPanel id="manufacturing-planningpage-tabs-panel" labelledBy={`manufacturing-planningpage-tabs-${tab}`}>
       {tab === 'plans' && (
         <section aria-label="Planlar" className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -269,10 +271,8 @@ export function PlanningPage() {
               )}
             </Field>
           </div>
-          {plans.isPending ? (
+          {plans.error ? (<ErrorState description={errorMessage(plans.error)} onRetry={() => void plans.refetch()} retrying={plans.isFetching} />) : plans.isPending ? (
             <PageLoading />
-          ) : plans.error ? (
-            <Callout tone="danger">{plans.error.message}</Callout>
           ) : !visible.length ? (
             <Card>
               <EmptyState
@@ -458,6 +458,7 @@ export function PlanningPage() {
       {tab === 'setup' && (
         <PlanningSetup resources={availableResources} loading={resources.isPending} />
       )}
+      </TabPanel>
     </>
   );
 }
@@ -485,7 +486,7 @@ function DurationHistory() {
       </p>
       <Records
         rows={report.data?.history.map((row) => ({ ...row, id: String(row.days) })) ?? []}
-        loading={report.isPending}
+        loading={report.isPending} onRetry={() => void report.refetch()} retrying={report.isFetching}
         error={report.error}
         columns={[
           { label: 'İncelenen gün', render: (row) => displayQuantity(row.days, 0) },
@@ -734,7 +735,7 @@ function CalendarRecords({ resources }: { resources: Resource[] }) {
             )}
           </Field>
           <Records
-            loading={calendars.isPending}
+            loading={calendars.isPending} onRetry={() => void calendars.refetch()} retrying={calendars.isFetching}
             error={calendars.error}
             rows={(calendars.data?.records ?? []).filter(
               (calendar) => !resourceId || calendar.resourceId === resourceId,

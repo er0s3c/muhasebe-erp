@@ -60,7 +60,7 @@ test('ithalat maliyet dağıtımı: alış faturası → dosya → navlun/gümr�
   await expect(page.getByRole('heading', { name: /AF-\d{4}-000001/, level: 1 })).toBeVisible();
 
   // 1) İthalat dosyası: kaynak satır + navlun 150 ₺ + gümrük vergisi 50 ₺ (kullanıcı girişi)
-  await nav.getByRole('link', { name: 'İthalat dosyaları' }).click();
+  await nav.getByRole('link', { name: 'İthalat maliyet dosyaları' }).click();
   await expect(page.getByText('Henüz ithalat dosyası yok')).toBeVisible();
   await expect(page.getByText('mali müşavirce doğrulanmamıştır').first()).toBeVisible();
   await page.getByRole('button', { name: 'Yeni ithalat dosyası' }).first().click();
@@ -101,7 +101,7 @@ test('ithalat maliyet dağıtımı: alış faturası → dosya → navlun/gümr�
   await expect(page.getByText('Stok defteri muhasebe bakiyesiyle uyumlu')).toBeVisible();
 
   // Kart bazında rapor sekmesi
-  await nav.getByRole('link', { name: 'İthalat dosyaları' }).click();
+  await nav.getByRole('link', { name: 'İthalat maliyet dosyaları' }).click();
   await page.getByRole('tab', { name: 'Kart bazında maliyet' }).click();
   await expect(page.getByRole('row', { name: /Seramik karo/ })).toContainText('120,0000');
 
@@ -122,7 +122,8 @@ test('ithalat maliyet dağıtımı: alış faturası → dosya → navlun/gümr�
   await dialog.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByRole('heading', { name: 'KTB TL', level: 1 })).toBeVisible();
 
-  await nav.getByRole('link', { name: 'Gider kartları' }).click();
+  await nav.getByRole('link', { name: 'Giderler' }).click();
+  await page.getByRole('tab', { name: 'Gider türleri' }).click();
   await expect(page.getByText('Henüz gider kartı yok')).toBeVisible();
   await page.getByRole('button', { name: 'Yeni gider kartı' }).first().click();
   await dialog.getByLabel(/^Kod/).fill('NKL');
