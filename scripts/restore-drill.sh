@@ -173,7 +173,7 @@ fingerprint "$DST" > "$WORK/fp.sabotaj"
 if diff -q "$WORK/fp.src" "$WORK/fp.sabotaj" > /dev/null; then echo "TATBİKAT SAĞLAM DEĞİL: silinen satır karşılaştırmada yakalanmadı" >&2; exit 2; fi
 echo "   silinen bir özel kod satırı karşılaştırmada yakalandı"
 psql "$(owner_url "$DST")" -Atq -v ON_ERROR_STOP=1 -c "alter table companies disable row level security" > /dev/null
-behavior "$DST" "$ORG" "$COMPANY" > "$WORK/bh.sabotaj"
+behavior "$DST" "$ORG" "$COMPANY" "$OWNER" > "$WORK/bh.sabotaj"
 if diff -q "$WORK/bh.src" "$WORK/bh.sabotaj" > /dev/null; then echo "TATBİKAT SAĞLAM DEĞİL: kapatılan RLS davranış denetiminde yakalanmadı" >&2; exit 2; fi
 echo "   kapatılan RLS davranış denetiminde yakalandı"
 

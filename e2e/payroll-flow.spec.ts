@@ -131,6 +131,8 @@ test('bordro: ücret şartı → ülke kuralı ve vergi profili → bordro → o
   await dialog.getByRole('button', { name: 'Ayı yeniden aç' }).click();
   await expect(dialog.getByText(/onaylanmış bordro var/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Vazgeç' }).click();
+  // Gerekçe yazılmış pencere vazgeçilince taslak koruması onay ister
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
   await expect(page.getByText('Ay kapalı', { exact: true })).toBeVisible();
 
   // Ödemeyi geri al → iptal et (gerekçeli) → ay açılabilir

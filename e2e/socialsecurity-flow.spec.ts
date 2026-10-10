@@ -145,12 +145,16 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await dialog.getByRole('button', { name: 'Bordroyu iptal et' }).click();
   await expect(dialog.getByText(/sosyal güvenlik bildirimi/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Vazgeç' }).click();
+  // Gerekçe yazılmış pencere vazgeçilince taslak koruması onay ister
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
   await nav.getByRole('link', { name: 'Puantaj' }).click();
   await page.getByRole('button', { name: 'Ayı yeniden aç' }).click();
   await dialog.getByLabel('Gerekçe').fill('Eksik mesai girişi');
   await dialog.getByRole('button', { name: 'Ayı yeniden aç' }).click();
   await expect(dialog.getByText(/sosyal güvenlik bildirimi/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Vazgeç' }).click();
+  // Gerekçe yazılmış pencere vazgeçilince taslak koruması onay ister
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
 
   // Prim özeti (kesinleşmiş): aya ve projeye göre
   await nav.getByRole('link', { name: 'SGK bildirgeleri', exact: true }).click();
