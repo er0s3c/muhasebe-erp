@@ -475,12 +475,12 @@ describe('demo aracı', () => {
           `type = 'sales' and status = 'posted' and invoice_date >= date_trunc('month', current_date)`,
         ),
       ).toBeGreaterThan(0);
-      // İK: onaylı bordro (4 satır), avanslar, net ödemeler, sosyal güvenlik bildirimi, yabancı işçi belgeleri (yenilenen + dolmuş)
-      expect(await q(`select status from payroll_runs`)).toEqual([{ status: 'approved' }]);
-      expect(await n('payroll_lines')).toBe(4);
+      // Ülke kuralları doğrulanmadan demo yüzdeleriyle mali bordro üretilmez.
+      expect(await q(`select status from payroll_runs`)).toEqual([]);
+      expect(await n('payroll_lines')).toBe(0);
       expect(await n('employee_advances')).toBe(2);
-      expect(await n('employee_salary_payments')).toBe(2);
-      expect(await n('social_declarations', `status = 'finalized'`)).toBe(1);
+      expect(await n('employee_salary_payments')).toBe(0);
+      expect(await n('social_declarations', `status = 'finalized'`)).toBe(0);
       expect(await n('employee_social_profiles')).toBe(4);
       expect(await n('foreign_worker_docs')).toBeGreaterThanOrEqual(4);
       expect(await n('foreign_doc_renewals')).toBe(1);

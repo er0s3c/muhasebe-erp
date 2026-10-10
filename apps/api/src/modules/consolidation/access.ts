@@ -20,7 +20,7 @@ import { loadMemberAccess } from '../access/effective';
  *     Çapraz kiracı RLS atlatması, SECURITY DEFINER işlevi ya da geniş yetki YOKTUR; toplama uygulama belleğinde yapılır.
  */
 
-export type DenyReason = 'NOT_A_MEMBER' | 'ROLE_INSUFFICIENT' | 'MODULE_DISABLED' | 'LICENSE_SECTOR_MISMATCH';
+export type DenyReason = 'NOT_A_MEMBER' | 'ROLE_INSUFFICIENT' | 'MODULE_DISABLED' | 'LICENSE_SECTOR_MISMATCH' | 'BRANCH_SCOPE_INSUFFICIENT';
 
 export interface MemberScope {
   companyId: string;
@@ -72,10 +72,11 @@ export async function evaluateMember(
   const deny = (reason: DenyReason) => ({ excluded: { companyId, reason } as ExcludedMember });
   return inCompany(tx, u, companyId, async () => {
     const [member] = await tx
-      .select({ role: memberships.role })
+      .select({ role: memberships.role,branchScopeMode:memberships.branchScopeMode })
       .from(memberships)
       .where(and(eq(memberships.companyId, companyId), eq(memberships.userId, u.userId)));
     if (!member) return deny('NOT_A_MEMBER');
+    if (member.branchScopeMode==='restricted') return deny('BRANCH_SCOPE_INSUFFICIENT');
     const [company] = await tx
       .select({
         id: companies.id,

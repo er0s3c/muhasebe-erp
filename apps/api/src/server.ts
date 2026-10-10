@@ -1,11 +1,13 @@
 import { loadConfig } from './config';
 import { createDb } from './db/client';
 import { checkRuntimeRole } from './db/preflight';
+import { withDatabaseReadiness } from './db/readiness';
 import { buildApp } from './app';
 import { BUILD_ENFORCED } from './licensing';
 import { startNotificationScheduler } from './modules/notifications/scheduler';
 import { startConstructionScheduler } from './modules/construction-control/jobs';
 import { startAdministrationScheduler } from './modules/administration/scheduler';
+import { startPlatformWebhookScheduler } from './modules/platform-integrations/events';
 
 const config = loadConfig();
 
@@ -29,7 +31,17 @@ const app = await buildApp({ db: handle.db, config });
 log = app.log;
 
 // Kiracı yalıtımı RLS'e bağlı: yanlış rolle çalışılıyorsa üretimde başlamayı reddet, geliştirmede uyar.
-const issues = await checkRuntimeRole(handle.db);
+let issues;
+try {
+  issues = await withDatabaseReadiness(() => checkRuntimeRole(handle.db), {
+    onRetry: attempt => app.log.warn({ attempt }, 'PostgreSQL henüz hazır değil; API açılışı için bağlantı bekleniyor'),
+  });
+} catch (error) {
+  app.log.fatal({ err: error }, 'API başlatılamadı: veritabanı bağlantısını ve yapılandırmasını kontrol edin');
+  await app.close();
+  await handle.close();
+  process.exit(1);
+}
 for (const issue of issues) {
   if (config.NODE_ENV === 'production') app.log.fatal({ code: issue.code }, issue.message);
   else app.log.warn({ code: issue.code }, issue.message);
@@ -55,6 +67,7 @@ if (app.license.enforced) {
 const stopNotificationScheduler = startNotificationScheduler(app);
 const stopConstructionScheduler = startConstructionScheduler(app);
 const stopAdministrationScheduler = startAdministrationScheduler(app);
+const stopPlatformWebhookScheduler=startPlatformWebhookScheduler(app);
 
 let closing = false;
 const shutdown = async (signal: string) => {
@@ -71,6 +84,7 @@ const shutdown = async (signal: string) => {
     stopNotificationScheduler();
     stopConstructionScheduler();
     stopAdministrationScheduler();
+    stopPlatformWebhookScheduler();
     await app.close();
     await handle.close();
     process.exit(0);

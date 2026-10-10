@@ -10,6 +10,8 @@ import { useToast } from '../../components/ui/Toast';
 import { useCan, useCompanyApi, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import { moneyIn } from '../../lib/format';
+import { Camera } from 'lucide-react';
+import { BarcodeCameraSheet } from './BarcodeCameraSheet';
 import type { InvoiceDetail } from '../../lib/types';
 import {
   OperationForm,
@@ -409,6 +411,13 @@ export function PosPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const requestId = useRef(crypto.randomUUID());
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const scanScope = `${company.id}:${sessionId}:${customerId}:${saving}`;
+  const currentScanScope = useRef({ key: scanScope, generation: 0 });
+  if (currentScanScope.current.key !== scanScope) {
+    currentScanScope.current = { key: scanScope, generation: currentScanScope.current.generation + 1 };
+  }
+  useEffect(() => () => { currentScanScope.current.generation += 1; }, []);
   const toast = useToast();
   const save = useLeatherActions();
   useEffect(() => {
@@ -440,13 +449,16 @@ export function PosPage() {
         : [...old, { item, quantity: '1', discountPct: item.discountPct || '0' }];
     });
   };
-  const scan = async () => {
-    if (!till || !search.trim()) return;
+  const scan = async (value = search) => {
+    const barcode = value.trim();
+    if (!till || !barcode || saving || !can('pos.sell')) return;
+    const generation = currentScanScope.current.generation;
     setError('');
     try {
       const result = await call<{ items: CatalogItem[] }>(
-        `/api/pos/catalog?tillId=${till.id}&barcode=${encodeURIComponent(search.trim())}${customerId ? `&customerId=${customerId}` : ''}`,
+        `/api/pos/catalog?tillId=${till.id}&barcode=${encodeURIComponent(barcode)}${customerId ? `&customerId=${customerId}` : ''}`,
       );
+      if (currentScanScope.current.generation !== generation) return;
       if (result.items.length !== 1) {
         setError(
           result.items.length
@@ -458,6 +470,7 @@ export function PosPage() {
       add(result.items[0]!);
       setSearch('');
     } catch (cause) {
+      if (currentScanScope.current.generation !== generation) return;
       setError(cause instanceof Error ? cause.message : 'Barkod sorgulanamadı');
     }
   };
@@ -564,11 +577,13 @@ export function PosPage() {
                           />
                         )}
                       </Field>
-                      <Button type="submit" disabled={saving}>
+                      <Button type="submit" disabled={saving || !can('pos.sell')}>
                         Barkodu ekle
                       </Button>
+                      <Button disabled={saving || !can('pos.sell')} onClick={() => setCameraOpen(true)}><Camera className="size-4" aria-hidden />Kamerayla okut</Button>
                     </form>
                   </Card>
+                  <BarcodeCameraSheet key={scanScope} open={cameraOpen} onOpenChange={setCameraOpen} onDetected={barcode => { setSearch(barcode); void scan(barcode); }} />
                   <Records
                     rows={catalog.data?.items}
                     loading={catalog.isPending}

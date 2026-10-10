@@ -2,21 +2,29 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import {
   resolveEnabledModules,
+  areaOfPermission,
   type Permission,
   type Role,
   type Sector,
+  type Jurisdiction,
+  type TaxSetupStatus,
+  type ResourceOperation,
+  type BranchContext,
 } from '@erp/shared';
 import type { Config } from '../config';
 import { setContext, withContext, type Db, type Tx } from '../db/client';
 import { appUpdates, companies, companyModules, memberships, users } from '../db/schema';
 import { AppError, forbidden, unauthorized, badRequest } from './errors';
-import { denialFor, isModuleDenied, loadMemberAccess, moduleAccessDenied, requirePermission, type MemberAccess } from '../modules/access/effective';
+import { denialFor, isModuleDenied, loadMemberAccess, moduleAccessDenied, requirePermission, requireResourceOperation, type MemberAccess } from '../modules/access/effective';
+import { inferResourceOperation } from './resource-operation';
 import type { Semaphore } from './limits';
 import type { RateLimiter } from './postgres-limiter';
 import type { Mailer } from '../modules/mail/mailer';
 import { assertLicensed } from '../licensing/gate';
 import type { DeviceService } from '../licensing/devices';
 import type { LicenseService } from '../licensing/service';
+import { withCompanyTimeZone } from './company-time';
+import { loadBranchContext } from '../modules/tenancy/branches';
 
 /**
  * Kayıtlı bir işleyicinin hangi kapıdan geçtiğini gösterir; rota–izin sözleşme testi (test/security.test.ts)
@@ -46,6 +54,7 @@ declare module 'fastify' {
     config: Config;
     /** Merkez Bankası kur XML'ini indirir; testlerde değiştirilebilir. */
     rateFetcher: (isoDate?: string) => Promise<string>;
+    fxRateFetcher: (provider: 'tcmb' | 'kktcmb', isoDate?: string) => Promise<string>;
     /** Bellek içi oran sınırlayıcı (RATE_LIMIT_ENABLED kapalıyken hiçbir şeyi engellemez). */
     limiter: RateLimiter;
     /** Bellek içi dışa aktarmalar için eşzamanlılık kapısı. */
@@ -86,9 +95,16 @@ export interface CompanyInfo {
   baseCurrency: string;
   reportingCurrency: string | null;
   allowNegativeStock: boolean;
+  jurisdiction: Jurisdiction | null;
+  profileMode: 'legacy_manual' | 'country';
+  profileVersionId: string | null;
+  timeZone: string;
+  fxProvider: 'tcmb' | 'kktcmb' | null;
+  taxSetupStatus: TaxSetupStatus;
 }
 
 export interface TenantCtx extends AuthCtx {
+  branch:BranchContext;
   company: CompanyInfo;
   /** Üyeliğin rolü (şablon). İzin kararı için ROL DEĞİL `access`/`can`/`require` kullanılır: kullanıcı bazlı modül erişimi rolü değiştirir. */
   role: Role;
@@ -105,7 +121,7 @@ const passwordChangeRequired = () =>
   forbidden('Devam etmeden önce şifrenizi değiştirmelisiniz', 'PASSWORD_CHANGE_REQUIRED');
 
 async function maintenanceWriteGuard(tx: Tx, req: FastifyRequest) {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.routeOptions.url?.startsWith('/api/auth/') || req.routeOptions.url === '/api/settings/backups') return;
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.routeOptions.url?.startsWith('/api/auth/') || req.routeOptions.url === '/api/settings/backups' || req.routeOptions.url === '/api/companies/:companyId/feedback') return;
   await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtext('erp-maintenance-write'))`);
   const [running] = await tx.select({ id: appUpdates.id }).from(appUpdates).where(eq(appUpdates.status, 'applying')).limit(1);
   if (running) throw new AppError(503, 'UPDATE_MAINTENANCE', 'Güncelleme ve yedekleme sürüyor; kayıtlar görüntülenebilir. Yazma işlemini güncelleme bitince tekrar deneyin.');
@@ -167,8 +183,21 @@ export interface TenantRouteOptions {
   permission?: Permission;
   /** Modül kayıt anahtarı; şirketin sektöründe açık değilse 403. */
   module?: string;
+  /** Kayıt işlem kapısı; iş akışında gerektiğinde HTTP varsayımını açıkça değiştirir. */
+  operation?: ResourceOperation | 'read';
+  /** Reader may maintain their own agenda; service still checks ownership. Explicit read-only/operation overrides win. */
+  personalAgenda?: boolean;
   /** Kullanıcı başına oran sınırı (ağır uçlar: dışa/içe aktarma, kur indirme). Sınır aşılırsa 429. */
   limit?: { name: string; max: number; windowMs: number };
+}
+
+/** Şirket toplamı üzerinden karar veren işlemler dar şube verisiyle hesaplanamaz. */
+function requiresAllBranches(path:string,method:string):boolean {
+  if(/^\/api\/(company\/profile|payroll|social-security|employee-ledger|bank-statements|bank-statement-lines|fiscal-years)(\/|$)/.test(path)) return true;
+  if(/^\/api\/treasury\/accounts\/:id\/reconciliation(\/|$)/.test(path)||/^\/api\/imports\/bank_statement(\/|$)/.test(path)) return true;
+  if(/^\/api\/reports\/(fx-position|executive-summary)(\/|$)/.test(path)) return true;
+  if(/^\/api\/exports\/(full-data|payroll-register|payroll-cost|social-declaration|social-premium-summary|employee-balances|employee-advances|employee-statement|bank-reconciliation|year-end-closing|executive-summary|fx-position)(\/|$)/.test(path)) return true;
+  return !['GET','HEAD','OPTIONS'].includes(method)&&/^\/api\/periods(\/|$)/.test(path);
 }
 
 /**
@@ -213,6 +242,10 @@ export function tenantRoute<T>(
       await maintenanceWriteGuard(tx, req);
 
       await setContext(tx, { userId: user.id, orgId: user.orgId, companyId, ip: req.ip });
+      // Aynı şirkette ülke geçişi ve mali belge kesinleştirme eşzamanlı olamaz.
+      const profileActivation = req.routeOptions.url === '/api/company/profile/activate';
+      if (profileActivation) await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'company-profile:' + companyId},0))`);
+      else if (!['GET','HEAD','OPTIONS'].includes(req.method)) await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${'company-profile:' + companyId},0))`);
       const securityPolicy = (await tx.execute<{ required: boolean; enabled: boolean }>(sql`select coalesce((select (settings->>'requireMfa')::boolean from company_operations_settings),false) as required,exists(select 1 from user_mfa where user_id=${user.id}::uuid and enabled_at is not null) as enabled`)).rows[0];
       if(securityPolicy?.required && !securityPolicy.enabled) throw forbidden('Bu şirket iki adımlı doğrulama gerektiriyor. Hesap güvenliği ekranından MFA kurulumunu tamamlayın.','MFA_SETUP_REQUIRED');
 
@@ -224,6 +257,12 @@ export function tenantRoute<T>(
           baseCurrency: companies.baseCurrency,
           reportingCurrency: companies.reportingCurrency,
           allowNegativeStock: companies.allowNegativeStock,
+          jurisdiction: companies.jurisdiction,
+          profileMode: companies.profileMode,
+          profileVersionId: companies.profileVersionId,
+          timeZone: companies.timeZone,
+          fxProvider: companies.fxProvider,
+          taxSetupStatus: companies.taxSetupStatus,
         })
         .from(companies)
         .where(eq(companies.id, companyId));
@@ -239,6 +278,8 @@ export function tenantRoute<T>(
       const enabledModules = resolveEnabledModules(company.sector as Sector, overrides);
 
       const role = member.role as Role;
+      const branch=await loadBranchContext(tx,companyId,user.id,req);
+      if((branch.mode==='restricted'||branch.selection!=='all')&&requiresAllBranches(req.routeOptions.url??'',req.method)) throw forbidden('Bu şirket geneli işlem tüm şubelere erişim ve tüm şubeler görünümü gerektirir','BRANCH_COMPANY_WIDE_DENIED');
       if (options.module && !enabledModules.has(options.module)) {
         throw forbidden('Bu modül şirketinizde etkin değil', 'MODULE_DISABLED');
       }
@@ -246,24 +287,35 @@ export function tenantRoute<T>(
       const access = await loadMemberAccess(tx, companyId, user.id, role);
       if (options.module && isModuleDenied(access, options.module)) throw moduleAccessDenied();
       if (options.permission && !access.permissions.has(options.permission)) throw denialFor(access, options.permission);
+      const operation = options.operation ?? inferResourceOperation(req.method, req.routeOptions.url ?? req.url.split('?')[0]!);
+      const operationModule = options.module ?? (options.permission ? areaOfPermission(options.permission) : null);
+      if (operation !== 'read' && operationModule) {
+        const ownAgenda = options.personalAgenda && options.module === 'core.directory' &&
+          access.permissions.has('directory.read') && access.overrides['core.directory'] !== 'read' &&
+          access.overrides[`operation.core.directory.${operation}`] !== 'none';
+        if (!ownAgenda) requireResourceOperation(access, operationModule, operation);
+      }
+      // Dönüşüm mevcut kaydı değiştirirken yeni belge de açar; oluşturma yasağı aşılmaz.
+      if (operationModule && req.method === 'POST' && req.routeOptions.url?.endsWith('/convert')) requireResourceOperation(access, operationModule, 'create');
 
       // Serialize cost provenance before document, item and treasury row locks.
-      if (['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      if (['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.routeOptions.url !== '/api/companies/:companyId/feedback') {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'leather-costs:' + companyId}, 0))`);
       }
 
-      return handler({
+      return withCompanyTimeZone(company.timeZone, () => handler({
         tx,
         user,
         req,
         reply,
         role,
+        branch,
         enabledModules,
         access,
         can: (permission) => access.permissions.has(permission),
         require: (permission) => requirePermission(access, permission),
         company: { ...company, sector: company.sector as Sector },
-      });
+      }));
     });
   };
   return Object.assign(route, {

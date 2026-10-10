@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ACCOUNT_MAPPING_KEYS } from '@erp/shared';
 import { readXlsx } from '../src/files/xlsx-read';
-import { addMember, asDb, asOwner, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear, TODAY_LOCAL } from './helpers';
+import { addMember, asDb, asOwner, client, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear, TODAY_LOCAL } from './helpers';
+import { createLegacyCompany } from './legacy-company';
 
 /**
  * Bordro motoru (Faz D3). Bu dosyadaki oranlar/çarpanlar YALNIZCA TEST DEĞERİDİR; kodda ve veritabanında varsayılan oran yoktur.
@@ -28,7 +29,7 @@ describe('bordro motoru (Faz D3)', async () => {
 
   async function world(name: string, sector = 'CONSTRUCTION') {
     const s = await registerUser(app, name);
-    const company = await createCompany(app, s.token, { sector });
+    const company = await createLegacyCompany(app, s.token, { sector });
     const c = client(app, s.token, company.id);
     const orgId = await orgOf(app, s.token);
     const mkEmp = async (body: Record<string, unknown> = {}) =>

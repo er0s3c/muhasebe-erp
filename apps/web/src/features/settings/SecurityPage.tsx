@@ -12,6 +12,8 @@ import { Modal } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
 import { api } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
+import { useSession } from '../../lib/session';
+import { ExportActivityCard, SessionsCard } from './SecurityActivity';
 
 interface MfaStatus {
   enabled: boolean;
@@ -24,6 +26,7 @@ export function SecurityPage() {
   const { t } = useTranslation();
   const toast = useToast();
   const qc = useQueryClient();
+  const { activeCompany } = useSession();
   const status = useQuery({ queryKey: ['mfa'], queryFn: () => api<MfaStatus>('/api/auth/mfa') });
   const refresh = async () => {await qc.invalidateQueries({ queryKey: ['mfa'] });await qc.invalidateQueries({predicate:q=>q.queryKey.includes('navigation')});};
 
@@ -147,6 +150,9 @@ export function SecurityPage() {
           {!setup && error && !dialog && <Callout tone="danger">{error}</Callout>}
         </Card>
       )}
+
+      <SessionsCard />
+      {activeCompany && <ExportActivityCard />}
 
       <Modal
         open={codes !== null}

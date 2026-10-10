@@ -23,7 +23,7 @@ export function PayrollSlipPage() {
   if (isPending) return <PageLoading />;
   if (!data) return <Callout tone="danger">{errorMessage(error)}</Callout>;
   const { run, line: l } = data;
-  const label = (i: PayrollLineItemRow) => (i.source === 'param' && i.paramKey ? `${t(`payroll.params.keys.${i.paramKey}`)}${i.rate ? ` (${Number(i.rate).toLocaleString('tr-TR', { maximumFractionDigits: 6 })})` : ''}` : `${i.code} — ${i.label}`);
+  const label = (i: PayrollLineItemRow) => (i.source === 'country' ? i.label : i.source === 'param' && i.paramKey ? `${t(`payroll.params.keys.${i.paramKey}`)}${i.rate ? ` (${Number(i.rate).toLocaleString('tr-TR', { maximumFractionDigits: 6 })})` : ''}` : `${i.code} — ${i.label}`);
   const earnings = l.items.filter((i) => i.kind === 'earning');
   const deductions = l.items.filter((i) => i.kind === 'deduction');
   const employer = l.items.filter((i) => i.kind === 'employer');
@@ -56,7 +56,10 @@ export function PayrollSlipPage() {
         <p className="mt-1 text-sm font-medium text-warning">{t('payroll.slip.draftNote')}</p>
       </div>
       {run.hasUnverifiedParams && <Callout tone="warning">{t('payroll.slip.unverifiedWarn')}</Callout>}
-      {!run.hasUnverifiedParams && run.paramsSnapshot.length === 0 && <Callout tone="info">{t('payroll.slip.noParams')}</Callout>}
+      {!run.jurisdiction && !run.hasUnverifiedParams && run.paramsSnapshot.length === 0 && <Callout tone="info">{t('payroll.slip.noParams')}</Callout>}
+      {l.legalCalculationSnapshot && <div className="rounded-md border border-border p-4"><p className="mb-3 text-sm font-medium">{run.jurisdiction === 'TR' ? 'Türkiye / standart 4/a' : 'KKTC'} — {l.legalCalculationSnapshot.rulePackVersion}</p><dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+        {[['Prim günü', String(l.legalCalculationSnapshot.socialDays)], ['Önceki kümülatif matrah', money(l.legalCalculationSnapshot.cumulativeTaxBaseBefore)], ['Yeni kümülatif matrah', money(l.legalCalculationSnapshot.cumulativeTaxBaseAfter)], ['Gelir vergisi istisna/indirimi', money(l.legalCalculationSnapshot.incomeTaxExemption)], ['Damga esası', money(l.legalCalculationSnapshot.stampBase)], ['Damga istisnası', money(l.legalCalculationSnapshot.stampTaxExemption)], ['Kişisel dönem indirimi', money(l.legalCalculationSnapshot.personalAllowance)], ['Özel indirim', money(l.legalCalculationSnapshot.specialAllowance)]].map(([name, value]) => <div key={name}><dt className="text-muted">{name}</dt><dd className="mt-1 tabular-nums">{value}</dd></div>)}
+      </dl><p className="mt-3 text-xs text-muted">Bu bordroda kaydedilmiş ülke ve hesap kuralı kullanılır. Sonraki kural değişiklikleri bu tutarları değiştirmez.</p></div>}
 
       <dl className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
         <div className="flex gap-2"><dt className="w-32 text-muted">{t('payroll.slip.employee')}</dt><dd>{l.employeeCode} — {l.employeeName}</dd></div>

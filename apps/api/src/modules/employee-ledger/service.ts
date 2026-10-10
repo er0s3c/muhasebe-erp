@@ -36,7 +36,7 @@ import type { LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
 import { calculateRun } from '../payroll/runs';
 import { generateCode } from '../parties/service';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { getTreasuryAccountRow } from '../treasury/accounts';
 import { cancelTreasuryTransaction, postTreasuryTransaction } from '../treasury/posting';
 import { getLedgerSettings } from './hooks';
@@ -134,11 +134,7 @@ export async function giveAdvance(tx: Tx, ctx: LedgerCtx, input: CreateAdvanceIn
     items: [],
   });
   const year = isoYear(input.date);
-  const number = formatDocumentNumber(
-    'AVN',
-    year,
-    await nextNumber(tx, ctx.companyId, 'EMPLOYEE_ADVANCE', year),
-  );
+  const number = await nextDocumentNumber(tx, ctx.companyId, 'EMPLOYEE_ADVANCE', year, 'AVN');
   const [row] = await tx
     .insert(employeeAdvances)
     .values({

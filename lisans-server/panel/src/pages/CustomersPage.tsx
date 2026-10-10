@@ -1,15 +1,17 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@ui/Button';
 import { PageHeader } from '@ui/Card';
-import { Callout, EmptyState, PageLoading } from '@ui/Feedback';
+import { Callout, EmptyState, ErrorState, PageLoading } from '@ui/Feedback';
 import { Field, Input, Textarea } from '@ui/Field';
 import { Modal, Sheet } from '@ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '@ui/Table';
 import { useToast } from '@ui/Toast';
+import { markFormSaved } from '@ui/UnsavedChanges';
 import { api, errorText, type Customer } from '../api';
 import { fmtDate } from '../format';
+import { focusValidationError, validationErrors } from '../validation';
 
 const blank = { name: '', contactName: '', email: '', phone: '', notes: '' };
 
@@ -22,10 +24,13 @@ export function CustomersPage() {
   const [form, setForm] = useState(blank);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [removing, setRemoving] = useState<Customer | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const { data, isPending } = useQuery({
+  const { data, isPending, error: queryError, refetch, isFetching } = useQuery({
     queryKey: ['customers', q],
     queryFn: () => api<{ customers: Customer[] }>(`/admin/api/customers${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`),
   });
@@ -38,18 +43,25 @@ export function CustomersPage() {
   });
 
   const submit = async () => {
+    if (pending.current || form.name.trim().length < 2) return;
+    pending.current = true;
     setBusy(true);
     setError(null);
+    setFieldErrors({});
     try {
       const body = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v.trim() === '' ? null : v.trim()]));
       await api('/admin/api/customers', { method: 'POST', body });
+      markFormSaved(formRef.current);
       toast.success('Müşteri eklendi.');
       setOpen(false);
       setForm(blank);
       await Promise.all([queryClient.invalidateQueries({ queryKey: ['customers'] }), queryClient.invalidateQueries({ queryKey: ['dashboard'] })]);
     } catch (e) {
+      setFieldErrors(validationErrors(e));
+      focusValidationError(formRef.current);
       setError(errorText(e));
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -83,7 +95,7 @@ export function CustomersPage() {
         title="Müşteriler"
         description="Lisans verdiğiniz kişi ve kurumlar."
         actions={
-          <Button variant="primary" onClick={() => setOpen(true)}>
+          <Button variant="primary" onClick={() => { setError(null); setFieldErrors({}); setOpen(true); }}>
             Yeni müşteri
           </Button>
         }
@@ -91,7 +103,7 @@ export function CustomersPage() {
       <div className="mb-4 max-w-sm">
         <Input aria-label="Müşteri ara" placeholder="Ad ya da e-posta ara…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
-      {isPending || !data ? (
+      {queryError ? <ErrorState description={errorText(queryError)} onRetry={() => void refetch()} retrying={isFetching} /> : isPending || !data ? (
         <PageLoading />
       ) : data.customers.length === 0 ? (
         <TableWrap>
@@ -140,11 +152,11 @@ export function CustomersPage() {
 
       <Sheet
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(next) => { if (!busy) setOpen(next); }}
         title="Yeni müşteri"
         footer={
           <>
-            <Button onClick={() => setOpen(false)}>Vazgeç</Button>
+            <Button disabled={busy} onClick={() => setOpen(false)}>Vazgeç</Button>
             <Button variant="primary" loading={busy} disabled={form.name.trim().length < 2} onClick={() => void submit()}>
               Ekle
             </Button>
@@ -152,6 +164,7 @@ export function CustomersPage() {
         }
       >
         <form
+          ref={formRef}
           className="flex flex-col gap-5"
           onSubmit={(e) => {
             e.preventDefault();
@@ -159,13 +172,13 @@ export function CustomersPage() {
           }}
         >
           {error && <Callout tone="danger">{error}</Callout>}
-          <Field label="Ad / unvan" required>
-            {(id) => <Input id={id} autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />}
+          <Field label="Ad / unvan" required error={fieldErrors.name}>
+            {(id) => <Input id={id} aria-invalid={!!fieldErrors.name} required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />}
           </Field>
-          <Field label="İlgili kişi">{(id) => <Input id={id} value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} />}</Field>
-          <Field label="E-posta">{(id) => <Input id={id} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />}</Field>
-          <Field label="Telefon">{(id) => <Input id={id} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />}</Field>
-          <Field label="Notlar">{(id) => <Textarea id={id} rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />}</Field>
+          <Field label="İlgili kişi" error={fieldErrors.contactName}>{(id) => <Input id={id} aria-invalid={!!fieldErrors.contactName} value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} />}</Field>
+          <Field label="E-posta" error={fieldErrors.email}>{(id) => <Input id={id} aria-invalid={!!fieldErrors.email} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />}</Field>
+          <Field label="Telefon" error={fieldErrors.phone}>{(id) => <Input id={id} aria-invalid={!!fieldErrors.phone} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />}</Field>
+          <Field label="Notlar" error={fieldErrors.notes}>{(id) => <Textarea id={id} aria-invalid={!!fieldErrors.notes} rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />}</Field>
         </form>
       </Sheet>
       <Modal

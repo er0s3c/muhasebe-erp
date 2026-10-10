@@ -19,7 +19,7 @@ import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
-import { useCan, useCMutation, useCQuery, useNavigation } from '../../lib/queries';
+import { useCan, useCanOperation, useCMutation, useCQuery, useNavigation } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { OpenItem, OpenItemsData, PartyDetail, PartyStatementData } from '../../lib/types';
 import { BalanceText } from './BalanceText';
@@ -36,9 +36,11 @@ export function PartyDetailPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const can = useCan();
-  const canManage = can('parties.manage');
+  const canOperation = useCanOperation();
+  const canManage = can('parties.manage') && canOperation('core.parties', 'update');
+  const canDelete = can('parties.manage') && canOperation('core.parties', 'delete');
   const { data: nav } = useNavigation();
-  const canCollect = can('treasury.post') && (nav?.modules.includes('core.treasury') ?? false);
+  const canCollect = can('treasury.post') && canOperation('core.treasury', 'create') && (nav?.modules.includes('core.treasury') ?? false);
   const company = useCompany();
   const { data, isPending, error } = useCQuery<PartyDetail>(['party', id], id ? `/api/parties/${id}` : null);
   const [tab, setTab] = useState<Tab>('statement');
@@ -152,10 +154,11 @@ export function PartyDetailPage() {
           <CardHeader
             title={t('parties.detail.tabs.card')}
             action={
-              canManage ? (
+              canManage || canDelete ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
+                    disabled={!canManage}
                     loading={toggleActive.isPending}
                     onClick={() =>
                       toggleActive.mutate(
@@ -167,7 +170,7 @@ export function PartyDetailPage() {
                     <Power className="size-3.5" aria-hidden />
                     {party.isActive ? t('parties.detail.deactivate') : t('parties.detail.activate')}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
+                  <Button size="sm" variant="ghost" disabled={!canDelete} onClick={() => setConfirmDelete(true)}>
                     <Trash2 className="size-3.5 text-danger" aria-hidden />
                     {t('parties.detail.delete')}
                   </Button>

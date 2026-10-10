@@ -17,15 +17,19 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { EmployeeRow, SocialProfileRow, SupportEligibilityRow, SupportRuleRow } from '../../lib/types';
 import { SOCIAL_INVALIDATE, SocialUnverifiedBadge } from './social-common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { Link } from 'react-router-dom';
+import { useCompany } from '../../lib/session';
 
 /** Sosyal güvenlik ayarları: tarihli personel profilleri, prim desteği kuralları (varsayılan kapalı, doğrulanmamış) ve uygunluk beyanları. */
 export function SocialSettingsPage() {
   const { t } = useTranslation();
+  const company = useCompany();
   return (
     <>
       <PageHeader title={t('social.settings.title')} description={t('social.settings.subtitle')} />
       <div className="mb-4">
         <Callout tone="warning">{t('social.settings.legal')}</Callout>
+        {company.jurisdiction && <div className="mt-3"><Callout tone="info">{company.jurisdiction === 'TR' ? 'Türkiye SGK ve işsizlik' : 'KKTC sigorta, ihtiyat ve istihdam katkısı'} hesapları, bordronun kayıtlı ülke kuralından alınır. İhtiyat sigorta primi toplamına eklenmez. Oranları, çalışan rejimini ve önizlemeyi <Link to="/hr/payroll/settings" className="underline">Bordro ayarlarında</Link> yönetin.</Callout></div>}
       </div>
       <div className="flex flex-col gap-6">
         <ProfilesCard />

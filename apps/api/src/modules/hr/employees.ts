@@ -32,6 +32,7 @@ export const formatEmployeeCode = (n: number) => `PRS-${String(n).padStart(4, '0
 export function toView(r: Row, projectCode?: string | null) {
   return {
     id: r.id,
+    branchId:r.branchId,
     code: r.code,
     fullName: r.fullName,
     nationality: r.nationality,

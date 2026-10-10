@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
   EXPORT_FORMATS,
+  areaOfModule,
+  resourceOperationAllowed,
   IMPORT_FIELDS,
   IMPORT_KINDS,
   IMPORT_KIND_LABELS,
@@ -21,6 +23,7 @@ import { unprocessable } from '../../http/errors';
 import type { ImportCtx, PlanResult } from './handlers/common';
 import { suggestMapping } from './mapping';
 import { IMPORT_HANDLERS } from './registry';
+import { isModuleDenied } from '../access/effective';
 import { readTable, splitHeader } from './table';
 
 /** Base64 dosya (5 MB → ~6,7 MB) ve satır listesi için yeterli; Fastify'ın 1 MiB varsayılanı bu uçlarda aşılır. */
@@ -63,6 +66,15 @@ function templateTable(kind: ImportKind): ReportTable {
  * (istek zaten tek işlemdedir: ya hepsi ya hiçbiri). Her tür kendi modülü ve iznimle korunur.
  */
 export const importRoutes: FastifyPluginAsync = async (app) => {
+  app.get('/api/imports/access', tenantRoute(app, {}, async ({ access, enabledModules }) => ({
+    kinds: IMPORT_KINDS.filter(kind => {
+      const handler = IMPORT_HANDLERS[kind];
+      const area = areaOfModule(handler.module);
+      return enabledModules.has(handler.module) && !isModuleDenied(access, handler.module)
+        && access.permissions.has(handler.permission)
+        && (!area || resourceOperationAllowed(access.permissions, access.overrides, area, 'create'));
+    }),
+  })));
   for (const kind of IMPORT_KINDS) {
     const handler = IMPORT_HANDLERS[kind];
     const guard = { module: handler.module, permission: handler.permission };

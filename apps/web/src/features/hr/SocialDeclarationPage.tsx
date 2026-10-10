@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { Button } from '../../components/ui/Button';
+import { Card, CardHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Textarea } from '../../components/ui/Field';
@@ -104,6 +105,7 @@ export function SocialDeclarationPage() {
         </Link>
         {d.finalizedAt ? ` · ${fmtDate(d.finalizedAt)}` : ''}
       </p>
+      {d.jurisdiction === 'KKTC' && <Card><CardHeader title="İhtiyat ve yerel istihdam katkıları" description="Sigorta primleri yukarıdaki toplamda gösterilir; İhtiyat ve istihdam katkısı ayrı yükümlülüklerdir." /><dl className="grid gap-3 p-4 sm:grid-cols-3">{[['İhtiyat işçi', 'employeeProvident'], ['İhtiyat işveren', 'employerProvident'], ['Yerel istihdam katkısı', 'employerLocalEmployment']].map(([label, key]) => <div key={key}><dt className="text-sm text-muted">{label}</dt><dd className="mt-1 font-semibold tabular-nums">{money(lines.reduce((sum, line) => sum.plus(line[key as 'employeeProvident' | 'employerProvident' | 'employerLocalEmployment']), dec(0)).toFixed(2))}</dd></div>)}</dl></Card>}
 
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
         <ExportMenu exportKey="social-declaration" params={{ id }} disabled={lines.length === 0} />
@@ -134,6 +136,7 @@ export function SocialDeclarationPage() {
               <Th num>{t('social.cols.base')}</Th>
               <Th num>{t('social.cols.employeePremium')}</Th>
               <Th num>{t('social.cols.employerPremium')}</Th>
+              {d.jurisdiction === 'KKTC' && <><Th num>İhtiyat işçi</Th><Th num>İhtiyat işveren</Th><Th num>İstihdam katkısı</Th></>}
               <Th num>{t('social.line.support')}</Th>
               <Th>{t('social.line.warnings')}</Th>
             </tr>
@@ -150,6 +153,7 @@ export function SocialDeclarationPage() {
                 <Td num>{money(l.premiumBase)}</Td>
                 <Td num>{money(l.employeePremium)}</Td>
                 <Td num>{money(l.employerPremium)}</Td>
+                {d.jurisdiction === 'KKTC' && <><Td num>{money(l.employeeProvident)}</Td><Td num>{money(l.employerProvident)}</Td><Td num>{money(l.employerLocalEmployment)}</Td></>}
                 <Td num>{dec(l.supportEmployee).plus(l.supportEmployer).gt(0) ? `${money(dec(l.supportEmployee).plus(l.supportEmployer).toFixed(4))} (${l.supportCodes})` : '—'}</Td>
                 <Td className="text-[13px] text-warning">{l.warnings.map((w) => warningText(w)).join('; ')}</Td>
               </tr>
@@ -161,6 +165,7 @@ export function SocialDeclarationPage() {
               <td className="num">{money(totals.premiumBase)}</td>
               <td className="num">{money(totals.employeePremium)}</td>
               <td className="num">{money(totals.employerPremium)}</td>
+              {d.jurisdiction === 'KKTC' && <><td className="num">{money(lines.reduce((sum, line) => sum.plus(line.employeeProvident), dec(0)).toFixed(2))}</td><td className="num">{money(lines.reduce((sum, line) => sum.plus(line.employerProvident), dec(0)).toFixed(2))}</td><td className="num">{money(lines.reduce((sum, line) => sum.plus(line.employerLocalEmployment), dec(0)).toFixed(2))}</td></>}
               <td className="num">{money(totals.supportTotal)}</td>
               <td />
             </tr>

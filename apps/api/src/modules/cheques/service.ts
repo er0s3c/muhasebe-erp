@@ -26,7 +26,7 @@ import { uuidList } from '../inventory/balances';
 import { createJournalEntry, type AutoJournalLine, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
 import { assertAllocatable, openItemsFor } from '../parties/service';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { lockTreasuryAccounts, type TreasuryAccountRow } from '../treasury/accounts';
 import { buildExchangeJournal,buildSettlementJournal, planSettlement, type SettleItemInput } from '../treasury/journal';
@@ -399,8 +399,7 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
   const acct = (c: ChequeRow) => map[docKey(direction, c.docType)]!;
 
   const batchId = uuidv7();
-  const seq = await nextNumber(tx, ctx.companyId, 'CHQB', year);
-  const batchNo = formatDocumentNumber(BATCH_PREFIX, year, seq);
+  const batchNo = await nextDocumentNumber(tx, ctx.companyId, 'CHQB', year, BATCH_PREFIX);
   const heading = `${ACTION_LABEL[input.action]} ${batchNo}${rows.length === 1 ? ` — ${DOC_LABEL[rows[0]!.docType as 'cheque' | 'note']} ${rows[0]!.docNo}` : ` — ${rows.length} belge`}`.slice(0, 300);
   const desc = input.note ? `${heading} — ${input.note}`.slice(0, 300) : heading;
 

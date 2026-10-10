@@ -17,6 +17,7 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { EmployeeRow, PayrollItemRow, PayrollParamRow, PayTermRow } from '../../lib/types';
 import { formatParamValue, PAYROLL_INVALIDATE, UnverifiedBadge } from './payroll-common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { CountryPayrollSettings } from './CountryPayrollSettings';
 
 /** Bordro ayarları: tarihli parametreler (varsayılan kapalı, doğrulanmamış), ücret şartları ve ek ödeme/kesinti kalemleri. */
 export function PayrollSettingsPage() {
@@ -25,6 +26,7 @@ export function PayrollSettingsPage() {
     <>
       <PageHeader title={t('payroll.settings.title')} description={t('payroll.settings.subtitle')} />
       <div className="flex flex-col gap-6">
+        <CountryPayrollSettings />
         <ParamsCard />
         <TermsCard />
         <ItemsCard />
@@ -262,13 +264,15 @@ function ItemsCard() {
   const [kind, setKind] = useState<'earning' | 'deduction'>('earning');
   const [social, setSocial] = useState(false);
   const [tax, setTax] = useState(false);
+  const [stamp, setStamp] = useState(true);
   const [liability, setLiability] = useState<(typeof PAYROLL_LIABILITIES)[number]>('other');
   const [error, setError] = useState<Error | null>(null);
   const add = useCMutation(
-    (_: void, call) => call('/api/payroll/items', { method: 'POST', body: { code: code.trim(), name: name.trim(), kind, affectsSocialBase: social, affectsTaxBase: tax, liability } }),
+    (_: void, call) => call('/api/payroll/items', { method: 'POST', body: { code: code.trim(), name: name.trim(), kind, affectsSocialBase: social, affectsTaxBase: tax, affectsStampBase: kind === 'earning' ? stamp : null, liability } }),
     PAYROLL_INVALIDATE,
   );
   const toggle = useCMutation((v: { id: string; isActive: boolean }, call) => call(`/api/payroll/items/${v.id}`, { method: 'PATCH', body: { isActive: v.isActive } }), PAYROLL_INVALIDATE);
+  const setStampFlag = useCMutation((v: { id: string; affectsStampBase: boolean }, call) => call(`/api/payroll/items/${v.id}`, { method: 'PATCH', body: { affectsStampBase: v.affectsStampBase } }), PAYROLL_INVALIDATE);
   const rows = data?.items ?? [];
 
   return (
@@ -288,6 +292,7 @@ function ItemsCard() {
                   <Th className="w-28">{t('payroll.items.kind')}</Th>
                   <Th className="w-28">{t('payroll.items.socialBase')}</Th>
                   <Th className="w-28">{t('payroll.items.taxBase')}</Th>
+                  <Th className="w-36">Damga vergisi esası</Th>
                   <Th className="w-36">{t('payroll.items.liability')}</Th>
                   <Th className="w-24">{t('common.status')}</Th>
                   {manage && <Th className="w-28"><span className="sr-only">{t('common.actions')}</span></Th>}
@@ -301,6 +306,7 @@ function ItemsCard() {
                     <Td>{t(`payroll.items.kinds.${r.kind}`)}</Td>
                     <Td>{r.kind === 'earning' ? (r.affectsSocialBase ? t('common.yes') : t('common.no')) : '—'}</Td>
                     <Td>{r.kind === 'earning' ? (r.affectsTaxBase ? t('common.yes') : t('common.no')) : '—'}</Td>
+                    <Td>{r.kind === 'earning' ? manage ? <Select aria-label={`${r.name} damga esası`} value={r.affectsStampBase === null ? '' : String(r.affectsStampBase)} disabled={setStampFlag.isPending} onChange={(e) => setStampFlag.mutate({ id: r.id, affectsStampBase: e.target.value === 'true' }, { onError: setError })}><option value="" disabled>Belirlenmedi</option><option value="true">Dahil</option><option value="false">Hariç</option></Select> : r.affectsStampBase == null ? 'Belirlenmedi' : r.affectsStampBase ? 'Dahil' : 'Hariç' : '—'}</Td>
                     <Td className="text-muted">{r.kind === 'deduction' ? t(`payroll.items.liabilities.${r.liability}`) : '—'}</Td>
                     <Td>{r.isActive ? <Badge tone="success">{t('common.active')}</Badge> : <Badge>{t('common.inactive')}</Badge>}</Td>
                     {manage && (
@@ -318,7 +324,7 @@ function ItemsCard() {
         )}
         {manage && (
           <form
-            className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[7rem_1fr_9rem_auto_auto_9rem_auto]"
+            className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4"
             onSubmit={(e) => {
               e.preventDefault();
               setError(null);
@@ -352,6 +358,7 @@ function ItemsCard() {
                 </Select>
               )}
             </Field>
+            <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" className="size-4" checked={stamp} disabled={kind !== 'earning'} onChange={(e) => setStamp(e.target.checked)} />Damga vergisi esası</label>
             <Button type="submit" variant="primary" loading={add.isPending} disabled={!code.trim() || !name.trim()}>
               <Plus className="size-4" aria-hidden />
               {t('common.add')}

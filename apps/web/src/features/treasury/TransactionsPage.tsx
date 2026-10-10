@@ -1,11 +1,14 @@
-import { Landmark, Plus, Search } from 'lucide-react';
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { SearchInput } from '../../components/ui/SearchInput';
+import { ListToolbar, ResultFooter } from '../../components/ui/ListTools';
+import { Landmark, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, ErrorState, ListSkeleton } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR, moneyIn } from '../../lib/format';
@@ -14,6 +17,7 @@ import type { TreasuryTxnListRow, TreasuryTxnStatus, TreasuryTxnType } from '../
 import { TXN_TYPES, TxnStatusBadge, TxnTypeBadge, accountLabel, useTreasuryAccounts } from './common';
 import { TransactionDetailSheet } from './TransactionDetailSheet';
 import { TransactionSheet } from './TransactionSheet';
+import { FinancialDraftList } from '../settings/DocumentApprovalsPage';
 
 const PAGE = 100;
 
@@ -61,7 +65,7 @@ export function TransactionsPage() {
   if (status) qs.set('status', status);
   if (accountId) qs.set('accountId', accountId);
   if (query) qs.set('query', query);
-  const { data, isPending } = useCQuery<{ transactions: TreasuryTxnListRow[]; total: number }>(['treasury', 'txns', qs.toString()], `/api/treasury/transactions?${qs}`);
+  const { data, isPending, error, refetch, isFetching } = useCQuery<{ transactions: TreasuryTxnListRow[]; total: number }>(['treasury', 'txns', qs.toString()], `/api/treasury/transactions?${qs}`);
   const filtered = !!(type || status || accountId || query);
 
   const newButton = canPost && (
@@ -74,8 +78,10 @@ export function TransactionsPage() {
   return (
     <>
       <PageHeader title={t('treasury.txn.title')} description={t('treasury.txn.subtitle')} actions={newButton} />
+      <FinancialDraftList type="payment"/>
 
-      <div className="mb-5 flex flex-wrap items-end gap-4">
+      <ListToolbar onReset={() => { setText(''); setType(''); setStatus(''); setAccountId(''); setFrom(`${year}-01-01`); setTo(`${year}-12-31`); setLimit(PAGE); }}>
+        <CompanySavedViews page={`treasury-transactions`} filters={{ type, status, accountId, from, to }} onApply={(v) => { setText(''); setType(v.type as TreasuryTxnType | ''); setStatus(v.status as TreasuryTxnStatus | ''); setAccountId(String(v.accountId)); setFrom(String(v.from)); setTo(String(v.to)); setLimit(PAGE); }} />
         <Field label={t('common.from')}>{(id) => <Input id={id} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />}</Field>
         <Field label={t('common.to')}>{(id) => <Input id={id} type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />}</Field>
         <Field label={t('treasury.txn.type')}>
@@ -114,14 +120,13 @@ export function TransactionsPage() {
             </Select>
           )}
         </Field>
-        <div className="relative w-full max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted" aria-hidden />
-          <Input className="pl-9" placeholder={t('treasury.txn.searchPlaceholder')} value={text} onChange={(e) => setText(e.target.value)} aria-label={t('common.search')} />
-        </div>
-      </div>
+        <SearchInput placeholder={t('treasury.txn.searchPlaceholder')} value={text} onChange={setText} aria-label={t('common.search')} />
+      </ListToolbar>
 
       {isPending ? (
-        <PageLoading />
+        <ListSkeleton />
+      ) : error ? (
+        <ErrorState error={error} onRetry={() => void refetch()} retrying={isFetching} />
       ) : !data?.transactions.length ? (
         <Card>
           <EmptyState
@@ -193,11 +198,7 @@ export function TransactionsPage() {
               </tbody>
             </Table>
           </TableWrap>
-          {data.total > data.transactions.length && (
-            <div className="mt-4 flex justify-center">
-              <Button onClick={() => setLimit((l) => l + PAGE)}>{t('common.loadMore')}</Button>
-            </div>
-          )}
+          <ResultFooter shown={data.transactions.length} total={data.total} loading={isFetching} onMore={() => setLimit((l) => l + PAGE)} />
         </>
       )}
 

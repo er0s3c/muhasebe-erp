@@ -26,7 +26,7 @@ import { uuidList } from '../inventory/balances';
 import { createJournalEntry, reverseJournalEntry, type AutoJournalLine, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
 import { assertAllocatable, openItemsFor } from '../parties/service';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
 import { assertCashOk, glBalance, lockTreasuryAccounts, type TreasuryAccountRow } from './accounts';
@@ -38,6 +38,8 @@ import {
   type SettleItemInput,
 } from './journal';
 import { getTreasuryTransaction } from './transactions';
+import { assertFinancialApproved } from '../approvals/document-gate';
+import { paymentSnapshot } from '../approvals/financial-snapshot';
 
 export const TXN_LABEL: Record<TreasuryTxnType, string> = {
   receipt: 'Tahsilat',
@@ -93,6 +95,10 @@ export async function postTreasuryTransaction(tx: Tx, ctx: LedgerCtx, input: Cre
   const locked = await lockTreasuryAccounts(tx, [input.accountId, ...(input.toAccountId ? [input.toAccountId] : [])]);
   const from = locked.get(input.accountId)!;
   await requireActive(from);
+  if (input.type === 'payment' || input.type === 'other_payment') {
+    const proof = await paymentSnapshot(tx, ctx, input);
+    await assertFinancialApproved(tx, 'payment', ctx.approvalRequestId, proof.amount, proof.hash, proof.projectId);
+  }
 
   const txnId = uuidv7();
   let partyId: string | null = null;
@@ -107,8 +113,7 @@ export async function postTreasuryTransaction(tx: Tx, ctx: LedgerCtx, input: Cre
   // Boşluksuz numara, gerekli tüm doğrulamalardan sonra alınır (numara sayacı kilitlerin sonuncusudur).
   const numberOf = async () => {
     const year = isoYear(date);
-    const seq = await nextNumber(tx, ctx.companyId, `TRS:${type}`, year);
-    return formatDocumentNumber(TREASURY_TXN_PREFIX[type], year, seq);
+    return nextDocumentNumber(tx, ctx.companyId, `TRS:${type}`, year, TREASURY_TXN_PREFIX[type]);
   };
 
   let txnNo: string;

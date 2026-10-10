@@ -127,7 +127,7 @@ test('deri uzmanlaşması ve mağaza alt ekranları tasarım dilini korur', asyn
   const headers = { authorization: 'Bearer ' + (await registered.json()).accessToken };
   const created = await request.post('/api/companies', {
     headers,
-    data: { name: 'Deri arayüz test şirketi', sector: 'LEATHER_FASHION' },
+    data: { name: 'Deri arayüz test şirketi', sector: 'LEATHER_FASHION', jurisdiction: 'KKTC' },
   });
   expect(created.status(), await created.text()).toBe(201);
   await page.goto('/login');

@@ -12,7 +12,7 @@ async function leatherCompany(request: APIRequestContext, tag: string) {
   const auth = { authorization: `Bearer ${accessToken}` };
   const created = await request.post('/api/companies', {
     headers: auth,
-    data: { name: 'Deri Aksesuar Test', sector: 'LEATHER_FASHION' },
+    data: { name: 'Deri Aksesuar Test', sector: 'LEATHER_FASHION', jurisdiction: 'KKTC' },
   });
   expect(created.status(), await created.text()).toBe(201);
   const { company } = await created.json();

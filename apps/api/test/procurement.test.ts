@@ -209,10 +209,16 @@ describe('satın alma zinciri: talep → onay → RFQ → sipariş → mal kabul
     expect((await sm.client.post(`/api/purchase-orders/${mine.json().order.id}/cancel`, { reason: 'Vazgeçildi' })).statusCode).toBe(403);
     expect((await w.c.post(`/api/purchase-orders/${mine.json().order.id}/cancel`, { reason: 'Vazgeçildi' })).statusCode).toBe(422); // mal kabulü var
 
-    // Market şirketinde modül kapalı
+    // Market şirketinde satın alma açık; şirket ayarıyla kapatılınca erişim yine engellenir.
     const market = await registerUser(app, 'SatinAlmaMarket');
     const mc = await createCompany(app, market.token, { sector: 'RETAIL_MARKET' });
-    expect((await client(app, market.token, mc.id).get('/api/purchase-orders')).json().error.code).toBe('MODULE_DISABLED');
+    const marketClient = client(app, market.token, mc.id);
+    expect((await marketClient.get('/api/purchase-orders')).statusCode).toBe(200);
+    const disabled = await marketClient.put('/api/company/modules/core.procurement', { enabled: false });
+    expect(disabled.statusCode, disabled.body).toBe(200);
+    const blocked = await marketClient.get('/api/purchase-orders');
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error.code).toBe('MODULE_DISABLED');
 
     // DB: verilmiş siparişin satırı ve mal kabul kaydı değişmez (sahip rolüyle bile)
     await asDb(handle, { companyId: w.company.id, orgId: w.orgId }, async (q) => {

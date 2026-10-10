@@ -14,7 +14,7 @@ async function setup(page: Page) {
   const token = (await r.json()).accessToken;
   const c = await page.request.post('/api/companies', {
     headers: { authorization: `Bearer ${token}` },
-    data: { name: 'İnşaat Kabul Testi', sector: 'CONSTRUCTION' },
+    data: { name: 'İnşaat Kabul Testi', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(c.status()).toBe(201);
   const headers = { authorization: `Bearer ${token}`, 'x-company-id': (await c.json()).company.id };
@@ -162,7 +162,7 @@ test('çevrimdışı kapatıp açma, fotoğraflı kayıt, tek eşitleme ve şirk
   expect((await photos.json()).items).toHaveLength(1);
   const second = await offline.request.post('/api/companies', {
     headers,
-    data: { name: 'Farklı Şirket', sector: 'CONSTRUCTION' },
+    data: { name: 'Farklı Şirket', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(second.status()).toBe(201);
   await offline.goto(`/workspace/project-control?projectId=${project.id}`);

@@ -5,7 +5,8 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { z } from 'zod';
-import { SECTORS, createCompanySchema, type CreateCompanyInput } from '@erp/shared';
+import { JURISDICTION_PROFILES, LEGAL_ENTITY_TYPES, SECTORS, createCompanySchema, type CreateCompanyInput } from '@erp/shared';
+import { legalEntityLabels } from '../settings/CompanyProfileSection';
 import { BrandLogo } from '../../components/layout/Brand';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -37,13 +38,15 @@ export function CreateCompanyPage() {
     handleSubmit,
     getValues,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<FormInput, unknown, CreateCompanyInput>({
     resolver: zodResolver(createCompanySchema),
-    defaultValues: { sector: 'CONSTRUCTION', baseCurrency: 'TRY', reportingCurrency: 'GBP' },
+    defaultValues: { sector: 'CONSTRUCTION', baseCurrency: 'TRY', reportingCurrency: 'GBP', legalEntityType: 'company', vatRegistered: true },
   });
 
   const sectorKey = sectors.join(',');
+  const jurisdiction = watch('jurisdiction');
   useEffect(() => {
     if (!sectors.includes(getValues('sector'))) setValue('sector', sectors[0]!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,6 +87,15 @@ export function CreateCompanyPage() {
               <Field label={t('onboarding.companyName')} error={errors.name?.message} required>
                 {(id) => <Input id={id} autoFocus autoComplete="organization" {...register('name')} />}
               </Field>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field label="Şirketin ülkesi" required error={errors.jurisdiction ? 'Şirketin ülkesini seçin.' : undefined}>
+                  {id => <Select id={id} {...register('jurisdiction')}><option value="">Ülke seçin</option><option value="TR">Türkiye</option><option value="KKTC">KKTC</option></Select>}
+                </Field>
+                <Field label="Şirket türü">{id => <Select id={id} {...register('legalEntityType')}>{LEGAL_ENTITY_TYPES.map(type => <option key={type} value={type}>{legalEntityLabels[type]}</option>)}</Select>}</Field>
+              </div>
+              {jurisdiction && JURISDICTION_PROFILES[jurisdiction] && <Callout>{jurisdiction === 'TR' ? 'Türkiye vergileri ve TCMB kur kaynağı' : 'KKTC vergileri ve KKTC Merkez Bankası kur kaynağı'} kullanılacak. Vergi sınıfları ve bordro parametreleri şirket kurulumundan sonra doğrulanır.</Callout>}
+              <Field label="Faaliyet kodu" error={errors.activityCode?.message}>{id => <Input id={id} maxLength={40} {...register('activityCode')} />}</Field>
+              <label className="flex items-center gap-3 text-sm"><input className="size-4" type="checkbox" {...register('vatRegistered')} />KDV mükellefi</label>
               <Field
                 label={t('onboarding.sector')}
                 hint={

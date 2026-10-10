@@ -6,7 +6,7 @@ test('üçlü eşleştirme: siparişten fatura satırı, tolerans dışı redded
   const password = 'Sifre-12345-xyz';
   const reg = await (await request.post('/api/auth/register', { data: { email, password, fullName: 'Ece Satınalma', organizationName: 'Eşleşme Holding' } })).json();
   const auth = { authorization: `Bearer ${reg.accessToken}` };
-  const company = (await (await request.post('/api/companies', { headers: auth, data: { name: 'Eşleşme İnşaat Ltd.', sector: 'CONSTRUCTION' } })).json()).company;
+  const company = (await (await request.post('/api/companies', { headers: auth, data: { name: 'Eşleşme İnşaat Ltd.', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' } })).json()).company;
   const h = { ...auth, 'x-company-id': company.id };
   const project = (await (await request.post('/api/projects', { headers: h, data: { name: 'Güneş Sitesi', kind: 'own' } })).json()).project;
   const wbs = (await (await request.post(`/api/projects/${project.id}/wbs`, { headers: h, data: { code: '03', name: 'Betonarme' } })).json()).wbs[0];

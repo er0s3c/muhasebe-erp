@@ -21,8 +21,8 @@ describe('deri sektörü ve ortak modüller', () => {
     expect(eligibleNotificationKinds(effectivePermissions('operations_manager'), resolveEnabledModules('LEATHER_FASHION', [{ module: 'leather.production', enabled: false }]))).not.toContain('leather_production_due');
   });
   it('şirket kurulumu yeni sektörü kabul eder ve mevcut sektörleri korur', () => {
-    expect(createCompanySchema.parse({ name: 'Deri Atölyesi', sector: 'LEATHER_FASHION' }).sector).toBe('LEATHER_FASHION');
-    expect(createCompanySchema.parse({ name: 'Şantiye', sector: 'CONSTRUCTION' }).sector).toBe('CONSTRUCTION');
+    expect(createCompanySchema.parse({ name: 'Deri Atölyesi', sector: 'LEATHER_FASHION', jurisdiction: 'KKTC' }).sector).toBe('LEATHER_FASHION');
+    expect(createCompanySchema.parse({ name: 'Şantiye', sector: 'CONSTRUCTION', jurisdiction: 'TR' }).sector).toBe('CONSTRUCTION');
   });
 
   it('ortak modüller ve deri modülleri açılır; inşaat ve planlı market POS açılmaz', () => {

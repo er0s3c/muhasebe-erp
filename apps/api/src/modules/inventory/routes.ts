@@ -12,6 +12,7 @@ import {
   listStockDocumentsQuerySchema,
   reverseStockDocumentSchema,
   stockStatusQuerySchema,
+  stockAnalyticsQuerySchema,
   todayIso,
   updateItemCategorySchema,
   updateItemSchema,
@@ -37,6 +38,7 @@ import {
 } from './documents';
 import { createItem, deleteItem, getItem, itemStatement, listItems, updateItem } from './items';
 import { inventorySummary, stockStatus } from './reports';
+import { stockAnalytics } from './analytics';
 import { createWarehouse, deleteWarehouse, listWarehouses, updateWarehouse } from './warehouses';
 
 const stockCtx = ({ company, user }: TenantCtx): StockCtx => ({
@@ -188,6 +190,9 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // --- Raporlar ---
+  app.get('/api/reports/stock-analytics', tenantRoute(app, read, async ({ tx, req, company }) =>
+    stockAnalytics(tx, company.baseCurrency, stockAnalyticsQuerySchema.parse(req.query)),
+  ));
   app.get(
     '/api/reports/stock-status',
     tenantRoute(app, read, async ({ tx, req, company }) =>

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { formatDateTR } from '@erp/shared';
+import { formatDateTR, getCompanyTimeZone } from '@erp/shared';
 import type { Sector } from '@erp/shared';
 import { api } from './api';
 import { useSession } from './session';
@@ -76,7 +76,7 @@ export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = toInstant(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return formatDateTR(d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Nicosia' }));
+  return formatDateTR(d.toLocaleDateString('sv-SE', { timeZone: getCompanyTimeZone() }));
 }
 
 /**
@@ -97,6 +97,6 @@ export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = toInstant(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const time = d.toLocaleTimeString('tr-TR', { timeZone: 'Europe/Nicosia', hour: '2-digit', minute: '2-digit' });
+  const time = d.toLocaleTimeString('tr-TR', { timeZone: getCompanyTimeZone(), hour: '2-digit', minute: '2-digit' });
   return `${fmtDate(iso)} ${time}`;
 }

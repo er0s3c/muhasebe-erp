@@ -30,6 +30,7 @@ interface AreaView {
   effective: { level: AccessLevel; partial: boolean };
   setBy: string | null;
   operations: { key: Permission; label: string; roleDefault: boolean; inherited: boolean; override: 'allow' | 'deny' | null; effective: boolean; roleBound: boolean; canAllow: boolean }[];
+  resourceOperations: { key: string; label: string; override: 'allow' | 'deny' | null; inherited: boolean; effective: boolean; canAllow: boolean }[];
 }
 interface AccessResponse {
   member: { userId: string; fullName: string; email: string; role: string };
@@ -53,6 +54,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
   const { data, isPending, error } = useCQuery<AccessResponse>(['module-access', userId ?? ''], userId ? `/api/company/members/${userId}/module-access` : null);
   const [draft, setDraft] = useState<Record<string, Choice>>({});
   const [operationDraft, setOperationDraft] = useState<Record<string, PermissionChoice>>({});
+  const [resourceDraft, setResourceDraft] = useState<Record<string, PermissionChoice>>({});
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'edit' | 'effective'>('edit');
   const [confirming, setConfirming] = useState(false);
@@ -62,6 +64,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
     if (data) {
       setDraft(Object.fromEntries(data.areas.map((a) => [a.key, (a.override ?? 'default') as Choice])));
       setOperationDraft(Object.fromEntries(data.areas.flatMap((a) => a.operations.map((p) => [p.key, p.override ?? 'default']))));
+      setResourceDraft(Object.fromEntries(data.areas.flatMap(a => a.resourceOperations.map(p => [p.key, p.override ?? 'default']))));
     }
   }, [data]);
   useEffect(() => {
@@ -69,7 +72,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
   }, [userId]);
 
   const save = useCMutation(
-    (body: { levels: Record<string, Choice>; permissions: Record<string, PermissionChoice> }, call) => call(`/api/company/members/${userId}/module-access`, { method: 'PUT', body }),
+    (body: { levels: Record<string, Choice>; permissions: Record<string, PermissionChoice>; operations: Record<string, PermissionChoice> }, call) => call(`/api/company/members/${userId}/module-access`, { method: 'PUT', body }),
     [['module-access', userId ?? ''], ['members']],
   );
 
@@ -80,12 +83,14 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
     [areas, draft],
   );
   const operationChanges = useMemo(() => areas.flatMap((a) => a.operations.filter((p) => (operationDraft[p.key] ?? 'default') !== (p.override ?? 'default')).map((p) => ({ ...p, area: a.key }))), [areas, operationDraft]);
+  const resourceChanges = useMemo(() => areas.flatMap(a => a.resourceOperations.filter(p => (resourceDraft[p.key] ?? 'default') !== (p.override ?? 'default')).map(p => ({ ...p, area: a.key }))), [areas, resourceDraft]);
   const previewBody = useMemo(() => ({
     levels: Object.fromEntries(changes.map(a => [a.key, draft[a.key] ?? 'default'])),
     permissions: Object.fromEntries(operationChanges.map(p => [p.key, operationDraft[p.key] ?? 'default'])),
-  }), [changes, operationChanges, draft, operationDraft]);
-  const hasChanges = changes.length + operationChanges.length > 0;
-  const preview = useQuery<{ permissions: Permission[] }>({
+    operations: Object.fromEntries(resourceChanges.map(p => [p.key, resourceDraft[p.key] ?? 'default'])),
+  }), [changes, operationChanges, resourceChanges, draft, operationDraft, resourceDraft]);
+  const hasChanges = changes.length + operationChanges.length + resourceChanges.length > 0;
+  const preview = useQuery<{ permissions: Permission[]; resourceOperations: Record<string, boolean> }>({
     queryKey: [company.id, 'module-access-preview', userId, previewBody],
     queryFn: () => call(`/api/company/members/${userId}/module-access/preview`, { method: 'POST', body: previewBody }),
     enabled: !!data && !!userId && hasChanges,
@@ -106,14 +111,16 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
 
   const previewAccess = (a: AreaView) => areaAccessOf(previewPermissions, a.key as AccessAreaKey);
   const operationLabel = (c: PermissionChoice) => c === 'allow' ? 'İzin ver' : c === 'deny' ? 'Engelle' : 'Modül seçimine göre';
-  const resetOperations = () => setOperationDraft(Object.fromEntries(areas.flatMap((a) => a.operations.map((p) => [p.key, 'default']))));
+  const resetOperations = () => { setOperationDraft(Object.fromEntries(areas.flatMap((a) => a.operations.map((p) => [p.key, 'default'])))); setResourceDraft(Object.fromEntries(areas.flatMap(a => a.resourceOperations.map(p => [p.key, 'default'])))); };
   const resetAll = () => { setDraft(Object.fromEntries(areas.map((a) => [a.key, 'default' as Choice]))); resetOperations(); };
-  const changedCount = changes.length + operationChanges.length;
+  const changedCount = changes.length + operationChanges.length + resourceChanges.length;
+  const resourceAllowed = (p: AreaView['resourceOperations'][number]) => hasChanges ? preview.data?.resourceOperations[p.key] === true : p.effective;
 
   const doSave = () => {
     const levels = Object.fromEntries(changes.map((a) => [a.key, draft[a.key] ?? 'default']));
     const permissions = Object.fromEntries(operationChanges.map((p) => [p.key, operationDraft[p.key] ?? 'default']));
-    save.mutate({ levels, permissions }, {
+    const operations = Object.fromEntries(resourceChanges.map(p => [p.key, resourceDraft[p.key] ?? 'default']));
+    save.mutate({ levels, permissions, operations }, {
       onSuccess: () => {
         toast.success(t('settings.members.access.saved'));
         setConfirming(false);
@@ -133,7 +140,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
         onOpenChange={(o) => !o && onClose()}
         wide
         title={t('settings.members.access.title', { name: member?.fullName ?? '' })}
-        description="Her modülün temel erişimini seçin; işlem izinlerini açarak görüntüleme, düzenleme, muhasebeleştirme ve onay haklarını ayrı yönetin."
+        description="Modül erişimini, kayıt oluşturma, güncelleme, silme, dışa aktarma ve onay haklarını ayrı yönetin. Özel şirket rolü ve temel kullanıcı rolü sınırları birlikte uygulanır."
         footer={
           <>
             {editable && (
@@ -191,7 +198,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
               Modül veya işlem ara
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Örn. irsaliye, stok hareketi, onay" type="search" data-testid="access-search" />
             </label>
-            {changedCount > 0 && <p className="text-xs text-muted">{changes.length} modül ve {operationChanges.length} işlem izni değiştirildi. Kaydetmeden önce etkin erişimi kontrol edebilirsiniz.</p>}
+            {changedCount > 0 && <p className="text-xs text-muted">{changes.length} modül ve {operationChanges.length + resourceChanges.length} işlem izni değiştirildi. Kaydetmeden önce etkin erişimi kontrol edebilirsiniz.</p>}
             {tab === 'edit' ? (
               <div className="flex flex-col gap-5" data-testid="access-edit">
                 {grouped.map(([group, list]) => (
@@ -212,6 +219,14 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                                 {a.roleDefault.partial && ` (${t('settings.members.access.partial')})`}
                               </div>
                               {covered.length > 0 && <div className="text-xs text-muted">{t('settings.members.access.covers', { modules: covered.join(', ') })}</div>}
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              {a.resourceOperations.map(p => <label key={p.key} className="flex min-w-0 flex-col gap-1 text-xs">
+                                {p.label} <span className="text-[12px] text-muted">{resourceAllowed(p) ? 'Etkin: izin var' : 'Etkin: engelli'}</span>
+                                <Select aria-label={`${moduleName(a.key)}: ${p.label}`} value={resourceDraft[p.key] ?? 'default'} disabled={!editable || cur === 'none'} onChange={e => setResourceDraft(d => ({ ...d, [p.key]: e.target.value as PermissionChoice }))} data-testid={`access-resource-${p.key}`}>
+                                  <option value="default">Rol ve modül seçimine göre</option><option value="allow" disabled={!p.canAllow}>İzin ver</option><option value="deny">Engelle</option>
+                                </Select>
+                              </label>)}
                             </div>
                             <div role="radiogroup" aria-label={t('settings.members.access.choose', { module: moduleName(a.key) })} className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
                               {CHOICES.map((c) => (
@@ -243,7 +258,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                                   return <div key={p.key} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                     <div className="min-w-0 flex-1">
                                       <label htmlFor={`operation-${p.key}`} className="text-xs">{p.label}</label>
-                                      <div className="text-[11px] text-muted">{allowed ? 'Etkin: izin var' : 'Etkin: engelli'}{p.roleBound && ' · Kullanıcı rolüyle sınırlı'}</div>
+                                      <div className="text-[12px] text-muted">{allowed ? 'Etkin: izin var' : 'Etkin: engelli'}{p.roleBound && ' · Kullanıcı rolüyle sınırlı'}</div>
                                     </div>
                                     <Select id={`operation-${p.key}`} aria-label={`${moduleName(a.key)}: ${p.label}`} className="sm:w-48 sm:shrink-0" value={choice} disabled={!editable || cur === 'none'} onChange={(e) => setOperationDraft((d) => ({ ...d, [p.key]: e.target.value as PermissionChoice }))} data-testid={`access-operation-${p.key}`}>
                                       <option value="default">Modül seçimine göre</option>
@@ -270,7 +285,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                   {grouped.flatMap(([, list]) => list).map((a) => {
                     const preview = previewAccess(a);
                     const lvl = preview.level;
-                    const dirty = (draft[a.key] ?? 'default') !== (a.override ?? 'default') || operationChanges.some((p) => p.area === a.key);
+                    const dirty = (draft[a.key] ?? 'default') !== (a.override ?? 'default') || operationChanges.some((p) => p.area === a.key) || resourceChanges.some(p => p.area === a.key);
                     return (
                       <li key={a.key} className="flex flex-col gap-2 px-4 py-2.5" data-testid={`effective-${a.key}`}>
                         <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm">{moduleName(a.key)}</span>
@@ -281,6 +296,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
                         </span>
                         </div>
                         <ul className="flex flex-col gap-1 text-xs text-muted">{a.operations.map((p) => <li key={p.key}>{p.label}: {previewPermissions.has(p.key) ? 'İzin var' : 'Engelli'}</li>)}</ul>
+                        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">{a.resourceOperations.map(p => <li key={p.key}>{p.label}: {resourceAllowed(p) ? 'İzin var' : 'Engelli'}</li>)}</ul>
                       </li>
                     );
                   })}
@@ -313,6 +329,7 @@ export function MemberAccessSheet({ member, onClose }: { member: Member | null; 
             </li>
           ))}
           {operationChanges.map((p) => <li key={p.key}>{moduleName(p.area)} — {p.label}: {operationLabel(p.override ?? 'default')} → {operationLabel(operationDraft[p.key] ?? 'default')}</li>)}
+          {resourceChanges.map(p => <li key={p.key}>{moduleName(p.area)} — {p.label}: {operationLabel(p.override ?? 'default')} → {operationLabel(resourceDraft[p.key] ?? 'default')}</li>)}
         </ul>
       </Modal>
     </>

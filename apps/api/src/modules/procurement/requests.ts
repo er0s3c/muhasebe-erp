@@ -65,7 +65,7 @@ async function writeLines(tx: Tx, companyId: string, requestId: string, projectI
 
 export async function validateProcurementProject(tx: Tx, ctx: ProcurementCtx, inputProjectId?: string | null): Promise<string | null> {
   const sector = ctx.sector ?? (await tx.select({ sector: companies.sector }).from(companies).where(eq(companies.id, ctx.companyId)))[0]?.sector;
-  if (['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(sector)) {
+  if (sector && sector !== 'CONSTRUCTION') {
     if (inputProjectId) throw unprocessable('Genel tedarik bir şantiye projesine bağlanamaz', 'PROCUREMENT_PROJECT_NOT_ALLOWED');
     return null;
   }

@@ -27,7 +27,7 @@ test('iki adımlı doğrulama: QR ile kurulum, kurtarma kodları, kodla giriş, 
   const email = `e2e-mfa-${Date.now()}@example.com`;
   const password = 'Sifre-12345-xyz';
   const reg = await (await request.post('/api/auth/register', { data: { email, password, fullName: 'Mine Güvenli', organizationName: 'Güvenli Holding' } })).json();
-  await request.post('/api/companies', { headers: { authorization: `Bearer ${reg.accessToken}` }, data: { name: 'Güvenli İnşaat Ltd.', sector: 'CONSTRUCTION' } });
+  await request.post('/api/companies', { headers: { authorization: `Bearer ${reg.accessToken}` }, data: { name: 'Güvenli İnşaat Ltd.', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' } });
 
   const login = async () => {
     await page.goto('/login');

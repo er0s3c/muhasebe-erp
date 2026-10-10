@@ -5,3 +5,4 @@ export * from './fingerprint';
 export * from './totp';
 export * from './code';
 export * from './release';
+export * from './feedback';

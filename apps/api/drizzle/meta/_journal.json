@@ -799,6 +799,76 @@
       "when": 1791290070678,
       "tag": "0113_manufacturing_constraint_names",
       "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1791482979602,
+      "tag": "0114_company_country_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1791483319058,
+      "tag": "0115_country_social_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1791484104334,
+      "tag": "0116_branches_document_rules_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1791523840779,
+      "tag": "0117_invoice_document_context",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1791524690734,
+      "tag": "0118_branch_grant_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1791525174334,
+      "tag": "0119_invoice_tax_procurement_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1791525261675,
+      "tag": "0120_financial_approvals_stock_targets",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1791541310850,
+      "tag": "0121_platform_integrations_sales_branches",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1791541358823,
+      "tag": "0122_offline_draft_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1791541797735,
+      "tag": "0123_portal_document_scopes",
+      "breakpoints": true
     }
   ]
 }

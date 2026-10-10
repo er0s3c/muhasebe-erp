@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { createBrowserRouter, type RouteObject } from 'react-router-dom';
+import { createBrowserRouter, Outlet, type RouteObject } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { PageLoading } from '../components/ui/Feedback';
 import { NotFoundPage } from '../features/NotFoundPage';
@@ -20,6 +20,8 @@ import {
   type RouteHandle,
 } from './guards';
 import { RouteError } from './RouteError';
+import { RouteChangeGuard } from '../components/ui/UnsavedChanges';
+import { QueryStateBoundary } from '../components/ui/QueryStateBoundary';
 
 /**
  * Sayfalar modül bazında lazy yüklenir: kullanıcının açmadığı (ya da şirketinin sektöründe
@@ -32,11 +34,14 @@ function page<K extends string>(
   name: K,
   permission: Permission | null,
 ): Pick<RouteObject, 'lazy' | 'handle'> {
-  const handle: RouteHandle = { permission };
+  const form = /Editor|Create|OpeningBalances/.test(name);
+  const normal = /Dashboard|WorkPage|Security|Notification|Activation/.test(name);
+  const handle: RouteHandle = { permission, layout: form ? 'form' : normal ? 'normal' : 'wide' };
   return { handle, lazy: async () => ({ Component: (await load())[name] }) };
 }
 
-export const router = createBrowserRouter([
+const routes: RouteObject[] = [
+  { path: '/offline-drafts', ...page(() => import('../features/offline/OfflineDraftPage'), 'OfflineDraftPage', null), errorElement: <RouteError />, hydrateFallbackElement: <PageLoading /> },
   { path:'/field-offline', ...page(()=>import('../features/construction-control/OfflineFieldPage'),'OfflineFieldPage',null), errorElement:<RouteError/>, hydrateFallbackElement:<PageLoading/> },
   { path: '/portal', ...page(() => import('../features/workspace/PortalPage'), 'PortalPage', null), errorElement: <RouteError />, hydrateFallbackElement: <PageLoading /> },
   {
@@ -78,10 +83,14 @@ export const router = createBrowserRouter([
                 children: [
                   { index: true, ...page(() => import('../features/dashboard/DashboardPage'), 'DashboardPage', null) },
                   { path: 'workspace', ...page(() => import('../features/workspace/WorkPage'), 'WorkPage', null) },
+                  { path: 'workspace/offline', ...page(() => import('../features/offline/OfflineSetupPage'), 'OfflineSetupPage', 'workspace.use') },
+                  { element: <RequireModule module="core.integrations" />, children: [{ path: 'settings/integrations', ...page(() => import('../features/settings/PlatformIntegrationsPage'), 'PlatformIntegrationsPage', 'core.integrations.read') }] },
                   { path: 'workspace/portal', ...page(() => import('../features/workspace/PortalAdminPage'), 'PortalAdminPage', 'members.manage') },
                   { path: 'workspace/project-control', element:<RequireModule module="construction.projects"/>, children:[{index:true,...page(()=>import('../features/construction-control/ProjectControlPage'),'ProjectControlPage','projects.read')}] },
                   { path: 'workspace/construction', element: <RequireModule module="construction.projects" />, children: [{ index: true, ...page(() => import('../features/workspace/ConstructionPage'), 'ConstructionPage', 'projects.read') }] },
                   { path: 'workspace/operations', ...page(() => import('../features/workspace/OperationsPage'), 'OperationsPage', null) },
+                  { path: 'reports/supplier-performance', ...page(() => import('../features/reports/SupplierPerformancePage'), 'SupplierPerformancePage', 'procurement.read') },
+                  { path: 'purchasing/replenishment', ...page(() => import('../features/procurement/ReplenishmentPage'), 'ReplenishmentPage', 'procurement.read') },
                   { path: 'workspace/handover', ...page(() => import('../features/workspace/HandoverPage'), 'HandoverPage', 'realestate.read') },
                   { path: 'workspace/scenarios', element: <RequireModule module="core.treasury" />, children: [{ index: true, ...page(() => import('../features/workspace/ScenariosPage'), 'ScenariosPage', 'treasury.read') }] },
                   { path: 'workspace/documents', ...page(() => import('../features/workspace/DocumentsPage'), 'DocumentsPage', null) },
@@ -194,6 +203,7 @@ export const router = createBrowserRouter([
                   {
                     element: <RequireModule module="core.inventory" />,
                     children: [
+                      { path: 'reports/stock-analytics', ...page(() => import('../features/reports/StockAnalyticsPage'), 'StockAnalyticsPage', 'inventory.read') },
                       { path: 'inventory/items', ...page(() => import('../features/inventory/ItemsPage'), 'ItemsPage', 'inventory.read') },
                       { path: 'inventory/items/:id', ...page(() => import('../features/inventory/ItemDetailPage'), 'ItemDetailPage', 'inventory.read') },
                       { path: 'inventory/status', ...page(() => import('../features/inventory/StockStatusPage'), 'StockStatusPage', 'inventory.read') },
@@ -314,6 +324,9 @@ export const router = createBrowserRouter([
                     element: <RequireModule module="core.settings" />,
                     children: [
                       { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage', 'settings.read') },
+                      { path: 'settings/branches', ...page(() => import('../features/settings/BranchesPage'), 'BranchesPage', 'company.manage') },
+                      { path: 'settings/approvals', ...page(() => import('../features/settings/DocumentApprovalsPage'), 'DocumentApprovalsPage', 'settings.read') },
+                      { path: 'reports/file-exchange', ...page(() => import('../features/imports/FileExchangePage'), 'FileExchangePage', 'workspace.use') },
                       { path: 'settings/operations', ...page(() => import('../features/settings/OperationsSettingsPage'), 'OperationsSettingsPage', 'settings.manage') },
                       { path: 'settings/backups', ...page(() => import('../features/settings/BackupsPage'), 'BackupsPage', 'company.manage') },
                       { path: 'settings/recurring', ...page(() => import('../features/settings/RecurringPage'), 'RecurringPage', 'settings.manage') },
@@ -373,4 +386,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter([{ element: <RouteChangeGuard><QueryStateBoundary><Outlet /></QueryStateBoundary></RouteChangeGuard>, children: routes }]);

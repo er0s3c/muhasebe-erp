@@ -420,7 +420,7 @@
     "when": 1791290070669
   },
   "0105_leather_foundation": {
-    "sha256": "e14cf2ed4bba3808038a4eb96d47713eb5bc97b20feb169d7fdaa1599d0f6408",
+    "sha256": "c4a36bd8355e56189b43aa37fa2cde75c648302ea6619b298ca79eb0e4289a7d",
     "when": 1791290070670
   },
   "0106_leather_domain": {
@@ -454,5 +454,45 @@
   "0113_manufacturing_constraint_names": {
     "sha256": "c5f6bbd99e14e43f70d96bc553679db7c00f280f47222aa7549bdb4ef0b786a0",
     "when": 1791290070678
+  },
+  "0114_company_country_profiles": {
+    "sha256": "bafe5bc70a4e22a16613703df92f4bfec986fbc3ed0b6faba67a61cf05340b94",
+    "when": 1791482979602
+  },
+  "0115_country_social_snapshots": {
+    "sha256": "a7da28f685165196171441e715cdded37687f983643eb13790d16558d38f6d3b",
+    "when": 1791483319058
+  },
+  "0116_branches_document_rules_roles": {
+    "sha256": "5b72b29b3429d0c5e299ff6a9546de003c26a13f20e819d1d5b78db0a2222fb9",
+    "when": 1791484104334
+  },
+  "0117_invoice_document_context": {
+    "sha256": "2856463eb3eb12e853b1fae4742b1912788ddb215f29d90e6206dd8276a3c8b4",
+    "when": 1791523840779
+  },
+  "0118_branch_grant_security": {
+    "sha256": "0272407015cc97c70b03aced4dd2f378fe04b4c092491a1c8e22fe7e9c693005",
+    "when": 1791524690734
+  },
+  "0119_invoice_tax_procurement_guards": {
+    "sha256": "69dfdfb4823cc59926349accd7345a6969c5942bda2c8eb940ac2c61c65889df",
+    "when": 1791525174334
+  },
+  "0120_financial_approvals_stock_targets": {
+    "sha256": "7d29838d1f8e1e7cd732d703a8c531a7ff19af5401a807188fce73fbcf3815bc",
+    "when": 1791525261675
+  },
+  "0121_platform_integrations_sales_branches": {
+    "sha256": "6430c974316cb34376b775849c5eb8c5e03a5f372279b7a90ca5cba3cda0d16e",
+    "when": 1791541310850
+  },
+  "0122_offline_draft_receipts": {
+    "sha256": "ed7f898405c6ee0d873101c0815fb3a4d704560c7af2453409abedea21b5799a",
+    "when": 1791541358823
+  },
+  "0123_portal_document_scopes": {
+    "sha256": "7fe815b38070ed8561f63db031d3680c0f5df1e5e5590e81fbc62ce93f1e9896",
+    "when": 1791541797735
   }
 }

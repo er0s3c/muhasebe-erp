@@ -19,7 +19,7 @@ import { accounts, costCodes, fiscalPeriods, journalEntries, journalLines, parti
 import { notFound, unprocessable } from '../../http/errors';
 import { describeSettlements, entrySettlements } from '../parties/service';
 import { validateDimensions, type DimensionLine } from '../projects/dimension';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { findRate, requireRate } from '../settings/rates';
 import { lockLeatherCosts, reverseAllocatedJournalCosts } from '../leather/costs';
@@ -40,6 +40,8 @@ export interface LedgerCtx {
   userId: string;
   baseCurrency: string;
   reportingCurrency: string | null;
+  /** Yalnızca onay işleyicisi aynı işlem içinde sağlar; HTTP girdisinden alınmaz. */
+  approvalRequestId?: string;
 }
 
 const JOURNAL_NUMBER_KEY = 'JE';
@@ -321,11 +323,11 @@ export async function postJournalEntry(tx: Tx, ctx: LedgerCtx, id: string) {
   await requireOpenPeriod(tx, entry.entryDate);
 
   const year = isoYear(entry.entryDate);
-  const seq = await nextNumber(tx, ctx.companyId, JOURNAL_NUMBER_KEY, year);
+  const entryNo = await nextDocumentNumber(tx, ctx.companyId, JOURNAL_NUMBER_KEY, year, 'YV');
   await tx
     .update(journalEntries)
     .set({
-      entryNo: formatDocumentNumber('YV', year, seq),
+      entryNo,
       status: 'posted',
       postedAt: new Date(),
       postedBy: ctx.userId,
@@ -435,6 +437,8 @@ export async function getJournalEntry(tx: Tx, id: string) {
       entryDate: journalEntries.entryDate,
       description: journalEntries.description,
       status: journalEntries.status,
+      legalProfileSnapshot: journalEntries.legalProfileSnapshot,
+      branchId:journalEntries.branchId,
       reversalOfId: journalEntries.reversalOfId,
       reversedById: journalEntries.reversedById,
       sourceType: journalEntries.sourceType,

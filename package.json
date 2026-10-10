@@ -33,7 +33,8 @@
     "tour": "tsx --env-file-if-exists=.env scripts/ui-tour.ts",
     "load:gen": "tsx --env-file-if-exists=.env scripts/loadgen.ts",
     "load:test": "tsx --env-file-if-exists=.env scripts/loadtest.ts",
-    "demo:manufacturing": "npm run demo:manufacturing -w @erp/api"
+    "demo:manufacturing": "npm run demo:manufacturing -w @erp/api",
+    "demo:leather": "npm run demo:leather -w @erp/api"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

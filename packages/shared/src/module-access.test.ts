@@ -13,10 +13,34 @@ import {
   permissionOverrideKey,
   permissionsOfArea,
   unclassifiedPermissions,
+  resourceOperationAllowed,
+  resourceOperationKey,
+  resourceOperationOf,
 } from './module-access';
 import { MODULES, NAV_ITEMS } from './module-registry';
 import { PERMISSIONS, ROLES, ROLE_PERMISSIONS, type Permission } from './permissions';
 import { setModuleAccessSchema } from './schemas/module-access';
+
+describe('kayıt işlem izinleri', () => {
+  it('oluşturma, güncelleme, silme ve dışa aktarma bağımsız kısıtlanır; izin ver temel erişimi aşmaz', () => {
+    const permissions = effectivePermissions('sales', {});
+    const denyCreate = { [resourceOperationKey('core.parties', 'create')]: 'none' as const };
+    expect(resourceOperationAllowed(permissions, denyCreate, 'core.parties', 'create')).toBe(false);
+    expect(resourceOperationAllowed(permissions, denyCreate, 'core.parties', 'update')).toBe(true);
+    expect(resourceOperationAllowed(permissions, denyCreate, 'core.parties', 'delete')).toBe(true);
+    const read = effectivePermissions('viewer', {});
+    expect(resourceOperationAllowed(read, { [resourceOperationKey('core.parties', 'create')]: 'write' }, 'core.parties', 'create')).toBe(false);
+    expect(resourceOperationAllowed(read, {}, 'core.parties', 'export')).toBe(true);
+    expect(resourceOperationAllowed(read, { [resourceOperationKey('core.parties', 'export')]: 'none' }, 'core.parties', 'export')).toBe(false);
+    expect(resourceOperationAllowed(permissions, { 'core.parties': 'none', [resourceOperationKey('core.parties', 'export')]: 'write' }, 'core.parties', 'export')).toBe(false);
+  });
+  it('bilinmeyen alan ve işlem anahtarları kabul edilmez; işlem-only taslak geçerlidir', () => {
+    expect(resourceOperationOf('operation.core.parties.create')).toEqual({ area: 'core.parties', operation: 'create' });
+    expect(resourceOperationOf('operation.core.parties.approve')).toBeNull();
+    expect(resourceOperationOf('operation.fake.create')).toBeNull();
+    expect(setModuleAccessSchema.safeParse({ operations: { 'operation.core.parties.delete': 'deny' } }).success).toBe(true);
+  });
+});
 
 describe('izin sınıflandırması', () => {
   it('her izin tam olarak bir alanın okuma/yazma/bağlı listesinde ya da rol-bağlı listede yer alır (yeni izin sınıflandırılmadan eklenemez)', () => {

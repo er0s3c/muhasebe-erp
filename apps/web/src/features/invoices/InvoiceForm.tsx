@@ -2,7 +2,7 @@ import { ArrowLeft, ClipboardList, Plus, Trash2, Truck, X, Paperclip } from 'luc
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, ITEM_UNITS, calcInvoice, dec, formatTR, todayIso } from '@erp/shared';
+import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, ITEM_UNITS, calcInvoice, calculateDocumentTaxes, calculateDocumentStamp, applyRate, dec, formatTR, todayIso, type DocumentTaxRuleSnapshot, type DocumentTaxCalculation, type MoneyValue } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
@@ -14,6 +14,7 @@ import { useToast } from '../../components/ui/Toast';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCompanyApi, useCQuery } from '../../lib/queries';
 import type { AccountMapping, PriceResolution, DeliveryNoteDetail, InvoiceableOrderLine, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
@@ -23,6 +24,8 @@ import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../proje
 import { INVOICE_INVALIDATE, useLineAccountOptions, usePartyOptions, useTaxRates, vatRateFor } from './common';
 import { DeliveryPicker } from './DeliveryPicker';
 import { OrderLinePicker } from './OrderLinePicker';
+import type { DocumentTaxRuleView } from '../settings/DocumentTaxRulesSection';
+import { FX_RATE_TYPES, FX_RATE_TYPE_LABELS, type FxRateLookup, type FxRateType } from '@erp/shared';
 
 interface LineState {
   key: number;
@@ -33,6 +36,13 @@ interface LineState {
   unitPrice: string;
   discountPct: string;
   vatCode: string;
+  taxRuleId?: string;
+  taxRuleSnapshot?: DocumentTaxRuleSnapshot | null;
+  productClass?: string;
+  transactionType?: string;
+  vatRateSnapshot?: string;
+  sourceTaxCalculation?: DocumentTaxCalculation | null;
+  sourceQuantity?: string;
   accountId: string;
   sourceLineId: string;
   /** İade satırında iade edilebilir kalan miktar (üst sınır) */
@@ -142,10 +152,16 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const seed = initial ?? original;
   const [partyId, setPartyId] = useState(seed?.invoice.partyId ?? fromDelivery?.note.partyId ?? '');
   const [invoiceDate, setInvoiceDate] = useState(initial?.invoice.invoiceDate ?? todayIso());
+  const taxRuleParams = new URLSearchParams({ date: invoiceDate, invoiceType: meta.returnOf ?? type });
+  if (partyId) taxRuleParams.set('partyId', partyId);
+  const { data: taxRuleData } = useCQuery<{ rules: DocumentTaxRuleView[] }>(['document-tax-rules', 'invoice', taxRuleParams.toString()], `/api/document-tax-rules?${taxRuleParams}`, { enabled: !!partyId });
+  const taxRules = useMemo(() => taxRuleData?.rules.filter(rule => rule.enabled && rule.verifiedAt) ?? [], [taxRuleData]);
   const [dueDate, setDueDate] = useState(initial?.invoice.dueDate ?? '');
   const [externalNo, setExternalNo] = useState(initial?.invoice.externalNo ?? '');
   const [currency, setCurrency] = useState(seed?.invoice.currencyCode ?? base);
   const [fxRate, setFxRate] = useState(initial?.invoice.fxRate && initial.invoice.currencyCode !== base ? initial.invoice.fxRate.replace(/0+$/, '').replace(/\.$/, '') : '');
+  const [fxRateType, setFxRateType] = useState<FxRateType>(initial?.invoice.fxRateType ?? 'forex_buy');
+  const [fxReason, setFxReason] = useState(initial?.invoice.fxReason ?? '');
   const [vatIncluded, setVatIncluded] = useState(seed?.invoice.vatIncluded ?? false);
   const [warehouseId, setWarehouseId] = useState(seed?.invoice.warehouseId ?? '');
   const [description, setDescription] = useState(initial?.invoice.description ?? '');
@@ -162,6 +178,10 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         unitPrice: trim(l.unitPrice),
         discountPct: dec(l.discountPct).isZero() ? '' : trim(l.discountPct),
         vatCode: l.vatCode ?? '',
+        taxRuleId: l.taxRuleId ?? '', taxRuleSnapshot: l.taxRuleSnapshot,
+        productClass: l.productClass ?? '', transactionType: l.transactionType ?? '',
+        ...(l.sourceLineId ? { vatRateSnapshot: l.vatRate } : {}),
+        sourceTaxCalculation: l.taxCalculation, sourceQuantity: l.quantity,
         accountId: l.accountId ?? '',
         sourceLineId: l.sourceLineId ?? '',
         returnable: null,
@@ -191,6 +211,9 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           unitPrice: trim(l.unitPrice),
           discountPct: dec(l.discountPct).isZero() ? '' : trim(l.discountPct),
           vatCode: l.vatCode ?? '',
+          taxRuleId: l.taxRuleId ?? '', taxRuleSnapshot: l.taxRuleSnapshot,
+          productClass: l.productClass ?? '', transactionType: l.transactionType ?? '', vatRateSnapshot: l.vatRate,
+          sourceTaxCalculation: l.taxCalculation, sourceQuantity: l.quantity,
           accountId: '',
           sourceLineId: l.id,
           returnable: trim(l.returnableQty!),
@@ -225,11 +248,12 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
 
   // Dövizli fatura: tarihindeki kayıtlı kuru önizleme amacıyla sorgula
   const foreign = currency !== base;
-  const rateQuery = useCQuery<{ rate: string | null }>(
-    ['rate-lookup', currency, base, invoiceDate],
-    foreign && /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) ? `/api/exchange-rates/lookup?from=${currency}&to=${base}&date=${invoiceDate}` : null,
+  const returnFx = original?.invoice.fxSnapshot ?? (initial?.invoice.returnOfId ? initial.invoice.fxSnapshot : null);
+  const rateQuery = useCQuery<FxRateLookup>(
+    ['rate-lookup', currency, base, invoiceDate, fxRateType],
+    foreign && /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) ? `/api/exchange-rates/lookup?from=${currency}&to=${base}&date=${invoiceDate}&rateType=${fxRateType}` : null,
   );
-  const lookedUp = rateQuery.data?.rate ?? null;
+  const lookedUp = returnFx?.rate ?? rateQuery.data?.rate ?? null;
   const fxMissing = foreign && !fxRate && !lookedUp && rateQuery.isSuccess;
 
   const totals = useMemo(
@@ -239,7 +263,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           quantity: l.quantity || '0',
           unitPrice: l.unitPrice || '0',
           discountPct: l.discountPct || '0',
-          vatRate: vatRateFor(taxRates, l.vatCode || null, invoiceDate),
+          vatRate: l.sourceLineId && l.vatRateSnapshot ? l.vatRateSnapshot : vatRateFor(taxRates, l.vatCode || null, invoiceDate),
         })),
         vatIncluded,
       ),
@@ -247,6 +271,28 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   );
   const usedCodes = new Set(lines.map((l) => l.vatCode).filter(Boolean));
   const unverified = taxRates.some((r) => usedCodes.has(r.code) && !r.verifiedAt);
+  const taxPreview = lines.reduce((summary, line, i) => {
+    const rule = line.sourceLineId ? line.taxRuleSnapshot : taxRules.find(candidate => candidate.id === line.taxRuleId);
+    if (!rule) return summary;
+    try {
+      const calculation = calculateDocumentTaxes({ jurisdiction: rule.jurisdiction, rulePackVersion: rule.version, sourceRefs: rule.sourceRefs, netAmount: totals.lines[i]!.net.toFixed(2), vatAmount: totals.lines[i]!.vat.toFixed(2), vatRatePct: line.sourceLineId && line.vatRateSnapshot ? line.vatRateSnapshot : vatRateFor(taxRates, line.vatCode || null, invoiceDate), vatWithholding: rule.config.vatWithholding, incomeWithholding: rule.config.incomeWithholding, stamp: rule.config.stamp });
+      if (line.sourceLineId && line.sourceTaxCalculation && line.sourceQuantity) {
+        const fraction = dec(line.quantity || 0).div(line.sourceQuantity);
+        calculation.vatWithheld = applyRate(line.sourceTaxCalculation.vatWithheld, fraction).toFixed(2);
+        calculation.incomeWithheld = applyRate(line.sourceTaxCalculation.incomeWithheld, fraction).toFixed(2);
+        calculation.stamp = applyRate(line.sourceTaxCalculation.stamp, fraction).toFixed(2);
+      }
+      const documentStamp = !line.sourceLineId && rule.config.stamp && rule.config.stampScope !== 'line';
+      if (documentStamp) {
+        const key = JSON.stringify([rule.jurisdiction, rule.version, rule.sourceRefs, rule.config.stamp, rule.config.stampLiability]);
+        const group = summary.stampGroups.get(key) ?? { rule, net: dec(0), gross: dec(0) };
+        group.net = group.net.plus(totals.lines[i]!.net); group.gross = group.gross.plus(totals.lines[i]!.gross);
+        summary.stampGroups.set(key, group);
+      }
+      return { ...summary, used: true, vat: summary.vat.plus(calculation.vatWithheld), income: summary.income.plus(calculation.incomeWithheld), stamp: summary.stamp.plus(documentStamp ? 0 : calculation.stamp) };
+    } catch (error) { return { ...summary, error: errorMessage(error) }; }
+  }, { used: false, vat: dec(0), income: dec(0), stamp: dec(0), error: null as string | null, stampGroups: new Map<string, { rule: DocumentTaxRuleSnapshot | DocumentTaxRuleView; net: MoneyValue; gross: MoneyValue }>() });
+  for (const group of taxPreview.stampGroups.values()) taxPreview.stamp = taxPreview.stamp.plus(calculateDocumentStamp(group.net.toFixed(2), group.gross.toFixed(2), group.rule.config.stamp));
 
   const patch = (key: number, p: Partial<LineState>) => setLines((cur) => cur.map((l) => (l.key === key ? { ...l, ...p } : l)));
 
@@ -408,7 +454,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     dueDate: dueDate || null,
     externalNo: externalNo.trim() || undefined,
     currency,
-    ...(foreign && fxRate ? { fxRate } : {}),
+    ...(foreign && fxRate && !returnFx ? { fxRate } : {}),
+    ...(foreign && !returnFx ? { fxRateType, fxReason: fxRate ? fxReason || null : null } : {}),
     vatIncluded,
     warehouseId: hasStock ? warehouseId || null : null,
     returnOfId,
@@ -423,6 +470,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       unitPrice: l.unitPrice,
       discountPct: l.discountPct || '0',
       vatCode: l.vatCode || null,
+      taxRuleId: l.taxRuleId || null, productClass: l.productClass || null,
+      transactionType: l.transactionType || null,
       accountId: l.itemId && itemById.get(l.itemId)?.kind === 'goods' && !salesSide ? null : l.accountId || null,
       sourceLineId: l.sourceLineId || null,
       deliveryLineId: l.deliveryLineId || null,
@@ -444,6 +493,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const remove = useCMutation((_: void, c) => c(`/api/invoices/${initial!.invoice.id}`, { method: 'DELETE' }), INVOICE_INVALIDATE);
 
   const submit = (post: boolean) => {
+    if (save.isPending || remove.isPending) return;
     setError(null);
     setFieldError(null);
     if (!partyId) return setFieldError(t('invoices.form.partyRequired'));
@@ -453,6 +503,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     if (post && EXTERNAL_NO_REQUIRED.includes(type) && !externalNo.trim()) return setFieldError(t('invoices.form.externalRequired'));
     save.mutate(post, {
       onSuccess: (res) => {
+        markFormSaved(document.querySelector('[data-form-guard-scope="invoice-editor"]'));
         toast.success(post ? t('invoices.form.postedMsg', { no: res.invoice.invoiceNo ?? '' }) : t('invoices.form.savedMsg'));
         navigate(`/invoices/${res.invoice.id}`, { replace: true, state: res.warnings?.creditLimit ? { creditLimit: res.warnings.creditLimit } : undefined });
       },
@@ -468,7 +519,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const fxNeedsLink = error && (error as { code?: string }).code === 'FX_RATE_MISSING';
 
   return (
-    <>
+    <FormGuard captureAll scopeKey="invoice-editor" pending={save.isPending || remove.isPending}>
       <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
         {t(`invoices.${meta.side}.title`)}
@@ -536,12 +587,17 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                   value={fxRate}
                   decimals={4}
                   maxDecimals={8}
-                  disabled={!foreign}
+                  disabled={!foreign || !!returnFx}
                   placeholder={!foreign ? '—' : lookedUp ? formatTR(lookedUp, 4) : '?'}
                   onChange={setFxRate}
                 />
               )}
             </Field>
+            {foreign && <>
+              <Field label="Kur türü">{id => <Select id={id} disabled={!!returnFx} value={returnFx?.rateType ?? fxRateType} onChange={event => setFxRateType(event.target.value as FxRateType)}>{FX_RATE_TYPES.map(type => <option key={type} value={type}>{FX_RATE_TYPE_LABELS[type]}</option>)}</Select>}</Field>
+              {fxRate && !returnFx && <Field label="Manuel kur gerekçesi" required>{id => <Input id={id} value={fxReason} maxLength={500} onChange={event => setFxReason(event.target.value)} />}</Field>}
+              <p className="text-xs text-muted sm:col-span-2">{returnFx ? `Özgün faturanın kuru kullanılacak · kur tarihi: ${returnFx.rateDate} · ${returnFx.provider ?? 'Kayıtlı kur'}` : fxRate ? 'Manuel işlem kuru kullanılacak.' : rateQuery.data?.rateDate ? `Kullanılacak kur tarihi: ${rateQuery.data.rateDate}${rateQuery.data.rateDate !== invoiceDate ? ' · önceki yayımlanan tarih' : ''} · ${rateQuery.data.provider ?? 'Kayıtlı kur'}` : 'Seçilen türde kur bekleniyor.'}</p>
+            </>}
             {hasStock && (
               <Field label={t('invoices.form.warehouse')}>
                 {(id) => (
@@ -582,6 +638,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
               <span />
             </div>
             <div className="flex flex-col gap-3">
+              {taxPreview.error && <Callout tone="danger" title="Vergi önizlemesi hesaplanamadı">{taxPreview.error}</Callout>}
               {lines.map((l, i) => {
                 const it = itemById.get(l.itemId);
                 const calc = totals.lines[i]!;
@@ -602,7 +659,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                       <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.quantity')} ${i + 1}`} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
                       <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('invoices.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => { bumpSuggest(l.key); patch(l.key, { unitPrice: v, priceNote: '' }); }} />
                       <MoneyInput value={l.discountPct} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.discount')} ${i + 1}`} placeholder="%" className="text-right" onChange={(v) => patch(l.key, { discountPct: v })} />
-                      <Select className="px-2 pr-6" value={l.vatCode} aria-label={`${t('invoices.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
+                      <Select disabled={!!l.taxRuleId || !!l.sourceLineId} className="px-2 pr-6" value={l.vatCode} aria-label={`${t('invoices.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
                         <option value="">{t('invoices.form.noVat')}</option>
                         {[...new Set(taxRates.map((r) => r.code))].map((code) => (
                           <option key={code} value={code}>
@@ -622,6 +679,13 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         <X className="size-4" />
                       </button>
                     </div>
+                    {(taxRules.length > 0 || l.taxRuleId) && <div className="mt-2 grid gap-2 rounded-lg bg-surface-2 p-3 sm:grid-cols-2">
+                      <Field label={`İşlem vergisi kuralı ${i + 1}`} className="sm:col-span-2">{id => <Select id={id} value={l.taxRuleId ?? ''} disabled={!!l.sourceLineId} onChange={e => {
+                        const rule = taxRules.find(candidate => candidate.id === e.target.value);
+                        patch(l.key, { taxRuleId: rule?.id ?? '', taxRuleSnapshot: null, productClass: rule?.productClass ?? '', transactionType: rule?.transactionType ?? '', vatCode: rule?.config.vatCode ?? '' });
+                      }}><option value="">Standart KDV oranı</option>{l.taxRuleId && !taxRules.some(rule => rule.id === l.taxRuleId) && <option value={l.taxRuleId}>{l.taxRuleSnapshot?.name ?? 'Önceki seçim'}{l.sourceLineId ? ' · özgün belge kuralı' : ' · bu koşullarda geçersiz'}</option>}{taxRules.map(rule => <option key={rule.id} value={rule.id}>{rule.name} · {rule.version}</option>)}</Select>}</Field>
+                      {l.taxRuleId && <><Field label={`Ürün / hizmet sınıfı ${i + 1}`}>{id => <Input id={id} value={l.productClass ?? ''} disabled={!!l.sourceLineId} onChange={e => patch(l.key, { productClass: e.target.value })} />}</Field><Field label={`İşlem türü ${i + 1}`}>{id => <Select id={id} value={l.transactionType ?? ''} disabled={!!l.sourceLineId} onChange={e => patch(l.key, { transactionType: e.target.value })}><option value="">Seçin</option><option value="domestic">Yurt içi</option><option value="export">İhracat</option><option value="import">İthalat</option><option value="other">Diğer</option></Select>}</Field></>}
+                    </div>}
                     {free && projectAllowed && (
                       <ProjectLineRow
                         className="mt-1.5"
@@ -719,6 +783,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                 <dt>{t('invoices.grossTotal')}</dt>
                 <dd className="num" data-testid="gross-total">{moneyIn(totals.gross.toFixed(2), currency)}</dd>
               </div>
+              {taxPreview.used && <><div className="flex justify-between py-1 text-sm"><dt>KDV tevkifatı</dt><dd className="num">{moneyIn(taxPreview.vat.toFixed(2), currency)}</dd></div><div className="flex justify-between py-1 text-sm"><dt>Stopaj</dt><dd className="num">{moneyIn(taxPreview.income.toFixed(2), currency)}</dd></div><div className="flex justify-between py-1 text-sm"><dt>Damga / pul</dt><dd className="num">{moneyIn(taxPreview.stamp.toFixed(2), currency)}</dd></div><div className="flex justify-between border-t border-border pt-2"><dt>Satıcıya ödenecek</dt><dd className="num">{moneyIn(totals.gross.minus(taxPreview.vat).minus(taxPreview.income).toFixed(2), currency)}</dd></div></>}
             </dl>
           </div>
           {canOverride && lines.some((l) => l.orderLineId) && (
@@ -739,19 +804,19 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             {initial && (
-              <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+              <Button variant="danger" disabled={save.isPending || remove.isPending} onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="size-4" aria-hidden />
                 {t('invoices.form.deleteDraft')}
               </Button>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={() => navigate(listPath)}>{t('common.cancel')}</Button>
-            <Button loading={save.isPending && !save.variables} onClick={() => submit(false)}>
+            <Button disabled={save.isPending || remove.isPending} onClick={() => navigate(listPath)}>{t('common.cancel')}</Button>
+            <Button disabled={save.isPending || remove.isPending} loading={save.isPending && !save.variables} onClick={() => submit(false)}>
               {t('invoices.form.saveDraft')}
             </Button>
             {canPost && (
-              <Button variant="primary" loading={save.isPending && !!save.variables} onClick={() => submit(true)}>
+              <Button variant="primary" disabled={save.isPending || remove.isPending} loading={save.isPending && !!save.variables} onClick={() => submit(true)}>
                 {t('invoices.form.savePost')}
               </Button>
             )}
@@ -779,6 +844,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
               onClick={() =>
                 remove.mutate(undefined, {
                   onSuccess: () => {
+                    markFormSaved(document.querySelector('[data-form-guard-scope="invoice-editor"]'));
                     toast.success(t('invoices.form.deleted'));
                     navigate(listPath, { replace: true });
                   },
@@ -796,7 +862,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       >
         {null}
       </Modal>
-    </>
+    </FormGuard>
   );
 }
 

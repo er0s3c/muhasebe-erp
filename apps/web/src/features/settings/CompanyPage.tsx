@@ -12,6 +12,7 @@ import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCQuery, useNavigation } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { moduleName } from '../../lib/modules';
+import { CompanyProfileSection } from './CompanyProfileSection';
 
 interface CompanyRow {
   id: string;
@@ -148,6 +149,7 @@ export function CompanyPage() {
           </dl>
         </Card>
       </div>
+      <div className="mt-6"><CompanyProfileSection /></div>
     </>
   );
 }

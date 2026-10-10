@@ -40,6 +40,7 @@ export async function createParty(tx: Tx, companyId: string, input: CreatePartyI
       kind: input.kind,
       taxNumber: input.taxNumber ?? null,
       taxOffice: input.taxOffice ?? null,
+      taxStatus: input.taxStatus ?? 'unknown',
       phone: input.phone ?? null,
       email: input.email ?? null,
       address: input.address ?? null,
@@ -54,7 +55,7 @@ export async function createParty(tx: Tx, companyId: string, input: CreatePartyI
 
 export async function updateParty(tx: Tx, id: string, input: UpdatePartyInput) {
   const values: Partial<typeof parties.$inferInsert> = {};
-  for (const key of ['name', 'kind', 'taxNumber', 'taxOffice', 'phone', 'email', 'address', 'currencyCode', 'paymentTermDays', 'notes', 'isActive'] as const) {
+  for (const key of ['name', 'kind', 'taxNumber', 'taxOffice', 'taxStatus', 'phone', 'email', 'address', 'currencyCode', 'paymentTermDays', 'notes', 'isActive'] as const) {
     if (input[key] !== undefined) (values as Record<string, unknown>)[key] = input[key];
   }
   if (input.creditLimit !== undefined) values.creditLimit = input.creditLimit;

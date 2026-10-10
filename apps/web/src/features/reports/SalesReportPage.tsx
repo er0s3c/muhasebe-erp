@@ -15,13 +15,13 @@ import { qtyText } from '../inventory/common';
 import { PeriodFields, periodText, useReportPeriod } from './common';
 import { useState } from 'react';
 
-const GROUPS: readonly SalesReportGroup[] = ['party', 'item', 'month', 'invoice'];
+const GROUPS: readonly SalesReportGroup[] = ['party', 'item', 'month', 'invoice', 'branch', 'creator'];
 const INVOICE_TYPES = ['sales', 'purchase', 'expense', 'sales_return', 'purchase_return'] as const;
 
 export const SalesReportPage = () => <SalesOrPurchaseReport side="sales" />;
 export const PurchaseReportPage = () => <SalesOrPurchaseReport side="purchases" />;
 
-/** Satış ya da alış raporu: cari, stok kartı, ay ya da fatura kırılımı; iadeler düşülmüş, iptal ve taslak hariç. */
+/** İadeler ve iptaller, muhasebedeki olay tarihinde tutarlardan düşülür. */
 function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
   const { t } = useTranslation();
   const base = useCompany().baseCurrency;
@@ -36,6 +36,8 @@ function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
   );
 
   const partyLabel = side === 'sales' ? t('reports.sales.customer') : t('reports.sales.supplier');
+  const groupedCount = ['party', 'month', 'branch', 'creator'].includes(groupBy);
+  const labelHead = groupBy === 'party' || groupBy === 'invoice' ? partyLabel : groupBy === 'item' ? t('reports.sales.item') : t(`reports.sales.groups.${groupBy}`);
   const amountHead = (
     <>
       <Th num>{t('reports.sales.net')} ({currencySymbol(base)})</Th>
@@ -57,6 +59,7 @@ function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
         <PeriodFields from={from} to={to} onFrom={setFrom} onTo={setTo} />
         <SegmentedTabs value={groupBy} onChange={setGroupBy} items={GROUPS.map((g) => ({ key: g, label: t(`reports.sales.groups.${g}`) }))} />
       </div>
+      {groupBy === 'creator' && <div className="mb-4"><Callout>Kırılım, özgün faturayı oluşturan kullanıcıya göredir. İadeler özgün kaydın kullanıcısından düşülür.</Callout></div>}
 
       {error ? (
         <Callout tone="danger">{errorMessage(error)}</Callout>
@@ -75,9 +78,9 @@ function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
                   {groupBy === 'invoice' && <Th className="w-28">{t('common.date')}</Th>}
                   {groupBy === 'item' && <Th className="w-28">{t('inventory.items.code')}</Th>}
                   {groupBy === 'invoice' && <Th className="w-40">{t('reports.sales.invoiceNo')}</Th>}
-                  <Th>{groupBy === 'party' || groupBy === 'invoice' ? partyLabel : groupBy === 'item' ? t('reports.sales.item') : t('reports.sales.month')}</Th>
+                  <Th>{labelHead}</Th>
                   {groupBy === 'invoice' && <Th className="w-36">{t('reports.sales.type')}</Th>}
-                  {(groupBy === 'party' || groupBy === 'month') && <Th num>{t('reports.sales.docCount')}</Th>}
+                  {groupedCount && <Th num>{t('reports.sales.docCount')}</Th>}
                   {groupBy === 'item' && <Th num>{t('reports.sales.qty')}</Th>}
                   {amountHead}
                 </tr>
@@ -97,7 +100,7 @@ function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
                         {r.externalNo && <span className="block text-xs text-muted">{r.externalNo}</span>}
                       </Td>
                     )}
-                    <Td className="max-w-sm truncate">
+                    <Td className="min-w-40 max-w-sm whitespace-normal break-words">
                       {groupBy === 'party' && r.code && <span className="mr-2 font-mono text-xs text-muted">{r.code}</span>}
                       {r.label}
                     </Td>
@@ -107,7 +110,7 @@ function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
                         {r.cancellation && <span className="ml-1 text-danger">({t('reports.sales.cancellation')})</span>}
                       </Td>
                     )}
-                    {(groupBy === 'party' || groupBy === 'month') && <Td num className="text-muted">{r.docCount}</Td>}
+                    {groupedCount && <Td num className="text-muted">{r.docCount}</Td>}
                     {groupBy === 'item' && <Td num className="text-muted">{r.qty ? qtyText(r.qty) : ''}</Td>}
                     <Td num>{money(r.net)}</Td>
                     <Td num className="text-muted">{money(r.vat)}</Td>
@@ -118,9 +121,8 @@ function SalesOrPurchaseReport({ side }: { side: 'sales' | 'purchases' }) {
               <tfoot>
                 <tr className="bg-surface-2">
                   <Td colSpan={groupBy === 'invoice' ? 4 : groupBy === 'item' ? 2 : 1}>{t('reports.sales.total')}</Td>
-                  {groupBy === 'invoice' && <Td />}
                   {groupBy === 'item' && <Td />}
-                  {(groupBy === 'party' || groupBy === 'month') && <Td num>{data.totals.docCount}</Td>}
+                  {groupedCount && <Td num>{data.totals.docCount}</Td>}
                   <Td num>{money(data.totals.net)}</Td>
                   <Td num>{money(data.totals.vat)}</Td>
                   <Td num>{money(data.totals.gross)}</Td>

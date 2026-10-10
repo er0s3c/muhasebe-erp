@@ -26,7 +26,7 @@ type Action = 'send' | 'accept' | 'reject' | 'reopen' | 'cancel' | 'confirm' | '
  * Teklif/sipariş görünümü: durum eylemleri, dönüşümler (teklif → sipariş, sipariş → irsaliye/fatura), karşılanma (teslim/fatura) miktarları,
  * durum geçmişi ve yazdırma (şirket antetli, imza bloklu). Teklif/sipariş yevmiye ve stok hareketi yazmaz.
  */
-export function SalesDocView({ data }: { data: SalesDocDetail }) {
+export function SalesDocView({ data,approvalPending=false }: { data: SalesDocDetail;approvalPending?:boolean }) {
   const { t } = useTranslation();
   const toast = useToast();
   const navigate = useNavigate();
@@ -35,7 +35,7 @@ export function SalesDocView({ data }: { data: SalesDocDetail }) {
   const { doc, lines, events, notes, invoices } = data;
   const cur = doc.currencyCode;
   const isOrder = doc.kind === 'order';
-  const canManage = can('invoices.manage');
+  const canManage = can('invoices.manage')&&!approvalPending;
   const listPath = isOrder ? '/sales/orders' : '/sales/quotes';
 
   const [reasonFor, setReasonFor] = useState<Action | null>(null);

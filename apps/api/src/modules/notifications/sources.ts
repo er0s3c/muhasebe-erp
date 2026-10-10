@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   addDaysIso,
+  COMPANY_TIME_ZONE,
   agendaReminderState,
   foreignDocStatus,
   guaranteeExpiryState,
@@ -42,6 +43,7 @@ export interface ScanCtx {
   today: string;
   /** Şirket saat diliminde şimdiki duvar saati (SS:DD). */
   time: string;
+  timeZone?: string;
   enabled: ReadonlySet<string>;
   license: LicenseView | null;
   /** Şirket, kurulumun sahibi kuruluşa mı ait (lisans bildirimi yalnızca oraya gider). */
@@ -366,19 +368,19 @@ const stockBelowMin: NotificationSource = {
 const draftStale: NotificationSource = {
   kind: 'draft_stale',
   perUser: true,
-  async scan({ tx, today, enabled }, { lead, user }) {
+  async scan({ tx, today, enabled, timeZone }, { lead, user }) {
     const days = lead ?? 14;
     const cutoff = addDaysIso(today, -days);
     let invoices: string[] = [];
     let entries: string[] = [];
     if (enabled.has('core.invoices') && hasPermission(user.permissions, 'invoices.manage')) {
       const r = await tx.execute<IdRow>(sql`
-        select i.id from invoices i where i.status = 'draft' and (i.created_at at time zone 'Europe/Nicosia')::date <= ${cutoff}::date`);
+        select i.id from invoices i where i.status = 'draft' and (i.created_at at time zone ${timeZone ?? COMPANY_TIME_ZONE})::date <= ${cutoff}::date`);
       invoices = ids(r.rows);
     }
     if (enabled.has('core.ledger') && hasPermission(user.permissions, 'ledger.post')) {
       const r = await tx.execute<IdRow>(sql`
-        select j.id from journal_entries j where j.status = 'draft' and (j.created_at at time zone 'Europe/Nicosia')::date <= ${cutoff}::date`);
+        select j.id from journal_entries j where j.status = 'draft' and (j.created_at at time zone ${timeZone ?? COMPANY_TIME_ZONE})::date <= ${cutoff}::date`);
       entries = ids(r.rows);
     }
     const n = invoices.length + entries.length;

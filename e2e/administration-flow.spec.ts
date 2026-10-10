@@ -15,7 +15,7 @@ test('şirket bütçesi aylık sapmayı ve kaynağı gösterir; onaydan sonra ye
   const token = (await registration.json()).accessToken;
   const made = await page.request.post('/api/companies', {
     headers: { authorization: `Bearer ${token}` },
-    data: { name: 'Bütçe İnşaat', sector: 'CONSTRUCTION' },
+    data: { name: 'Bütçe İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(made.status()).toBe(201);
   const company = (await made.json()).company,
@@ -133,7 +133,7 @@ test('demirbaş kartından amortisman taslağı, yevmiye kaydı ve ters kayıt i
   const token = (await registration.json()).accessToken;
   const made = await page.request.post('/api/companies', {
     headers: { authorization: `Bearer ${token}` },
-    data: { name: 'Ekipman İnşaat', sector: 'CONSTRUCTION' },
+    data: { name: 'Ekipman İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(made.status()).toBe(201);
   const company = (await made.json()).company,
@@ -207,7 +207,7 @@ test('personel masraf formu avans ve iade tutarını gösterir; iptal bakiyeyi a
   const token = (await registration.json()).accessToken;
   const made = await page.request.post('/api/companies', {
     headers: { authorization: `Bearer ${token}` },
-    data: { name: 'Masraf İnşaat', sector: 'CONSTRUCTION' },
+    data: { name: 'Masraf İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(made.status()).toBe(201);
   const company = (await made.json()).company,
@@ -320,7 +320,7 @@ test('görev sayacı, uyarı tasarımı, yönetim raporu ve işletim ayarları',
   const token = (await register.json()).accessToken;
   const made = await page.request.post('/api/companies', {
     headers: { authorization: `Bearer ${token}` },
-    data: { name: 'Yönetim Test İnşaat', sector: 'CONSTRUCTION' },
+    data: { name: 'Yönetim Test İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(made.status()).toBe(201);
   const company = (await made.json()).company,
@@ -454,7 +454,7 @@ test('kampanya önizlemesi fatura indirimi ve tarihli geçmiş olarak kaydedilir
   const token = (await register.json()).accessToken;
   const made = await page.request.post('/api/companies', {
     headers: { authorization: `Bearer ${token}` },
-    data: { name: 'Satış Test İnşaat', sector: 'CONSTRUCTION' },
+    data: { name: 'Satış Test İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(made.status()).toBe(201);
   const company = (await made.json()).company,
@@ -541,7 +541,7 @@ test('tekrar planı ve kişisel grafik panosu gerçek kaynak kayıtlarla çalı�
   const token = (await registration.json()).accessToken;
   const made = await page.request.post('/api/companies', {
     headers: { authorization: `Bearer ${token}` },
-    data: { name: 'Planlama İnşaat', sector: 'CONSTRUCTION' },
+    data: { name: 'Planlama İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(made.status()).toBe(201);
   const company = (await made.json()).company,

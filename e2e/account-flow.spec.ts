@@ -24,7 +24,7 @@ test('hesap güvenliği: posta kapalıyken genel sayfalar; yöneticinin geçici 
     })
   ).json();
   const auth = { authorization: `Bearer ${owner.accessToken}` };
-  const company = (await (await request.post('/api/companies', { headers: auth, data: { name: 'Sahip İnşaat Ltd.', sector: 'CONSTRUCTION' } })).json()).company;
+  const company = (await (await request.post('/api/companies', { headers: auth, data: { name: 'Sahip İnşaat Ltd.', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' } })).json()).company;
   const memberEmail = `e2e-uye-${stamp}@example.com`;
   const add = await request.post('/api/company/members', {
     headers: { ...auth, 'x-company-id': company.id },

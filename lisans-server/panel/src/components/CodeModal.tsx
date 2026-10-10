@@ -19,7 +19,7 @@ export function CodeModal({ code, onClose }: { code: string | null; onClose: () 
     <Modal
       open={code !== null}
       onOpenChange={(o) => {
-        if (!o) {
+        if (!o && copied) {
           setCopied(false);
           onClose();
         }

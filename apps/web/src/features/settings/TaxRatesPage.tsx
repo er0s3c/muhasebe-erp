@@ -17,6 +17,7 @@ import { errorMessage } from '../../lib/errors';
 import { formatDateTR, formatTR } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { TaxRate } from '../../lib/types';
+import { DocumentTaxRulesSection } from './DocumentTaxRulesSection';
 
 type FormInput = z.input<typeof createTaxRateSchema>;
 
@@ -163,6 +164,8 @@ export function TaxRatesPage() {
           </TableWrap>
         )}
       </div>
+
+      <DocumentTaxRulesSection rates={data?.taxRates ?? []} />
 
       <Sheet
         open={adding}

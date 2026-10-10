@@ -134,6 +134,8 @@ export const createItemSchema = z.object({
   saleCurrency: currencyCode.default('TRY'),
   /** Kritik stok seviyesi: eldeki miktar bu değere eşit veya altına düşünce uyarılır. */
   minLevel: quantityString.optional(),
+  /** Sipariş önerisinin dolduracağı hedef; tanımlı değilse otomatik hedef tahmin edilmez. */
+  targetLevel: quantityString.optional(),
   notes: optionalText(1000),
   /** Seri no takibi (X3): giriş/çıkışta miktar kadar seri no girilir; yalnızca mal kartında. */
   tracksSerial: z.boolean().optional(),
@@ -153,6 +155,7 @@ export const updateItemSchema = z.object({
   salePrice: unitCostString.nullable().optional(),
   saleCurrency: currencyCode.optional(),
   minLevel: quantityString.nullable().optional(),
+  targetLevel: quantityString.nullable().optional(),
   notes: clearableText(1000),
   isActive: z.boolean().optional(),
   tracksSerial: z.boolean().optional(),

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { computeProgress, dec, todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -152,8 +153,9 @@ export function ProgressEditorPage() {
   const decide = useCMutation((v: { requestId: string; decision: 'approve' | 'reject' }, call) => call(`/api/approvals/${v.requestId}/decide`, { method: 'POST', body: { decision: v.decision, ...(decideNote.trim() ? { note: decideNote.trim() } : {}) } }), SUBCONTRACT_INVALIDATE);
 
   const run = <T,>(m: { mutate: (v: undefined, o: { onSuccess: (r: T) => void; onError: (e: Error) => void }) => void }, onOk: (r: T) => void) => {
+    if (save.isPending || submit.isPending || withdraw.isPending || remove.isPending || cancel.isPending || decide.isPending) return;
     setError(null);
-    m.mutate(undefined, { onSuccess: onOk, onError: setError });
+    m.mutate(undefined, { onSuccess: (result) => { markFormSaved(document.querySelector('[data-form-guard-scope="ProgressEditorPage"]')); onOk(result); }, onError: setError });
   };
 
   if ((!isNew && detailQ.isPending) || basisQ.isPending || !basis || (!isNew && !detail)) {
@@ -179,7 +181,7 @@ export function ProgressEditorPage() {
   };
   const pct = (v: string) => `%${Number(v)}`;
 
-  return (
+  return (<FormGuard captureAll scopeKey="ProgressEditorPage" pending={save.isPending || submit.isPending || withdraw.isPending || remove.isPending || cancel.isPending || decide.isPending}>{(
     <div className="flex flex-col gap-5">
       <div>
         <Link to={`/subcontracts/${basis.subcontract.id}`} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
@@ -403,7 +405,7 @@ export function ProgressEditorPage() {
         <Field label={t('subcontracts.progress.cancelReason')} required>{(fid) => <Input id={fid} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} maxLength={300} />}</Field>
       </Modal>
     </div>
-  );
+  )}</FormGuard>);
 }
 
 function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {

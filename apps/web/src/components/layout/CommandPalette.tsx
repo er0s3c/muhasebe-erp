@@ -7,6 +7,7 @@ import { cn } from '../../lib/cn';
 import { useCQuery, useNavigation } from '../../lib/queries';
 import type { SearchHit } from '@erp/shared';
 import { navIcon } from './icons';
+import { buildDisplayNavigation } from './navigation';
 
 interface Command {
   id: string;
@@ -57,9 +58,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     if (modules.includes('core.settings') && can('rates.manage')) {
       list.push({ id: 'enter-rates', label: t('shell.enterRates'), group: t('shell.quickActions'), path: '/settings/currencies', icon: 'coins', keywords: 'döviz kur dolar euro sterlin' });
     }
-    for (const g of nav?.groups ?? []) {
+    for (const g of buildDisplayNavigation(nav?.groups)) {
       for (const item of g.items) {
-        list.push({ id: item.key, label: t(item.labelKey as never), group: t('shell.pages'), path: item.path, icon: item.icon });
+        list.push({ id: item.key, label: item.label ?? t(item.labelKey as never), group: g.label, path: item.path, icon: item.icon });
       }
     }
     return list;
@@ -131,7 +132,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
               aria-label={t('shell.typeToSearch')}
             />
-            <kbd className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted">Esc</kbd>
+            <kbd className="rounded border border-border px-1.5 py-0.5 text-[12px] text-muted">Esc</kbd>
           </div>
           <div id={listId} role="listbox" aria-label={t('shell.commandPalette')} className="max-h-80 overflow-y-auto p-2">
             {recordSearch.isFetching && <p role="status" className="px-3 py-2 text-sm text-muted">Kayıtlar aranıyor…</p>}

@@ -28,6 +28,7 @@ interface FormState {
   salePrice: string;
   saleCurrency: string;
   minLevel: string;
+  targetLevel: string;
   notes: string;
   tracksSerial: boolean;
 }
@@ -49,6 +50,7 @@ const fromItem = (i: Item): FormState => ({
   salePrice: trim(i.salePrice),
   saleCurrency: i.saleCurrency,
   minLevel: trim(i.minLevel),
+  targetLevel: trim(i.targetLevel ?? null),
   notes: i.notes ?? '',
   tracksSerial: i.tracksSerial,
 });
@@ -69,7 +71,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
   const editing = !!item;
   const empty: FormState = {
     name: '', code: '', kind: 'goods', inventoryRole: 'merchandise', unit: 'adet', categoryId: '', barcode: '', vatCode: '',
-    purchasePrice: '', purchaseCurrency: company.baseCurrency, salePrice: '', saleCurrency: company.baseCurrency, minLevel: '', notes: '', tracksSerial: false,
+    purchasePrice: '', purchaseCurrency: company.baseCurrency, salePrice: '', saleCurrency: company.baseCurrency, minLevel: '', targetLevel: '', notes: '', tracksSerial: false,
   };
   const [f, setF] = useState<FormState>(empty);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +112,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
             salePrice: f.salePrice || null,
             saleCurrency: f.saleCurrency,
             minLevel: goods && f.minLevel ? f.minLevel : null,
+            targetLevel: goods && f.targetLevel ? f.targetLevel : null,
             notes: f.notes,
             tracksSerial: goods && f.tracksSerial,
           },
@@ -132,6 +135,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           ...(f.salePrice ? { salePrice: f.salePrice } : {}),
           saleCurrency: f.saleCurrency,
           ...(goods && f.minLevel ? { minLevel: f.minLevel } : {}),
+          ...(goods && f.targetLevel ? { targetLevel: f.targetLevel } : {}),
           ...(goods && f.tracksSerial ? { tracksSerial: true } : {}),
           notes: f.notes,
         },
@@ -265,11 +269,14 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           <p className="col-span-full -mt-2 text-xs text-muted">{t('inventory.form.pricesHint')}</p>
         </div>
 
-        {goods && (
+        {goods && (<>
           <Field label={t('inventory.form.minLevel')} hint={t('inventory.form.minLevelHint')} error={errors.minLevel}>
             {(id) => <MoneyInput id={id} value={f.minLevel} onChange={(v) => set('minLevel', v)} decimals={0} maxDecimals={4} />}
           </Field>
-        )}
+          <Field label="Hedef stok miktarı" hint="Minimuma düşünce satın alma önerisi bu hedefe tamamlar. Boş bırakılırsa hedef tahmin edilmez." error={errors.targetLevel}>
+            {id => <MoneyInput id={id} value={f.targetLevel} onChange={value => set('targetLevel', value)} decimals={0} maxDecimals={4} />}
+          </Field>
+        </>)}
         {goods && (
           <label className="flex cursor-pointer items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5 size-4" checked={f.tracksSerial} onChange={(e) => set('tracksSerial', e.target.checked)} />

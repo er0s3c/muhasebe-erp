@@ -16,12 +16,20 @@ import {
   updatePayrollParamSchema,
   uuid,
   verifyPayrollParamSchema,
+  createCountryPayrollConfigSchema,
+  updateCountryPayrollConfigSchema,
+  createPayrollTaxProfileSchema,
+  countryPayrollPreviewSchema,
+  computeCountryPayroll,
+  turkeyPayroll2026,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { pageOf } from '../../http/paging';
 import { createItem, createParam, createTerm, deleteParam, deleteTerm, listItems, listParams, listTerms, logPayrollAccess, updateItem, updateParam, verifyParam, type PayrollCtx } from './config';
 import { payrollCostByProject } from './reports';
 import { approveRun, calculateRun, cancelRun, createRun, deleteRun, getRun, getSlip, listRuns, payRun, removeAdjustment, setAdjustment, unpayRun } from './runs';
+import { createCountryConfig, createTaxProfile, enableCountryConfig, listCountryConfigs, listTaxProfiles, verifyCountryConfig } from './country-config';
+import { unprocessable } from '../../http/errors';
 
 export const payrollRoutes: FastifyPluginAsync = async (app) => {
   const MODULE = 'hr.payroll';
@@ -31,6 +39,25 @@ export const payrollRoutes: FastifyPluginAsync = async (app) => {
   const adjParam = z.object({ id: uuid, adjId: uuid });
   const slipParam = z.object({ id: uuid, employeeId: uuid });
   const termsQuery = z.object({ employeeId: uuid.optional() });
+
+  app.get('/api/payroll/country-configs', tenantRoute(app, read, async ({ tx }) => ({ configs: await listCountryConfigs(tx), suggestions: { TR: turkeyPayroll2026() } })));
+  app.post('/api/payroll/country-configs', tenantRoute(app, manage, async (c) => {
+    const config = await createCountryConfig(c.tx, pctx(c), createCountryPayrollConfigSchema.parse(c.req.body));
+    void c.reply.code(201); return { config };
+  }));
+  app.post('/api/payroll/country-configs/:id/verify', tenantRoute(app, manage, async (c) => ({ config: await verifyCountryConfig(c.tx, idParam.parse(c.req.params).id, c.user.id) })));
+  app.patch('/api/payroll/country-configs/:id', tenantRoute(app, manage, async (c) => ({ config: await enableCountryConfig(c.tx, idParam.parse(c.req.params).id, updateCountryPayrollConfigSchema.parse(c.req.body).enabled) })));
+  app.get('/api/payroll/tax-profiles', tenantRoute(app, read, async ({ tx }) => ({ profiles: await listTaxProfiles(tx) })));
+  app.post('/api/payroll/tax-profiles', tenantRoute(app, manage, async (c) => {
+    const profile = await createTaxProfile(c.tx, pctx(c), createPayrollTaxProfileSchema.parse(c.req.body));
+    void c.reply.code(201); return { profile };
+  }));
+  app.post('/api/payroll/country-preview', tenantRoute(app, read, async (c) => {
+    const i = countryPayrollPreviewSchema.parse(c.req.body);
+    try {
+      return { calculation: computeCountryPayroll({ ...i, basis: 'monthly', rate: i.gross, params: {}, items: [], attendance: { normalHours: '0', overtimeHours: '0', hourDays: 0, annualLeaveDays: 0, sickLeaveDays: 0, unpaidLeaveDays: 0, absentDays: 0 } }), previewOnly: true };
+    } catch (err) { throw unprocessable(err instanceof Error ? err.message : 'Önizleme hesaplanamadı', 'PAYROLL_COUNTRY_CALCULATION'); }
+  }));
 
   // --- Parametreler (tarihli, doğrulama alanlı, varsayılan kapalı) ---------------------------------------
   app.get('/api/payroll/params', tenantRoute(app, read, async ({ tx }) => ({ params: await listParams(tx) })));

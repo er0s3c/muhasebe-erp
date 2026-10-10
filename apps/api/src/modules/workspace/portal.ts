@@ -4,21 +4,26 @@ import { hash, verify } from '@node-rs/argon2';
 import { sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { z } from 'zod';
-import { idParam, resolveEnabledModules, todayIso, type Sector, type Role } from '@erp/shared';
-import { tenantRoute } from '../../http/context';
+import { idParam, resolveEnabledModules, todayIso, portalDocumentScopesSchema, EMPTY_PORTAL_SCOPES, PORTAL_DOCUMENT_KINDS, type PortalDocumentScopes, type Sector, type Role } from '@erp/shared';
+import { tenantRoute, type TenantCtx } from '../../http/context';
 import { setContext, withContext } from '../../db/client';
-import { AppError, notFound, unauthorized } from '../../http/errors';
+import { AppError, forbidden, notFound, unauthorized } from '../../http/errors';
 import { requireRecord } from './records';
 import { loadMemberAccess } from '../access/effective';
 import { partyOpenItems } from '../parties/service';
 import { storeAsset, readAsset, validateAsset } from '../construction-control/storage';
 import { randomUUID } from 'node:crypto';
+import { availablePortalScopes, effectivePortalScopes, getPortalDocument, listPortalDocuments, portalModuleReadable, requirePortalDocumentScope } from './portal-documents';
 
 const credentials = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   password: z.string().min(12).max(128),
   documentId: z.uuid().optional(),
-  action: z.enum(['request_service', 'confirm_service', 'passport_asset']).optional(),
+  action: z.enum(['request_service', 'confirm_service', 'passport_asset', 'list_documents', 'document_detail']).optional(),
+  recordKind: z.enum(PORTAL_DOCUMENT_KINDS).optional(),
+  recordId: z.uuid().optional(),
+  offset: z.number().int().min(0).max(100_000).optional(),
+  limit: z.number().int().min(1).max(50).optional(),
   contractId: z.uuid().optional(),
   serviceId: z.uuid().optional(),
   clientId: z.uuid().optional(),
@@ -38,14 +43,25 @@ const credentials = z.object({
   assetId: z.uuid().optional(),
 });
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+function requireFullPortalScope(c: TenantCtx) {
+  if (c.branch.mode !== 'all' || c.branch.selection !== 'all') throw forbidden('Portal paylaşımı için tüm şubelere erişiminiz olmalı ve tüm şubeler seçilmeli.', 'PORTAL_BRANCH_SCOPE_REQUIRED');
+  if (!portalModuleReadable(c.access, c.enabledModules, 'core.parties', 'parties.read')) throw forbidden('Portal paylaşımı için cari görüntüleme ve dışa aktarma yetkisi gerekli.');
+}
+function validateSelectedScopes(c: TenantCtx, scopes: PortalDocumentScopes) {
+  requireFullPortalScope(c);
+  const available = availablePortalScopes(c.access, c.enabledModules);
+  if (Object.entries(scopes).some(([key, enabled]) => enabled && !available[key as keyof PortalDocumentScopes])) throw forbidden('Seçtiğiniz belge kapsamı için modül, görüntüleme ve dışa aktarma yetkisi gerekli.');
+}
 export const portalRoutes: FastifyPluginAsync = async (app) => {
   const manage = { module: 'core.parties', permission: 'members.manage' } as const;
   app.get(
     '/api/workspace/portal-links',
     tenantRoute(app, manage, async (c) => ({
+      availableScopes: availablePortalScopes(c.access, c.enabledModules),
+      canShare: c.branch.mode === 'all' && c.branch.selection === 'all' && portalModuleReadable(c.access, c.enabledModules, 'core.parties', 'parties.read'),
       items: (
         await c.tx.execute(
-          sql`select l.id,l.label,l.party_id as "partyId",p.name as "partyName",l.expires_at as "expiresAt",l.revoked_at as "revokedAt" from portal_links l join parties p on p.id=l.party_id order by l.created_at desc limit 100`,
+          sql`select l.id,l.label,l.scopes,l.party_id as "partyId",p.name as "partyName",l.expires_at as "expiresAt",l.revoked_at as "revokedAt" from portal_links l join parties p on p.id=l.party_id order by l.created_at desc limit 100`,
         )
       ).rows,
     })),
@@ -60,8 +76,10 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
           password: z.string().min(12).max(128),
           days: z.number().int().min(1).max(30),
           documentIds: z.array(z.uuid()).max(50).default([]),
+          scopes: portalDocumentScopesSchema.default(EMPTY_PORTAL_SCOPES),
         })
         .parse(c.req.body);
+      validateSelectedScopes(c, input.scopes);
       await requireRecord(c, 'party', input.partyId);
       for (const id of input.documentIds) {
         const r = await c.tx.execute(
@@ -73,8 +91,8 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
       const id = uuidv7();
       const passwordHash = await hash(input.password);
       await c.tx
-        .execute(sql`insert into portal_links(id,company_id,org_id,party_id,label,token_hash,password_hash,expires_at,created_by,document_ids)
-      values(${id},${c.company.id},${c.user.orgId},${input.partyId},${input.label},${digest(token)},${passwordHash},now()+${input.days}*interval '1 day',${c.user.id},${`{${input.documentIds.join(',')}}`}::uuid[])`);
+        .execute(sql`insert into portal_links(id,company_id,org_id,party_id,label,token_hash,password_hash,expires_at,created_by,document_ids,scopes)
+      values(${id},${c.company.id},${c.user.orgId},${input.partyId},${input.label},${digest(token)},${passwordHash},now()+${input.days}*interval '1 day',${c.user.id},${`{${input.documentIds.join(',')}}`}::uuid[],${JSON.stringify(input.scopes)}::jsonb)`);
       await c.tx.execute(
         sql`insert into portal_access_events(id,company_id,link_id,action) values(${uuidv7()},${c.company.id},${id},'created')`,
       );
@@ -82,6 +100,26 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
       return { id, token };
     }),
   );
+  app.patch('/api/workspace/portal-links/:id', tenantRoute(app, manage, async (c) => {
+    const { id } = idParam.parse(c.req.params);
+    const { scopes } = z.object({ scopes: portalDocumentScopesSchema }).strict().parse(c.req.body);
+    validateSelectedScopes(c, scopes);
+    const result = await c.tx.execute(sql`update portal_links set scopes=${JSON.stringify(scopes)}::jsonb where id=${id}::uuid and revoked_at is null returning id`);
+    if (!result.rows.length) throw notFound('Aktif portal bağlantısı');
+    await c.tx.execute(sql`insert into portal_access_events(id,company_id,link_id,action) values(${uuidv7()},${c.company.id},${id},'scopes_updated')`);
+    return { id, scopes };
+  }));
+  app.post('/api/workspace/portal-links/:id/rotate', tenantRoute(app, manage, async (c) => {
+    requireFullPortalScope(c);
+    const { id } = idParam.parse(c.req.params);
+    const input = z.object({ password: z.string().min(12).max(128), days: z.number().int().min(1).max(30) }).strict().parse(c.req.body);
+    const token = randomBytes(32).toString('base64url');
+    const passwordHash = await hash(input.password);
+    const result = await c.tx.execute(sql`update portal_links set token_hash=${digest(token)},password_hash=${passwordHash},expires_at=now()+${input.days}*interval '1 day' where id=${id}::uuid and revoked_at is null returning id`);
+    if (!result.rows.length) throw notFound('Aktif portal bağlantısı');
+    await c.tx.execute(sql`insert into portal_access_events(id,company_id,link_id,action) values(${uuidv7()},${c.company.id},${id},'rotated')`);
+    return { id, token };
+  }));
   app.post(
     '/api/workspace/portal-links/:id/revoke',
     tenantRoute(app, manage, async (c) => {
@@ -106,6 +144,7 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
     const parsed = credentials.safeParse(req.body);
     if (!parsed.success) throw unauthorized('Portal erişimi doğrulanamadı.');
     const input = parsed.data;
+    void reply.header('cache-control', 'no-store');
     return withContext(app.db, {}, async (tx) => {
       await tx.execute(sql`select set_config('app.portal_hash',${digest(input.token)},true)`);
       const rows = await tx.execute<{
@@ -116,8 +155,9 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
         created_by: string;
         password_hash: string;
         document_ids: string[];
+        scopes: PortalDocumentScopes;
       }>(
-        sql`select id,company_id,org_id,party_id,created_by,password_hash,document_ids from portal_links where token_hash=${digest(input.token)} and revoked_at is null and expires_at>now()`,
+        sql`select id,company_id,org_id,party_id,created_by,password_hash,document_ids,scopes from portal_links where token_hash=${digest(input.token)} and revoked_at is null and expires_at>now()`,
       );
       const link = rows.rows[0];
       if (!link || !(await verify(link.password_hash, input.password)))
@@ -128,10 +168,11 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
         userId: link.created_by,
         ip: req.ip,
       });
-      const issuer = await tx.execute<{ role: Role }>(
-        sql`select m.role from memberships m join users u on u.id=m.user_id where m.company_id=${link.company_id}::uuid and m.user_id=${link.created_by}::uuid and m.role in ('owner','admin') and u.is_active`,
+      const issuer = await tx.execute<{ role: Role; branchScopeMode: string }>(
+        sql`select m.role,m.branch_scope_mode as "branchScopeMode" from memberships m join users u on u.id=m.user_id where m.company_id=${link.company_id}::uuid and m.user_id=${link.created_by}::uuid and m.role in ('owner','admin') and u.is_active`,
       );
-      if (!issuer.rows.length) throw unauthorized('Portal erişimi kapatılmış.');
+      if (!issuer.rows.length || issuer.rows[0]!.branchScopeMode !== 'all') throw unauthorized('Portal erişimi kapatılmış.');
+      await tx.execute(sql`select set_config('app.branch_id','',true),set_config('app.branch_selection','all',true)`);
       const issuerAccess = await loadMemberAccess(
         tx,
         link.company_id,
@@ -143,8 +184,8 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
         !issuerAccess.permissions.has('parties.read')
       )
         throw unauthorized('Portal erişimi kapatılmış.');
-      const companies = await tx.execute<{ name: string; sector: Sector }>(
-        sql`select name,sector from companies where id=${link.company_id}::uuid`,
+      const companies = await tx.execute<{ name: string; sector: Sector; timeZone: string }>(
+        sql`select name,sector,time_zone as "timeZone" from companies where id=${link.company_id}::uuid`,
       );
       const company = companies.rows[0];
       if (!company) throw unauthorized();
@@ -152,9 +193,19 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
         sql`select module,enabled from company_modules`,
       );
       const modules = resolveEnabledModules(company.sector, overrides.rows);
-      if (!modules.has('core.parties')) throw unauthorized('Portal erişimi kapatılmış.');
+      if (!portalModuleReadable(issuerAccess, modules, 'core.parties', 'parties.read')) throw unauthorized('Portal erişimi kapatılmış.');
+      const asOf = todayIso(new Date(), company.timeZone);
+      const documentScopes = effectivePortalScopes(portalDocumentScopesSchema.parse(link.scopes), availablePortalScopes(issuerAccess, modules));
+      if (input.action === 'list_documents' || input.action === 'document_detail') {
+        if (!input.recordKind) throw notFound('Paylaşılan belge');
+        requirePortalDocumentScope(documentScopes, input.recordKind);
+        await tx.execute(sql`insert into portal_access_events(id,company_id,link_id,action) values(${uuidv7()},${link.company_id},${link.id},${input.action})`);
+        if (input.action === 'list_documents') return listPortalDocuments(tx, link.party_id, input.recordKind, input.offset ?? 0, input.limit ?? 20);
+        if (!input.recordId) throw notFound('Paylaşılan belge');
+        return { document: await getPortalDocument(tx, link.party_id, input.recordKind, input.recordId) };
+      }
       const customerRead =
-        modules.has('construction.realestate') && issuerAccess.permissions.has('realestate.read');
+        portalModuleReadable(issuerAccess, modules, 'construction.realestate', 'realestate.read');
       const serviceEnabled =
         customerRead &&
         modules.has('construction.projects') &&
@@ -270,7 +321,7 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
             sql`insert into construction_assets(id,company_id,project_id,created_by,filename,mime,size,sha256) values(${assetId},${link.company_id},${s.projectId},${link.created_by},${input.photo.filename},${input.photo.mime},${bytes.length},${hash})`,
           );
           await tx.execute(
-            sql`insert into construction_photos(id,company_id,project_id,created_by,location_id,asset_id,date,caption) values(${photoId},${link.company_id},${s.projectId},${link.created_by},${locationId},${assetId},${todayIso()},${input.description.slice(0, 500)})`,
+            sql`insert into construction_photos(id,company_id,project_id,created_by,location_id,asset_id,date,caption) values(${photoId},${link.company_id},${s.projectId},${link.created_by},${locationId},${assetId},${asOf},${input.description.slice(0, 500)})`,
           );
           photos.push(photoId);
         }
@@ -314,15 +365,15 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
       );
       if (!parties.rows[0]) throw notFound();
       const receivables = await partyOpenItems(tx, link.party_id, {
-        asOf: todayIso(),
+        asOf,
         type: 'receivable',
       });
       const payables = await partyOpenItems(tx, link.party_id, {
-        asOf: todayIso(),
+        asOf,
         type: 'payable',
       });
       const sales =
-        modules.has('construction.realestate') && issuerAccess.permissions.has('realestate.read')
+        customerRead
           ? (
               await tx.execute(
                 sql`select id,unit_id as "unitId",code,status,currency_code as "currency",price,planned_handover as "plannedHandover" from sales_contracts where party_id=${link.party_id}::uuid order by contract_date desc limit 100`,
@@ -330,8 +381,7 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
             ).rows
           : [];
       const subcontracts =
-        modules.has('construction.subcontracts') &&
-        issuerAccess.permissions.has('subcontracts.read')
+        portalModuleReadable(issuerAccess, modules, 'construction.subcontracts', 'subcontracts.read')
           ? (
               await tx.execute(
                 sql`select code,title,status,currency_code as "currency" from subcontracts where party_id=${link.party_id}::uuid order by created_at desc limit 100`,
@@ -346,6 +396,7 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
           ).rows
         : [];
       return {
+        documentScopes,
         serviceEnabled,
         services: customerRead
           ? (
@@ -376,7 +427,7 @@ export const portalRoutes: FastifyPluginAsync = async (app) => {
         sales,
         subcontracts,
         documents,
-        asOf: todayIso(),
+        asOf,
       };
     });
   });

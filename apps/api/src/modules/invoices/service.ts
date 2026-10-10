@@ -1,7 +1,11 @@
 import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { enqueueInvoiceWebhook } from '../platform-integrations/events';
 import {
   INVOICE_TYPE_META,
   calcInvoice,
+  calculateDocumentTaxes,
+  calculateDocumentStamp,
+  applyRate,
   dec,
   partyKindFits,
   toDbAmount,
@@ -13,6 +17,9 @@ import {
   type MoneyValue,
   type PartyKind,
   type UpdateInvoiceInput,
+  type DocumentTaxRuleSnapshot,
+  type DocumentTaxCalculation,
+  type InvoiceTaxTotalsSnapshot,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { trContains } from '../../db/search';
@@ -24,6 +31,8 @@ import { uuidList } from '../inventory/balances';
 import { requireActiveWarehouse } from '../inventory/warehouses';
 import { checkOrderLinks } from '../sales/usage';
 import { checkDeliveryLinks } from './delivery-link';
+import { loadDocumentTaxRule } from './tax-rules';
+import { assertDocumentNotPending } from '../approvals/document-gate';
 
 export interface InvoiceCtx {
   companyId: string;
@@ -46,6 +55,12 @@ export interface PreparedLine {
   vatCode: string | null;
   /** Fatura tarihinde geçerli oran (yüzde), örn. "16.0000". */
   vatRate: string;
+  taxRuleId: string | null;
+  taxRuleSnapshot: DocumentTaxRuleSnapshot | null;
+  taxCalculation: DocumentTaxCalculation | null;
+  productClass: string | null;
+  transactionType: InvoiceLineInput['transactionType'];
+  taxTreatment: 'standard' | 'zero' | 'exempt' | 'unclassified';
   accountId: string | null;
   sourceLineId: string | null;
   /** Faturalanan irsaliye satırı (satış/alış faturası); bağlı satır stok hareketi yapmaz. */
@@ -72,6 +87,9 @@ export type LineSource = Pick<
   | 'unitPrice'
   | 'discountPct'
   | 'vatCode'
+  | 'taxRuleId'
+  | 'productClass'
+  | 'transactionType'
   | 'accountId'
   | 'sourceLineId'
   | 'deliveryLineId'
@@ -82,7 +100,7 @@ export type LineSource = Pick<
 >;
 
 export async function loadParty(tx: Tx, partyId: string, type: InvoiceType) {
-  const [party] = await tx.select().from(parties).where(eq(parties.id, partyId));
+  const [party] = await tx.select().from(parties).where(eq(parties.id, partyId)).for('share');
   if (!party) throw unprocessable('Cari bulunamadı', 'PARTY_NOT_FOUND');
   if (!party.isActive) throw unprocessable(`${party.name} carisi pasif`, 'PARTY_INACTIVE');
   if (!partyKindFits(party.kind as PartyKind, INVOICE_TYPE_META[type].control)) {
@@ -102,7 +120,7 @@ export async function resolveVat(tx: Tx, codes: readonly string[], date: string)
   const rows = await tx
     .select()
     .from(taxRates)
-    .where(inArray(taxRates.code, unique))
+    .where(and(inArray(taxRates.code, unique), sql`${taxRates.jurisdiction} is not distinct from (select p.jurisdiction from company_profile_versions p join companies c on c.id=p.company_id and c.profile_mode='country' where p.company_id=app_company_id() and p.effective_from<=${date}::date and (p.effective_to is null or p.effective_to>=${date}::date) order by p.effective_from desc limit 1)`))
     .orderBy(sql`${taxRates.validFrom} desc`);
   for (const r of rows) {
     if (r.validFrom <= date && (!r.validTo || r.validTo >= date) && !out.has(r.code)) out.set(r.code, dec(r.rate).toFixed(4));
@@ -121,13 +139,28 @@ export async function prepareLines(
   lines: readonly LineSource[],
   vatIncluded: boolean,
   companyId: string,
+  partyId?: string,
 ) {
   const meta = INVOICE_TYPE_META[type];
   const itemIds = [...new Set(lines.map((l) => l.itemId).filter((v): v is string => !!v))];
   const itemRows = itemIds.length ? await tx.select().from(items).where(inArray(items.id, itemIds)) : [];
   const itemById = new Map(itemRows.map((r) => [r.id, r]));
 
-  const vatCodes = lines.map((l) => l.vatCode).filter((v): v is string => !!v);
+  const sourceIds = lines.flatMap(l => l.sourceLineId ? [l.sourceLineId] : []);
+  const sourceRows = sourceIds.length ? await tx.select().from(invoiceLines).where(inArray(invoiceLines.id, sourceIds)) : [];
+  const sourceById = new Map(sourceRows.map(row => [row.id, row]));
+  const rules: (DocumentTaxRuleSnapshot | null)[] = [];
+  const ruleCache = new Map<string, DocumentTaxRuleSnapshot>();
+  for (const line of lines) {
+    const source = line.sourceLineId ? sourceById.get(line.sourceLineId) : null;
+    if (source) { rules.push(source.taxRuleSnapshot as DocumentTaxRuleSnapshot | null); continue; }
+    if (!line.taxRuleId) { rules.push(null); continue; }
+    if (!partyId) throw unprocessable('Vergi kuralı için cari bilgisi gerekli', 'TAX_RULE_PARTY');
+    const key = JSON.stringify([line.taxRuleId, line.productClass, line.transactionType]);
+    const rule = ruleCache.get(key) ?? await loadDocumentTaxRule(tx, line.taxRuleId, invoiceDate, type, partyId, line.productClass, line.transactionType);
+    ruleCache.set(key, rule); rules.push(rule);
+  }
+  const vatCodes = lines.flatMap((l, i) => l.sourceLineId ? [] : (rules[i]?.config.vatCode ?? l.vatCode) ? [rules[i]?.config.vatCode ?? l.vatCode!] : []);
   const rates = await resolveVat(tx, vatCodes, invoiceDate);
 
   const accountIds = [...new Set(lines.map((l) => l.accountId).filter((v): v is string => !!v))];
@@ -136,6 +169,10 @@ export async function prepareLines(
 
   const prepared: Omit<PreparedLine, 'net' | 'vat' | 'gross'>[] = lines.map((l, i) => {
     const label = `Satır ${i + 1}`;
+    const source = l.sourceLineId ? sourceById.get(l.sourceLineId) : null;
+    const rule = rules[i] ?? null;
+    const vatCode = source ? source.vatCode : rule ? rule.config.vatCode : l.vatCode;
+    const vatRate = source ? source.vatRate : vatCode ? rates.get(vatCode) : '0.0000';
     const item = l.itemId ? itemById.get(l.itemId) : undefined;
     if (l.itemId && !item) throw unprocessable(`${label}: stok kartı bulunamadı`, 'ITEM_NOT_FOUND');
     if (item && !item.isActive) throw unprocessable(`${label}: ${item.code} ${item.name} kartı pasif`, 'ITEM_INACTIVE');
@@ -161,9 +198,13 @@ export async function prepareLines(
         throw unprocessable(`${label}: stoklu kalem projeye doğrudan yazılamaz; malzeme stoktan projeye sarf edilir`, 'PROJECT_ON_STOCK_LINE');
       }
     }
-    if (l.vatCode && !rates.has(l.vatCode)) {
-      throw unprocessable(`${label}: ${l.vatCode} KDV kodu ${invoiceDate} tarihinde geçerli değil`, 'VAT_CODE_INVALID');
+    if (vatCode && !vatRate) {
+      throw unprocessable(`${label}: ${vatCode} KDV kodu ${invoiceDate} tarihinde geçerli değil`, 'VAT_CODE_INVALID');
     }
+    if (rule?.config.taxTreatment === 'zero' && !dec(vatRate ?? 0).isZero()) throw unprocessable('Sıfır oran kuralı sıfır KDV kodunu kullanmalı', 'TAX_ZERO_RATE');
+    if (rule?.config.taxTreatment === 'standard' && dec(vatRate ?? 0).isZero()) throw unprocessable('Vergili işlem pozitif KDV oranı kullanmalı', 'TAX_STANDARD_RATE');
+    if (source?.taxRuleSnapshot && (!dec(l.unitPrice).eq(source.unitPrice) || !dec(l.discountPct ?? 0).eq(source.discountPct)))
+      throw unprocessable('Vergi kurallı iade özgün satırın fiyat ve indirimini kullanmalı', 'RETURN_TAX_PRICE');
     if (l.accountId) {
       const a = accById.get(l.accountId);
       if (!a) throw unprocessable(`${label}: hesap bulunamadı`, 'ACCOUNT_NOT_FOUND');
@@ -183,8 +224,14 @@ export async function prepareLines(
       unit: l.unit ?? item?.unit ?? null,
       unitPrice: l.unitPrice,
       discountPct: l.discountPct ?? '0',
-      vatCode: l.vatCode ?? null,
-      vatRate: l.vatCode ? rates.get(l.vatCode)! : '0.0000',
+      vatCode: vatCode ?? null,
+      vatRate: vatRate ?? '0.0000',
+      taxRuleId: source?.taxRuleId ?? rule?.id ?? null,
+      taxRuleSnapshot: rule,
+      taxCalculation: null,
+      productClass: source?.productClass ?? l.productClass ?? null,
+      transactionType: (source?.transactionType as InvoiceLineInput['transactionType']) ?? l.transactionType ?? null,
+      taxTreatment: rule?.config.taxTreatment ?? (vatCode ? (dec(vatRate ?? 0).isZero() ? 'zero' : 'standard') : 'unclassified'),
       accountId: l.accountId ?? null,
       sourceLineId: l.sourceLineId ?? null,
       deliveryLineId: l.deliveryLineId ?? null,
@@ -205,8 +252,64 @@ export async function prepareLines(
     prepared.map((p) => ({ quantity: p.quantity, unitPrice: p.unitPrice, discountPct: p.discountPct, vatRate: p.vatRate })),
     vatIncluded,
   );
-  const withAmounts: PreparedLine[] = prepared.map((p, i) => ({ ...p, ...totals.lines[i]! }));
+  const withAmounts: PreparedLine[] = prepared.map((p, i) => {
+    const amounts = totals.lines[i]!;
+    const rule = p.taxRuleSnapshot;
+    let taxCalculation: DocumentTaxCalculation | null = null;
+    if (rule) {
+      try {
+        taxCalculation = calculateDocumentTaxes({
+          jurisdiction: rule.jurisdiction, rulePackVersion: rule.version, sourceRefs: rule.sourceRefs,
+          netAmount: amounts.net.toFixed(2), vatRatePct: p.vatRate, vatAmount: amounts.vat.toFixed(2),
+          vatWithholding: rule.config.vatWithholding, incomeWithholding: rule.config.incomeWithholding,
+          stamp: rule.config.stamp,
+        });
+      } catch (error) {
+        throw unprocessable(`Satır ${p.lineNo}: ${error instanceof Error ? error.message : 'Vergi hesabı geçersiz'}`, 'DOCUMENT_TAX_CALCULATION_INVALID');
+      }
+    }
+    const source = p.sourceLineId ? sourceById.get(p.sourceLineId) : null;
+    if (taxCalculation && source?.taxCalculation) {
+      const originalTax = source.taxCalculation as DocumentTaxCalculation;
+      const fraction = dec(p.quantity).div(source.quantity);
+      const withheld = applyRate(originalTax.vatWithheld, fraction);
+      const income = applyRate(originalTax.incomeWithheld, fraction);
+      taxCalculation = { ...taxCalculation, vatWithheld: withheld.toFixed(2), incomeWithheld: income.toFixed(2), stamp: applyRate(originalTax.stamp, fraction).toFixed(2), vatPayableToSeller: amounts.vat.minus(withheld).toFixed(2), payableToSeller: amounts.gross.minus(withheld).minus(income).toFixed(2) };
+    }
+    return { ...p, ...amounts, taxCalculation };
+  });
+  // Belgeye ait istisna ve tavan her satırda tekrarlanmaz. Aynı kaynak/sürüm ve
+  // damga tanımındaki kalemler tek matrahta hesaplanıp satırlara bölüştürülür.
+  const stampGroups = new Map<string, PreparedLine[]>();
+  for (const line of withAmounts) {
+    const rule = line.taxRuleSnapshot;
+    if (!rule?.config.stamp || rule.config.stampScope === 'line' || line.sourceLineId) continue;
+    const key = JSON.stringify([rule.jurisdiction, rule.version, rule.sourceRefs, rule.config.stamp, rule.config.stampLiability]);
+    const group = stampGroups.get(key) ?? [];
+    group.push(line); stampGroups.set(key, group);
+  }
+  for (const group of stampGroups.values()) {
+    const net = group.reduce((total, line) => total.plus(line.net), dec(0));
+    const gross = group.reduce((total, line) => total.plus(line.gross), dec(0));
+    const stamp = dec(calculateDocumentStamp(toDbAmount(net), toDbAmount(gross), group[0]!.taxRuleSnapshot!.config.stamp));
+    let allocated = dec(0);
+    for (const [index, line] of group.entries()) {
+      const part = index === group.length - 1 ? stamp.minus(allocated) : net.isZero() ? dec(0) : applyRate(stamp, line.net.div(net));
+      allocated = allocated.plus(part);
+      line.taxCalculation!.stamp = part.toFixed(2);
+      line.taxCalculation!.stampAllocation = { basis: 'document', documentNet: net.toFixed(2), documentGross: gross.toFixed(2), documentStamp: stamp.toFixed(2) };
+    }
+  }
   return { lines: withAmounts, totals };
+}
+
+export function invoiceTaxTotals(lines: readonly PreparedLine[], fx?: MoneyValue): InvoiceTaxTotalsSnapshot | null {
+  if (!lines.some(line => line.taxCalculation)) return null;
+  const sum = (field: 'vatWithheld' | 'incomeWithheld' | 'stamp') => lines.reduce((total, line) => total.plus(line.taxCalculation?.[field] ?? 0), dec(0));
+  const sumBase = (field: 'vatWithheld' | 'incomeWithheld' | 'stamp') => fx ? lines.reduce((total, line) => total.plus(applyRate(line.taxCalculation?.[field] ?? '0', fx)), dec(0)).toFixed(2) : null;
+  const payable = lines.reduce((total, line) => total.plus(line.gross).minus(line.taxCalculation?.vatWithheld ?? 0).minus(line.taxCalculation?.incomeWithheld ?? 0), dec(0));
+  const payableBase = fx ? lines.reduce((total, line) => total.plus(applyRate(line.net, fx)).plus(applyRate(line.vat, fx)).minus(applyRate(line.taxCalculation?.vatWithheld ?? '0', fx)).minus(applyRate(line.taxCalculation?.incomeWithheld ?? '0', fx)), dec(0)) : null;
+  return { engineVersion: 'document-tax-v1', vatWithheld: sum('vatWithheld').toFixed(2), incomeWithheld: sum('incomeWithheld').toFixed(2), stamp: sum('stamp').toFixed(2), payableToSeller: payable.toFixed(2), vatWithheldBase: sumBase('vatWithheld'), incomeWithheldBase: sumBase('incomeWithheld'), stampBase: sumBase('stamp'), payableToSellerBase: payableBase ? payableBase.toFixed(2) : null };
 }
 
 /** İade faturası: orijinal fatura ve satır bağlarını doğrular. */
@@ -321,8 +424,12 @@ type DraftInput = Omit<CreateInvoiceInput, 'type' | 'post'> | Omit<UpdateInvoice
 async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: DraftInput, id?: string) {
   const party = await loadParty(tx, input.partyId, type);
   const currency = input.currency ?? party.currencyCode;
-  const { lines, totals } = await prepareLines(tx, type, input.invoiceDate, input.lines, input.vatIncluded, ctx.companyId);
+  const { lines, totals } = await prepareLines(tx, type, input.invoiceDate, input.lines, input.vatIncluded, ctx.companyId, party.id);
   const original = await checkReturnLink(tx, type, party.id, input.returnOfId, lines);
+  if (original && lines.some(line => line.taxRuleSnapshot) && original.currencyCode !== currency)
+    throw unprocessable('Vergi kurallı iade özgün faturanın para birimini kullanmalı', 'RETURN_TAX_CURRENCY');
+  if (original && lines.some(line => line.taxRuleSnapshot) && original.vatIncluded !== input.vatIncluded)
+    throw unprocessable('Vergi kurallı iade özgün faturanın KDV dahil/hariç seçimini kullanmalı', 'RETURN_TAX_VAT_INCLUDED');
   if (original) await checkReturnQuantities(tx, original.id, lines, id);
   await checkDeliveryLinks(tx, type, party.id, lines, id);
   await inheritOrderLinks(tx, type, currency, lines);
@@ -344,7 +451,10 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
     externalNo: input.externalNo ?? null,
     partyId: party.id,
     currencyCode: currency,
-    fxRate: currency === ctx.baseCurrency ? null : input.fxRate ? toDbRate(input.fxRate) : null,
+    fxRate: currency === ctx.baseCurrency ? null : original?.fxSnapshot && original.currencyCode === currency ? original.fxRate : input.fxRate ? toDbRate(input.fxRate) : null,
+    fxRateType: input.fxRateType ?? original?.fxRateType ?? null,
+    fxReason: input.fxReason ?? original?.fxReason ?? null,
+    fxSnapshot: original?.fxSnapshot && original.currencyCode === currency ? { ...original.fxSnapshot, originalInvoiceId: original.id } : null,
     vatIncluded: input.vatIncluded,
     warehouseId: stockLines ? (input.warehouseId ?? original?.warehouseId ?? null) : null,
     returnOfId: original?.id ?? null,
@@ -354,6 +464,7 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
     netTotal: toDbAmount(totals.net),
     vatTotal: toDbAmount(totals.vat),
     grossTotal: toDbAmount(totals.gross),
+    taxTotalsSnapshot: invoiceTaxTotals(lines),
     updatedAt: new Date(),
   };
 
@@ -381,6 +492,12 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
       discountPct: dec(l.discountPct).toFixed(4),
       vatCode: l.vatCode,
       vatRate: l.vatRate,
+      taxRuleId: l.taxRuleId,
+      taxRuleSnapshot: l.taxRuleSnapshot,
+      taxCalculation: l.taxCalculation,
+      productClass: l.productClass,
+      transactionType: l.transactionType,
+      taxTreatment: l.taxTreatment,
       net: toDbAmount(l.net),
       vat: toDbAmount(l.vat),
       gross: toDbAmount(l.gross),
@@ -408,11 +525,13 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
 }
 
 export async function createInvoiceDraft(tx: Tx, ctx: InvoiceCtx, input: CreateInvoiceInput) {
-  return writeDraft(tx, ctx, input.type, input);
+  const id=await writeDraft(tx, ctx, input.type, input);
+  await enqueueInvoiceWebhook(tx,id,'invoice.draft.created');
+  return id;
 }
 
 async function getDraftRow(tx: Tx, id: string, action: 'düzenlenebilir' | 'silinebilir' = 'düzenlenebilir') {
-  const [row] = await tx.select().from(invoices).where(eq(invoices.id, id));
+  const [row] = await tx.select().from(invoices).where(eq(invoices.id, id)).for('update');
   if (!row) throw notFound('Fatura');
   if (row.status !== 'draft') {
     throw unprocessable(action === 'silinebilir' ? 'Yalnızca taslak fatura silinebilir; kayıtlı fatura iptal edilir' : 'Yalnızca taslak fatura düzenlenebilir', 'INVOICE_NOT_DRAFT');
@@ -422,12 +541,14 @@ async function getDraftRow(tx: Tx, id: string, action: 'düzenlenebilir' | 'sili
 
 export async function updateInvoiceDraft(tx: Tx, ctx: InvoiceCtx, id: string, input: UpdateInvoiceInput) {
   const row = await getDraftRow(tx, id);
+  await assertDocumentNotPending(tx, 'invoice', id);
   await writeDraft(tx, ctx, row.type as InvoiceType, input, id);
   return id;
 }
 
 export async function deleteInvoiceDraft(tx: Tx, id: string) {
   await getDraftRow(tx, id, 'silinebilir');
+  await assertDocumentNotPending(tx, 'invoice', id);
   if((await tx.execute(sql`select id from campaign_applications where invoice_id=${id}::uuid`)).rows.length)throw conflict('Kampanya uygulama geçmişi olan taslak silinemez. Fatura satırlarını düzenleyebilirsiniz.');
   // Satır sayısı denetlenir: eşzamanlı ikinci silme 404 alır (API-11)
   const deleted = await tx.delete(invoices).where(eq(invoices.id, id)).returning({ id: invoices.id });
@@ -439,6 +560,7 @@ interface HeadRow extends Record<string, unknown> {
   type: InvoiceType;
   status: string;
   invoiceNo: string | null;
+  branchId: string | null;
   externalNo: string | null;
   invoiceDate: string;
   dueDate: string | null;
@@ -513,14 +635,16 @@ interface LineRowOut extends Record<string, unknown> {
 
 export async function getInvoice(tx: Tx, id: string) {
   const head = await tx.execute<HeadRow>(sql`
-    select i.id, i.type, i.status, i.invoice_no as "invoiceNo", i.external_no as "externalNo",
+    select i.id, i.branch_id as "branchId", i.type, i.status, i.invoice_no as "invoiceNo", i.external_no as "externalNo",
            i.invoice_date::text as "invoiceDate", i.due_date::text as "dueDate",
-           i.party_id as "partyId", p.code as "partyCode", p.name as "partyName",
+           i.party_id as "partyId", p.code as "partyCode", coalesce(i.document_metadata->'party'->>'name',p.name) as "partyName",
            i.currency_code as "currencyCode", i.fx_rate as "fxRate", i.vat_included as "vatIncluded",
+           i.fx_rate_type as "fxRateType", i.fx_reason as "fxReason", i.fx_snapshot as "fxSnapshot", i.document_metadata as "documentMetadata",
            i.warehouse_id as "warehouseId", w.name as "warehouseName",
            i.return_of_id as "returnOfId", ro.invoice_no as "returnOfNo", i.description,
            i.match_override_reason as "matchOverrideReason",
            i.net_total as "netTotal", i.vat_total as "vatTotal", i.gross_total as "grossTotal",
+           i.legal_profile_snapshot as "legalProfileSnapshot", i.tax_totals_snapshot as "taxTotalsSnapshot",
            i.net_total_base as "netTotalBase", i.vat_total_base as "vatTotalBase", i.gross_total_base as "grossTotalBase",
            i.journal_entry_id as "journalEntryId", je.entry_no as "journalEntryNo",
            i.stock_document_id as "stockDocumentId", sd.doc_no as "stockDocumentNo",
@@ -542,6 +666,8 @@ export async function getInvoice(tx: Tx, id: string) {
     select l.id, l.line_no as "lineNo", l.item_id as "itemId", it.code as "itemCode", it.kind as "itemKind",
            l.description, l.quantity, l.unit, l.unit_price as "unitPrice", l.discount_pct as "discountPct",
            l.vat_code as "vatCode", l.vat_rate as "vatRate", l.net, l.vat, l.gross,
+           l.tax_rule_id as "taxRuleId", l.tax_rule_snapshot as "taxRuleSnapshot", l.tax_calculation as "taxCalculation",
+           l.product_class as "productClass", l.transaction_type as "transactionType", l.tax_treatment as "taxTreatment",
            l.account_id as "accountId", a.code as "accountCode", l.source_line_id as "sourceLineId",
            l.net_base as "netBase", l.vat_base as "vatBase", l.cost_value as "costValue",
            l.delivery_line_id as "deliveryLineId", l.po_line_id as "poLineId", po.code as "orderCode",

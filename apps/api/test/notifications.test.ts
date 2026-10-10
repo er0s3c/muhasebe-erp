@@ -899,7 +899,7 @@ describe('bildirim sistemi', async () => {
     it('perakende şirkette inşaata özgü kaynaklar (onay, yabancı işçi vb. modül yoksa) hiç sayılmaz', async () => {
       const w = await world('NtfPerakende', 'RETAIL_MARKET');
       const prefs = (await ok(w.c.get('/api/notification-preferences'))).kinds.map((k: any) => k.kind) as string[];
-      expect(prefs).not.toContain('approval_pending'); // inşaat modülleri yok
+      expect(prefs).toContain('approval_pending'); // genel satın alma ve mali belge onayları perakendede de kullanılabilir
       expect(prefs).toContain('cheque_due');
       expect(prefs).toContain('stock_below_min');
       const r = await w.scan();

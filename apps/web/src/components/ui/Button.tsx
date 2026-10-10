@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react';
-import type { ButtonHTMLAttributes } from 'react';
+import { cloneElement, forwardRef, isValidElement, type ButtonHTMLAttributes, type ReactElement } from 'react';
 import { cn } from '../../lib/cn';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -24,25 +24,48 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
   loading?: boolean;
+  /** Tek bir Link/anchor üzerinde aynı görünüm; iç içe button/link üretmez. */
+  asChild?: boolean;
 }
 
-export function Button({ variant = 'secondary', size = 'md', loading, className, children, disabled, type = 'button', ...rest }: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = 'secondary', size = 'md', loading, className, children, disabled, type = 'button', asChild, ...rest }, ref) {
+  const styles = cn(
+    'ui-button inline-flex max-w-full shrink-0 items-center justify-center gap-2 whitespace-normal break-words rounded-md text-center font-medium transition-colors [&>svg]:shrink-0',
+    'disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
+    variants[variant], sizes[size], className,
+  );
+  if (asChild && isValidElement(children)) {
+    const child = children as ReactElement<{ className?: string; onClick?: ButtonProps['onClick']; tabIndex?: number; 'aria-disabled'?: boolean }>;
+    return cloneElement(child, {
+      ...rest,
+      className: cn(styles, child.props.className),
+      'aria-disabled': disabled || loading || undefined,
+      tabIndex: disabled || loading ? -1 : child.props.tabIndex,
+      onClick: (event) => {
+        if (disabled || loading) { event.preventDefault(); return; }
+        child.props.onClick?.(event);
+        if (!event.defaultPrevented) rest.onClick?.(event);
+      },
+    });
+  }
   return (
     <button
+      ref={ref}
       type={type}
       data-variant={variant}
+      data-size={size}
+      aria-busy={loading || undefined}
       disabled={disabled || loading}
-      className={cn(
-        'inline-flex max-w-full shrink-0 items-center justify-center gap-2 whitespace-normal break-words rounded-md text-center transition-colors [&>svg]:shrink-0',
-        'disabled:cursor-not-allowed disabled:opacity-50',
-        variants[variant],
-        sizes[size],
-        className,
-      )}
+      className={styles}
       {...rest}
     >
       {loading && <Loader2 className="size-4 animate-spin" aria-hidden />}
       {children}
     </button>
   );
-}
+});
+
+export interface IconButtonProps extends Omit<ButtonProps, 'aria-label'> { label: string }
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({ label, className, ...props }, ref) {
+  return <Button ref={ref} aria-label={label} title={label} className={cn('w-10 px-0 max-md:w-11', className)} {...props} />;
+});

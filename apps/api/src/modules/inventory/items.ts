@@ -36,7 +36,13 @@ async function assertBarcodeFree(tx: Tx, barcode: string | null | undefined, exc
   if (dup && dup.id !== exceptId) throw conflict(`${barcode} barkodu başka bir kartta kayıtlı`, 'BARCODE_TAKEN');
 }
 
+function assertStockLevels(minLevel: string | null | undefined, targetLevel: string | null | undefined) {
+  if (minLevel != null && targetLevel != null && dec(targetLevel).lt(minLevel))
+    throw unprocessable('Hedef stok miktarı minimum stok miktarından küçük olamaz', 'STOCK_TARGET_BELOW_MINIMUM');
+}
+
 export async function createItem(tx: Tx, companyId: string, input: CreateItemInput, taken?: ReadonlySet<string>) {
+  assertStockLevels(input.minLevel, input.targetLevel);
   const code = input.code ?? (await generateCode(tx, companyId, taken));
   const [dup] = await tx.select({ id: items.id }).from(items).where(eq(items.code, code));
   if (dup) throw conflict(`${code} kodlu stok kartı zaten var`, 'ITEM_CODE_TAKEN');
@@ -64,6 +70,7 @@ export async function createItem(tx: Tx, companyId: string, input: CreateItemInp
       salePrice: input.salePrice ?? null,
       saleCurrency: input.saleCurrency,
       minLevel: input.minLevel ?? null,
+      targetLevel: input.targetLevel ?? null,
       notes: input.notes ?? null,
       tracksSerial: input.tracksSerial ?? false,
     })
@@ -86,6 +93,7 @@ async function hasMovements(tx: Tx, id: string): Promise<boolean> {
 
 export async function updateItem(tx: Tx, id: string, input: UpdateItemInput) {
   const current = await getItemRow(tx, id);
+  assertStockLevels(input.minLevel === undefined ? current.minLevel : input.minLevel, input.targetLevel === undefined ? current.targetLevel : input.targetLevel);
   if (input.inventoryRole && input.inventoryRole !== current.inventoryRole && await hasMovements(tx, id)) {
     throw unprocessable('Hareketi olan kartın stok muhasebe sınıfı değiştirilemez', 'ITEM_ROLE_IN_USE');
   }
@@ -102,7 +110,7 @@ export async function updateItem(tx: Tx, id: string, input: UpdateItemInput) {
   const values: Partial<typeof items.$inferInsert> = {};
   for (const key of [
     'name', 'kind', 'unit', 'categoryId', 'barcode', 'vatCode', 'purchasePrice', 'purchaseCurrency',
-    'salePrice', 'saleCurrency', 'minLevel', 'notes', 'isActive', 'tracksSerial', 'inventoryRole',
+    'salePrice', 'saleCurrency', 'minLevel', 'targetLevel', 'notes', 'isActive', 'tracksSerial', 'inventoryRole',
   ] as const) {
     if (input[key] !== undefined) (values as Record<string, unknown>)[key] = input[key];
   }
@@ -196,7 +204,7 @@ export async function listItems(tx: Tx, q: ListItemsQuery) {
 
   const rows = await tx.execute<ListRow>(sql`
     select i.id, i.code, i.name, i.kind, i.inventory_role as "inventoryRole", i.unit, i.barcode, i.is_active as "isActive", i.tracks_serial as "tracksSerial", i.vat_code as "vatCode",
-           i.min_level as "minLevel", i.category_id as "categoryId", c.name as "categoryName",
+           i.min_level as "minLevel", i.target_level as "targetLevel", i.category_id as "categoryId", c.name as "categoryName",
            i.purchase_price as "purchasePrice", i.purchase_currency as "purchaseCurrency",
            i.sale_price as "salePrice", i.sale_currency as "saleCurrency",
            coalesce(b.wh_qty, 0) as "onHand", coalesce(b.total_qty, 0) as "totalQty",

@@ -1,13 +1,13 @@
-import { ArrowLeft, Ban, Printer, Undo2, Paperclip } from 'lucide-react';
+import { ArrowLeft, Ban, Printer, Undo2, Paperclip, Eye } from 'lucide-react';
 import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { DELIVERY_NOTE_TYPE_META, INVOICE_TYPES, INVOICE_TYPE_META, dec, todayIso } from '@erp/shared';
+import { DELIVERY_NOTE_TYPE_META, INVOICE_TYPES, INVOICE_TYPE_META, INVOICE_PRINT_TEMPLATES, INVOICE_PRINT_TEMPLATE_LABELS, dec, todayIso, type InvoicePrintTemplate } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
-import { Field, Input } from '../../components/ui/Field';
+import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
@@ -21,6 +21,9 @@ import { INVOICE_INVALIDATE, InvoiceStatusBadge, InvoiceTypeBadge } from './comm
 import { InvoiceForm } from './InvoiceForm';
 import { MatchCard } from './MatchCard';
 import { fmtDate } from '../../lib/license';
+import { InvoicePrintDocument } from './InvoicePrintDocument';
+import { InvoiceShareButton } from './InvoiceShareButton';
+import { DocumentApprovalPanel, useDocumentApprovals } from '../approvals/common';
 
 /**
  * /invoices/new (yeni ve iade) ve /invoices/:id: taslaksa düzenlenebilir form,
@@ -38,6 +41,7 @@ export function InvoiceEditorPage() {
   const deliveryNoteId = params.get('deliveryNote');
 
   const detail = useCQuery<InvoiceDetail>(['invoice', id], id ? `/api/invoices/${id}` : null);
+  const approvals = useDocumentApprovals('invoice', id);
   const original = useCQuery<InvoiceDetail>(['invoice', returnOf], !id && returnOf ? `/api/invoices/${returnOf}` : null);
   const fromDelivery = useCQuery<DeliveryNoteDetail>(['delivery-note', deliveryNoteId], !id && deliveryNoteId ? `/api/delivery-notes/${deliveryNoteId}` : null);
 
@@ -51,8 +55,9 @@ export function InvoiceEditorPage() {
   }
   if (detail.error) return <Callout tone="danger">{errorMessage(detail.error)}</Callout>;
   if (!detail.data) return <PageLoading />;
-  if (detail.data.invoice.status === 'draft' && canManage) {
-    return <InvoiceForm key={id} type={detail.data.invoice.type} initial={detail.data} />;
+  if (detail.data.invoice.status === 'draft' && canManage && !approvals.data?.requests.some(request=>request.status==='pending')) {
+    if(approvals.isPending)return <PageLoading/>;
+    return <><DocumentApprovalPanel type="invoice" id={id} status="draft"/><InvoiceForm key={id} type={detail.data.invoice.type} initial={detail.data} /></>;
   }
   return <InvoiceView key={id} data={detail.data} />;
 }
@@ -73,6 +78,10 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
   const [cancelling, setCancelling] = useState(false);
   const [cancelDate, setCancelDate] = useState(todayIso());
   const [reason, setReason] = useState('');
+  const formatSettings = useCQuery<{ invoicePrintTemplate: InvoicePrintTemplate }>(['document-format'], '/api/settings/document-format');
+  const [selectedTemplate, setSelectedTemplate] = useState<InvoicePrintTemplate | null>(null);
+  const [printPreview, setPrintPreview] = useState(false);
+  const printTemplate = selectedTemplate ?? formatSettings.data?.invoicePrintTemplate ?? 'detailed';
   // İptal reddedilirse (ör. tahsil edilmiş fatura) gerekçe ve yönlendirme pencerede kalır: kullanıcı önce tahsilatı iptal eder
   const [cancelError, setCancelError] = useState<string | null>(null);
   const creditLimit = (location.state as { creditLimit?: { limit: string; balance: string } } | null)?.creditLimit;
@@ -90,6 +99,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
 
   return (
     <>
+      <div className="print:hidden">
       <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
         {t(`invoices.${meta.side}.title`)}
@@ -110,11 +120,14 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 print:hidden">
+          <Field label="Çıktı şablonu" className="w-36">{id => <Select id={id} value={printTemplate} onChange={event => setSelectedTemplate(event.target.value as InvoicePrintTemplate)}>{INVOICE_PRINT_TEMPLATES.map(value => <option key={value} value={value}>{INVOICE_PRINT_TEMPLATE_LABELS[value]}</option>)}</Select>}</Field>
           <Link className="link inline-flex items-center gap-2 text-sm" to={`/workspace/documents?kind=invoice&id=${inv.id}`}><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>
+          <Button onClick={() => setPrintPreview(value => !value)} aria-pressed={printPreview}><Eye className="size-4" aria-hidden />{printPreview ? 'Önizlemeyi kapat' : 'Çıktıyı önizle'}</Button>
           <Button onClick={() => window.print()}>
             <Printer className="size-4" aria-hidden />
             {t('invoices.view.print')}
           </Button>
+          <InvoiceShareButton data={data} />
           {canReturn && (
             <Button onClick={() => navigate(`/invoices/new?type=${returnType}&returnOf=${inv.id}`)}>
               <Undo2 className="size-4" aria-hidden />
@@ -131,6 +144,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
       </div>
 
       <div className="flex flex-col gap-4">
+        <DocumentApprovalPanel type="invoice" id={inv.id} status={inv.status}/>
         {inv.status === 'cancelled' && (
           <Callout tone="danger" title={t('invoices.view.cancelledTitle', { date: inv.cancelledAt ? fmtDate(inv.cancelledAt) : '' })}>
             {inv.cancelReason}
@@ -291,6 +305,8 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                 <dd className="num">{moneyIn(inv.grossTotalBase, base)}</dd>
               </div>
             )}
+            {foreign && inv.fxSnapshot && <div className="mt-2 text-xs text-muted"><dt>Kullanılan kur kaydı</dt><dd className="mt-1">{inv.fxSnapshot.rateDate} · {inv.fxSnapshot.provider ?? 'Defter para birimi'}{inv.fxSnapshot.manualReason && ` · ${inv.fxSnapshot.manualReason}`}{inv.fxSnapshot.originalInvoiceId && ' · özgün faturadan'}</dd></div>}
+            {inv.taxTotalsSnapshot && <><div className="flex justify-between py-1"><dt>KDV tevkifatı</dt><dd className="num">{moneyIn(inv.taxTotalsSnapshot.vatWithheld, inv.currencyCode)}</dd></div><div className="flex justify-between py-1"><dt>Stopaj</dt><dd className="num">{moneyIn(inv.taxTotalsSnapshot.incomeWithheld, inv.currencyCode)}</dd></div><div className="flex justify-between py-1"><dt>Damga / pul</dt><dd className="num">{moneyIn(inv.taxTotalsSnapshot.stamp, inv.currencyCode)}</dd></div><div className="flex justify-between border-t border-border pt-2"><dt>Satıcıya ödenecek</dt><dd className="num">{moneyIn(inv.taxTotalsSnapshot.payableToSeller, inv.currencyCode)}</dd></div></>}
           </dl>
         </div>
 
@@ -341,6 +357,9 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
           <Field label={t('invoices.view.cancelReason')} required>{(fid) => <Input id={fid} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />}</Field>
         </div>
       </Modal>
+      </div>
+      {printPreview && <div className="mb-4 mt-6 border-t border-border pt-4 text-sm text-muted print:hidden">Çıktı önizlemesi · {INVOICE_PRINT_TEMPLATE_LABELS[printTemplate]} şablon. Yazdırma penceresinden PDF olarak kaydedebilirsiniz.</div>}
+      <InvoicePrintDocument data={data} template={printTemplate} preview={printPreview} />
     </>
   );
 }

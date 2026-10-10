@@ -128,7 +128,7 @@ describe('raporlar ve dışa aktarma', async () => {
   it('satış/alış raporu: her kırılımda toplam net, KDV özetindeki net tutarla aynı; iade düşer, iptal iptal tarihinde eksi', async () => {
     const { c } = await books('Satis');
     const vat = await ok(c.get(`/api/reports/vat-summary?from=${day(1, 1)}&to=${day(12, 31)}`));
-    for (const groupBy of ['party', 'item', 'month', 'invoice']) {
+    for (const groupBy of ['party', 'item', 'month', 'invoice', 'branch', 'creator']) {
       const s = await ok(c.get(`/api/reports/sales-report?from=${day(1, 1)}&to=${day(12, 31)}&groupBy=${groupBy}`));
       const p = await ok(c.get(`/api/reports/purchase-report?from=${day(1, 1)}&to=${day(12, 31)}&groupBy=${groupBy}`));
       expect(Number(s.totals.net), `satış ${groupBy}`).toBe(Number(vat.totals.salesNet));

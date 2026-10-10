@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { currencyCode, isoDate, moneyString, uuid } from './common';
+import { PARTY_TAX_STATUSES } from './document-tax-rules';
 
 export const PARTY_KINDS = ['customer', 'supplier', 'both'] as const;
 /**
@@ -38,6 +39,7 @@ export const createPartySchema = z.object({
   kind: z.enum(PARTY_KINDS).default('customer'),
   taxNumber: optionalText(40),
   taxOffice: optionalText(120),
+  taxStatus: z.enum(PARTY_TAX_STATUSES).optional(),
   phone: optionalText(40),
   email: z
     .union([z.literal(''), z.email().max(254)])
@@ -66,6 +68,7 @@ export const updatePartySchema = z.object({
   kind: z.enum(PARTY_KINDS).optional(),
   taxNumber: clearableText(40),
   taxOffice: clearableText(120),
+  taxStatus: z.enum(PARTY_TAX_STATUSES).optional(),
   phone: clearableText(40),
   email: z
     .union([z.literal(''), z.email().max(254)])

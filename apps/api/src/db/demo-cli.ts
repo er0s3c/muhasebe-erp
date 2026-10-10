@@ -1,6 +1,7 @@
 import { loadConfig } from '../config';
 import { createDb } from './client';
 import { seedManufacturingDemo } from './demo-manufacturing';
+import { seedLeatherDemo } from './demo-leather';
 import { seedDemo } from './demo';
 import { runMigrations } from './migrate';
 import { databaseNameOf, resetSchema, restoreLicenseState, saveLicenseState } from './reset';
@@ -10,6 +11,7 @@ import { databaseNameOf, resetSchema, restoreLicenseState, saveLicenseState } fr
  *
  *   seed                      demo verisini şirket bazlı sürümlerle ekler/günceller; mevcut şifreleri korur
  *   seed-manufacturing        mevcut demo kuruluşuna üretim şirketini ekler/günceller
+ *   seed-leather              mevcut demo kuruluşuna deri şirketini (Ada Deri) ekler/günceller
  *   reset --confirm=<dbadı>   şemayı SİLER, migration'ları uygular, demo verisini yükler (yıkıcı); lisans durumu (kurulum kimliği + kira) korunur
  *
  * Güvenlik: üretim modunda (NODE_ENV=production) yalnızca ALLOW_DEMO=true ile çalışır; böylece bir müşteri
@@ -33,10 +35,11 @@ if (config.NODE_ENV === 'production' && process.env.ALLOW_DEMO !== 'true') {
 }
 
 try {
-  if (command === 'seed' || command === 'seed-manufacturing') {
+  if (command === 'seed' || command === 'seed-manufacturing' || command === 'seed-leather') {
     const handle = createDb(config.DATABASE_URL);
     try {
       if (command === 'seed-manufacturing') await seedManufacturingDemo(handle.db);
+      else if (command === 'seed-leather') await seedLeatherDemo(handle.db);
       else await seedDemo(handle.db, console.log, { secret: config.JWT_SECRET });
     } finally {
       await handle.close();
@@ -68,6 +71,6 @@ try {
     fail('Kullanım: demo-cli <seed | seed-manufacturing | reset --confirm=<veritabanı adı>>');
   }
 } catch (err) {
-  console.error('Demo komutu başarısız:', err instanceof Error ? err.message : err);
+  console.error('Demo komutu başarısız:', err);
   process.exit(1);
 }

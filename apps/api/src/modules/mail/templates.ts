@@ -3,7 +3,7 @@ import type { MailMessage } from './mailer';
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 function layout(name: string, paragraphs: string[], link?: { url: string; label: string }): { text: string; html: string } {
-  const text = [`Merhaba ${name},`, '', ...paragraphs, ...(link ? ['', link.url] : []), '', 'Ada Muhasebe'].join('\n');
+  const text = [`Merhaba ${name},`, '', ...paragraphs, ...(link ? ['', link.url] : []), '', 'Ada ERP'].join('\n');
   const html =
     `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#0c0a08;line-height:1.5">` +
     `<p>Merhaba ${esc(name)},</p>` +
@@ -12,7 +12,7 @@ function layout(name: string, paragraphs: string[], link?: { url: string; label:
       ? `<p><a href="${esc(link.url)}" style="display:inline-block;background:#e4f222;color:#0c0a08;padding:10px 20px;border-radius:6px;text-decoration:none">${esc(link.label)}</a></p>` +
         `<p style="color:#6d6c6b;font-size:13px">Düğme çalışmazsa bu adresi tarayıcınıza yapıştırın:<br>${esc(link.url)}</p>`
       : '') +
-    `<p style="color:#6d6c6b;font-size:13px">Ada Muhasebe</p></div>`;
+    `<p style="color:#6d6c6b;font-size:13px">Ada ERP</p></div>`;
   return { text, html };
 }
 

@@ -2,6 +2,8 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import {
   allocateByHours,
   computePayroll,
+  computeCountryPayroll,
+  COUNTRY_PAYROLL_ENGINE_VERSION,
   dec,
   isoYear,
   monthBounds,
@@ -11,19 +13,22 @@ import {
   type PayrollAdjustmentInput,
   type PayrollItemInput,
   type PayrollWarning,
+  type CountryPayrollResult,
   ADVANCE_DEDUCTION_ITEM_CODE,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { costCodes, employees, journalEntries, payrollAdjustments, payrollItems, payrollLineAllocations, payrollLineItems, payrollLines, payrollRuns } from '../../db/schema';
+import { costCodes, employees, journalEntries, payrollAdjustments, payrollItems, payrollLineAllocations, payrollLineItems, payrollLines, payrollRuns, socialDeclarations } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { getMonthLock } from '../hr/attendance';
 import { createJournalEntry, reverseJournalEntry, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { logPayrollAccess, resolveParams, termsAtMonthEnd, type PayrollCtx } from './config';
 import { buildPayrollJournal } from './journal';
 import { advanceItemTotal, deleteRunAdvanceDeductions, recordRunAdvanceSettlements, validateRunAdvanceDeductions } from '../employee-ledger/hooks';
 import { paged, type PageQuery } from '../../http/paging';
+import { resolveLegalProfileSnapshot } from '../tenancy/profiles';
+import { cumulativeBases, lockPayrollYear, requireNoLaterPostedCountryRun, resolveCountryConfig, taxProfilesAt } from './country-config';
 
 const ledgerCtx = (c: PayrollCtx): LedgerCtx => ({ companyId: c.companyId, userId: c.userId, baseCurrency: c.baseCurrency, reportingCurrency: c.reportingCurrency });
 const chunks = <T>(xs: readonly T[], n = 500): T[][] => {
@@ -35,6 +40,9 @@ const chunks = <T>(xs: readonly T[], n = 500): T[][] => {
 type Run = typeof payrollRuns.$inferSelect;
 
 async function lockRun(tx: Tx, id: string): Promise<Run> {
+  const [initial] = await tx.select({ companyId: payrollRuns.companyId, month: payrollRuns.month, jurisdiction: payrollRuns.jurisdiction }).from(payrollRuns).where(eq(payrollRuns.id, id));
+  if (!initial) throw notFound('Bordro');
+  if (initial.jurisdiction) await lockPayrollYear(tx, initial.companyId, initial.month);
   const [run] = await tx.select().from(payrollRuns).where(eq(payrollRuns.id, id)).for('update');
   if (!run) throw notFound('Bordro');
   return run;
@@ -59,13 +67,15 @@ interface AttendanceRow {
   absent: number;
   entryDays: number;
   employedDays: number;
+  hireDate: string | null;
+  leaveDate: string | null;
 }
 
 /** Ayda çalışma aralığı olan (ya da kaydı olan) personelin puantaj toplamları. */
 async function attendanceByEmployee(tx: Tx, month: string): Promise<AttendanceRow[]> {
   const { start, end } = monthBounds(month);
   const res = await tx.execute<Record<string, unknown>>(sql`
-    select e.id, e.code, e.full_name as "fullName",
+    select e.id, e.code, e.full_name as "fullName", e.hire_date::text as "hireDate", e.leave_date::text as "leaveDate",
            coalesce(sum(a.normal_hours), 0)::text as normal, coalesce(sum(a.overtime_hours), 0)::text as overtime,
            count(a.id) filter (where a.normal_hours + a.overtime_hours > 0)::int as "hourDays",
            count(a.id) filter (where a.day_type = 'annual_leave')::int as annual,
@@ -94,6 +104,8 @@ async function attendanceByEmployee(tx: Tx, month: string): Promise<AttendanceRo
     absent: Number(r.absent),
     entryDays: Number(r.entryDays),
     employedDays: Number(r.employedDays),
+    hireDate: r.hireDate as string | null,
+    leaveDate: r.leaveDate as string | null,
   }));
 }
 
@@ -117,16 +129,22 @@ async function hourGroups(tx: Tx, month: string) {
 // --- Oluşturma / hesaplama -------------------------------------------------------------------------------
 
 export async function createRun(tx: Tx, ctx: PayrollCtx, input: { month: string; description?: string | null }) {
+  const { start, end } = monthBounds(input.month);
+  const legalProfile = await resolveLegalProfileSnapshot(tx, ctx.companyId, end);
+  if (legalProfile && legalProfile.effectiveFrom > start) throw unprocessable('Şirket ülke profili ay ortasında başlıyor; bu ayın bordrosu otomatik ülke hesabına uygun değil', 'PAYROLL_COUNTRY_PARTIAL_PROFILE');
+  if (legalProfile && ctx.baseCurrency !== 'TRY') throw unprocessable('Ülke bordrosu TRY ücret hesabını destekler; şirket temel para birimini kontrol edin', 'PAYROLL_COUNTRY_CURRENCY');
+  if (legalProfile) await lockPayrollYear(tx, ctx.companyId, input.month);
   const [existing] = await tx
     .select({ number: payrollRuns.number })
     .from(payrollRuns)
     .where(and(eq(payrollRuns.month, input.month), sql`${payrollRuns.status} <> 'cancelled'`));
   if (existing) throw conflict(`${input.month} ayı için bordro zaten var (${existing.number})`, 'PAYROLL_RUN_EXISTS');
   const year = isoYear(`${input.month}-01`);
-  const number = formatDocumentNumber('BRD', year, await nextNumber(tx, ctx.companyId, 'PAYROLL', year));
+  const number = await nextDocumentNumber(tx, ctx.companyId, 'PAYROLL', year, 'BRD');
   const [run] = await tx
     .insert(payrollRuns)
-    .values({ companyId: ctx.companyId, number, month: input.month, description: input.description?.trim() || null, createdBy: ctx.userId })
+    .values({ companyId: ctx.companyId, number, month: input.month, description: input.description?.trim() || null, createdBy: ctx.userId,
+      jurisdiction: legalProfile?.jurisdiction ?? null, engineVersion: legalProfile ? COUNTRY_PAYROLL_ENGINE_VERSION : 'legacy-v1', legalProfileSnapshot: legalProfile })
     .returning();
   await calculateRun(tx, ctx, run!.id);
   return getRun(tx, run!.id);
@@ -149,6 +167,8 @@ export async function calculateRun(tx: Tx, _ctx: PayrollCtx, id: string) {
   const run = await lockRun(tx, id);
   requireDraft(run);
   const { end, days } = monthBounds(run.month);
+  const country = run.engineVersion === COUNTRY_PAYROLL_ENGINE_VERSION && run.jurisdiction ? await resolveCountryConfig(tx, run.jurisdiction, run.month) : null;
+  const taxProfiles = country ? await taxProfilesAt(tx, run.month) : null;
   const { set: params, ids: paramIds } = await resolveParams(tx, end);
   const terms = await termsAtMonthEnd(tx, run.month);
   const att = await attendanceByEmployee(tx, run.month);
@@ -170,6 +190,7 @@ export async function calculateRun(tx: Tx, _ctx: PayrollCtx, id: string) {
       amount: a.amount,
       affectsSocialBase: a.item.affectsSocialBase,
       affectsTaxBase: a.item.affectsTaxBase,
+      affectsStampBase: a.item.affectsStampBase,
       liability: a.item.liability as 'tax' | 'social' | 'other',
     });
     adjByEmp.set(a.employeeId, list);
@@ -187,13 +208,33 @@ export async function calculateRun(tx: Tx, _ctx: PayrollCtx, id: string) {
   for (const e of att) {
     const term = terms.get(e.id);
     if (!term) continue;
-    const r = computePayroll({
+    const fullMonth = e.hireDate !== null && e.hireDate <= `${run.month}-01` && (!e.leaveDate || e.leaveDate >= end);
+    if (country && term.effective_from > `${run.month}-01` && term.effective_from !== e.hireDate) throw unprocessable(`${e.code}: ay içinde değişen ücret şartı otomatik ülke bordrosunda desteklenmiyor`, 'PAYROLL_COUNTRY_PARTIAL_TERM');
+    if (country && !e.hireDate) throw unprocessable(`${e.code}: ülke bordrosunda işe giriş tarihi gerekli`, 'PAYROLL_HIRE_DATE_REQUIRED');
+    if (country && e.sick > 0 && !params.sick_leave_pay_pct) throw unprocessable(`${e.code}: hastalık izninin ücret oranını tarihli parametre olarak girin`, 'PAYROLL_COUNTRY_SICK_PAY_REQUIRED');
+    const outsideDays = country && !fullMonth ? Math.max(0, 30 - Math.min(30, e.employedDays)) : 0;
+    const payrollInput = {
       basis: term.pay_basis as PayBasis,
       rate: term.amount,
-      attendance: { normalHours: e.normal, overtimeHours: e.overtime, hourDays: e.hourDays, annualLeaveDays: e.annual, sickLeaveDays: e.sick, unpaidLeaveDays: e.unpaid, absentDays: e.absent },
-      params,
+      attendance: { normalHours: e.normal, overtimeHours: e.overtime, hourDays: e.hourDays, annualLeaveDays: e.annual, sickLeaveDays: e.sick, unpaidLeaveDays: e.unpaid, absentDays: e.absent + outsideDays },
+      params: country ? { ...params, days_per_month: { value: '30', verified: true } } : params,
       items: adjByEmp.get(e.id) ?? [],
-    });
+    };
+    let r: ReturnType<typeof computePayroll> | CountryPayrollResult;
+    let countryLineSnapshot: Record<string, unknown> | null = null;
+    if (country) {
+      const taxProfile = taxProfiles!.get(e.id);
+      if (!taxProfile) throw unprocessable(`${e.code}: ülke ve açılış matrahı içeren personel vergi profili gerekli`, 'PAYROLL_TAX_PROFILE_REQUIRED');
+      if (taxProfile.effectiveFrom > `${run.month}-01` && taxProfile.effectiveFrom !== e.hireDate) throw unprocessable(`${e.code}: ay ortasında değişen vergi profili desteklenmiyor`, 'PAYROLL_COUNTRY_PARTIAL_TAX_PROFILE');
+      const bases = await cumulativeBases(tx, e.id, run.month, taxProfile.profile, country.config);
+      const socialDays = Math.max(0, Math.min(30, (fullMonth ? 30 : e.employedDays) - e.unpaid - e.absent - (params.sick_leave_pay_pct?.value === '0' ? e.sick : 0)));
+      try {
+        r = computeCountryPayroll({ ...payrollInput, config: country.config, profile: taxProfile.profile, month: run.month, socialDays, ...bases });
+      } catch (err) {
+        throw unprocessable(`${e.code}: ${err instanceof Error ? err.message : 'Ülke bordro hesabı geçersiz'}`, 'PAYROLL_COUNTRY_CALCULATION');
+      }
+      countryLineSnapshot = { ...(r as CountryPayrollResult).legalSnapshot, taxProfileId: taxProfile.id, configId: country.row.id, priorRunMonths: bases.priorRunMonths };
+    } else r = computePayroll(payrollInput);
     const warnings: PayrollWarning[] = [...r.warnings];
     if (e.employedDays < days) warnings.push({ code: 'partial_month', count: e.employedDays });
     if (e.employedDays > e.entryDays) warnings.push({ code: 'missing_attendance', count: e.employedDays - e.entryDays });
@@ -204,6 +245,7 @@ export async function calculateRun(tx: Tx, _ctx: PayrollCtx, id: string) {
         companyId: run.companyId,
         runId: id,
         employeeId: e.id,
+        legalCalculationSnapshot: countryLineSnapshot,
         payBasis: term.pay_basis,
         rate: toDbAmount(term.amount),
         normalHours: e.normal,
@@ -276,7 +318,7 @@ export async function calculateRun(tx: Tx, _ctx: PayrollCtx, id: string) {
       }),
     );
 
-    for (const u of r.usedParams) usedKeys.set(u.key, { value: u.value, verified: u.verified });
+    for (const u of r.usedParams) if (paramIds[u.key]) usedKeys.set(u.key, { value: u.value, verified: u.verified });
     gross = gross.plus(r.gross);
     deductions = deductions.plus(r.deductionsTotal);
     employer = employer.plus(r.employerTotal);
@@ -293,6 +335,7 @@ export async function calculateRun(tx: Tx, _ctx: PayrollCtx, id: string) {
       netTotal: toDbAmount(gross.minus(deductions)),
       employerTotal: toDbAmount(employer),
       paramsSnapshot: snapshot,
+      countryConfigSnapshot: country ? { ...country.config, configId: country.row.id, verifiedAt: country.row.verifiedAt?.toISOString(), verifiedBy: country.row.verifiedBy, sourceNote: country.row.sourceNote } : null,
       hasUnverifiedParams: snapshot.some((s) => !s.verified),
       calculatedAt: new Date(),
       updatedAt: new Date(),
@@ -418,6 +461,7 @@ export async function getRun(tx: Tx, id: string) {
       employerSocial: l.employer_social as string,
       employerOther: l.employer_other as string,
       employerTotal: l.employer_total as string,
+      legalCalculationSnapshot: l.legal_calculation_snapshot ?? null,
       warnings: l.warnings as PayrollWarning[],
       items: items.filter((i) => i.lineId === lid).map((i) => ({ kind: i.kind, source: i.source, code: i.code, label: i.label, amount: i.amount, liability: i.liability, paramKey: i.paramKey, rate: i.rate })),
       allocations: allocs.rows.filter((a) => a.lineId === lid),
@@ -449,11 +493,13 @@ export async function getSlip(tx: Tx, runId: string, employeeId: string) {
 export async function approveRun(tx: Tx, ctx: PayrollCtx, id: string) {
   const run = await lockRun(tx, id);
   requireDraft(run);
+  await requireNoLaterPostedCountryRun(tx, run);
   const lock = await getMonthLock(tx, run.month);
   if (!lock.closed) throw unprocessable(`Puantaj ayı (${run.month}) kapalı değil; bordro onaylanamaz. Önce puantajı kapatın`, 'ATTENDANCE_MONTH_NOT_CLOSED');
   // Onay anında yeniden hesaplanır: kayda giren, ekranda son görülen değil, güncel parametre/şart/puantaj durumudur
   await calculateRun(tx, ctx, id);
   const fresh = await lockRun(tx, id);
+  if (fresh.jurisdiction && fresh.hasUnverifiedParams) throw unprocessable('Ülke bordrosunda kullanılan ücret/mesai parametreleri doğrulanmalı', 'PAYROLL_COUNTRY_UNVERIFIED_PAY_PARAMS');
   const lines = await tx.select().from(payrollLines).where(eq(payrollLines.runId, id));
   if (lines.length === 0) throw unprocessable('Bordroda satır yok: ücret şartı girilmiş personel bulunamadı', 'PAYROLL_EMPTY');
   const negative = lines.filter((l) => dec(l.net).isNegative());
@@ -534,6 +580,11 @@ export async function cancelRun(tx: Tx, ctx: PayrollCtx, id: string, input: { re
   const run = await lockRun(tx, id);
   if (run.status === 'paid') throw unprocessable('Ödendi işaretli bordro iptal edilemez; önce ödemeyi geri alın', 'PAYROLL_PAID');
   if (run.status !== 'approved') throw unprocessable('Yalnızca onaylı bordro iptal edilir (taslak silinir)', 'PAYROLL_NOT_APPROVED');
+  await requireNoLaterPostedCountryRun(tx, run);
+  if (run.jurisdiction) {
+    const [declaration] = await tx.select({ id: socialDeclarations.id }).from(socialDeclarations).where(and(eq(socialDeclarations.payrollRunId, id), eq(socialDeclarations.status, 'finalized'))).limit(1);
+    if (declaration) throw conflict('Bu bordronun sosyal bildirimi kesinleşmiş; iptalden önce bildirimi yeniden açın', 'PAYROLL_COUNTRY_FINALIZED_DECLARATION');
+  }
   const reversal = await reverseJournalEntry(tx, ledgerCtx(ctx), run.entryId!, {
     entryDate: input.entryDate ?? todayIso(),
     description: `Bordro iptali ${run.number}: ${input.reason}`.slice(0, 300),

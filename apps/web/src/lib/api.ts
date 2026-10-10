@@ -1,3 +1,5 @@
+import { currentBranch } from './branch';
+
 /**
  * API istemcisi. Erişim jetonu yalnızca bellekte tutulur (XSS ile çalınamaz);
  * oturum, httpOnly refresh çerezi ile sayfa yenilenince geri kurulur.
@@ -43,6 +45,7 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   companyId?: string | null;
+  branchId?: string;
   signal?: AbortSignal;
 }
 
@@ -51,6 +54,7 @@ async function raw(path: string, opts: RequestOptions): Promise<Response> {
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (accessToken && !opts.anonymous) headers.Authorization = `Bearer ${accessToken}`;
   if (opts.companyId) headers['X-Company-Id'] = opts.companyId;
+  if (opts.companyId) headers['X-Branch-Id'] = opts.branchId ?? currentBranch(opts.companyId);
   return fetch(path, {
     method: opts.method ?? 'GET',
     headers,

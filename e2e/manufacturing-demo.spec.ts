@@ -29,32 +29,31 @@ test('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ pag
     await expect(page.getByRole('main')).toBeVisible();
     await expect(page.getByText('Beklenmeyen bir hata oluştu', { exact: false })).toHaveCount(0);
     if (path === 'planning') {
-      const plan = page.getByRole('form', { name: 'Üretim planı hesapla' });
-      await plan
-        .getByLabel('Senaryoya eklenecek üretim emri')
-        .selectOption({ label: 'URE-000001' });
-      await plan.getByRole('button', { name: 'Rotayı ekle' }).click();
-      await expect(plan.getByLabel('Dakika', { exact: true })).toHaveCount(2);
-      await plan.getByRole('button', { name: 'Rotayı ekle' }).click();
-      await expect(plan.getByLabel('Dakika', { exact: true })).toHaveCount(2);
+      await page.getByRole('button', { name: 'Yeni plan oluştur', exact: true }).click();
+      const plan = page.getByRole('dialog', { name: 'Yeni plan oluştur', exact: true });
+      const orderSelect = plan.getByLabel('Üretim emri', { exact: true });
+      const [selectedOrder] = await orderSelect.selectOption({ label: 'URE-000001' });
+      await plan.getByRole('button', { name: 'Ekle', exact: true }).click();
+      await expect(orderSelect.locator(`option[value="${selectedOrder}"]`)).toHaveCount(0);
+      await expect(plan.getByText('URE-000001', { exact: true })).toBeVisible();
+      await plan.getByRole('button', { name: 'Tarihe geç', exact: true }).click();
+      await plan.getByRole('button', { name: 'Planı kontrol et', exact: true }).click();
+      await expect(plan.getByLabel('Süre (dakika)', { exact: true })).toHaveCount(2);
       const created = page.waitForResponse(
         (r) =>
           r.url().endsWith('/api/manufacturing/planning/schedules') &&
           r.request().method() === 'POST',
       );
-      await plan.getByRole('button', { name: 'Senaryo oluştur' }).click();
+      await plan.getByRole('button', { name: 'Taslak plan oluştur', exact: true }).click();
       const response = await created;
       expect(response.ok(), await response.text()).toBeTruthy();
       const scenario = (await response.json()).record;
       expect(scenario.operations).toHaveLength(2);
-      const row = page
-        .getByRole('row')
-        .filter({ hasText: scenario.code })
-        .filter({ has: page.getByRole('button', { name: /Planı yayımla|Planı iptal et/ }) });
+      const planCard = page.getByRole('article', { name: scenario.code, exact: true });
       const published = page.waitForResponse((r) =>
         r.url().endsWith(`/planning/schedules/${scenario.id}/publish`),
       );
-      await row.getByRole('button', { name: 'Planı yayımla', exact: true }).click();
+      await planCard.getByRole('button', { name: 'Planı yayımla', exact: true }).click();
       await page
         .getByRole('dialog')
         .getByRole('button', { name: 'Planı yayımla', exact: true })
@@ -63,7 +62,7 @@ test('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ pag
       const cancelled = page.waitForResponse((r) =>
         r.url().endsWith(`/planning/schedules/${scenario.id}/cancel`),
       );
-      await row.getByRole('button', { name: 'Planı iptal et' }).click();
+      await planCard.getByRole('button', { name: 'Planı iptal et' }).click();
       await page
         .getByRole('dialog')
         .getByRole('button', { name: 'Kapasiteyi serbest bırak' })

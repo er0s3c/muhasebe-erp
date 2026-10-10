@@ -115,17 +115,17 @@ export function ProgramPanel({ projectId }: { projectId: string }) {
             role="img"
             aria-label="İş programı; koyu çubuklar kritik işler, açık gri çubuklar başlangıç planı"
           >
-            <text x="180" y="14" className="fill-current text-[11px]">
+            <text x="180" y="14" className="fill-current text-[12px]">
               {first}
             </text>
-            <text x="790" y="14" className="fill-current text-[11px]">
+            <text x="790" y="14" className="fill-current text-[12px]">
               {last}
             </text>
             {rows.map((r, i) => {
               const b = baseline.find((b) => b.id === r.id);
               return (
                 <g key={r.id}>
-                  <text x="0" y={i * 48 + 53} className="fill-current text-[11px]">
+                  <text x="0" y={i * 48 + 53} className="fill-current text-[12px]">
                     {r.title.slice(0, 25)}
                   </text>
                   {b && (

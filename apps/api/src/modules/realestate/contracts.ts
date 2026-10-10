@@ -29,7 +29,7 @@ import {
   openItemsForParties,
 } from '../parties/service';
 import { requireOpenPeriod } from '../settings/periods';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireRate } from '../settings/rates';
 import { buildActivationJournal, buildHandoverJournal } from './journal';
 import type { RealEstateCtx } from './units';
@@ -150,11 +150,7 @@ export async function createContract(tx: Tx, ctx: SalesCtx, input: CreateSalesCo
       sql`update construction_workflows set status='lost',version=version+1 where id=${expired.id}::uuid`,
     );
   const year = isoYear(input.contractDate);
-  const code = formatDocumentNumber(
-    'SSZ',
-    year,
-    await nextNumber(tx, ctx.companyId, 'SALES_CONTRACT', year),
-  );
+  const code = await nextDocumentNumber(tx, ctx.companyId, 'SALES_CONTRACT', year, 'SSZ');
   const [row] = await tx
     .insert(salesContracts)
     .values({

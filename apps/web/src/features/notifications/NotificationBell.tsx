@@ -52,7 +52,7 @@ export function NotificationBell() {
               data-testid="notification-badge"
               data-critical={hasCritical || undefined}
               className={cn(
-                'absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-md bg-inverted px-1 text-[10px] leading-none text-on-inverted',
+                'absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-md bg-inverted px-1 text-[12px] leading-none text-on-inverted',
                 hasCritical && 'border border-danger-on-inverted',
               )}
             >

@@ -95,6 +95,8 @@ const envSchema = z
     CONSTRUCTION_AI_URL: z.url().startsWith('https://').optional(),
     CONSTRUCTION_AI_KEY: z.string().optional(),
     CONSTRUCTION_AI_MODEL: z.string().default(''),
+    GEMINI_API_KEY: z.string().optional(),
+    GEMINI_MODEL: z.string().default('gemini-flash-lite-latest'),
     /**
      * Lisans sunucusu (satıcı) adresi; verilmezse derlemede gömülen adres kullanılır. Sahte bir sunucu kira üretemez
      * (kiralar derlemeye gömülü satıcı anahtarıyla doğrulanır); yine de üretimde https zorunludur.

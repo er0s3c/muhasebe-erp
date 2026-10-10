@@ -388,7 +388,7 @@ export function ProjectControlPage() {
                       ? Number(cockpit.data.metrics.actual).toLocaleString('tr-TR')
                       : '—'}
                   </Stat>
-                  <Stat label="Tahmini toplam maliyet" sub="Mevcut ERP EAC hesabı">
+                  <Stat label="Tahmini toplam maliyet" sub="Tamamlanma maliyeti tahmini">
                     {cockpit.data?.metrics
                       ? Number(cockpit.data.metrics.eac).toLocaleString('tr-TR')
                       : '—'}

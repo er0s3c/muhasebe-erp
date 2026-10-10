@@ -49,7 +49,7 @@ import { treasuryStatement } from '../treasury/reports';
 /** Dışa aktarma bağlamı: işlem ve şirket bilgisi (başlık/alt başlıkta kullanılır). */
 export interface BuildCtx {
   tx: Tx;
-  company: { name: string; baseCurrency: string; reportingCurrency: string | null };
+  company: { name: string; baseCurrency: string; reportingCurrency: string | null; timeZone?: string };
   /** İsteği yapan kullanıcı (yalnızca kullanıcıya göre görünürlüğü olan raporlar için: ajanda). */
   user?: { id: string; role?: Role };
   /** Şirket kimliği, rol ve açık modüller (bölümleri izin/modüle göre kapılayan raporlar: yönetici özeti, döviz pozisyonu). */
@@ -471,9 +471,9 @@ export async function generalLedgerTable(ctx: BuildCtx, q: { from: string; to: s
   ];
 }
 
-const GROUP_LABEL = { party: 'Cari bazında', item: 'Stok kartı bazında', month: 'Ay bazında', invoice: 'Fatura bazında' } as const;
+const GROUP_LABEL = { party: 'Cari bazında', item: 'Stok kartı bazında', month: 'Ay bazında', invoice: 'Fatura bazında', branch: 'Şube bazında', creator: 'Özgün kaydı oluşturan kullanıcı bazında' } as const;
 
-export async function salesReportTable(ctx: BuildCtx, side: 'sales' | 'purchases', q: { from: string; to: string; groupBy: 'party' | 'item' | 'month' | 'invoice' }): Promise<ReportTable[]> {
+export async function salesReportTable(ctx: BuildCtx, side: 'sales' | 'purchases', q: import('@erp/shared').SalesReportQuery): Promise<ReportTable[]> {
   const d = await salesReport(ctx.tx, side, q);
   const b = ctx.company.baseCurrency;
   const amounts = [col('net', `Net (${b})`, 'money'), col('vat', `KDV (${b})`, 'money'), col('gross', `Brüt (${b})`, 'money')];
@@ -485,8 +485,8 @@ export async function salesReportTable(ctx: BuildCtx, side: 'sales' | 'purchases
   } else if (q.groupBy === 'item') {
     columns = [col('code', 'Kod', 'text', 14), col('label', 'Stok kartı', 'text', 40), col('qty', 'Miktar', 'qty'), ...amounts];
     rows = d.rows.map((r) => ({ code: r.code, label: r.label, qty: r.qty, net: r.net, vat: r.vat, gross: r.gross }));
-  } else if (q.groupBy === 'month') {
-    columns = [col('label', 'Ay', 'text', 12), col('count', 'Belge adedi', 'int'), ...amounts];
+  } else if (q.groupBy === 'month' || q.groupBy === 'branch' || q.groupBy === 'creator') {
+    columns = [col('label', q.groupBy === 'month' ? 'Ay' : q.groupBy === 'branch' ? 'Şube' : 'Kaydı oluşturan kullanıcı', 'text', 40), col('count', 'Belge adedi', 'int'), ...amounts];
     rows = d.rows.map((r) => ({ label: r.label, count: r.docCount, net: r.net, vat: r.vat, gross: r.gross }));
   } else {
     columns = [col('date', 'Tarih', 'date'), col('code', 'Fatura no', 'text', 18), col('externalNo', side === 'sales' ? 'Dış no' : 'Tedarikçi fatura no', 'text', 18), col('label', side === 'sales' ? 'Müşteri' : 'Tedarikçi', 'text', 36), col('type', 'Tür', 'text', 16), ...amounts];
@@ -497,7 +497,7 @@ export async function salesReportTable(ctx: BuildCtx, side: 'sales' | 'purchases
       key: side === 'sales' ? 'satis-raporu' : 'alis-raporu',
       title: side === 'sales' ? 'Satış raporu' : 'Alış raporu',
       sheet: side === 'sales' ? 'Satış raporu' : 'Alış raporu',
-      subtitle: sub(ctx, period(q.from, q.to), GROUP_LABEL[q.groupBy], 'İadeler düşülmüştür; iptal ve taslaklar hariç'),
+      subtitle: sub(ctx, period(q.from, q.to), GROUP_LABEL[q.groupBy], 'İadeler ve iptaller olay tarihinde düşülür; taslaklar hariç'),
       columns,
       rows,
       totals: { ...(d.totals.docCount === null ? {} : { count: d.totals.docCount }), net: d.totals.net, vat: d.totals.vat, gross: d.totals.gross },
@@ -1250,7 +1250,7 @@ export async function socialDeclarationTable(ctx: BuildCtx, q: { id: string }): 
       key: 'sosyal-guvenlik-bildirimi',
       title: `Aylık sosyal güvenlik bildirimi — ${x.number} (${monthLabelTR(x.month)})`,
       sheet: 'Aylık bildirim',
-      subtitle: sub(ctx, SOCIAL_NOTE, SOCIAL_STATUS_LABEL[x.status] ?? x.status, `Kaynak bordro ${x.payrollRunNumber}`, warn, 'kişisel veri: sosyal güvenlik no maskeli'),
+      subtitle: sub(ctx, SOCIAL_NOTE, SOCIAL_STATUS_LABEL[x.status] ?? x.status, `Kaynak bordro ${x.payrollRunNumber}`, x.jurisdiction ? `Ülke ${x.jurisdiction}; kural ${String(x.countryConfigSnapshot?.rulePackVersion ?? '')}` : 'Eski manuel hesap', warn, 'kişisel veri: sosyal güvenlik no maskeli'),
       columns: [
         col('code', 'Kod', 'text', 10),
         col('name', 'Ad soyad', 'text', 28),
@@ -1266,6 +1266,7 @@ export async function socialDeclarationTable(ctx: BuildCtx, q: { id: string }): 
         col('base', `Prime esas kazanç (${b})`, 'money'),
         col('empPrem', `İşçi primi (${b})`, 'money'),
         col('erPrem', `İşveren primi (${b})`, 'money'),
+        ...(x.jurisdiction === 'KKTC' ? [col('empProvident', `İhtiyat işçi (${b})`, 'money'), col('erProvident', `İhtiyat işveren (${b})`, 'money'), col('localEmployment', `Yerel istihdam katkısı (${b})`, 'money')] : []),
         col('supEmp', `İşçi prim desteği (${b})`, 'money'),
         col('supEr', `İşveren prim desteği (${b})`, 'money'),
         col('empDue', `İşçi ödenecek (${b})`, 'money'),
@@ -1288,6 +1289,9 @@ export async function socialDeclarationTable(ctx: BuildCtx, q: { id: string }): 
         base: l.premiumBase,
         empPrem: l.employeePremium,
         erPrem: l.employerPremium,
+        empProvident: l.employeeProvident,
+        erProvident: l.employerProvident,
+        localEmployment: l.employerLocalEmployment,
         supEmp: l.supportEmployee,
         supEr: l.supportEmployer,
         empDue: l.employeeDue,
@@ -1299,6 +1303,9 @@ export async function socialDeclarationTable(ctx: BuildCtx, q: { id: string }): 
         base: d.totals.premiumBase,
         empPrem: d.totals.employeePremium,
         erPrem: d.totals.employerPremium,
+        empProvident: d.lines.reduce((sum, l) => sum.plus(l.employeeProvident), dec(0)).toFixed(2),
+        erProvident: d.lines.reduce((sum, l) => sum.plus(l.employerProvident), dec(0)).toFixed(2),
+        localEmployment: d.lines.reduce((sum, l) => sum.plus(l.employerLocalEmployment), dec(0)).toFixed(2),
         supEmp: d.totals.supportEmployee,
         supEr: d.totals.supportEmployer,
         empDue: d.totals.employeeDue,

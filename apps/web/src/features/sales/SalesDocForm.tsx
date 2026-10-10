@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { calcInvoice, dec, todayIso, type SalesDocKind } from '@erp/shared';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
@@ -179,6 +180,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
   const remove = useCMutation((_: void, c) => c(`/api/sales-docs/${initial!.doc.id}`, { method: 'DELETE' }), SALES_INVALIDATE);
 
   const submit = (advance: 'send' | 'confirm' | null) => {
+    if (save.isPending || remove.isPending || cancelDoc.isPending) return;
     setError(null);
     setFieldError(null);
     if (!partyId) return setFieldError(t('sales.form.partyRequired'));
@@ -186,6 +188,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
     if (lines.some((l) => !l.itemId && l.unitPrice === '')) return setFieldError(t('sales.form.priceRequired'));
     save.mutate(advance, {
       onSuccess: (res) => {
+        markFormSaved(document.querySelector('[data-form-guard-scope="SalesDocForm"]'));
         toast.success(advance ? t(`sales.actions.done.${advance}`) : t('sales.form.savedMsg'));
         navigate(`/sales/docs/${res.doc.id}`, { replace: true });
       },
@@ -197,7 +200,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
   if (!whData || !itemData || !taxData) return <PageLoading />;
   const gridCols = 'lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1.5fr)_88px_120px_72px_minmax(0,0.9fr)_32px]';
 
-  return (
+  return (<FormGuard captureAll scopeKey="SalesDocForm" pending={save.isPending || remove.isPending || cancelDoc.isPending}>{(
     <>
       <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
@@ -383,7 +386,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
               onClick={() =>
                 cancelDoc.mutate(cancelReason.trim(), {
                   onSuccess: () => {
-                    toast.success(t('sales.actions.done.cancel'));
+                    markFormSaved(document.querySelector('[data-form-guard-scope="SalesDocForm"]')); toast.success(t('sales.actions.done.cancel'));
                     navigate(listPath, { replace: true });
                   },
                   onError: (e) => {
@@ -435,5 +438,5 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
         {null}
       </Modal>
     </>
-  );
+  )}</FormGuard>);
 }

@@ -19,6 +19,8 @@ import { itemProfitability, salesReport } from './analytics';
 import { evaluateInvoiceMatch } from '../procurement/matching';
 import { cancelInvoice, postInvoice } from './posting';
 import { invoiceSummary, vatSummary } from './reports';
+import { documentTaxRuleRoutes } from './tax-rules';
+import { documentTaxReport } from './tax-report';
 import {
   createInvoiceDraft,
   deleteInvoiceDraft,
@@ -48,6 +50,8 @@ async function lockForPosting(tx: Tx, lines: readonly { itemId?: string | null; 
 }
 
 export const invoiceRoutes: FastifyPluginAsync = async (app) => {
+  await app.register(documentTaxRuleRoutes);
+  app.get('/api/reports/document-taxes', tenantRoute(app, { module: 'core.invoices', permission: 'reports.read' }, async ({ tx, req }) => documentTaxReport(tx, vatSummaryQuerySchema.parse(req.query))));
   const read = { module: 'core.invoices', permission: 'invoices.read' } as const;
   const manage = { module: 'core.invoices', permission: 'invoices.manage' } as const;
   const post = { module: 'core.invoices', permission: 'invoices.post' } as const;

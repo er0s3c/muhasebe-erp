@@ -3,6 +3,8 @@ import { dec, decCheck, tryDec } from '../money';
 import type { Sector } from '../module-registry';
 import { currencyCode, DB_AMOUNT_LIMIT, isoDate, rateString, uuid } from './common';
 import { ITEM_UNITS, positiveQuantity, unitCostString } from './inventory';
+import { TRANSACTION_TYPES } from './document-tax-rules';
+import { fxRateTypeSchema } from '../fx';
 
 // --- Fatura türleri ----------------------------------------------------------
 
@@ -216,6 +218,10 @@ export const invoiceLineSchema = z.object({
   discountPct: percentString.default('0'),
   /** Şirketin KDV oranı kodu; boşsa KDV yok (%0). */
   vatCode: z.string().trim().max(20).nullable().optional(),
+  /** Doğrulanmış tarihli ülke kuralı. İadede özgün satırın kuralı kullanılır. */
+  taxRuleId: uuid.nullable().optional(),
+  productClass: z.string().trim().min(1).max(80).nullable().optional(),
+  transactionType: z.enum(TRANSACTION_TYPES).nullable().optional(),
   /** Serbest satırda gelir/gider hesabı; boşsa eşlemedeki varsayılan kullanılır. */
   accountId: uuid.nullable().optional(),
   /** İade faturasında, iade edilen orijinal fatura satırı. */
@@ -252,6 +258,8 @@ const invoiceBase = z.object({
   currency: currencyCode.optional(),
   /** Verilmezse fatura tarihindeki kayıtlı kur kullanılır. */
   fxRate: rateString.optional(),
+  fxRateType: fxRateTypeSchema.optional(),
+  fxReason: z.string().trim().min(3).max(500).nullable().optional(),
   /** Birim fiyatlar KDV dahil mi? */
   vatIncluded: z.boolean().default(false),
   /** Stoklu satır varsa zorunlu; boşsa varsayılan depo. */
@@ -269,6 +277,8 @@ const invoiceBase = z.object({
 type InvoiceBase = z.infer<typeof invoiceBase>;
 
 function refine(doc: InvoiceBase & { type?: InvoiceType }, ctx: z.RefinementCtx) {
+  if (doc.fxRate && doc.fxRateType && !doc.fxReason)
+    ctx.addIssue({ code: 'custom', path: ['fxReason'], message: 'Manuel kur için gerekçe gerekli' });
   if (doc.dueDate && doc.dueDate < doc.invoiceDate) {
     ctx.addIssue({ code: 'custom', path: ['dueDate'], message: 'Vade tarihi fatura tarihinden önce olamaz' });
   }

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
@@ -113,14 +114,15 @@ export function PurchaseOrderEditorPage() {
   const cancelReceipt = useCMutation((v: string, call) => call(`/api/po-receipts/${v}/cancel`, { method: 'POST', body: { reason: t('procurement.orders.receiptCancelReason') } }), PROCUREMENT_INVALIDATE);
 
   const go = <T,>(fn: (o: { onSuccess: (r: T) => void; onError: (e: Error) => void }) => void, ok: (r: T) => void) => {
+    if (save.isPending || act.isPending || cancel.isPending || remove.isPending || cancelReceipt.isPending) return;
     setError(null);
-    fn({ onSuccess: ok, onError: setError });
+    fn({ onSuccess: (result) => { markFormSaved(document.querySelector('[data-form-guard-scope="PurchaseOrderEditorPage"]')); ok(result); }, onError: setError });
   };
 
   if (!isNew && detailQ.isPending) return <PageLoading />;
   const total = lines.reduce((s, l) => s + (Number(num(l.quantity)) || 0) * (Number(num(l.price)) || 0), 0);
 
-  return (
+  return (<FormGuard captureAll scopeKey="PurchaseOrderEditorPage" pending={save.isPending || act.isPending || cancel.isPending || remove.isPending || cancelReceipt.isPending}>{(
     <div className="flex flex-col gap-5">
       <div>
         <Link to="/purchasing/orders" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
@@ -314,7 +316,7 @@ export function PurchaseOrderEditorPage() {
 
       {detail && <ReceiptModal detail={detail} open={receiptOpen} onOpenChange={setReceiptOpen} />}
     </div>
-  );
+  )}</FormGuard>);
 }
 
 function ReceiptModal({ detail, open, onOpenChange }: { detail: PurchaseOrderDetail; open: boolean; onOpenChange: (o: boolean) => void }) {

@@ -19,7 +19,7 @@ test('lisans: etkin kurulum, sahip ayrıntıları ve gerçek lisans sunucusuyla 
   expect(login.status()).toBe(200);
   const token = (await login.json()).accessToken as string;
   const auth = { authorization: `Bearer ${token}` };
-  const company = await request.post('/api/companies', { headers: auth, data: { name: 'Lisans Market', sector: 'RETAIL_MARKET' } });
+  const company = await request.post('/api/companies', { headers: auth, data: { name: 'Lisans Market', sector: 'RETAIL_MARKET', jurisdiction: 'KKTC' } });
   expect(company.status()).toBe(201);
 
   // Kurulum sahibi olmayan kuruluş lisans ayrıntılarını görmez ve yenileyemez
@@ -28,7 +28,7 @@ test('lisans: etkin kurulum, sahip ayrıntıları ve gerçek lisans sunucusuyla 
   });
   expect(stranger.status()).toBe(201);
   const strangerAuth = { authorization: `Bearer ${(await stranger.json()).accessToken}` };
-  expect((await request.post('/api/companies', { headers: strangerAuth, data: { name: 'Yabancı İnşaat', sector: 'CONSTRUCTION' } })).status()).toBe(201);
+  expect((await request.post('/api/companies', { headers: strangerAuth, data: { name: 'Yabancı İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' } })).status()).toBe(201);
   expect((await (await request.get('/api/license', { headers: strangerAuth })).json()).isOwner).toBe(false);
   expect((await request.post('/api/license/refresh', { headers: strangerAuth })).status()).toBe(403);
 

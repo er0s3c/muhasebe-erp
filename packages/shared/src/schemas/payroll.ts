@@ -113,11 +113,12 @@ export const createPayrollItemSchema = z.object({
   kind: z.enum(PAYROLL_ITEM_KINDS),
   affectsSocialBase: z.boolean().default(false),
   affectsTaxBase: z.boolean().default(false),
+  affectsStampBase: z.boolean().nullable().default(null),
   liability: z.enum(PAYROLL_LIABILITIES).default('other'),
 });
 export type CreatePayrollItemInput = z.infer<typeof createPayrollItemSchema>;
 export const updatePayrollItemSchema = z
-  .object({ name: text(100).min(1), affectsSocialBase: z.boolean(), affectsTaxBase: z.boolean(), liability: z.enum(PAYROLL_LIABILITIES), isActive: z.boolean() })
+  .object({ name: text(100).min(1), affectsSocialBase: z.boolean(), affectsTaxBase: z.boolean(), affectsStampBase: z.boolean().nullable(), liability: z.enum(PAYROLL_LIABILITIES), isActive: z.boolean() })
   .partial();
 
 export const createPayrollRunSchema = z.object({ month: yearMonth, description: text(300).nullable().optional() });

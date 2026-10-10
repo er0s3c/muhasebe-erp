@@ -7,6 +7,7 @@ import { apiBlob } from '../../lib/api';
 import { saveBlob } from '../../lib/download';
 import { errorMessage } from '../../lib/errors';
 import { useCompany } from '../../lib/session';
+import { useCQuery } from '../../lib/queries';
 import { Button } from './Button';
 import { useToast } from './Toast';
 
@@ -34,7 +35,9 @@ export function ExportMenu({ exportKey, path, params = {}, formats = ['xlsx', 'c
   const { t } = useTranslation();
   const toast = useToast();
   const company = useCompany();
+  const access = useCQuery<{ reports: Record<string, boolean> }>(['export-access'], '/api/exports/access', { enabled: !!exportKey && !path, refetchOnWindowFocus: true });
   const [busy, setBusy] = useState(false);
+  const denied = !path && !!exportKey && access.data?.reports[exportKey] !== true;
 
   const download = async (format: ExportFormat) => {
     const qs = new URLSearchParams({ format });
@@ -52,8 +55,8 @@ export function ExportMenu({ exportKey, path, params = {}, formats = ['xlsx', 'c
 
   return (
     <Dropdown.Root>
-      <Dropdown.Trigger asChild disabled={disabled || busy}>
-        <Button className="print:hidden" loading={busy} disabled={disabled}>
+      <Dropdown.Trigger asChild disabled={disabled || busy || denied}>
+        <Button className="print:hidden" loading={busy} disabled={disabled || denied} title={denied ? 'Dışa aktarma yetkiniz yok' : undefined}>
           <Download className="size-4" aria-hidden />
           {t('reports.export.button')}
           <ChevronDown className="size-3.5 text-muted" aria-hidden />

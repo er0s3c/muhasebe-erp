@@ -9,6 +9,9 @@ import {
   nextHighWater,
   parseLeaseToken,
   signEnvelope,
+  feedbackReceiptSchema,
+  type FeedbackRequest,
+  type FeedbackReceipt,
   type Lease,
   type LeaseEvaluation,
   type LicenseState,
@@ -245,6 +248,39 @@ export class LicenseService {
   /** Satıcıya raporlanan ve yönetici ekranında gösterilen kullanım sayıları (yalnızca sayı). */
   async usage(): Promise<{ companies: number; devices: number }> {
     return this.statsProvider();
+  }
+
+  async feedbackAvailability(): Promise<{ available: boolean; reason?: string }> {
+    await this.init();
+    await this.current();
+    if (!this.transport?.feedback) return { available: false, reason: 'Geri bildirim alıcısı bu kurulumda henüz tanımlı değil. Yönetici lisans sunucusu bağlantısını ayarlamalı.' };
+    if (!this.row?.leaseToken || !this.lease || this.leaseInvalid) return { available: false, reason: 'Geri bildirim göndermek için bu kurulumun lisans bağlantısı doğrulanmalı. Yöneticiniz lisans ekranından kurulumu etkinleştirebilir.' };
+    return { available: true };
+  }
+
+  /** Support reports do not renew leases or overwrite license diagnostic state. */
+  submitFeedback(input: Pick<FeedbackRequest, 'feedback' | 'company' | 'reporter'>): Promise<{ feedback: FeedbackReceipt }> {
+    return this.exclusive(async () => {
+      const { row, fp, key } = await this.fresh();
+      const availability = await this.feedbackAvailability();
+      if (!availability.available || !this.transport?.feedback) throw new AppError(503, 'FEEDBACK_UNAVAILABLE', availability.reason ?? 'Geri bildirim bağlantısı hazır değil');
+      try {
+        const transport = this.transport;
+        const time = transport.time ? await transport.time(row.installationId, newNonce(), this.keyring) : null;
+        const envelope = signEnvelope('feedback', {
+          ...input, installationId: row.installationId, fingerprint: fp.fingerprint, appVersion: this.appVersion,
+          nonce: newNonce(), ts: time?.serverTime ?? this.now(), ...(time ? { protocolVersion: 2, timeNonce: time.nonce } : {}),
+        }, key);
+        const response = await transport.feedback!(envelope);
+        const report = feedbackReceiptSchema.safeParse(response.feedback);
+        if (!report.success) throw new LicenseUnreachableError('Geri bildirim sunucusunun yanıtı geçersiz');
+        return { feedback: report.data };
+      } catch (err) {
+        if (err instanceof LicenseServerError) throw new AppError(err.status === 429 ? 429 : err.status === 409 ? 409 : 422, err.code, err.message);
+        if (err instanceof LicenseUnreachableError) throw new AppError(502, 'FEEDBACK_UNREACHABLE', 'Geri bildiriminiz gönderilemedi; destek sunucusuna şu anda ulaşılamıyor. Yazdıklarınız bu formda korunuyor, tekrar deneyebilirsiniz.');
+        throw err;
+      }
+    });
   }
 
   /**

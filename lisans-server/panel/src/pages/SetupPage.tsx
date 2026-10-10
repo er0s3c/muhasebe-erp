@@ -3,7 +3,8 @@ import { Check, Copy, KeyRound } from 'lucide-react';
 import { useState, type ChangeEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@ui/Button';
-import { Callout, PageLoading } from '@ui/Feedback';
+import { Brand } from '@ui/Brand';
+import { Callout, ErrorState, PageLoading } from '@ui/Feedback';
 import { Field, Input } from '@ui/Field';
 import { useToast } from '@ui/Toast';
 import { api, ApiError, errorText } from '../api';
@@ -56,6 +57,7 @@ export function SetupPage() {
   const [busy, setBusy] = useState(false);
 
   if (status.isPending) return <PageLoading />;
+  if (status.error) return <div className="mx-auto max-w-xl p-6"><ErrorState title="Kurulum durumu yüklenemedi" description={errorText(status.error)} onRetry={() => void status.refetch()} retrying={status.isFetching} /></div>;
   if (step === 0 && status.data && !status.data.needed) return <Navigate to="/login" replace />;
 
   const set = (k: keyof typeof form) => (e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
@@ -108,6 +110,7 @@ export function SetupPage() {
   return (
     <div className="flex min-h-full items-center justify-center px-4 py-12">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 sm:p-8">
+        <Brand className="mb-6 h-9" />
         <h1 className="text-heading">İlk kurulum</h1>
         <ol className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px]" aria-label="Kurulum adımları">
           {STEPS.map((s, i) => (

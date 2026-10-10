@@ -13,7 +13,7 @@ export function Th({ className, num, ...props }: ThHTMLAttributes<HTMLTableCellE
   return (
     <th
       className={cn(
-        'sticky top-0 z-10 whitespace-nowrap border-b border-border bg-surface-2 px-4 py-2.5 text-left text-[11px] font-normal uppercase tracking-[0.05em] text-muted',
+        'sticky top-0 z-10 whitespace-nowrap border-b border-border bg-surface-2 px-4 py-3 text-left text-xs font-medium text-muted',
         num && 'num',
         className,
       )}
@@ -24,6 +24,17 @@ export function Th({ className, num, ...props }: ThHTMLAttributes<HTMLTableCellE
 export function Td({ className, num, ...props }: TdHTMLAttributes<HTMLTableCellElement> & { num?: boolean }) {
   return <td className={cn('border-b border-border/70 px-4 py-2.5 align-middle', num && 'num', className)} {...props} />;
 }
-export function Tr({ className, clickable, ...props }: HTMLAttributes<HTMLTableRowElement> & { clickable?: boolean }) {
-  return <tr className={cn('last:[&>td]:border-b-0', clickable && 'cursor-pointer hover:bg-surface-2/70', className)} {...props} />;
+export function Tr({ className, clickable, onClick, onKeyDown, ...props }: HTMLAttributes<HTMLTableRowElement> & { clickable?: boolean }) {
+  return <tr
+    tabIndex={clickable && onClick ? 0 : undefined}
+    className={cn('last:[&>td]:border-b-0', clickable && 'cursor-pointer hover:bg-surface-2/70 focus-visible:bg-surface-2', className)}
+    onClick={onClick}
+    onKeyDown={event => {
+      onKeyDown?.(event);
+      if (!event.defaultPrevented && !onKeyDown && event.target === event.currentTarget && onClick && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault(); event.currentTarget.click();
+      }
+    }}
+    {...props}
+  />;
 }

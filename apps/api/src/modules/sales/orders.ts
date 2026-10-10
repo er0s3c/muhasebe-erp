@@ -26,11 +26,13 @@ import { items, parties, salesOrderEvents, salesOrderLines, salesOrders } from '
 import { notFound, unprocessable } from '../../http/errors';
 import { requireActiveWarehouse } from '../inventory/warehouses';
 import { resolveVat } from '../invoices/service';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { resolvePrice } from './pricing';
 import { releaseOrderAllocations } from '../manufacturing/allocations';
 import { lockLeatherCosts, one } from '../leather/common';
 import { orderLineUsage, zeroUsage } from './usage';
+import { assertDocumentApproved, assertDocumentNotPending } from '../approvals/document-gate';
+import { captureQuote } from '../approvals/source-snapshot';
 
 export interface SalesCtx {
   companyId: string;
@@ -228,6 +230,7 @@ export async function updateSalesDoc(
   input: UpdateSalesDocInput,
 ) {
   const row = await lockDoc(tx, id);
+  if (row.kind === 'quote') await assertDocumentNotPending(tx, 'sales_quote', id);
   if (row.status !== 'draft') throw unprocessable('Yalnızca taslak düzenlenebilir', 'SO_NOT_DRAFT');
   await writeDoc(tx, ctx, row.kind as SalesDocKind, input, id);
   return id;
@@ -235,6 +238,7 @@ export async function updateSalesDoc(
 
 export async function deleteSalesDoc(tx: Tx, id: string) {
   const row = await lockDoc(tx, id);
+  if (row.kind === 'quote') await assertDocumentNotPending(tx, 'sales_quote', id);
   if (row.status !== 'draft' || row.docNo)
     throw unprocessable(
       'Yalnızca numarasız taslak silinebilir; diğerleri iptal edilir',
@@ -269,6 +273,13 @@ export async function transitionSalesDoc(
   }
   const doc = await lockDoc(tx, id);
   const kind = doc.kind as SalesDocKind;
+  if (kind === 'quote') {
+    await assertDocumentNotPending(tx, 'sales_quote', id);
+    if (doc.status === 'draft' && to === 'sent') {
+      const proof = await captureQuote(tx, ctx, id);
+      await assertDocumentApproved(tx, 'sales_quote', id, proof.amount, proof.hash);
+    }
+  }
   if (!canTransition(kind, doc.status as SalesDocStatus, to)) {
     throw unprocessable(
       `${KIND_LABEL[kind]} "${doc.status}" durumundan "${to}" durumuna geçirilemez`,
@@ -301,11 +312,7 @@ export async function transitionSalesDoc(
   let docNo = doc.docNo;
   if (doc.status === 'draft' && to !== 'cancelled' && !docNo) {
     const year = isoYear(doc.docDate);
-    docNo = formatDocumentNumber(
-      SALES_DOC_PREFIX[kind],
-      year,
-      await nextNumber(tx, ctx.companyId, `SALES:${kind}`, year),
-    );
+    docNo = await nextDocumentNumber(tx, ctx.companyId, `SALES:${kind}`, year, SALES_DOC_PREFIX[kind]);
   }
   await tx.insert(salesOrderEvents).values({
     companyId: ctx.companyId,

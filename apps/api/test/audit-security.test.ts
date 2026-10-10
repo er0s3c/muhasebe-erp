@@ -34,13 +34,13 @@ describe('denetim düzeltmeleri: güvenlik', async () => {
     const viewer = await addMember(app, oc, co.id, 'viewer');
     const accountant = await addMember(app, oc, co.id, 'accountant');
     for (const t of [viewer.token, accountant.token]) {
-      const r = await client(app, t).post('/api/companies', { name: 'Kendi Şirketim', sector: 'COMMERCE' });
+      const r = await client(app, t).post('/api/companies', { name: 'Kendi Şirketim', sector: 'COMMERCE', jurisdiction: 'KKTC' });
       expect(r.statusCode, r.body).toBe(403);
       expect(r.json().error.code).toBe('COMPANY_CREATE_FORBIDDEN');
     }
     const admin = await addMember(app, oc, co.id, 'admin');
-    expect((await client(app, admin.token).post('/api/companies', { name: 'Yönetici Şirketi', sector: 'COMMERCE' })).statusCode).toBe(201);
-    expect((await client(app, owner.token).post('/api/companies', { name: 'İkinci Şirket', sector: 'COMMERCE' })).statusCode).toBe(201);
+    expect((await client(app, admin.token).post('/api/companies', { name: 'Yönetici Şirketi', sector: 'COMMERCE', jurisdiction: 'KKTC' })).statusCode).toBe(201);
+    expect((await client(app, owner.token).post('/api/companies', { name: 'İkinci Şirket', sector: 'COMMERCE', jurisdiction: 'KKTC' })).statusCode).toBe(201);
     // Görüntüleyici yine de "kurulum sahibi" ayrıntılarını göremez
     expect((await client(app, viewer.token).get('/api/license')).json().isOwner).toBe(false);
     expect((await client(app, viewer.token).get('/api/system/update')).statusCode).toBe(403);

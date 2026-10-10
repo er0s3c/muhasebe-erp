@@ -34,12 +34,12 @@ describe('izin denetimi merkezîdir (yapısal tarama)', () => {
   it('rol varsayılanı yardımcıları yalnızca merkezi erişim kodunda (ipucu/rol adımı doğrulaması) kullanılır', () => {
     expect(usersOf(/\broleHasDefault\b/)).toEqual(['packages/shared/src/permissions.ts', 'apps/api/src/modules/access/effective.ts'].sort());
     expect(usersOf(/\broleDefaultPermissions\b/)).toEqual(
-      ['apps/api/src/modules/access/routes.ts', 'apps/api/src/modules/approvals/service.ts', 'packages/shared/src/module-access.ts'].sort(),
+      ['apps/api/src/modules/access/company-roles.ts', 'apps/api/src/modules/access/routes.ts', 'apps/api/src/modules/approvals/service.ts', 'packages/shared/src/module-access.ts'].sort(),
     );
   });
 
   it('etkin izin kümesi yalnızca merkezi yerlerde ve bağlamı kuran kodlarda hesaplanır (effectivePermissions)', () => {
-    expect(usersOf(/\beffectivePermissions\(/)).toEqual(['apps/api/src/modules/access/effective.ts', 'apps/api/src/modules/access/routes.ts', 'packages/shared/src/module-access.ts'].sort());
+    expect(usersOf(/\beffectivePermissions\(/)).toEqual(['apps/api/src/modules/access/effective.ts', 'packages/shared/src/module-access.ts'].sort());
   });
 
   it('hasPermission bir rol değil izin kümesi alır; kaynakta `hasPermission(role…)` yoktur', () => {
@@ -55,6 +55,8 @@ describe('izin denetimi merkezîdir (yapısal tarama)', () => {
   it('API kodunda yetki kararı için doğrudan rol dizgesi karşılaştırması yoktur (yalnızca üyelik yönetimi ve erişim kuralları)', () => {
     const allow = new Set([
       'apps/api/src/modules/tenancy/members.ts',
+      'apps/api/src/modules/access/company-roles.ts', // owner role assignment is membership management
+      'apps/api/src/modules/tenancy/branches.ts', // owner branch scope cannot be restricted
       'apps/api/src/modules/tenancy/service.ts',
       'apps/api/src/modules/access/routes.ts',
       'apps/api/src/modules/access/effective.ts',

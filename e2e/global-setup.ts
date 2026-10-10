@@ -39,7 +39,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   const company = await fetch(`${base}/api/companies`, {
     method: 'POST',
     headers: { ...json, authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name: 'Kurulum Sahibi İnşaat', sector: 'CONSTRUCTION' }),
+    body: JSON.stringify({ name: 'Kurulum Sahibi İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' }),
   });
   if (company.status !== 201) throw new Error(`Kurulum sahibinin şirketi açılamadı (${company.status}): ${await company.text()}`);
   process.env.E2E_OWNER_EMAIL = email;

@@ -20,6 +20,7 @@ import type { Account, OpenItem, OpenItemsData, TreasuryTxnDetail, TreasuryTxnTy
 import { usePartyOptions } from '../invoices/common';
 import { PROJECT_COST_INVALIDATE, ProjectLineRow, isProjectTaggable, projectFields } from '../projects/common';
 import { TREASURY_INVALIDATE, TXN_TYPES, accountLabel, useMarketRates, useTreasuryAccounts } from './common';
+import { APPROVAL_INVALIDATE, type FinancialDraft } from '../approvals/common';
 
 interface Props {
   open: boolean;
@@ -36,6 +37,7 @@ interface Props {
    */
   line?: { id: string; date: string; /** Mutlak tutar (kanonik) */ amount: string; direction: 'in' | 'out'; accountId: string; description: string };
   onSaved: (result: TreasuryTxnDetail) => void;
+  editingDraft?:FinancialDraft;
 }
 
 /** Seçilen açık kalem: kalem para biriminde kapatılan tutar; karşılık (kasa/banka para biriminde) boşsa kurdan önerilir. */
@@ -51,7 +53,7 @@ const num = (v: string | null | undefined) => dec(v && v !== '' ? v : 0);
  * Kasa/banka hareketi formu: tahsilat/ödeme (açık kalem eşleştirmeli, kur farkı önizlemeli), virman,
  * döviz alım-satım ve diğer tahsilat/ödeme. Önizleme sunucudakiyle aynı ortak formülleri kullanır.
  */
-export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', initialPartyId = '', initialAccountId = '', line, onSaved }: Props) {
+export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', initialPartyId = '', initialAccountId = '', line, onSaved, editingDraft }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
   const company = useCompany();
@@ -88,18 +90,18 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
   useEffect(() => {
     if (!open) return;
     setType(startType);
-    setDate(line?.date ?? todayIso());
-    setAccountId(line?.accountId ?? initialAccountId);
+    setDate(String(editingDraft?.payload.date??line?.date ?? todayIso()));
+    setAccountId(String(editingDraft?.payload.accountId??line?.accountId ?? initialAccountId));
     setToAccountId('');
-    setAmountInput(null);
+    setAmountInput(editingDraft?String(editingDraft.payload.amount):null);
     setCounterAmount('');
-    setFxRate('');
-    setPartyId(initialPartyId);
-    setGlAccountId('');
-    setProjectId('');
-    setWbsId('');
-    setDescription(line?.description ?? '');
-    setItems({});
+    setFxRate(String(editingDraft?.payload.fxRate??''));
+    setPartyId(String(editingDraft?.payload.partyId??initialPartyId));
+    setGlAccountId(String(editingDraft?.payload.glAccountId??''));
+    setProjectId(String(editingDraft?.payload.projectId??''));
+    setWbsId(String(editingDraft?.payload.wbsId??''));
+    setDescription(String(editingDraft?.payload.description??line?.description ?? ''));
+    setItems(Object.fromEntries(((editingDraft?.payload.items??[]) as {lineId:string;amount:string;settleAmount?:string}[]).map(item=>[item.lineId,{amount:item.amount,settle:item.settleAmount??null}])));
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, startType, initialPartyId, initialAccountId, line?.id]);
@@ -239,10 +241,8 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
   };
 
   const save = useCMutation(
-    (_: void, call) =>
-      call<TreasuryTxnDetail>(line ? `/api/bank-statement-lines/${line.id}/create-transaction` : '/api/treasury/transactions', {
-        method: 'POST',
-        body: {
+    async (_: void, call) => {
+      const body={
           type,
           // Satır kilitli modda tarih, tutar ve hesabı sunucu ekstre satırından alır
           ...(line ? {} : { date, accountId, amount }),
@@ -260,9 +260,17 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
           // Proje etiketi yalnızca gelir/gider/maliyet karşı hesabında anlamlıdır (sunucu kuralı)
           ...(glTaggable ? projectFields(projectId, wbsId) : {}),
           ...(showRate && fxRate ? { fxRate } : {}),
-        },
-      }),
-    [...TREASURY_INVALIDATE, ...PROJECT_COST_INVALIDATE],
+      };
+      const requestApproval=async()=>{
+        const {draft}=await call<{draft:FinancialDraft}>(editingDraft?`/api/financial-approval-drafts/${editingDraft.id}`:'/api/financial-approval-drafts',{method:editingDraft?'PUT':'POST',body:{docType:'payment',payload:body}});
+        await call(`/api/financial-approval-drafts/${draft.id}/submit`,{method:'POST',body:{}});
+        return {approvalDraftId:draft.id};
+      };
+      if(editingDraft)return requestApproval();
+      try{return await call<TreasuryTxnDetail>(line ? `/api/bank-statement-lines/${line.id}/create-transaction` : '/api/treasury/transactions',{method:'POST',body});}
+      catch(e){if(!line&&(type==='payment'||type==='other_payment')&&e instanceof ApiError&&e.code==='APPROVAL_REQUIRED')return requestApproval();throw e;}
+    },
+    [...TREASURY_INVALIDATE, ...PROJECT_COST_INVALIDATE,...APPROVAL_INVALIDATE],
   );
 
   const itemProblems = selected.some((it) => {
@@ -287,6 +295,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
     setError(null);
     save.mutate(undefined, {
       onSuccess: (res) => {
+        if('approvalDraftId'in res){toast.success('Ödeme taslağı onaya gönderildi; henüz mali kayıt oluşmadı');onOpenChange(false);return;}
         toast.success(t('treasury.sheet.saved', { no: res.transaction.txnNo }));
         onSaved(res);
         onOpenChange(false);
@@ -329,6 +338,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
       open={open}
       onOpenChange={onOpenChange}
       title={line ? t('treasury.sheet.lineTitle') : t('treasury.sheet.title')}
+      description={type==='payment'||type==='other_payment'?'Aktif onay kuralı varsa işlem mali taslak olarak onaya gönderilir; son onayda kesinleşir.':undefined}
       footer={
         <>
           <div className="mr-auto text-sm" aria-live="polite">

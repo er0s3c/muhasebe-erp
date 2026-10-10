@@ -260,7 +260,7 @@ function CashChart({ result }: { result: Result }) {
                 y="215"
                 textAnchor="middle"
                 fill="currentColor"
-                className="text-[11px]"
+                className="text-[12px]"
               >
                 {r.week}. hafta
               </text>

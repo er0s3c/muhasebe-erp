@@ -23,6 +23,9 @@ import { usePartyOptions, useTaxRates, vatRateFor } from '../invoices/common';
 import { ProjectWbsFields } from '../projects/common';
 import { accountLabel, useTreasuryAccounts } from '../treasury/common';
 import { EXPENSE_INVALIDATE, useExpenseCardOptions } from './common';
+import { ApiError } from '../../lib/api';
+import { APPROVAL_INVALIDATE, type FinancialDraft } from '../approvals/common';
+import { FinancialDraftList } from '../settings/DocumentApprovalsPage';
 
 interface Form {
   cardId: string;
@@ -145,10 +148,8 @@ export function ExpenseEntriesPage() {
   const reimbursement = calc?.payable.minus(applied) ?? dec(0);
 
   const create = useCMutation(
-    (f: Form, call) =>
-      call('/api/expense-entries', {
-        method: 'POST',
-        body: {
+    async (f: Form, call) => {
+      const body={
           entryDate: f.entryDate,
           cardId: f.cardId,
           description: f.description.trim(),
@@ -167,9 +168,11 @@ export function ExpenseEntriesPage() {
           ...(f.projectTouched
             ? { projectId: f.projectId || null, wbsId: f.projectId ? f.wbsId || null : null }
             : {}),
-        },
-      }),
-    [...EXPENSE_INVALIDATE, ['employee-ledger'], ['activity-report']],
+      };
+      try{return await call<{entry?:ExpenseEntry;approvalDraftId?:string}>('/api/expense-entries',{method:'POST',body});}
+      catch(e){if(e instanceof ApiError&&e.code==='APPROVAL_REQUIRED'){const {draft}=await call<{draft:FinancialDraft}>('/api/financial-approval-drafts',{method:'POST',body:{docType:'expense',payload:body}});await call(`/api/financial-approval-drafts/${draft.id}/submit`,{method:'POST',body:{}});return {approvalDraftId:draft.id};}throw e;}
+    },
+    [...EXPENSE_INVALIDATE, ['employee-ledger'], ['activity-report'],...APPROVAL_INVALIDATE],
   );
   const cancelMut = useCMutation(
     (v: { id: string; reason: string; date: string }, call) =>
@@ -184,8 +187,8 @@ export function ExpenseEntriesPage() {
     if (!form) return;
     setError(null);
     create.mutate(form, {
-      onSuccess: () => {
-        toast.success(t('expenses.form.saved'));
+      onSuccess: result => {
+        toast.success(result.approvalDraftId?'Gider taslağı onaya gönderildi; henüz mali kayıt oluşmadı':t('expenses.form.saved'));
         setForm(null);
       },
       onError: (e) => setError(errorMessage(e)),
@@ -230,6 +233,7 @@ export function ExpenseEntriesPage() {
       <div className="mb-4">
         <Callout tone="warning">{t('expenses.notice')}</Callout>
       </div>
+      <FinancialDraftList type="expense"/>
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <Field label={t('common.from')}>
           {(id) => (

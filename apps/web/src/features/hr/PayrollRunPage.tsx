@@ -72,6 +72,7 @@ export function PayrollRunPage() {
           {t('payroll.run.title', { month: run.month })}
           <span className="font-mono text-[15px] text-muted">{run.number}</span>
           <PayrollStatusBadge status={run.status} />
+          {run.jurisdiction && <Badge tone="brand">{run.jurisdiction === 'TR' ? 'Türkiye' : 'KKTC'}</Badge>}
           {run.hasUnverifiedParams && <UnverifiedBadge />}
         </h1>
       </div>
@@ -204,6 +205,7 @@ export function PayrollRunPage() {
           </ul>
         </Card>
       )}
+      {run.countryConfigSnapshot && <Card><CardHeader title="Kaydedilmiş ülke bordro kuralı" description="Bu bordronun hesaplandığı tarife, prim rejimi ve doğrulama kaydı." /><div className="flex flex-col gap-2 p-4 text-sm"><p>{run.jurisdiction === 'TR' ? 'Türkiye / standart 4/a / teşviksiz prim' : `KKTC / ${run.countryConfigSnapshot.regime}`}</p><p>{run.countryConfigSnapshot.rulePackVersion} — {run.countryConfigSnapshot.verifiedBy}</p><p className="text-muted">{run.countryConfigSnapshot.sourceNote}</p><div className="flex flex-wrap gap-3">{run.countryConfigSnapshot.sourceRefs.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer" className="text-brand underline">Kural kaynağı</a>)}</div></div></Card>}
 
       <Modal
         open={dlg === 'approve'}

@@ -156,7 +156,7 @@ async function queueBackup(c:BackupContext) {
 export async function queueAutomaticBackup(app:FastifyInstance,c:BackupContext,date:string) {
   try {
     await requireBackupOwner(app,c);
-    const recent=(await c.tx.execute(sql`select id from administration_runs where kind='backup' and ((started_at at time zone 'Europe/Nicosia')::date=${date}::date or status in ('queued','running')) limit 1`)).rows;
+    const recent=(await c.tx.execute(sql`select id from administration_runs where kind='backup' and ((started_at at time zone ${c.company.timeZone})::date=${date}::date or status in ('queued','running')) limit 1`)).rows;
     if(!recent.length) await queueBackup(c);
   } catch(error) {app.log.warn({companyId:c.company.id,reason:error instanceof Error?error.message:'Yedekleme yapılandırılmamış'},'Otomatik yedek atlandı');}
 }

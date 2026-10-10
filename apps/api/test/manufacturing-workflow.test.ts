@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { createLegacyCompany } from './legacy-company';
 import { describe, expect, it } from 'vitest';
-import { makeApp, registerUser, createCompany, client, addMember, TODAY_LOCAL } from './helpers';
+import { makeApp, registerUser, client, addMember, TODAY_LOCAL } from './helpers';
 
 describe('üretim kabulü, depo ve kapasite', async () => {
   const { app } = await makeApp(),
     user = await registerUser(app, 'MfgWorkflow');
-  const company = await createCompany(app, user.token, { sector: 'MANUFACTURING_WHOLESALE' }),
+  const company = await createLegacyCompany(app, user.token, { sector: 'MANUFACTURING_WHOLESALE' }),
     c = client(app, user.token, company.id);
   const ok = async (p: ReturnType<typeof c.get>, status = 200) => {
     const r = await p;
@@ -275,7 +276,7 @@ describe('üretim kabulü, depo ve kapasite', async () => {
       (await operator.client.get(`/api/manufacturing/production/orders/${order}/estimates`))
         .statusCode,
     ).toBe(404);
-    const isolated = await createCompany(app, user.token, { sector: 'MANUFACTURING_WHOLESALE' });
+    const isolated = await createLegacyCompany(app, user.token, { sector: 'MANUFACTURING_WHOLESALE' });
     expect(
       (
         await client(app, user.token, isolated.id).get(

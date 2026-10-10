@@ -15,7 +15,7 @@ async function ownerWithCompany(request: APIRequestContext, tag: string) {
   expect(reg.status()).toBe(201);
   const { accessToken, user } = (await reg.json()) as { accessToken: string; user: { id: string } };
   const auth = { authorization: `Bearer ${accessToken}` };
-  const res = await request.post('/api/companies', { headers: auth, data: { name: 'Yücel İnşaat Ltd.', sector: 'CONSTRUCTION' } });
+  const res = await request.post('/api/companies', { headers: auth, data: { name: 'Yücel İnşaat Ltd.', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' } });
   expect(res.status()).toBe(201);
   const { company } = (await res.json()) as { company: { id: string } };
   return { email, stamp, ownerId: user.id, companyId: company.id, headers: { ...auth, 'x-company-id': company.id } };

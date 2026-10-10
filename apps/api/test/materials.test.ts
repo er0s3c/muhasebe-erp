@@ -175,7 +175,7 @@ describe('KDV tevkifatı ve taşerona malzeme mahsubu (Faz B kapanışı)', asyn
 
     // Ham SQL: kayıt değişmez/silinmez; yanlış bedel reddedilir
     const issueId = (await w.c.get(`/api/subcontracts/${w.sc.id}/material-issues`)).json().issues[0].id as string;
-    await asDb(handle, { companyId: w.company.id, orgId: w.orgId }, async (q) => {
+    await asDb(handle, { companyId: w.company.id, orgId: w.orgId, userId: w.s.userId }, async (q) => {
       let e = await expectDbError(q, `update subcontract_material_issues set note = 'x' where id = $1`, [issueId]);
       expect(['ERP10', '42501']).toContain(e.code);
       e = await expectDbError(q, `delete from subcontract_material_issues where id = $1`, [issueId]);
@@ -189,7 +189,7 @@ describe('KDV tevkifatı ve taşerona malzeme mahsubu (Faz B kapanışı)', asyn
       lines: [{ itemId: w.item.id, quantity: '2', projectId: w.project.id, wbsId: w.wbs.id }],
     });
     expect(loose.statusCode, loose.body).toBe(201);
-    await asDb(handle, { companyId: w.company.id, orgId: w.orgId }, async (q) => {
+    await asDb(handle, { companyId: w.company.id, orgId: w.orgId, userId: w.s.userId }, async (q) => {
       const e = await expectDbError(
         q,
         `insert into subcontract_material_issues (id, company_id, subcontract_id, issue_date, stock_document_id, amount, amount_base)

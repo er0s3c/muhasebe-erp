@@ -5,7 +5,7 @@ const { app, handle } = await makeApp();
 
 async function world(name: string) {
   const owner = await registerUser(app, name);
-  const company = await createCompany(app, owner.token, { name: 'Deri Aksesuar Ltd.', sector: 'LEATHER_FASHION' });
+  const company = await createCompany(app, owner.token, { name: 'Deri Aksesuar Ltd.', sector: 'LEATHER_FASHION', jurisdiction: 'KKTC' });
   const c = client(app, owner.token, company.id);
   const supplier = (await c.post('/api/parties', { name: 'Tabakhane Tedarik', kind: 'supplier' })).json().party;
   const item = (await c.post('/api/items', { name: 'Tabaklanmış dana derisi', unit: 'm2' })).json().item;

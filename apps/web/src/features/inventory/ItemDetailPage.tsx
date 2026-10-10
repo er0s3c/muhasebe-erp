@@ -18,7 +18,7 @@ import { ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
-import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { useCan, useCanOperation, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { ItemDetail, ItemStatementData } from '../../lib/types';
 import { DocTypeBadge, STOCK_INVALIDATE, qtyText, useUnitLabel, useWarehouses } from './common';
@@ -36,7 +36,8 @@ export function ItemDetailPage() {
   const company = useCompany();
   const unitLabel = useUnitLabel();
   const can = useCan();
-  const canManage = can('inventory.manage');
+  const canOperation = useCanOperation();
+  const canManage = can('inventory.manage') && canOperation('core.inventory', 'update');
   const canMove = can('inventory.move');
   const { data, isPending, error } = useCQuery<ItemDetail>(['item', id], id ? `/api/items/${id}` : null);
   const [tab, setTab] = useState<Tab>('statement');

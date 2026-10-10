@@ -367,11 +367,20 @@ describe('sözleşme testleri', async () => {
     for (const r of routes) {
       const g = guardOf(r);
       if (!r.url.startsWith('/api/') || g?.kind !== 'tenant') continue;
+      // This sends support to the vendor and changes no tenant business data; viewers may report issues too.
+      if (r.url === '/api/companies/:companyId/feedback') continue;
       for (const m of methodsOf(r)) {
         if (m !== 'GET' && !g.permission) missing.push(`${m} ${r.url}`);
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  it('müşteri desteği şirket üyeliği kapısını korur ve yalnız gönderim rotası izin istisnasıdır', () => {
+    const support = routes.filter(r => r.url === '/api/companies/:companyId/feedback');
+    expect(support).toHaveLength(1);
+    expect(methodsOf(support[0]!)).toEqual(['POST']);
+    expect(guardOf(support[0]!)).toMatchObject({ kind: 'tenant' });
   });
 
   it('rotalarda geçen izinler ve modüller tanımlı kayıtlardandır', () => {
@@ -426,10 +435,18 @@ describe('sözleşme testleri', async () => {
       // directory_mark_merged: birleştirme bayrağını yalnızca işlev içinden geçerli kılar;
       // member_module_access_cleanup: rol değişince/üyelik silinince o üyenin özel modül erişim satırlarını siler (kendi üyeliğini silen yöneticinin satırları da kalmaz);
       // notification_scan_targets: bildirim zamanlayıcısı için yalnızca şirket/kuruluş kimliklerini listeler; notification_prune: yalnızca app_company_id() şirketinin KAPANMIŞ eski bildirimlerini siler
+      // Şube helper'ları yalnız oturumun şirketini sorgular: app_branch_has_access üyelik kapsamını,
+      // company_has_finalized_records ve document_tax_rule_last_used_date aktif şubeden bağımsız geçmiş korumasını doğrular.
       expect(definers.rows.map((r) => r.proname)).toEqual([
-        'audit_row_change', 'can_manage_user', 'claim_installation_owner', 'company_has_members', 'directory_anonymize_contact', 'directory_mark_merged',
-        'directory_repoint_notes', 'directory_subject_notes', 'installation_owner_org', 'license_company_count', 'member_module_access_cleanup', 'notification_prune', 'notification_scan_targets', 'rate_limit_step', 'user_company_mfa_required',
+        'app_branch_has_access', 'audit_row_change', 'can_manage_user', 'claim_installation_owner', 'company_has_finalized_records', 'company_has_members', 'directory_anonymize_contact', 'directory_mark_merged',
+        'directory_repoint_notes', 'directory_subject_notes', 'document_tax_rule_last_used_date', 'enqueue_invoice_webhooks', 'installation_owner_org', 'license_company_count', 'member_module_access_cleanup', 'notification_prune', 'notification_scan_targets', 'rate_limit_step', 'user_company_mfa_required',
       ]);
+      const branchHelpers=await q(`select p.proname,p.proconfig,exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a where a.grantee=0 and a.privilege_type='EXECUTE') as public_execute from pg_proc p where p.pronamespace='public'::regnamespace and p.proname in ('app_branch_has_access','company_has_finalized_records','document_tax_rule_last_used_date','enqueue_invoice_webhooks')`);
+      expect(branchHelpers.rows).toHaveLength(4);
+      for(const helper of branchHelpers.rows){
+        expect(helper.public_execute,helper.proname).toBe(false);
+        expect(helper.proconfig.find((entry:string)=>entry.startsWith('search_path=')).replace(/\s/g,''),helper.proname).toBe('search_path=pg_catalog,public,pg_temp');
+      }
       const role = await q(`select rolsuper, rolbypassrls from pg_roles where rolname = 'erp_app'`);
       expect(role.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
       const owned = await q(

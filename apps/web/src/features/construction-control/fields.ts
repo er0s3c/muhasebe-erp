@@ -86,7 +86,7 @@ export const EDITOR_FIELDS: Record<WorkflowKind, EditorField[]> = {
   ],
   production: [
     ref('subcontractId', 'Sözleşme', 'subcontracts'),
-    ref('lineKey', 'BOQ kalemi', 'boq'),
+    ref('lineKey', 'Metraj kalemi', 'boq'),
     f('quantity', 'Gerçekleşen miktar', 'number'),
     f('plannedQuantity', 'Planlanan miktar', 'number'),
     f('unit', 'Birim'),

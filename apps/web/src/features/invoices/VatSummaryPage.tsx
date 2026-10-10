@@ -14,6 +14,7 @@ import { currencySymbol, money, moneyIn } from '../../lib/format';
 import { useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { VatSummary } from '../../lib/types';
+import { DocumentTaxesSummary } from './DocumentTaxesSummary';
 
 /** KDV özeti: hesaplanan KDV (satışlar), indirilecek KDV (alışlar/giderler), oran bazında. */
 export function VatSummaryPage() {
@@ -45,6 +46,7 @@ export function VatSummaryPage() {
           </Callout>
         </div>
       )}
+      <DocumentTaxesSummary from={from} to={to} />
 
       {isPending || !data ? (
         <PageLoading />

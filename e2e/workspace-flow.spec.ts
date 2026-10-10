@@ -14,7 +14,7 @@ async function setup(page: Page) {
   const token = (await registered.json()).accessToken as string;
   const made = await page.request.post('/api/companies', {
     headers: { authorization: `Bearer ${token}` },
-    data: { name: 'Çalışma Alanı Test İnşaat', sector: 'CONSTRUCTION' },
+    data: { name: 'Çalışma Alanı Test İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(made.status(), await made.text()).toBe(201);
   const company = (await made.json()).company;

@@ -184,7 +184,7 @@ export async function listItems(tx: Tx) {
   return tx.select().from(payrollItems).orderBy(asc(payrollItems.kind), asc(payrollItems.code));
 }
 
-export async function createItem(tx: Tx, ctx: PayrollCtx, input: CreatePayrollItemInput) {
+export async function createItem(tx: Tx, ctx: PayrollCtx, input: Omit<CreatePayrollItemInput, 'affectsStampBase'> & { affectsStampBase?: boolean | null }) {
   const code = input.code.trim().toUpperCase();
   if (code === ADVANCE_DEDUCTION_ITEM_CODE) throw conflict(`${code} kodu avans kesintisine ayrılmıştır`, 'PAYROLL_ITEM_RESERVED');
   const [dup] = await tx.select({ id: payrollItems.id }).from(payrollItems).where(eq(payrollItems.code, code));
@@ -198,13 +198,14 @@ export async function createItem(tx: Tx, ctx: PayrollCtx, input: CreatePayrollIt
       kind: input.kind,
       affectsSocialBase: input.kind === 'earning' ? input.affectsSocialBase : false,
       affectsTaxBase: input.kind === 'earning' ? input.affectsTaxBase : false,
+      affectsStampBase: input.kind === 'earning' ? input.affectsStampBase ?? null : null,
       liability: input.kind === 'deduction' ? input.liability : 'other',
     })
     .returning();
   return row!;
 }
 
-export async function updateItem(tx: Tx, id: string, input: { name?: string; affectsSocialBase?: boolean; affectsTaxBase?: boolean; liability?: 'tax' | 'social' | 'other'; isActive?: boolean }) {
+export async function updateItem(tx: Tx, id: string, input: { name?: string; affectsSocialBase?: boolean; affectsTaxBase?: boolean; affectsStampBase?: boolean | null; liability?: 'tax' | 'social' | 'other'; isActive?: boolean }) {
   const [cur] = await tx.select().from(payrollItems).where(eq(payrollItems.id, id)).for('update');
   if (!cur) throw notFound('Bordro kalemi');
   if (cur.code === ADVANCE_DEDUCTION_ITEM_CODE) throw conflict('Avans kesintisi kalemi sistem kalemidir; değiştirilemez', 'PAYROLL_ITEM_RESERVED');
@@ -214,6 +215,7 @@ export async function updateItem(tx: Tx, id: string, input: { name?: string; aff
     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     ...(earning && input.affectsSocialBase !== undefined ? { affectsSocialBase: input.affectsSocialBase } : {}),
     ...(earning && input.affectsTaxBase !== undefined ? { affectsTaxBase: input.affectsTaxBase } : {}),
+    ...(earning && input.affectsStampBase !== undefined ? { affectsStampBase: input.affectsStampBase } : {}),
     ...(!earning && input.liability !== undefined ? { liability: input.liability } : {}),
   };
   // Değiştirilecek alan yoksa (boş gövde ya da kesinti kalemine yalnızca matrah bayrakları) güncel kayıt döner (API-6)

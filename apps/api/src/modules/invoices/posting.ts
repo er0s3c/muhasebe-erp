@@ -1,4 +1,5 @@
 import { asc, eq, sql } from 'drizzle-orm';
+import { enqueueInvoiceWebhook } from '../platform-integrations/events';
 import {
   EXTERNAL_NO_REQUIRED,
   INVOICE_TYPE_META,
@@ -26,9 +27,11 @@ import { requireItemMappings } from '../inventory/accounting';
 import { accruedDeliveryLines, cancelAccruedPurchase, effectiveReturnValue, lockLeatherCosts, recognizeDeliverySale, reverseAllocatedJournalCosts, settleAccruedPurchase, traceStockDocument, unrecognizeDeliverySale } from '../leather/costs';
 import { reverseCustomDepositForInvoice } from '../leather/advanced';
 import { describeSettlements, entrySettlements } from '../parties/service';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
+import { assertDocumentApproved } from '../approvals/document-gate';
+import { invoiceApprovalSnapshot } from '../approvals/source-snapshot';
 import { requireOpenPeriod } from '../settings/periods';
-import { requireRate } from '../settings/rates';
+import { lookupRate } from '../settings/rates';
 import { assertMatchOrOverride, evaluateInvoiceMatch } from '../procurement/matching';
 import { checkOrderLinks, lockOrderLines } from '../sales/usage';
 import { DeliveryAllocator } from './delivery-link';
@@ -36,6 +39,7 @@ import { buildInvoiceJournal, requiredMappingKeys } from './journal';
 import {
   assertExternalNoFree,
   getInvoice,
+  invoiceTaxTotals,
   loadParty,
   prepareLines,
   resolveWarehouse,
@@ -113,6 +117,9 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       unitPrice: l.unitPrice,
       discountPct: l.discountPct,
       vatCode: l.vatCode,
+      taxRuleId: l.taxRuleId,
+      productClass: l.productClass,
+      transactionType: l.transactionType as LineSource['transactionType'],
       accountId: l.accountId,
       sourceLineId: l.sourceLineId,
       deliveryLineId: l.deliveryLineId,
@@ -123,6 +130,7 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
     })),
     inv.vatIncluded,
     ctx.companyId,
+    party.id,
   );
   if (totals.gross.isZero()) throw unprocessable('Fatura tutarı sıfır olamaz', 'INVOICE_TOTAL_ZERO');
 
@@ -134,21 +142,57 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
     assertMatchOrOverride(rows, inv.matchOverrideReason);
   }
 
-  const fx =
-    inv.currencyCode === ctx.baseCurrency
-      ? dec(1)
-      : inv.fxRate
-        ? dec(inv.fxRate)
-        : await requireRate(tx, inv.currencyCode, ctx.baseCurrency, inv.invoiceDate, ctx.baseCurrency);
+  const original = inv.returnOfId ? await lockInvoice(tx, inv.returnOfId) : null;
+  const savedOriginalFx = original?.fxSnapshot;
+  const fxLookup = await lookupRate(tx, inv.currencyCode, ctx.baseCurrency, inv.invoiceDate, ctx.baseCurrency, inv.fxRateType ? { rateType: inv.fxRateType as import('@erp/shared').FxRateType } : { legacyInverse: true });
+  const fx = original && savedOriginalFx && original.currencyCode === inv.currencyCode ? dec(original.fxRate!) : inv.currencyCode === ctx.baseCurrency ? dec(1) : inv.fxRate ? dec(inv.fxRate) : fxLookup.rate ? dec(fxLookup.rate) : null;
+  if (!fx) throw unprocessable(`${inv.currencyCode}/${ctx.baseCurrency} kuru ${inv.invoiceDate} tarihinde seçilen türde bulunamadı`, 'FX_RATE_MISSING');
+  const fxSnapshot: import('@erp/shared').FinancialFxSnapshot = original && savedOriginalFx && original.currencyCode === inv.currencyCode
+    ? { ...savedOriginalFx, originalInvoiceId: original.id }
+    : inv.fxRate && inv.currencyCode !== ctx.baseCurrency
+      ? { ...fxLookup, rate: toDbRate(fx), rateDate: inv.invoiceDate, source: 'Manuel işlem kuru', provider: 'manual', sourceUrl: null, method: 'manual', legs: [], manualReason: inv.fxReason ?? null }
+      : fxLookup;
   if (fx.lte(0)) throw unprocessable('Kur sıfırdan büyük olmalı', 'FX_RATE_INVALID');
+  const approvalProof = await invoiceApprovalSnapshot(tx, ctx, inv, stored, lines, fx);
+  await assertDocumentApproved(tx, 'invoice', id, approvalProof.amount, approvalProof.hash, approvalProof.projectId);
 
   const netBase = lines.map((l) => applyRate(l.net, fx));
   const vatBase = lines.map((l) => applyRate(l.vat, fx));
 
   // İade bağı: orijinal faturayı kilitle, kalan miktarı kilit altında yeniden doğrula
-  const original = inv.returnOfId ? await lockInvoice(tx, inv.returnOfId) : null;
   if (original && original.status !== 'posted') {
     throw unprocessable('Orijinal fatura artık kaydedilmiş durumda değil', 'RETURN_ORIGINAL_NOT_POSTED');
+  }
+  if (original && lines.some(line => line.taxRuleSnapshot) && (original.vatIncluded !== inv.vatIncluded || original.currencyCode !== inv.currencyCode))
+    throw unprocessable('Vergi kurallı iade özgün faturanın para birimi ve KDV dahil/hariç seçimini kullanmalı', 'RETURN_TAX_DOCUMENT');
+  if (original && lines.some(line => line.taxCalculation)) {
+    const sourceTax = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, original.id));
+    const previousTax = await tx.execute<{ sourceId: string; qty: string; vatWithheld: string; incomeWithheld: string; stamp: string }>(sql`
+      select l.source_line_id as "sourceId", sum(l.quantity)::text as qty,
+        coalesce(sum((l.tax_calculation->>'vatWithheld')::numeric),0)::text as "vatWithheld",
+        coalesce(sum((l.tax_calculation->>'incomeWithheld')::numeric),0)::text as "incomeWithheld",
+        coalesce(sum((l.tax_calculation->>'stamp')::numeric),0)::text as stamp
+      from invoice_lines l join invoices i on i.id=l.invoice_id
+      where i.return_of_id=${original.id} and i.status='posted' and i.id<>${inv.id} and l.source_line_id is not null
+      group by l.source_line_id`);
+    const previous = new Map(previousTax.rows.map(row => [row.sourceId, row]));
+    const sources = new Map(sourceTax.map(row => [row.id, row]));
+    for (const l of lines) {
+      if (!l.sourceLineId || !l.taxCalculation) continue;
+      const source = sources.get(l.sourceLineId);
+      if (!source?.taxCalculation) continue;
+      const before = previous.get(l.sourceLineId) ?? { sourceId: l.sourceLineId, qty: '0', vatWithheld: '0', incomeWithheld: '0', stamp: '0' };
+      const originalTax = source.taxCalculation;
+      const calculation = l.taxCalculation;
+      if (dec(l.quantity).eq(dec(source.quantity).minus(before.qty))) {
+        calculation.vatWithheld = dec(originalTax.vatWithheld).minus(before.vatWithheld).toFixed(2);
+        calculation.incomeWithheld = dec(originalTax.incomeWithheld).minus(before.incomeWithheld).toFixed(2);
+        calculation.stamp = dec(originalTax.stamp).minus(before.stamp).toFixed(2);
+        calculation.vatPayableToSeller = l.vat.minus(calculation.vatWithheld).toFixed(2);
+        calculation.payableToSeller = l.gross.minus(calculation.vatWithheld).minus(calculation.incomeWithheld).toFixed(2);
+      }
+      previous.set(l.sourceLineId, { sourceId: l.sourceLineId, qty: dec(before.qty).plus(l.quantity).toFixed(4), vatWithheld: toDbAmount(dec(before.vatWithheld).plus(calculation.vatWithheld)), incomeWithheld: toDbAmount(dec(before.incomeWithheld).plus(calculation.incomeWithheld)), stamp: toDbAmount(dec(before.stamp).plus(calculation.stamp)) });
+    }
   }
   const returned = original ? await returnedTotals(tx, original.id, inv.id) : new Map<string, { qty: MoneyValue; cost: MoneyValue }>();
   const sourceById = new Map<string, { quantity: MoneyValue; cost: MoneyValue | null; lineNo: number }>();
@@ -307,7 +351,12 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
   const itemMapping = await requireItemMappings(tx, stockLines.map(l => l.itemId!));
   const mapping = await requireMappings(
     tx,
-    requiredMappingKeys(type, { hasStock: stockLines.length > 0, hasStockAdjust: !stockAdjust.isZero() }),
+    requiredMappingKeys(type, {
+      hasStock: stockLines.length > 0, hasStockAdjust: !stockAdjust.isZero(),
+      hasVatWithholding: lines.some(line => dec(line.taxCalculation?.vatWithheld ?? 0).gt(0)),
+      hasIncomeWithholding: lines.some(line => dec(line.taxCalculation?.incomeWithheld ?? 0).gt(0)),
+      hasStamp: lines.some(line => line.taxRuleSnapshot?.config.stampLiability === 'company' && dec(line.taxCalculation?.stamp ?? 0).gt(0)),
+    }),
   );
   const dueDate = inv.dueDate ?? addDays(inv.invoiceDate, party.paymentTermDays);
   const built = buildInvoiceJournal({
@@ -325,6 +374,12 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       netBase: netBase[i]!,
       vatBase: vatBase[i]!,
       vatRate: l.vatRate,
+      vatWithheld: dec(l.taxCalculation?.vatWithheld ?? 0),
+      vatWithheldBase: applyRate(l.taxCalculation?.vatWithheld ?? '0', fx),
+      incomeWithheld: dec(l.taxCalculation?.incomeWithheld ?? 0),
+      incomeWithheldBase: applyRate(l.taxCalculation?.incomeWithheld ?? '0', fx),
+      stampCompany: dec(l.taxRuleSnapshot?.config.stampLiability === 'company' ? l.taxCalculation?.stamp ?? 0 : 0),
+      stampCompanyBase: applyRate(l.taxRuleSnapshot?.config.stampLiability === 'company' ? l.taxCalculation?.stamp ?? '0' : '0', fx),
       accountId: l.accountId,
       isStock: l.isStock,
       ...(l.itemId ? itemMapping.get(l.itemId) : {}),
@@ -338,8 +393,7 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
 
   // --- Yazma: fatura numarası → stok belgesi → yevmiye → satırlar → fatura ---
   const year = isoYear(inv.invoiceDate);
-  const seq = await nextNumber(tx, ctx.companyId, `INV:${type}`, year);
-  const invoiceNo = formatDocumentNumber(meta.prefix, year, seq);
+  const invoiceNo = await nextDocumentNumber(tx, ctx.companyId, `INV:${type}`, year, meta.prefix);
   const text = `${TYPE_LABEL[type]} ${invoiceNo} — ${party.name}`.slice(0, 300);
 
   let stockDocumentId: string | null = null;
@@ -385,6 +439,12 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
         unit: l.unit,
         vatCode: l.vatCode,
         vatRate: l.vatRate,
+        taxRuleId: l.taxRuleId,
+        taxRuleSnapshot: l.taxRuleSnapshot,
+        taxCalculation: l.taxCalculation,
+        productClass: l.productClass,
+        transactionType: l.transactionType,
+        taxTreatment: l.taxTreatment,
         net: toDbAmount(l.net),
         vat: toDbAmount(l.vat),
         gross: toDbAmount(l.gross),
@@ -405,10 +465,13 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       invoiceNo,
       dueDate,
       fxRate: toDbRate(fx),
+      fxSnapshot,
+      documentMetadata: { company: (await tx.execute<Record<string, unknown>>(sql`select name,tax_number as "taxNumber",tax_office as "taxOffice",jurisdiction,legal_entity_type as "legalEntityType" from companies where id=${ctx.companyId}`)).rows[0], party: { id: party.id, name: party.name, taxNumber: party.taxNumber, taxOffice: party.taxOffice, taxStatus: party.taxStatus, address: party.address }, originalInvoice: original ? { id: original.id, invoiceNo: original.invoiceNo, invoiceDate: original.invoiceDate } : null, capturedAt: new Date().toISOString() },
       warehouseId,
       netTotal: toDbAmount(totals.net),
       vatTotal: toDbAmount(totals.vat),
       grossTotal: toDbAmount(totals.gross),
+      taxTotalsSnapshot: invoiceTaxTotals(lines, fx),
       netTotalBase: toDbAmount(sumBase(netBase)),
       vatTotalBase: toDbAmount(sumBase(vatBase)),
       grossTotalBase: toDbAmount(built.grossBase),
@@ -421,6 +484,7 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
     .where(eq(invoices.id, id));
 
   const result = await getInvoice(tx, id);
+  await enqueueInvoiceWebhook(tx,id,'invoice.posted');
   return { ...result, warnings: await creditLimitWarning(tx, type, party.id, party.creditLimit) };
 }
 

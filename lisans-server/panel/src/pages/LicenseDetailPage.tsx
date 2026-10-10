@@ -1,14 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Badge } from '@ui/Badge';
 import { Button } from '@ui/Button';
 import { Card, CardHeader, PageHeader } from '@ui/Card';
-import { Callout, EmptyState, PageLoading } from '@ui/Feedback';
+import { Callout, EmptyState, ErrorState, PageLoading } from '@ui/Feedback';
 import { Field, Input, Textarea } from '@ui/Field';
 import { Modal } from '@ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '@ui/Table';
 import { useToast } from '@ui/Toast';
+import { markFormSaved } from '@ui/UnsavedChanges';
 import { api, errorText, type Activation, type License } from '../api';
 import { CodeModal } from '../components/CodeModal';
 import { LicenseFormSheet } from '../components/LicenseFormSheet';
@@ -44,7 +45,7 @@ export function LicenseDetailPage() {
   const { id = '' } = useParams();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const { data, isPending, error } = useQuery({ queryKey: ['license', id], queryFn: () => api<Detail>(`/admin/api/licenses/${id}`) });
+  const { data, isPending, error, refetch, isFetching } = useQuery({ queryKey: ['license', id], queryFn: () => api<Detail>(`/admin/api/licenses/${id}`) });
   const [editOpen, setEditOpen] = useState(false);
   const [extendOpen, setExtendOpen] = useState(false);
   const [extendTo, setExtendTo] = useState('');
@@ -56,9 +57,12 @@ export function LicenseDetailPage() {
   const [days, setDays] = useState('90');
   const [lease, setLease] = useState<{ token: string; until: string } | null>(null);
   const [offlineError, setOfflineError] = useState<string | null>(null);
+  const pending = useRef(false);
+  const extendInput = useRef<HTMLInputElement>(null);
+  const offlineInput = useRef<HTMLTextAreaElement>(null);
 
   if (isPending) return <PageLoading />;
-  if (error || !data) return <Callout tone="danger">{error ? errorText(error) : 'Lisans bulunamadı.'}</Callout>;
+  if (error || !data) return <><PageHeader title="Lisans ayrıntısı" /><ErrorState description={error ? errorText(error) : 'Lisans bulunamadı.'} onRetry={() => void refetch()} retrying={isFetching} /></>;
   const { license: l, activations } = data;
 
   const refresh = () =>
@@ -69,6 +73,8 @@ export function LicenseDetailPage() {
     ]);
 
   const run = async (fn: () => Promise<void>) => {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     try {
       await fn();
@@ -76,6 +82,7 @@ export function LicenseDetailPage() {
     } catch (e) {
       toast.error(errorText(e));
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -99,6 +106,7 @@ export function LicenseDetailPage() {
   const extend = () =>
     run(async () => {
       await api(`/admin/api/licenses/${id}/extend`, { method: 'POST', body: { validUntil: extendTo } });
+      markFormSaved(extendInput.current);
       toast.success('Süre uzatıldı.');
       setExtendOpen(false);
     });
@@ -110,6 +118,8 @@ export function LicenseDetailPage() {
     });
 
   const signOffline = async () => {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     setOfflineError(null);
     setLease(null);
@@ -119,10 +129,12 @@ export function LicenseDetailPage() {
         body: { requestCode: requestCode.trim(), days: Number(days) },
       });
       setLease({ token: res.lease, until: res.leaseUntil });
+      markFormSaved(offlineInput.current);
       await refresh();
     } catch (e) {
       setOfflineError(errorText(e));
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -147,13 +159,13 @@ export function LicenseDetailPage() {
         actions={
           <>
             <Link to="/licenses" className="link mr-2 text-sm">← Tüm lisanslar</Link>
-            <Button onClick={() => setEditOpen(true)}>Düzenle</Button>
-            <Button onClick={() => { setExtendTo(toDateInput(l.validUntil)); setExtendOpen(true); }}>Süreyi uzat</Button>
+            <Button disabled={busy} onClick={() => setEditOpen(true)}>Düzenle</Button>
+            <Button disabled={busy} onClick={() => { setExtendTo(toDateInput(l.validUntil)); setExtendOpen(true); }}>Süreyi uzat</Button>
           </>
         }
       />
 
-      <div className="flex flex-col gap-6">
+      <fieldset disabled={busy} className="flex min-w-0 flex-col gap-6">
         <Card>
           <CardHeader
             title="Lisans"
@@ -239,7 +251,7 @@ export function LicenseDetailPage() {
             {!l.offlineAllowed && <Callout tone="warning">Bu lisans çevrimdışı etkinleştirmeye izin vermiyor; önce “Düzenle” ile izin verin.</Callout>}
             {offlineError && <Callout tone="danger">{offlineError}</Callout>}
             <Field label="İstek kodu">
-              {(fid) => <Textarea id={fid} rows={4} className="font-mono text-xs" spellCheck={false} value={requestCode} onChange={(e) => setRequestCode(e.target.value)} />}
+              {(fid) => <Textarea ref={offlineInput} id={fid} rows={4} className="font-mono text-xs" spellCheck={false} value={requestCode} onChange={(e) => setRequestCode(e.target.value)} />}
             </Field>
             <Field label="Geçerlilik (gün)" hint="Bu süre sonunda yeni istek kodu gerekir; abonelik bitişini aşamaz." className="max-w-xs">
               {(fid) => <Input id={fid} type="number" min={1} max={400} value={days} onChange={(e) => setDays(e.target.value)} />}
@@ -260,29 +272,29 @@ export function LicenseDetailPage() {
             )}
           </div>
         </Card>
-      </div>
+      </fieldset>
 
       <LicenseFormSheet open={editOpen} onOpenChange={setEditOpen} license={l} />
       <CodeModal code={code} onClose={() => setCode(null)} />
 
       <Modal
         open={extendOpen}
-        onOpenChange={setExtendOpen}
+        onOpenChange={(next) => { if (!busy) setExtendOpen(next); }}
         title="Süreyi uzat"
         description="Yeni abonelik bitiş tarihi. Müşteri bir sonraki kalp atışında görür."
         footer={
           <>
-            <Button onClick={() => setExtendOpen(false)}>Vazgeç</Button>
+            <Button disabled={busy} onClick={() => setExtendOpen(false)}>Vazgeç</Button>
             <Button variant="primary" loading={busy} disabled={!extendTo} onClick={() => void extend()}>Uzat</Button>
           </>
         }
       >
-        <Field label="Yeni bitiş tarihi">{(fid) => <Input id={fid} type="date" value={extendTo} onChange={(e) => setExtendTo(e.target.value)} />}</Field>
+        <Field label="Yeni bitiş tarihi">{(fid) => <Input ref={extendInput} id={fid} type="date" value={extendTo} onChange={(e) => setExtendTo(e.target.value)} />}</Field>
       </Modal>
 
       <Modal
         open={confirm !== null}
-        onOpenChange={(o) => !o && setConfirm(null)}
+        onOpenChange={(o) => !o && !busy && setConfirm(null)}
         title={copy?.title ?? (confirm?.kind === 'code' ? 'Yeni etkinleştirme kodu üretilsin mi?' : 'Kurulum devre dışı bırakılsın mı?')}
         description={
           copy?.body ??
@@ -292,7 +304,7 @@ export function LicenseDetailPage() {
         }
         footer={
           <>
-            <Button onClick={() => setConfirm(null)}>Vazgeç</Button>
+            <Button disabled={busy} onClick={() => setConfirm(null)}>Vazgeç</Button>
             <Button variant={copy?.danger || confirm?.kind === 'deactivate' ? 'danger' : 'primary'} loading={busy} onClick={() => void doConfirm()}>
               {copy?.action ?? (confirm?.kind === 'code' ? 'Kodu üret' : 'Devre dışı bırak')}
             </Button>

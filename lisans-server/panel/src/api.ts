@@ -11,7 +11,10 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, opts: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown } = {}): Promise<T> {
+export async function api<T>(
+  path: string,
+  opts: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown } = {},
+): Promise<T> {
   const method = opts.method ?? 'GET';
   const headers: Record<string, string> = { accept: 'application/json' };
   if (opts.body !== undefined) headers['content-type'] = 'application/json';
@@ -28,14 +31,24 @@ export async function api<T>(path: string, opts: { method?: 'GET' | 'POST' | 'PA
   } catch {
     /* gövde yok */
   }
-  if (!res.ok) throw new ApiError(res.status, json?.error?.code ?? 'UNKNOWN', json?.error?.message ?? `İstek başarısız (${res.status})`, json?.error?.details);
+  if (!res.ok)
+    throw new ApiError(
+      res.status,
+      json?.error?.code ?? 'UNKNOWN',
+      json?.error?.message ?? `İstek başarısız (${res.status})`,
+      json?.error?.details,
+    );
   return json as T;
 }
 
 export function errorText(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.code === 'VALIDATION_ERROR' && Array.isArray(err.details)) {
-      return (err.details as { path: string; message: string }[]).map((d) => `${d.path}: ${d.message}`).join('; ') || err.message;
+      return (
+        (err.details as { path: string; message: string }[])
+          .map((d) => `${d.path}: ${d.message}`)
+          .join('; ') || err.message
+      );
     }
     return err.message;
   }
@@ -45,7 +58,8 @@ export function errorText(err: unknown): string {
 
 // ---- Sunucu yanıt tipleri (lisans-server/server/src/modules/licenses.ts serileştiricileriyle aynı) -----------------
 
-export type Sector = 'CONSTRUCTION' | 'RETAIL_MARKET' | 'COMMERCE' | 'LEATHER_FASHION' | 'MANUFACTURING_WHOLESALE';
+export type Sector =
+  'CONSTRUCTION' | 'RETAIL_MARKET' | 'COMMERCE' | 'LEATHER_FASHION' | 'MANUFACTURING_WHOLESALE';
 export type LicenseStatus = 'active' | 'suspended' | 'revoked';
 
 export interface Customer {
@@ -120,6 +134,36 @@ export interface Dashboard {
   licenses: Partial<Record<LicenseStatus, number>>;
   activations: { active: number; flagged: number; reportedDevices: number };
   expiringIn30Days: number;
+}
+
+export type FeedbackStatus = 'new' | 'in_review' | 'resolved';
+export interface CustomerFeedback {
+  id: string;
+  reference: string;
+  status: FeedbackStatus;
+  customerId: string;
+  customerName: string;
+  companyName: string;
+  reporterName: string;
+  pageTitle: string;
+  pagePath: string;
+  message: string;
+  hasScreenshot: boolean;
+  createdAt: string;
+}
+export interface CustomerFeedbackDetail extends CustomerFeedback {
+  installationId: string;
+  reporterEmail: string;
+  steps: string;
+  expected: string;
+  appVersion: string;
+  internalNote: string;
+  screenshot: { name: string; mime: string; size: number } | null;
+}
+export interface FeedbackInbox {
+  feedback: CustomerFeedback[];
+  total: number;
+  counts: Record<FeedbackStatus, number>;
 }
 
 export interface Passkey {

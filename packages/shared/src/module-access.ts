@@ -169,6 +169,26 @@ export function areaOfPermission(permission: Permission): AccessAreaKey | null {
 
 export type AccessOverrides = Readonly<Partial<Record<string, AccessLevel>>>;
 
+export const RESOURCE_OPERATIONS = ['create', 'update', 'delete', 'export'] as const;
+export type ResourceOperation = (typeof RESOURCE_OPERATIONS)[number];
+export const RESOURCE_OPERATION_LABELS: Record<ResourceOperation, string> = { create: 'Oluştur', update: 'Güncelle', delete: 'Sil', export: 'Dışa aktar' };
+export const resourceOperationKey = (area: AccessAreaKey, operation: ResourceOperation) => `operation.${area}.${operation}`;
+export function resourceOperationOf(key: string): { area: AccessAreaKey; operation: ResourceOperation } | null {
+  if (!key.startsWith('operation.')) return null;
+  const parts = key.slice(10).split('.');
+  const operation = parts.pop();
+  const area = parts.join('.');
+  return isAccessArea(area) && RESOURCE_OPERATIONS.includes(operation as ResourceOperation) ? { area, operation: operation as ResourceOperation } : null;
+}
+
+/** İşlem seçimi temel izni genişletmez; mevcut yetki üzerine ayrı bir kapıdır. */
+export function resourceOperationAllowed(permissions: PermissionSet, overrides: AccessOverrides, area: AccessAreaKey, operation: ResourceOperation): boolean {
+  if (overrides[area] === 'none' || overrides[resourceOperationKey(area, operation)] === 'none') return false;
+  const view = areaAccessOf(permissions, area);
+  // Raporun kendi okuma/özel dışa aktarma izni rota kapısında ayrıca denetlenir.
+  return operation === 'export' ? view.level !== 'none' : view.level === 'write';
+}
+
 export const PERMISSION_CHOICES = ['allow', 'deny', 'default'] as const;
 export type PermissionChoice = (typeof PERMISSION_CHOICES)[number];
 

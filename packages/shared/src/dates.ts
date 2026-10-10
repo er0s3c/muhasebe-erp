@@ -1,9 +1,20 @@
 export const COMPANY_TIME_ZONE = 'Europe/Nicosia';
 
+let companyTimeZoneResolver: () => string | null | undefined = () => COMPANY_TIME_ZONE;
+
+/** Sunucuda istek bağlamı, tarayıcıda etkin şirket tarafından bir kez kurulur. */
+export function setCompanyTimeZoneResolver(resolver: () => string | null | undefined): void {
+  companyTimeZoneResolver = resolver;
+}
+
+export function getCompanyTimeZone(): string {
+  return companyTimeZoneResolver() || COMPANY_TIME_ZONE;
+}
+
 /** Şirket saat diliminde bugünün tarihi, ISO biçiminde (YYYY-MM-DD). */
-export function todayIso(now: Date = new Date()): string {
+export function todayIso(now: Date = new Date(), timeZone: string = getCompanyTimeZone()): string {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: COMPANY_TIME_ZONE,
+    timeZone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

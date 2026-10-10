@@ -81,7 +81,6 @@ const emptyResult = (companyId: string, skipped = false): CompanyScanResult => (
 export async function scanCompany(db: Db, target: { companyId: string; orgId: string }, opts: ScanOptions = {}): Promise<CompanyScanResult> {
   const mails: MailMessage[] = [];
   const now = opts.now ?? new Date();
-  const local = nowLocal(now);
   const license = opts.license ? await opts.license().catch(() => null) : null;
 
   const result = await withContext(db, { orgId: target.orgId, companyId: target.companyId }, async (tx) => {
@@ -93,13 +92,14 @@ export async function scanCompany(db: Db, target: { companyId: string; orgId: st
       if (!got.rows[0]?.ok) return emptyResult(target.companyId, true);
     }
 
-    const [company] = (await tx.execute<{ sector: string }>(sql`select sector from companies where id = ${target.companyId}::uuid`)).rows;
+    const [company] = (await tx.execute<{ sector: string; timeZone: string }>(sql`select sector,time_zone as "timeZone" from companies where id = ${target.companyId}::uuid`)).rows;
     if (!company) return emptyResult(target.companyId);
+    const local = nowLocal(now, company.timeZone);
     const overrides = (await tx.execute<{ module: string; enabled: boolean }>(sql`select module, enabled from company_modules`)).rows;
     const enabled = resolveEnabledModules(company.sector as Sector, overrides);
     const dbOwner = (await tx.execute<{ id: string | null }>(sql`select installation_owner_org() as id`)).rows[0]?.id ?? null;
     const owner = license && license.ownerOrgId !== undefined ? license.ownerOrgId : dbOwner;
-    const ctx: ScanCtx = { tx, companyId: target.companyId, today: local.date, time: local.time, enabled, license, ownerOrg: owner === target.orgId };
+    const ctx: ScanCtx = { tx, companyId: target.companyId, today: local.date, time: local.time, timeZone: company.timeZone, enabled, license, ownerOrg: owner === target.orgId };
 
     const members: Member[] = (
       await tx.execute<{ userId: string; role: Role; email: string; fullName: string }>(sql`

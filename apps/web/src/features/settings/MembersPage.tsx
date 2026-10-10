@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import type { z } from 'zod';
 import { ROLES, addMemberSchema, type AddMemberInput } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
+import { useConfirmation } from '../../components/ui/useConfirmation';
 import { Button } from '../../components/ui/Button';
 import { PageHeader } from '../../components/ui/Card';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
@@ -18,18 +19,21 @@ import { useCMutation, useCQuery, useNavigation } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import type { Member } from '../../lib/types';
 import { MemberAccessSheet } from './MemberAccessSheet';
+import { CompanyRolesCard, type CompanyRolesResponse } from './CompanyRolesCard';
 
 type FormInput = z.input<typeof addMemberSchema>;
 
 export function MembersPage() {
   const { t } = useTranslation();
   const toast = useToast();
+  const { confirm, dialog } = useConfirmation();
   const { user } = useSession();
   const callerRole = useNavigation().data?.role;
   const [accessFor, setAccessFor] = useState<Member | null>(null);
   // Rütbe kuralları (sunucu da denetler): kimse kendi erişimini, kimse sahibin erişimini değiştiremez; yöneticininkini yalnızca sahip
   const canEditAccess = (m: Member) => m.userId !== user?.id && m.role !== 'owner' && (callerRole === 'owner' || m.role !== 'admin');
   const { data, isPending } = useCQuery<{ members: Member[] }>(['members'], '/api/company/members');
+  const roles = useCQuery<CompanyRolesResponse>(['company-roles'], '/api/company/roles');
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Member | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -51,10 +55,12 @@ export function MembersPage() {
     (v: { userId: string; role: string }, call) => call(`/api/company/members/${v.userId}`, { method: 'PATCH', body: { role: v.role } }),
     [['members']],
   );
+  const assignRole = useCMutation((v: { userId: string; roleId: string | null }, call) => call(`/api/company/members/${v.userId}/custom-role`, { method: 'PUT', body: { roleId: v.roleId } }), [['members'], ['module-access'], ['navigation'], ['export-access']]);
   const resetMfa = useCMutation((userId: string, call) => call(`/api/company/members/${userId}/mfa`, { method: 'DELETE' }), [['members']]);
   const remove = useCMutation((userId: string, call) => call(`/api/company/members/${userId}`, { method: 'DELETE' }), [['members']]);
 
   const onSubmit = handleSubmit((values) => {
+    if (add.isPending) return;
     setFormError(null);
     add.mutate(
       { ...values, password: values.password || undefined },
@@ -71,6 +77,7 @@ export function MembersPage() {
 
   return (
     <>
+      {dialog}
       <PageHeader
         title={t('settings.members.title')}
         description={t('settings.members.subtitle')}
@@ -81,6 +88,8 @@ export function MembersPage() {
           </Button>
         }
       />
+
+      <CompanyRolesCard />
 
       {isPending ? (
         <PageLoading />
@@ -115,6 +124,7 @@ export function MembersPage() {
                     <Select
                       className="h-8 w-44"
                       value={m.role}
+                      disabled={assignRole.isPending || changeRole.isPending || (m.role === 'owner' && callerRole !== 'owner')}
                       aria-label={t('settings.members.role')}
                       onChange={(e) =>
                         changeRole.mutate(
@@ -135,6 +145,11 @@ export function MembersPage() {
                         </option>
                       ))}
                     </Select>
+                    {m.customRoleName && <p className="mt-1 text-xs text-muted">Özel rol: {m.customRoleName}</p>}
+                    {canEditAccess(m) && m.role !== 'admin' && <Select className="mt-2 h-8 w-44" value={m.customRoleId ?? ''} aria-label={`${m.fullName}: özel şirket rolü`} disabled={assignRole.isPending} onChange={e => {
+                      const roleId = e.target.value || null;
+                      confirm({ title: 'Şirket rolünü uygula', description: 'Rol ataması kişiye özel erişim seçimlerini temizler. Seçilen rolü uygulamak istiyor musunuz?', confirmLabel: 'Rolü uygula', onConfirm: async () => { await assignRole.mutateAsync({ userId: m.userId, roleId }); toast.success('Şirket rolü uygulandı'); } });
+                    }}><option value="">Standart kullanıcı rolü</option>{roles.data?.roles.filter(role => role.isActive).map(role => <option key={role.id} value={role.id}>{role.name}</option>)}</Select>}
                   </Td>
                   <Td>
                     {m.mfaEnabled ? (
@@ -143,12 +158,7 @@ export function MembersPage() {
                         <button
                           className="rounded-md p-1.5 text-muted hover:bg-danger-soft hover:text-danger"
                           onClick={() => {
-                            if (window.confirm(t('settings.members.mfaResetConfirm', { name: m.fullName }))) {
-                              resetMfa.mutate(m.userId, {
-                                onSuccess: () => toast.success(t('settings.members.mfaReset')),
-                                onError: (err) => toast.error(errorMessage(err)),
-                              });
-                            }
+                            confirm({ title: t('settings.members.mfaResetAction'), description: t('settings.members.mfaResetConfirm', { name: m.fullName }), danger: true, onConfirm: async () => { await resetMfa.mutateAsync(m.userId); toast.success(t('settings.members.mfaReset')); } });
                           }}
                           aria-label={t('settings.members.mfaResetAction')}
                           title={t('settings.members.mfaResetAction')}

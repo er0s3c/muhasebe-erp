@@ -58,7 +58,7 @@ describe('deri mağaza POS',async()=>{
     expect((await outsider.client.post('/api/pos/sessions',{tillId:s.till.id,openingCash:'0'})).statusCode).toBe(403);
     const session=must201(await s.cashier.client.post('/api/pos/sessions',{tillId:s.till.id,openingCash:'0'})).session;
     const discounted=await s.cashier.client.post(`/api/pos/sessions/${session.id}/sales`,{requestId:randomUUID(),lines:[{itemId:s.itemId,quantity:'1',discountPct:'10'}],payments:[{method:'cash',amount:'90'}]});expect(discounted.statusCode).toBe(403);
-    const second=await createCompany(app,s.owner.token,{sector:'LEATHER_FASHION',name:'İkinci mağaza'});const other=client(app,s.owner.token,second.id);
+    const second=await createCompany(app,s.owner.token,{sector:'LEATHER_FASHION', jurisdiction: 'KKTC',name:'İkinci mağaza'});const other=client(app,s.owner.token,second.id);
     expect((await other.get(`/api/pos/sessions/${session.id}`)).statusCode).toBe(404);
   });
 });

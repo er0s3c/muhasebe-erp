@@ -13,7 +13,7 @@ async function generateCode(tx: Tx, companyId: string): Promise<string> {
 /** Depolar; miktarlar `stock_movements` toplamından. */
 export async function listWarehouses(tx: Tx) {
   const rows = await tx.execute<Record<string, unknown>>(sql`
-    select w.id, w.code, w.name, w.is_default as "isDefault", w.is_active as "isActive",
+    select w.id, w.code, w.name, w.branch_id as "branchId", w.is_default as "isDefault", w.is_active as "isActive",
            coalesce(b.items, 0)::int as "itemCount"
     from warehouses w
     left join (
@@ -41,7 +41,9 @@ export async function createWarehouse(tx: Tx, companyId: string, input: CreateWa
     .from(warehouses)
     .where(eq(warehouses.isDefault, true));
   // İlk depo otomatik varsayılan olur; sonradan istenirse eskisi bırakılır
-  const makeDefault = input.isDefault || !existingDefault;
+  const scope=(await tx.execute<{selection:string;mode:string}>(sql`select coalesce(nullif(current_setting('app.branch_selection',true),''),'all') as selection,(select branch_scope_mode from memberships where company_id=app_company_id() and user_id=app_user_id()) as mode`)).rows[0];
+  if(input.isDefault&&(scope?.selection!=='all'||scope?.mode!=='all')) throw unprocessable('Varsayılan depo şirket genelinde değiştirilir; tüm şubeler görünümünü seçin.','DEFAULT_WAREHOUSE_BRANCH_SCOPE');
+  const makeDefault = input.isDefault || (!existingDefault && scope?.selection==='all' && scope?.mode==='all');
   if (makeDefault && existingDefault) {
     await tx.update(warehouses).set({ isDefault: false }).where(eq(warehouses.id, existingDefault.id));
   }
@@ -68,6 +70,8 @@ export async function updateWarehouse(tx: Tx, id: string, input: UpdateWarehouse
   }
   if (input.isDefault) {
     if (!current.isActive) throw unprocessable('Pasif depo varsayılan yapılamaz', 'WAREHOUSE_INACTIVE');
+    const scope=(await tx.execute<{selection:string;mode:string}>(sql`select coalesce(nullif(current_setting('app.branch_selection',true),''),'all') as selection,(select branch_scope_mode from memberships where company_id=app_company_id() and user_id=app_user_id()) as mode`)).rows[0];
+    if(scope?.selection!=='all'||scope?.mode!=='all') throw unprocessable('Varsayılan depo şirket genelinde değiştirilir; tüm şubeler görünümünü seçin.','DEFAULT_WAREHOUSE_BRANCH_SCOPE');
     await tx
       .update(warehouses)
       .set({ isDefault: false })

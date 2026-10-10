@@ -130,7 +130,7 @@ function WorkContent() {
           ].map((metric, index) => <button key={metric.label} type="button"
             className={`min-w-0 px-5 py-5 text-left transition-colors hover:bg-surface-2 ${index > 1 ? 'border-t border-border lg:border-t-0' : ''}`}
             onClick={() => { setStatus(metric.status); setDue(metric.filter); setOffset(0); }}>
-            <span className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wider text-muted">{metric.label}<metric.icon className="size-4" aria-hidden /></span>
+            <span className="flex items-center justify-between gap-2 text-[12px] uppercase tracking-wider text-muted">{metric.label}<metric.icon className="size-4" aria-hidden /></span>
             <span className={`mt-2 block text-[28px] leading-tight tabular-nums ${index === 2 && metric.value ? 'text-danger' : ''}`}>{metric.value ?? '—'}</span>
             <span className="mt-1 block text-xs text-muted">{metric.hint}</span>
           </button>)}

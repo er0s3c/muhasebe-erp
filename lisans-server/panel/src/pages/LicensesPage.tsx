@@ -5,15 +5,18 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Badge } from '@ui/Badge';
 import { Button } from '@ui/Button';
 import { PageHeader } from '@ui/Card';
-import { EmptyState, PageLoading } from '@ui/Feedback';
+import { EmptyState, ErrorState, PageLoading } from '@ui/Feedback';
 import { Select } from '@ui/Field';
+import { SavedViews } from '@ui/SavedViews';
 import { Table, TableWrap, Td, Th, Tr } from '@ui/Table';
-import { api, type License } from '../api';
+import { api, errorText, type License } from '../api';
 import { CodeModal } from '../components/CodeModal';
 import { LicenseFormSheet } from '../components/LicenseFormSheet';
 import { KIND_LABELS, SECTOR_LABELS, STATUS_LABELS, STATUS_TONES, fmtDay } from '../format';
+import { usePanelAdmin } from '../session';
 
 export function LicensesPage() {
+  const admin = usePanelAdmin();
   const [params, setParams] = useSearchParams();
   const status = params.get('status') ?? '';
   const customerId = params.get('customerId') ?? '';
@@ -30,7 +33,7 @@ export function LicensesPage() {
   const query = new URLSearchParams();
   if (status) query.set('status', status);
   if (customerId) query.set('customerId', customerId);
-  const { data, isPending } = useQuery({
+  const { data, isPending, error, refetch, isFetching } = useQuery({
     queryKey: ['licenses', status, customerId],
     queryFn: () => api<{ licenses: License[] }>(`/admin/api/licenses${query.size ? `?${query}` : ''}`),
   });
@@ -74,9 +77,17 @@ export function LicensesPage() {
             Müşteri süzgecini kaldır
           </Button>
         )}
+        <SavedViews key={admin.id} scope={['license-admin', admin.id, 'licenses']} description="Yalnızca bu tarayıcıdaki yönetici hesabınız için saklanır. Arama metni ve müşteri bilgileri kaydedilmez." filters={{ status, flagged: flaggedOnly }} onApply={(filters) => {
+          const next = new URLSearchParams(params);
+          const savedStatus = String(filters.status);
+          if (savedStatus in STATUS_LABELS) next.set('status', savedStatus); else next.delete('status');
+          if (filters.flagged === true) next.set('flagged', '1'); else next.delete('flagged');
+          next.delete('new');
+          setParams(next, { replace: true });
+        }} />
       </div>
 
-      {isPending ? (
+      {error ? <ErrorState description={errorText(error)} onRetry={() => void refetch()} retrying={isFetching} /> : isPending ? (
         <PageLoading />
       ) : rows.length === 0 ? (
         <TableWrap>

@@ -1,8 +1,10 @@
 import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { RouterProvider } from 'react-router-dom';
+import { Provider as TooltipProvider } from '@radix-ui/react-tooltip';
 import { PageLoading } from '../components/ui/Feedback';
 import { ToastProvider } from '../components/ui/Toast';
+import { UnsavedChangesProvider } from '../components/ui/UnsavedChanges';
 import { ActivationPage } from '../features/license/ActivationPage';
 import { usePublicConfig } from '../lib/queries';
 import { ApiError } from '../lib/api';
@@ -51,13 +53,17 @@ export function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <TooltipProvider delayDuration={150}>
       <LicenseGate>
         <SessionProvider>
           <ToastProvider>
+            <UnsavedChangesProvider>
             <RouterProvider router={router} />
+            </UnsavedChangesProvider>
           </ToastProvider>
         </SessionProvider>
       </LicenseGate>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }

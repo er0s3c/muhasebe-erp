@@ -3,6 +3,8 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useConfirmation } from '../../components/ui/useConfirmation';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
@@ -63,6 +65,7 @@ function Editor({ detail }: { detail?: ImportFileDetail }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const toast = useToast();
+  const { confirm, dialog } = useConfirmation();
   const can = useCan();
   const base = useCompany().baseCurrency;
   const { options: partyOptions } = usePartyOptions('supplier');
@@ -130,6 +133,7 @@ function Editor({ detail }: { detail?: ImportFileDetail }) {
   // Başarıdan sonra sorgular yenilenince düzenleyici yeniden kurulur (anahtar değişir); bu yüzden sonuç `mutate` geri çağrısıyla
   // değil `mutateAsync` ile beklenir (geri çağrılar bileşen sökülünce çalışmaz).
   const run = async (v: { action: 'allocate' | 'reopen' | 'post' | 'cancel'; payload?: unknown }, done: string, after?: () => void) => {
+    if (act.isPending || save.isPending) return;
     setError(null);
     try {
       await act.mutateAsync(v);
@@ -141,11 +145,13 @@ function Editor({ detail }: { detail?: ImportFileDetail }) {
   };
 
   const onSave = async () => {
+    if (save.isPending || act.isPending) return;
     setError(null);
     try {
       const res = await save.mutateAsync();
       toast.success(detail ? t('landed.messages.saved') : t('landed.messages.created'));
       setDirty(false);
+      markFormSaved(document.querySelector('[data-form-guard-scope="Editor"]'));
       if (!detail) navigate(`/inventory/imports/${res.file.id}`, { replace: true });
     } catch (e) {
       setError(errorMessage(e));
@@ -192,8 +198,9 @@ function Editor({ detail }: { detail?: ImportFileDetail }) {
   };
 
   const title = detail ? `${detail.file.code} — ${detail.file.name}` : t('landed.newTitle');
-  return (
+  return (<FormGuard captureAll scopeKey="Editor" pending={save.isPending || act.isPending}>{(
     <div className="print-wide">
+      {dialog}
       <PageHeader
         title={title}
         description={detail ? undefined : t('landed.subtitle')}
@@ -212,7 +219,7 @@ function Editor({ detail }: { detail?: ImportFileDetail }) {
               </Button>
             )}
             {detail && status === 'allocated' && can('invoices.manage') && (
-              <Button loading={act.isPending} onClick={() => window.confirm(t('landed.actions.confirmReopen')) && void run({ action: 'reopen' }, t('landed.messages.reopened'))}>
+              <Button loading={act.isPending} onClick={() => confirm({ title: t('landed.actions.reopen'), description: t('landed.actions.confirmReopen'), confirmLabel: t('landed.actions.reopen'), onConfirm: async () => { await act.mutateAsync({ action: 'reopen' }); toast.success(t('landed.messages.reopened')); } })}>
                 {t('landed.actions.reopen')}
               </Button>
             )}
@@ -680,7 +687,7 @@ function Editor({ detail }: { detail?: ImportFileDetail }) {
         </div>
       </Modal>
     </div>
-  );
+  )}</FormGuard>);
 }
 
 function SourcePicker({ open, onClose, taken, onAdd }: { open: boolean; onClose: () => void; taken: Set<string>; onAdd: (list: ImportSource[]) => void }) {

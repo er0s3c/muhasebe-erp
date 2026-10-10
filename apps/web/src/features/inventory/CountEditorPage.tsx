@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { dec } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
@@ -101,12 +102,14 @@ export function CountEditorPage() {
     save.mutate(undefined, {
       onSuccess: () => {
         setDirty(false);
+        markFormSaved(document.querySelector('[data-form-guard-scope="CountEditorPage"]'));
         toast.success(t('inventory.count.saved'));
       },
       onError: (e) => toast.error(errorMessage(e)),
     });
 
   const postNow = async () => {
+    if (save.isPending || post.isPending || remove.isPending) return;
     try {
       if (dirty) {
         await save.mutateAsync();
@@ -114,6 +117,7 @@ export function CountEditorPage() {
       }
       const res = await post.mutateAsync();
       setConfirmPost(false);
+      markFormSaved(document.querySelector('[data-form-guard-scope="CountEditorPage"]'));
       toast.success(t('inventory.count.posted', { no: res.count.countNo }));
       if (res.warnings?.zeroCostItems.length) setZeroCost(res.warnings.zeroCostItems);
     } catch (e) {
@@ -140,7 +144,7 @@ export function CountEditorPage() {
     return { text: `${diff.gt(0) ? '+' : '−'}${qtyText(diff.abs().toFixed(4))}`, tone: diff.gt(0) ? 'success' : 'danger' };
   };
 
-  return (
+  return (<FormGuard captureAll scopeKey="CountEditorPage" pending={save.isPending || post.isPending || remove.isPending}>{(
     <>
       <Link to="/inventory/counts" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
@@ -308,5 +312,5 @@ export function CountEditorPage() {
         {null}
       </Modal>
     </>
-  );
+  )}</FormGuard>);
 }

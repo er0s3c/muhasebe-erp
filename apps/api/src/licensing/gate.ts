@@ -23,6 +23,8 @@ const WRITES_WHEN_RESTRICTED = new Set([
   // yoksa başarısız güncelleme "istendi" durumunda kalır ve her dakika yeniden denenir.
   'POST /api/system/updater/report',
   'POST /api/system/updater/offline',
+  // Support remains available when a verified installation is restricted.
+  'POST /api/companies/:companyId/feedback',
 ]);
 
 const isLicenseRoute = (route: string) => route === '/api/license' || route.startsWith('/api/license/');

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { DELIVERY_NOTE_TYPE_META, dec, todayIso } from '@erp/shared';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
@@ -207,6 +208,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
   const remove = useCMutation((_: void, c) => c(`/api/delivery-notes/${initial!.note.id}`, { method: 'DELETE' }), DELIVERY_INVALIDATE);
 
   const submit = (post: boolean) => {
+    if (save.isPending || remove.isPending) return;
     setError(null);
     setFieldError(null);
     if (!partyId) return setFieldError(t('deliveries.form.partyRequired'));
@@ -215,6 +217,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
     if (lines.some((l) => l.maxQty && dec(l.quantity).gt(l.maxQty))) return setFieldError(t('deliveries.form.returnQtyExceeded'));
     save.mutate(post, {
       onSuccess: (res) => {
+        markFormSaved(document.querySelector('[data-form-guard-scope="DeliveryNoteForm"]'));
         toast.success(post ? t('deliveries.form.postedMsg', { no: res.note.noteNo ?? '' }) : t('deliveries.form.savedMsg'));
         navigate(`/delivery-notes/${res.note.id}`, { replace: true });
       },
@@ -230,7 +233,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
     ? 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_96px_minmax(0,1fr)_88px_minmax(0,0.8fr)_32px]'
     : 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_120px_32px]';
 
-  return (
+  return (<FormGuard captureAll scopeKey="DeliveryNoteForm" pending={save.isPending || remove.isPending}>{(
     <>
       <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
@@ -449,5 +452,5 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
         {null}
       </Modal>
     </>
-  );
+  )}</FormGuard>);
 }

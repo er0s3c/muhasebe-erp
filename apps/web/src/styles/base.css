@@ -1,0 +1,146 @@
+/* Katmanlar: unlayered kural utility sınıflarını ezer; bu yüzden element kuralları @layer base içindedir */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.5;
+    font-feature-settings: 'ss01';
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--brand);
+    color: var(--brand-contrast);
+  }
+
+  /* Kaydırma çubuğu: tarayıcı varsayılanı yerine ince, yuvarlak ve tema renkli; üzerine gelince belirginleşir */
+  :root {
+    color-scheme: light;
+  }
+  :root.dark {
+    color-scheme: dark;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+  *:hover {
+    scrollbar-color: var(--scroll-thumb-hover) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scroll-thumb);
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scroll-thumb-hover);
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--text);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  h1 { font-weight: 600; letter-spacing: -0.025em; }
+  h2, h3 { font-weight: 500; }
+}
+
+@layer components {
+  /* Tutar sütunları: sabit genişlikli rakamlar, sağa yaslı */
+  .num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* Bağlantı: Ink, alt çizgili; sarı asla metin rengi olmaz */
+  .link {
+    color: var(--text);
+    text-decoration: underline;
+    text-decoration-color: var(--border-strong);
+    text-underline-offset: 4px;
+    transition: text-decoration-color 0.3s ease-out;
+  }
+  .link:hover {
+    text-decoration-color: var(--text);
+  }
+
+  /* Büyük harf mikro etiket (menü grupları, tablo başlıkları, sayaç etiketleri) */
+  .micro {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.6;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .ui-control { min-height: var(--control-height); }
+  .ui-button { min-height: var(--control-height); }
+  .ui-button[data-size='sm'] { min-height: 32px; }
+  .ui-skeleton { background: var(--surface-2); animation: skeleton-pulse 1.8s ease-in-out infinite; }
+}
+
+@media (max-width: 767px) {
+  .ui-button[data-size='sm'] { min-height: 44px; }
+}
+@keyframes skeleton-pulse {
+  50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pop-in {
+  from {
+    transform: translateY(-6px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+

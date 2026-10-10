@@ -8,6 +8,8 @@ export const upsertRateSchema = z.object({
   quoteCode: currencyCode,
   buy: rateString,
   sell: rateString.optional(),
+  effectiveBuy: rateString.nullable().optional(),
+  effectiveSell: rateString.nullable().optional(),
   source: z.string().trim().max(60).default('manual'),
 });
 export type UpsertRateInput = z.infer<typeof upsertRateSchema>;
@@ -28,6 +30,14 @@ export const createTaxRateSchema = z.object({
   validFrom: isoDate,
   validTo: isoDate.nullable().optional(),
   sourceNote: z.string().trim().max(500).optional(),
+  sourceUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .url('Geçerli bir kaynak adresi girin')
+    .refine((value) => /^https?:\/\//i.test(value), 'Kaynak adresi HTTP veya HTTPS olmalı')
+    .optional(),
+  rulePackVersion: z.string().trim().min(1).max(80).optional(),
 });
 export type CreateTaxRateInput = z.infer<typeof createTaxRateSchema>;
 

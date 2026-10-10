@@ -10,7 +10,7 @@ import type { Tx } from '../../db/client';
 import { TR } from '../../db/search';
 import { items, stockCountLines, stockCounts } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { loadItemStates, loadWarehouseQty, lockItems } from './balances';
 import { journalStockDocument } from './journal';
@@ -259,11 +259,11 @@ export async function postStockCount(tx: Tx, ctx: StockCtx, id: string) {
   }
 
   const year = isoYear(count.countDate);
-  const seq = await nextNumber(tx, ctx.companyId, COUNT_NUMBER_KEY, year);
+  const countNo = await nextDocumentNumber(tx, ctx.companyId, COUNT_NUMBER_KEY, year, 'SY');
   await tx
     .update(stockCounts)
     .set({
-      countNo: formatDocumentNumber('SY', year, seq),
+      countNo,
       status: 'posted',
       documentId: doc?.id ?? null,
       postedAt: new Date(),

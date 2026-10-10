@@ -1,8 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { CreateCompanyInput, LoginInput, RegisterInput, Role, Sector } from '@erp/shared';
+import { COMPANY_TIME_ZONE, setCompanyTimeZoneResolver, type CreateCompanyInput, type LoginInput, type RegisterInput, type Role, type Sector, type Jurisdiction } from '@erp/shared';
 import { clearFieldPackage } from '../features/construction-control/offline';
 import { api, refreshSession, setAccessToken, setSessionLostHandler } from './api';
+import { setBranchUserId } from './branch';
 
 export interface SessionUser {
   id: string;
@@ -19,6 +20,11 @@ export interface CompanySummary {
   baseCurrency: string;
   reportingCurrency: string | null;
   role: Role;
+  jurisdiction?: Jurisdiction | null;
+  timeZone?: string;
+  profileVersionId?: string | null;
+  fxProvider?: 'tcmb' | 'kktcmb' | null;
+  taxSetupStatus?: string;
 }
 
 interface Session {
@@ -38,6 +44,11 @@ interface Session {
 
 const SessionContext = createContext<Session | null>(null);
 const ACTIVE_KEY = 'activeCompanyId';
+let activeTimeZone = COMPANY_TIME_ZONE;
+setCompanyTimeZoneResolver(() => activeTimeZone);
+const updateCompanyClock = (companies: CompanySummary[], activeId: string | null) => {
+  activeTimeZone = (companies.find(company => company.id === activeId) ?? companies[0])?.timeZone ?? COMPANY_TIME_ZONE;
+};
 
 const readActive = () => {
   try {
@@ -56,15 +67,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const loadMe = useCallback(async () => {
     const me = await api<{ user: SessionUser; companies: CompanySummary[] }>('/api/me');
+    updateCompanyClock(me.companies, readActive());
     setUser(me.user);
+    setBranchUserId(me.user.id);
     setCompanies(me.companies);
     setStatus('authenticated');
   }, []);
 
   const clear = useCallback(() => {
+    window.dispatchEvent(new Event('erp-session-cleared'));
     void clearFieldPackage();
     setAccessToken(null);
+    activeTimeZone = COMPANY_TIME_ZONE;
     setUser(null);
+    setBranchUserId(null);
     setCompanies([]);
     setStatus('anonymous');
     queryClient.clear();
@@ -89,13 +105,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const setActiveCompanyId = useCallback((id: string) => {
     void clearFieldPackage();
+    if (companies.some(company => company.id === id)) updateCompanyClock(companies, id);
     setActiveId(id);
     try {
       localStorage.setItem(ACTIVE_KEY, id);
     } catch {
       /* özel pencere */
     }
-  }, []);
+  }, [companies]);
 
   const authenticate = useCallback(
     async (path: string, body: unknown) => {
@@ -135,6 +152,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const me = await api<{ user: SessionUser; companies: CompanySummary[] }>('/api/me');
         setCompanies(me.companies);
         setActiveCompanyId(company.id);
+        updateCompanyClock(me.companies, company.id);
         queryClient.clear();
         return me.companies.find((c) => c.id === company.id)!;
       },

@@ -7,6 +7,7 @@ import { useCan, useCQuery } from '../../lib/queries';
 import type { SalesDocDetail, SalesDocKind } from '../../lib/types';
 import { SalesDocForm } from './SalesDocForm';
 import { SalesDocView } from './SalesDocView';
+import { DocumentApprovalPanel, useDocumentApprovals } from '../approvals/common';
 
 /** /sales/docs/new?kind=quote|order ve /sales/docs/:id: taslaksa düzenlenebilir form, değilse salt okunur görünüm (eylemler, yazdırma). */
 export function SalesDocPage() {
@@ -17,6 +18,7 @@ export function SalesDocPage() {
   const kindParam = params.get('kind');
   const newKind: SalesDocKind = (SALES_DOC_KINDS as readonly string[]).includes(kindParam ?? '') ? (kindParam as SalesDocKind) : 'quote';
   const detail = useCQuery<SalesDocDetail>(['sales-doc', id], id ? `/api/sales-docs/${id}` : null);
+  const approvals = useDocumentApprovals('sales_quote',detail.data?.doc.kind==='quote'?id:undefined);
 
   if (!id) {
     if (!canManage) return <Callout tone="danger">{t('errors.FORBIDDEN')}</Callout>;
@@ -24,6 +26,7 @@ export function SalesDocPage() {
   }
   if (detail.error) return <Callout tone="danger">{errorMessage(detail.error)}</Callout>;
   if (!detail.data) return <PageLoading />;
-  if (detail.data.doc.status === 'draft' && canManage) return <SalesDocForm key={id} kind={detail.data.doc.kind} initial={detail.data} />;
-  return <SalesDocView key={id} data={detail.data} />;
+  const quote=detail.data.doc.kind==='quote',pending=quote&&!!approvals.data?.requests.some(request=>request.status==='pending');
+  if(quote&&approvals.isPending)return <PageLoading/>;
+  return <>{quote&&<DocumentApprovalPanel type="sales_quote" id={id} status={detail.data.doc.status}/>} {detail.data.doc.status==='draft'&&canManage&&!pending?<SalesDocForm key={id} kind={detail.data.doc.kind} initial={detail.data}/>:<SalesDocView key={id} data={detail.data} approvalPending={pending}/>}</>;
 }

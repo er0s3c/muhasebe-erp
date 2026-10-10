@@ -20,8 +20,8 @@
     "return": "İade ve değişim"
   },
   "app": {
-    "name": "Ada Muhasebe",
-    "tagline": "KKTC işletmeleri için sade ve güçlü muhasebe"
+    "name": "Ada ERP",
+    "tagline": "İşletmeniz için sade ve güçlü ERP"
   },
   "common": {
     "save": "Kaydet",
@@ -178,6 +178,9 @@
     "core": { "integrations": "Entegrasyonlar" }
   },
   "nav": {
+    "offlineDrafts": "Çevrimdışı depo ve saha",
+    "documentApprovals": "Belge onayları",
+    "platformIntegrations": "API ve bildirim bağlantıları",
     "manufacturing.promise": "Sipariş taahhüdü",
     "manufacturing.shopFloor": "Atölye iş ekranı",
     "manufacturing.exceptions": "Müdahale bekleyen işler",
@@ -208,6 +211,9 @@
     "accountLedger": "Hesap ekstresi",
     "yearEnd": "Yıl sonu kapanışı",
     "company": "Şirket bilgileri",
+    "branches": "Şubeler ve kapsam",
+    "fileExchange": "İçe ve dışa aktarma",
+    "replenishment": "Stok tamamlama önerileri",
     "members": "Kullanıcılar",
     "currencies": "Para birimi ve kurlar",
     "taxRates": "KDV oranları",
@@ -217,6 +223,8 @@
     "partyAging": "Yaşlandırma raporu",
     "items": "Stok kartları",
     "stockStatus": "Stok durumu",
+    "stockAnalytics": "ABC, hareketsiz stok ve devir",
+    "supplierPerformance": "Tedarikçi performansı",
     "stockMovements": "Stok hareketleri",
     "stockCounts": "Sayımlar",
     "warehouses": "Depolar",
@@ -691,7 +699,9 @@
         },
         "inventoryWms": "Stok belgesine bağlı parti, kalite blokesi, raf ve yerleştirme takibi.",
         "sales": { "logistics": "İrsaliyeden paketleme, taşıyıcı, sevk ve teslim takibi." },
-        "core": { "integrations": "Dış kanal bağlantıları, ürün eşleştirmesi, tekrar deneme ve hata kuyruğu." }
+        "core": {
+          "integrations": "Dış kanal bağlantıları, ürün eşleştirmesi, tekrar deneme ve hata kuyruğu."
+        }
       }
     }
   },
@@ -2058,12 +2068,14 @@
     },
     "sales": {
       "title": "Satış raporu",
-      "subtitle": "Kaydedilmiş satış faturaları ve iadeleri; cari, stok kartı, ay ya da fatura bazında.",
+      "subtitle": "Kaydedilmiş satışlar ve iadeler; cari, stok kartı, ay, fatura, şube veya kaydı oluşturan kullanıcı bazında.",
       "groups": {
         "party": "Cari",
         "item": "Stok kartı",
         "month": "Ay",
-        "invoice": "Fatura"
+        "invoice": "Fatura",
+        "branch": "Şube",
+        "creator": "Kaydı oluşturan kullanıcı"
       },
       "customer": "Müşteri",
       "supplier": "Tedarikçi",
@@ -2083,7 +2095,7 @@
     },
     "purchases": {
       "title": "Alış raporu",
-      "subtitle": "Kaydedilmiş alış ve gider faturaları ile alış iadeleri; cari, stok kartı, ay ya da fatura bazında."
+      "subtitle": "Kaydedilmiş alış ve giderler ile iadeler; cari, stok kartı, ay, fatura, şube veya kaydı oluşturan kullanıcı bazında."
     },
     "itemProfit": {
       "title": "Stok kârlılığı",
@@ -2614,7 +2626,7 @@
       "noWbsDesc": "Maliyeti iş kalemine göre izlemek için İş kırılımı sekmesinden iş kalemlerini tanımlayın.",
       "goWbs": "İş kırılımına git",
       "committed": "Kalan taahhüt",
-      "committedSub": "{{n}} yürürlükteki sözleşme ve sipariş: BOQ − hakediş, sipariş − gelen. EAC'ye girmez",
+      "committedSub": "{{n}} yürürlükteki sözleşme ve sipariş: metraj − hakediş, sipariş − gelen. Tahmini toplam maliyete girmez",
       "committedMissingRateTitle": "Taahhüt eksik olabilir",
       "committedMissingRate": "{{n}} dövizli sözleşmenin kuru bulunamadı; taahhüde katılamadı. Kuru girin."
     },
@@ -2720,7 +2732,7 @@
     "deactivate": "Pasifleştir",
     "costCodes": {
       "title": "Maliyet kodları",
-      "desc": "Maliyet türü: iş kaleminden bağımsız üçüncü boyut (malzeme, işçilik, taşeron…). Hakediş maliyeti BOQ satırının koduyla, yoksa \"taşeron\" kodu ile yazılır.",
+      "desc": "Maliyet türü: iş kaleminden bağımsız üçüncü boyut (malzeme, işçilik, taşeron…). Hakediş maliyeti metraj satırının koduyla, yoksa \"taşeron\" kodu ile yazılır.",
       "code": "Kod",
       "name": "Ad",
       "kind": "Tür",
@@ -2906,7 +2918,7 @@
   },
   "profitability": {
     "title": "Proje kârlılığı",
-    "subtitle": "Sözleşmeli gelir ile tahmini toplam maliyet (EAC) arasındaki kâr; tanınmış gelir ve gerçekleşen maliyetle birlikte.",
+    "subtitle": "Sözleşmeli gelir ile tamamlanma maliyeti tahmini arasındaki kâr; tanınmış gelir ve gerçekleşen maliyetle birlikte.",
     "asOf": "Tarih itibarıyla",
     "view": {
       "base": "Defter ({{cur}})",
@@ -2918,7 +2930,7 @@
       "contracted": "Sözleşmeli gelir",
       "revenue": "Tanınmış gelir",
       "actual": "Gerçekleşen maliyet",
-      "eac": "Tahmini maliyet (EAC)",
+      "eac": "Tamamlanma maliyeti tahmini",
       "projected": "Tahmini kâr",
       "recognized": "Tanınmış kâr",
       "margin": "Marj",
@@ -2932,7 +2944,7 @@
     "unsold": "Satılmamış birimlerin liste değeri: {{value}}",
     "noRate": "{{n}} tutar için kur bulunamadı; bu tutarlar sıfır sayıldı. Kur girin.",
     "noReporting": "Yönetim para birimi karşılığı için şirkette raporlama para birimi tanımlı ve kur kayıtlı olmalı.",
-    "note": "Tahmini kâr = sözleşmeli gelir − EAC (bütçe ve ilerleme yoksa gerçekleşen maliyet). Yönetim para biriminde tanınmış tutarlar tarihsel, diğerleri bugünkü kurla çevrilir. İç raporlama; yasal kâr hesabı değildir.",
+    "note": "Tahmini kâr = sözleşmeli gelir − tamamlanma maliyeti tahmini (bütçe ve ilerleme yoksa gerçekleşen maliyet). Yönetim para biriminde tanınmış tutarlar tarihsel, diğerleri bugünkü kurla çevrilir. İç raporlama; yasal kâr hesabı değildir.",
     "empty": "Henüz proje yok.",
     "pendingHint": "Onayda ya da işveren kabulü bekleyen değişiklik emirleri; sözleşmeli gelire, maliyete ve tahmine eklenmez.",
     "pendingRevenue": "Gelir {{v}}",
@@ -3360,13 +3372,13 @@
   },
   "subcontracts": {
     "title": "Taşeron sözleşmeleri",
-    "subtitle": "Sözleşme, BOQ, hakediş, avans ve teminat",
+    "subtitle": "Sözleşme, metraj, hakediş, avans ve teminat",
     "add": "Yeni sözleşme",
     "back": "Sözleşmeler",
     "notFound": "Sözleşme bulunamadı",
     "deleted": "Sözleşme silindi",
     "empty": "Henüz taşeron sözleşmesi yok",
-    "emptyDesc": "Bir projeye taşeron sözleşmesi açın, BOQ girin; hakedişler bu BOQ üzerinden kümülatif hazırlanır.",
+    "emptyDesc": "Bir projeye taşeron sözleşmesi açın, metraj girin; hakedişler bu metraj üzerinden kümülatif hazırlanır.",
     "status": {
       "draft": "Taslak",
       "active": "Yürürlükte",
@@ -3396,7 +3408,7 @@
     },
     "kpi": {
       "amount": "Sözleşme tutarı",
-      "amountSub": "Yürürlükteki revizyonun BOQ toplamı",
+      "amountSub": "Yürürlükteki revizyonun metraj toplamı",
       "retention": "Teminat",
       "retentionSub": "Hakedişten kesilir",
       "advance": "Avans mahsubu",
@@ -3406,7 +3418,7 @@
       "days": "{{days}} gün"
     },
     "tabs": {
-      "boq": "BOQ ve revizyonlar",
+      "boq": "Metraj ve revizyonlar",
       "progress": "Hakedişler",
       "balances": "Avans ve teminat",
       "variations": "Değişiklik emirleri"
@@ -3431,7 +3443,7 @@
     },
     "form": {
       "newTitle": "Yeni taşeron sözleşmesi",
-      "newDesc": "Yürürlüğe girmek için BOQ girip revizyonu onaylayın.",
+      "newDesc": "Yürürlüğe girmek için metraj girip revizyonu onaylayın.",
       "editTitle": "Sözleşmeyi düzenle",
       "saved": "Sözleşme kaydedildi",
       "project": "Proje",
@@ -3442,7 +3454,7 @@
       "title": "İş tanımı",
       "titlePlaceholder": "ör. Elektrik tesisatı",
       "currency": "Para birimi",
-      "currencyHint": "Hakediş ve BOQ bu para biriminde girilir; defter karşılığı kurla hesaplanır.",
+      "currencyHint": "Hakediş ve metraj bu para biriminde girilir; defter karşılığı kurla hesaplanır.",
       "startDate": "Başlangıç",
       "endDate": "Bitiş",
       "endBeforeStart": "Bitiş tarihi başlangıçtan önce olamaz",
@@ -3469,13 +3481,13 @@
       "current": "Yürürlükteki",
       "approvedAt": "Onay: {{date}}",
       "newRevision": "Yeni revizyon",
-      "revCreated": "Taslak revizyon açıldı (yürürlükteki BOQ kopyalandı)",
+      "revCreated": "Taslak revizyon açıldı (yürürlükteki metraj kopyalandı)",
       "firstDraftHint": "İlk revizyonu onayladığınızda sözleşme yürürlüğe girer. Onay, ekrandaki son hâli de kaydeder.",
       "noWbs": "Projede maliyet yazılabilecek iş kalemi yok. Önce projede iş kırılımı oluşturun.",
-      "title": "BOQ (iş kalemleri)",
+      "title": "Metraj (iş kalemleri)",
       "desc": "Birim fiyatlı metraj. Onaylı revizyon değişmez; yürürlükteki sözleşmede değişiklik, değişiklik emriyle yapılır.",
       "addLine": "Satır ekle",
-      "empty": "BOQ boş",
+      "empty": "Metraj boş",
       "emptyDesc": "Satır ekleyerek başlayın.",
       "pickWbs": "İş kalemi seçin",
       "defaultCode": "Varsayılan (taşeron)",
@@ -3492,7 +3504,7 @@
       "deleteDraft": "Taslağı sil",
       "deleted": "Taslak revizyon silindi",
       "save": "Kaydet",
-      "saved": "BOQ kaydedildi",
+      "saved": "Metraj kaydedildi",
       "approve": "Revizyonu onayla",
       "approveActivate": "Onayla ve yürürlüğe al",
       "approved": "Revizyon onaylandı"
@@ -3651,12 +3663,12 @@
     },
     "employer": {
       "title": "İşveren sözleşmeleri",
-      "subtitle": "İşverene yapılan işlerde sözleşme ve BOQ (projede tek)",
+      "subtitle": "İşverene yapılan işlerde sözleşme ve metraj (projede tek)",
       "add": "Yeni işveren sözleşmesi",
       "newTitle": "Yeni işveren sözleşmesi",
       "back": "İşveren sözleşmeleri",
       "empty": "Henüz işveren sözleşmesi yok",
-      "emptyDesc": "\"İşverene yapılan iş\" türündeki projeye işveren sözleşmesi açın, BOQ girin; alınan hakedişler bu BOQ üzerinden kümülatif hazırlanır.",
+      "emptyDesc": "\"İşverene yapılan iş\" türündeki projeye işveren sözleşmesi açın, metraj girin; alınan hakedişler bu metraj üzerinden kümülatif hazırlanır.",
       "party": "İşveren",
       "partyHint": "Projenin işvereni (müşteri carisi)",
       "claimsTitle": "İşveren hakedişleri",
@@ -3665,7 +3677,7 @@
       "claimEdit": "İşveren hakedişi {{no}}",
       "newClaim": "Yeni hakediş",
       "noContract": "Bu projede işveren sözleşmesi yok",
-      "noContractDesc": "İşveren sözleşmesi açıp BOQ girin; hakedişler işverene kesilir ve 120 cari alacak olarak izlenir.",
+      "noContractDesc": "İşveren sözleşmesi açıp metraj girin; hakedişler işverene kesilir ve 120 cari alacak olarak izlenir.",
       "receiveAdvance": "Avans al",
       "advanceDesc": "İşverenden sözleşme para biriminde ({{currency}}) bir kasa/banka hesabına alınır.",
       "releaseDesc": "İşverenin tuttuğu teminatın geri ödenecek kısmı; en çok bakiye kadar: {{max}}",
@@ -3724,7 +3736,7 @@
     "listTitle": "Değişiklik emirleri",
     "listSubtitle": "Taşeron ve işveren sözleşmelerindeki ek/eksilen iş, fiyat değişikliği ve süre uzatımları.",
     "listEmptyDesc": "Değişiklik emri, yürürlükteki sözleşmenin sayfasında \"Değişiklik emirleri\" sekmesinden açılır.",
-    "descPayable": "Yürürlükteki sözleşmede BOQ ve süre yalnızca değişiklik emriyle değişir. Onaylanan emir hemen uygulanır.",
+    "descPayable": "Yürürlükteki sözleşmede metraj ve süre yalnızca değişiklik emriyle değişir. Onaylanan emir hemen uygulanır.",
     "descReceivable": "İşveren sözleşmesinde iç onaydan sonra işverenin yazılı kabulü kaydedilir; kabul edilmeden bedele yansımaz.",
     "add": "Değişiklik emri oluştur",
     "openExisting": "Açık emre git ({{code}})",
@@ -3737,7 +3749,7 @@
     "kpiSub": "İlk bedel {{original}} · bekleyen emir {{n}}",
     "openLinked": "{{code}} değişiklik emrini aç",
     "draftInVariation": "Bu taslak revizyon {{code}} değişiklik emrine bağlıdır; değişiklik emri sayfasında düzenlenir ve emrin onayıyla yürürlüğe girer.",
-    "boqHint": "Yürürlükteki sözleşmede BOQ değişikliği \"Değişiklik emirleri\" sekmesinden yapılır.",
+    "boqHint": "Yürürlükteki sözleşmede metraj değişikliği \"Değişiklik emirleri\" sekmesinden yapılır.",
     "revisionInfo": "rev. {{base}} → rev. {{rev}}",
     "print": "Yazdır / PDF",
     "daysValue": "{{n}} gün",
@@ -3791,7 +3803,7 @@
       "pendingSub": "{{n}} emir; bedele ve tahmine dahil değil"
     },
     "createTitle": "Yeni değişiklik emri",
-    "createDesc": "Yürürlükteki BOQ kopyalanır; sonraki ekranda kalemleri değiştirirsiniz.",
+    "createDesc": "Yürürlükteki metraj kopyalanır; sonraki ekranda kalemleri değiştirirsiniz.",
     "create": "Oluştur",
     "form": {
       "title": "Konu",
@@ -3811,8 +3823,8 @@
       "noExtension": "Süre değişmiyor"
     },
     "editHint": "Kalemleri ekleyin, kaldırın ya da miktar/fiyatı değiştirin. Hakedişte işlenmiş miktarın altına inilemez. Gönderim ekrandaki son hâli de kaydeder.",
-    "boqTitle": "Değişiklik emri BOQ'su (rev. {{rev}})",
-    "boqDesc": "Yürürlükteki BOQ'nun kopyası. Kaydettikçe aşağıdaki karşılaştırma güncellenir.",
+    "boqTitle": "Değişiklik emri metrajı (revizyon {{rev}})",
+    "boqDesc": "Yürürlükteki metrajın kopyası. Kaydettikçe aşağıdaki karşılaştırma güncellenir.",
     "save": "Kaydet",
     "saved": "Değişiklik emri kaydedildi",
     "submit": "Onaya gönder",
@@ -3823,7 +3835,7 @@
     "awaitingBody": "İç onay tamamlandı. İşverenin yazılı kabulünü (tarih ve yazı/referans no) kaydettiğinizde değişiklik sözleşmeye işlenir.",
     "compareTitle": "Önceki / yeni karşılaştırması",
     "compareDesc": "{{n}} kalem değişti",
-    "compareLive": "Karşılaştırma kaydedilmiş BOQ'dan hesaplanır; kesin tutarlar uygulamada yazılır.",
+    "compareLive": "Karşılaştırma kaydedilmiş metrajdan hesaplanır; kesin tutarlar uygulamada yazılır.",
     "compare": {
       "oldQty": "Önceki miktar",
       "newQty": "Yeni miktar",
@@ -3843,15 +3855,15 @@
     "acceptedToast": "İşveren kabulü kaydedildi; değişiklik uygulandı",
     "clientReject": "İşveren reddi",
     "clientRejectTitle": "İşveren reddi",
-    "clientRejectDesc": "Değişiklik emri reddedilir ve taslak BOQ silinir; sözleşme aynen kalır.",
+    "clientRejectDesc": "Değişiklik emri reddedilir ve taslak metraj silinir; sözleşme aynen kalır.",
     "clientRejectedToast": "İşveren reddi kaydedildi",
     "rejectNote": "Ret gerekçesi",
     "cancel": "İptal et",
     "cancelTitle": "Değişiklik emri iptal edilsin mi?",
-    "cancelDesc": "Bekleyen onay geri çekilir, taslak BOQ silinir; kayıt iptal olarak kalır.",
+    "cancelDesc": "Bekleyen onay geri çekilir, taslak metraj silinir; kayıt iptal olarak kalır.",
     "cancelledToast": "Değişiklik emri iptal edildi",
     "pendingProjectTitle": "{{n}} bekleyen değişiklik emri",
-    "pendingProjectBody": "Taşeron maliyet farkı {{cost}}, işveren gelir farkı {{revenue}}. Onaylanıp uygulanana kadar taahhüde, EAC'ye ve gelire eklenmez."
+    "pendingProjectBody": "Taşeron maliyet farkı {{cost}}, işveren gelir farkı {{revenue}}. Onaylanıp uygulanana kadar taahhüde, tamamlanma maliyeti tahminine ve gelire eklenmez."
   },
   "hr": {
     "title": "Personel",
@@ -4634,15 +4646,7 @@
     "saved": "Puantaj kaydedildi",
     "missingHire": "{{count}} aktif personelin işe giriş tarihi girilmemiş; çizelgede görünmez ve puantaj yazılamaz.",
     "missingHireLink": "Personel kartları",
-    "weekdays": [
-      "Pz",
-      "Pt",
-      "Sa",
-      "Ça",
-      "Pe",
-      "Cu",
-      "Ct"
-    ],
+    "weekdays": ["Pz", "Pt", "Sa", "Ça", "Pe", "Cu", "Ct"],
     "tabs": {
       "grid": "Aylık çizelge",
       "day": "Günlük giriş",
@@ -6001,7 +6005,8 @@
       "NOT_A_MEMBER": "Artık bu şirketin üyesi değilsiniz",
       "ROLE_INSUFFICIENT": "Bu şirkette konsolidasyon izniniz yok (yalnız sahip/yönetici)",
       "MODULE_DISABLED": "Şirket konsolidasyon modülünü kapatmış",
-      "LICENSE_SECTOR_MISMATCH": "Lisans bu şirketin sektörünü kapsamıyor"
+      "LICENSE_SECTOR_MISMATCH": "Lisans bu şirketin sektörünü kapsamıyor",
+      "BRANCH_SCOPE_INSUFFICIENT": "Şirket genelinde konsolidasyon için tüm şubelere erişim gerekir"
     },
     "company": "Şirket",
     "unverified": "Doğrulanmadı: konsolidasyon, kur çevrimi ve eliminasyon yöntemi bir muhasebe standardına dayanmaz; iç yönetim raporudur, yasal konsolide tablo yerine geçmez.",

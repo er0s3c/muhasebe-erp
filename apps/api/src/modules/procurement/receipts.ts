@@ -5,7 +5,7 @@ import { companies, items, poReceiptLines, poReceipts, purchaseOrderLines } from
 import { notFound, unprocessable } from '../../http/errors';
 import { cancelDeliveryNote, postDeliveryNote } from '../deliveries/posting';
 import { createDeliveryDraft, type DeliveryCtx } from '../deliveries/service';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { getOrder, lockOrder } from './orders';
 import type { ProcurementCtx } from './requests';
@@ -73,7 +73,7 @@ export async function createReceipt(tx: Tx, ctx: ProcurementCtx, orderId: string
   }
 
   const year = isoYear(input.receiptDate);
-  const receiptNo = formatDocumentNumber('MK', year, await nextNumber(tx, ctx.companyId, 'PO_RECEIPT', year));
+  const receiptNo = await nextDocumentNumber(tx, ctx.companyId, 'PO_RECEIPT', year, 'MK');
   const [receipt] = await tx
     .insert(poReceipts)
     .values({ companyId: ctx.companyId, orderId, receiptNo, receiptDate: input.receiptDate, deliveryNoteId, note: input.note ?? null, createdBy: ctx.userId })

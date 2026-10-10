@@ -19,7 +19,7 @@ import { insertDocument, loadStockableItems, reverseStockDocument, type StockCtx
 import { StockPlanner } from '../inventory/planner';
 import { lockDeliveryLines } from '../invoices/delivery-link';
 import { checkOrderLinks, lockOrderLines } from '../sales/usage';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
 import { requireActiveWarehouse } from '../inventory/warehouses';
@@ -169,8 +169,7 @@ export async function postDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string) {
   }
 
   const year = isoYear(note.noteDate);
-  const seq = await nextNumber(tx, ctx.companyId, `DLV:${type}`, year);
-  const noteNo = formatDocumentNumber(meta.prefix, year, seq);
+  const noteNo = await nextDocumentNumber(tx, ctx.companyId, `DLV:${type}`, year, meta.prefix);
 
   const doc = await insertDocument(
     tx,

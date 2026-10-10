@@ -21,7 +21,7 @@ async function registerOwner(c: LicensedApp, browser = new Browser(c.app)) {
   const reg = await browser.register('Sahip');
   expect(reg.statusCode, reg.body).toBe(201);
   const body = reg.json();
-  const co = await client(c.app, body.accessToken).post('/api/companies', { name: 'Cihaz Ltd.', sector: 'COMMERCE' });
+  const co = await client(c.app, body.accessToken).post('/api/companies', { name: 'Cihaz Ltd.', sector: 'COMMERCE', jurisdiction: 'KKTC' });
   expect(co.statusCode, co.body).toBe(201);
   return { browser, token: body.accessToken as string, email: body.user.email as string, companyId: co.json().company.id as string };
 }
@@ -253,7 +253,7 @@ describe('cihaz koltukları: kayıt, sınır, iptal, boşta düşme', () => {
     expect(victim).toBeTruthy();
     expect((await client(c.app, token).delete(`/api/devices/${victim.id}`)).statusCode).toBe(200);
     // ama iş yazmaları kapalı
-    expect((await client(c.app, token).post('/api/companies', { name: 'X', sector: 'COMMERCE' })).statusCode).toBe(402);
+    expect((await client(c.app, token).post('/api/companies', { name: 'X', sector: 'COMMERCE', jurisdiction: 'KKTC' })).statusCode).toBe(402);
   });
 });
 

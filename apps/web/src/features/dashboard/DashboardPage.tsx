@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle2, Circle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { CURRENCY_CODES, todayIso } from '@erp/shared';
+import { CURRENCY_CODES, dec, todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { cn } from '../../lib/cn';
@@ -11,6 +11,8 @@ import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCQuery, useCompanyApi, useModuleEnabled } from '../../lib/queries';
 import { useSession } from '../../lib/session';
 import { NotificationsCard } from '../notifications/NotificationsCard';
+import { PageHelpTooltip } from '../../components/layout/PageHelpTooltip';
+import { ErrorState, ListSkeleton } from '../../components/ui/Feedback';
 import type { AgingReport, DeliverySummary, InventorySummary, InvoiceSummary, JournalListItem, Member, TaxRate, TrialBalanceData, TreasurySummary } from '../../lib/types';
 
 interface Step {
@@ -42,7 +44,7 @@ function CounterBand({ metrics, label }: { metrics: Metric[]; label: string }) {
           const body = (
             <>
               <p className="text-caption uppercase tracking-[0.05em] text-muted">{m.label}</p>
-              <p className={cn('mt-2 text-[clamp(1rem,10cqw,1.75rem)] leading-tight [overflow-wrap:anywhere]', m.tone === 'warning' && 'text-warning', m.tone === 'danger' && 'text-danger')}>{m.value}</p>
+              <p className={cn('mt-2 text-right font-semibold tabular-nums text-[clamp(1rem,10cqw,1.75rem)] leading-tight [overflow-wrap:anywhere]', m.tone === 'warning' && 'text-warning', m.tone === 'danger' && 'text-danger')}>{m.value}</p>
             </>
           );
           const cell = 'block h-full p-5 [container-type:inline-size]';
@@ -92,7 +94,8 @@ export function DashboardPage() {
   const canTreasury = can('treasury.read') && treasuryOn;
   const { data: treasury } = useCQuery<TreasurySummary>(['dashboard', 'treasury'], '/api/treasury/summary', { enabled: canTreasury });
 
-  const { data: posted } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'posted'], `/api/journal-entries?status=posted&limit=200&from=${year}-01-01`, { enabled: canLedger });
+  const postedQuery = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'posted'], `/api/journal-entries?status=posted&limit=200&from=${year}-01-01`, { enabled: canLedger });
+  const posted = postedQuery.data;
   const { data: drafts } = useCQuery<{ entries: JournalListItem[] }>(['dashboard', 'drafts'], '/api/journal-entries?status=draft&limit=200', { enabled: canLedger });
   const { data: tb } = useCQuery<TrialBalanceData>(['dashboard', 'tb'], `/api/reports/trial-balance?from=${year}-01-01&to=${today}&currency=base`, { enabled: canReports });
   const { data: recv } = useCQuery<AgingReport>(['dashboard', 'recv'], `/api/reports/party-aging?type=receivable&asOf=${today}`, { enabled: canParties });
@@ -134,35 +137,33 @@ export function DashboardPage() {
   const allDone = steps.length > 0 && doneCount === steps.length;
 
   const balanced = tb ? Number(tb.totals.difference) === 0 : null;
+  const overdue = recv ? dec(recv.totals.d1_30).plus(recv.totals.d31_60).plus(recv.totals.d61_90).plus(recv.totals.d90plus).toFixed(2) : null;
+  const limitedCount = (count: number) => count >= 200 ? `En az ${count}` : count;
 
   return (
     <>
       <div className="mb-8">
-        <h1 className="text-heading-lg">{t('dashboard.greeting', { name: user?.fullName.split(' ')[0] ?? '' })}</h1>
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-heading font-semibold">{t('dashboard.greeting', { name: user?.fullName.split(' ')[0] ?? '' })}</h1>
+          <PageHelpTooltip title="Genel Bakış" helpKey="dashboard" />
+        </div>
         <p className="mt-2 text-sm text-muted">{t('dashboard.subtitle', { company: company.name })}</p>
+        <p className="mt-1 text-xs text-muted">Bakiye ve stok: {formatDateTR(today)} · Faturalar: {invSummary?.month ?? today.slice(0, 7)} · Muhasebe: {year}</p>
       </div>
 
       <div className="flex flex-col gap-6">
         <CounterBand
           label={t('dashboard.summary')}
           metrics={[
-            ...(canLedger
-              ? [
-                  { key: 'posted', label: t('dashboard.postedEntries'), value: posted ? posted.entries.length : '—' },
-                  { key: 'drafts', label: t('dashboard.draftEntries'), value: drafts ? drafts.entries.length : '—', tone: drafts && drafts.entries.length > 0 ? ('warning' as const) : undefined },
-                ]
-              : []),
-            ...(canLedger && canReports
-              ? [{ key: 'balance', label: t('dashboard.ledgerBalance'), value: balanced === null ? '—' : balanced ? t('dashboard.balanced') : t('dashboard.unbalanced'), tone: balanced === false ? ('danger' as const) : undefined }]
+            ...(canTreasury
+              ? [{ key: 'treasury', label: t('dashboard.treasuryBalance'), value: treasury ? moneyIn(treasury.equivalent, company.baseCurrency) : '—', to: '/treasury/accounts' }]
               : []),
             ...(canParties
               ? [
                   { key: 'recv', label: t('dashboard.receivables'), value: recv ? moneyIn(recv.totals.total, company.baseCurrency) : '—', to: '/parties/aging' },
+                  { key: 'overdue', label: 'Geciken alacaklar', value: overdue === null ? '—' : moneyIn(overdue, company.baseCurrency), to: '/parties/aging', tone: overdue && dec(overdue).gt(0) ? ('warning' as const) : undefined },
                   { key: 'pay', label: t('dashboard.payables'), value: pay ? moneyIn(pay.totals.total, company.baseCurrency) : '—', to: '/parties/aging' },
                 ]
-              : []),
-            ...(canTreasury
-              ? [{ key: 'treasury', label: t('dashboard.treasuryBalance'), value: treasury ? moneyIn(treasury.equivalent, company.baseCurrency) : '—', to: '/treasury/accounts' }]
               : []),
             ...(canInvoices
               ? [
@@ -188,6 +189,11 @@ export function DashboardPage() {
                   { key: 'low', label: t('dashboard.lowStock'), value: stockSummary ? stockSummary.lowCount : '—', to: '/inventory/status?low=1', tone: stockSummary && stockSummary.lowCount > 0 ? ('warning' as const) : undefined },
                 ]
               : []),
+            ...(canLedger ? [
+              { key: 'posted', label: `${t('dashboard.postedEntries')} · ${year}`, value: posted ? limitedCount(posted.entries.length) : '—', to: '/accounting/journal' },
+              { key: 'drafts', label: t('dashboard.draftEntries'), value: drafts ? limitedCount(drafts.entries.length) : '—', to: '/accounting/journal?status=draft', tone: drafts && drafts.entries.length > 0 ? ('warning' as const) : undefined },
+            ] : []),
+            ...(canLedger && canReports ? [{ key: 'balance', label: t('dashboard.ledgerBalance'), value: balanced === null ? '—' : balanced ? t('dashboard.balanced') : t('dashboard.unbalanced'), tone: balanced === false ? ('danger' as const) : undefined }] : []),
           ]}
         />
 
@@ -234,7 +240,7 @@ export function DashboardPage() {
                   </Link>
                 }
               />
-              {!posted?.entries.length ? (
+              {postedQuery.isError && !posted ? <ErrorState onRetry={() => void postedQuery.refetch()} retrying={postedQuery.isFetching} /> : !posted ? <ListSkeleton rows={3} /> : !posted.entries.length ? (
                 <p className="px-5 py-8 text-center text-sm text-muted">{t('dashboard.noEntries')}</p>
               ) : (
                 <ul>

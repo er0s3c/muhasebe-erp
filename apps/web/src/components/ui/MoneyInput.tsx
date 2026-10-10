@@ -18,6 +18,9 @@ interface MoneyInputProps {
   disabled?: boolean;
   className?: string;
   'aria-label'?: string;
+  'aria-describedby'?: string;
+  'aria-invalid'?: boolean;
+  'aria-required'?: boolean;
   id?: string;
 }
 
@@ -33,7 +36,7 @@ const isCanonical = (v: string) => /^-?\d+(\.\d+)?$/.test(v);
  * Geçersiz yazımda (UI-3) değer sessizce silinmez: yazılan metin alanda kalır, alan kırmızı çerçeve ve "Geçersiz sayı"
  * iletisiyle işaretlenir (aria-invalid) ve dışarıya boş değer verilir (zorunlu alan kaydı engellenir).
  */
-export function MoneyInput({ value, onChange, decimals = 2, maxDecimals = decimals, allowNegative = true, className, ...rest }: MoneyInputProps) {
+export function MoneyInput({ value, onChange, decimals = 2, maxDecimals = decimals, allowNegative = true, className, 'aria-describedby': describedBy, 'aria-invalid': fieldInvalid, ...rest }: MoneyInputProps) {
   const { t } = useTranslation();
   const errorId = useId();
   const [draft, setDraft] = useState<string | null>(null);
@@ -59,8 +62,8 @@ export function MoneyInput({ value, onChange, decimals = 2, maxDecimals = decima
         autoComplete="off"
         className={cn('num', invalid && 'border-danger focus:border-danger', className)}
         value={shown}
-        aria-invalid={invalid || undefined}
-        aria-describedby={invalid ? errorId : undefined}
+        aria-invalid={invalid || fieldInvalid || undefined}
+        aria-describedby={[describedBy, invalid ? errorId : undefined].filter(Boolean).join(' ') || undefined}
         title={invalid ? t('common.invalidNumber') : undefined}
         onFocus={(e) => {
           setFocused(true);

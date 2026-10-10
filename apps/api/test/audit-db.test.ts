@@ -125,8 +125,8 @@ describe('denetim düzeltmeleri: veritabanı bütünlüğü', async () => {
     const party = (await w.c.post('/api/parties', { name: 'Müşteri', kind: 'customer' })).json().party;
     const inv = await w.c.post('/api/invoices', { type: 'sales', partyId: party.id, invoiceDate: day(5, 10), post: true, lines: [{ description: 'Hizmet', quantity: '1', unitPrice: '100', vatCode: 'KDV-16' }] });
     expect(inv.statusCode, inv.body).toBe(201);
-    const rates = (await w.c.get('/api/tax-rates')).json().taxRates as { id: string; code: string }[];
-    const used = rates.find((r) => r.code === 'KDV-16')!;
+    const rates = (await w.c.get('/api/tax-rates')).json().taxRates as { id: string; code: string; validFrom: string }[];
+    const used = rates.find((r) => r.code === 'KDV-16' && r.validFrom <= day(5, 10))!;
     const unused = rates.find((r) => r.code === 'KDV-5')!;
     const del = await w.c.delete(`/api/tax-rates/${used.id}`);
     expect(del.statusCode).toBe(422);

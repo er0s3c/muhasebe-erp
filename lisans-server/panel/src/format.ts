@@ -5,19 +5,47 @@ export const SECTOR_LABELS: Record<string, string> = {
   MANUFACTURING_WHOLESALE: 'Üretim ve Toptan Ticaret',
   LEATHER_FASHION: 'Deri aksesuar ve moda',
 };
-export const KIND_LABELS: Record<string, string> = { commercial: 'Ticari', trial: 'Deneme', demo: 'Demo' };
-export const STATUS_LABELS: Record<string, string> = { active: 'Etkin', suspended: 'Askıda', revoked: 'İptal' };
+export const KIND_LABELS: Record<string, string> = {
+  commercial: 'Ticari',
+  trial: 'Deneme',
+  demo: 'Demo',
+};
+export const STATUS_LABELS: Record<string, string> = {
+  active: 'Etkin',
+  suspended: 'Askıda',
+  revoked: 'İptal',
+};
 export const STATUS_TONES = { active: 'success', suspended: 'warning', revoked: 'danger' } as const;
 
-const dateFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Nicosia', day: '2-digit', month: '2-digit', year: 'numeric' });
-const dateTimeFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Nicosia', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const dateFmt = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: 'Europe/Nicosia',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+const dateTimeFmt = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: 'Europe/Nicosia',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
-const dayFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric' });
+const dayFmt = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: 'UTC',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
 
-export const fmtDate = (iso: string | null | undefined) => (iso ? dateFmt.format(new Date(iso)) : '—');
+export const fmtDate = (iso: string | null | undefined) =>
+  iso ? dateFmt.format(new Date(iso)) : '—';
 /** Abonelik bitişi takvim günüdür: sunucu "yyyy-MM-dd" girdisini o günün UTC sonu (23:59:59.999Z) olarak saklar; yerel saatle gösterilirse ertesi güne kayar. */
-export const fmtDay = (iso: string | null | undefined) => (iso ? dayFmt.format(new Date(iso)) : '—');
-export const fmtDateTime = (iso: string | null | undefined) => (iso ? dateTimeFmt.format(new Date(iso)) : '—');
+export const fmtDay = (iso: string | null | undefined) =>
+  iso ? dayFmt.format(new Date(iso)) : '—';
+export const fmtDateTime = (iso: string | null | undefined) =>
+  iso ? dateTimeFmt.format(new Date(iso)) : '—';
 /** ISO zamanı <input type="date"> değerine (yyyy-MM-dd) çevirir. */
 export const toDateInput = (iso: string) => new Date(iso).toISOString().slice(0, 10);
 
@@ -51,4 +79,6 @@ export const AUDIT_LABELS: Record<string, string> = {
   'release.delete': 'Sürüm taslağı silindi',
   'release.send': 'Güncelleme müşterilere gönderildi',
   'release.cancel': 'Güncelleme gönderimi geri alındı',
+  'feedback.create': 'Geri bildirim alındı',
+  'feedback.update': 'Geri bildirim güncellendi',
 };

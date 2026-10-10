@@ -231,6 +231,13 @@ describe('rehber, ajanda ve görüşme notları (Faz X6)', async () => {
     const mine = await mk({ title: 'Muhasebeci görevi' }, acct.client);
     expect(mine.ownerId).toBe(acct.userId);
     expect((await acct.client.patch(`/api/agenda/${mine.id}`, { title: 'Güncel' })).statusCode).toBe(200);
+    const accessPath = `/api/company/members/${acct.userId}/module-access`;
+    expect((await w.c.put(accessPath, { operations: { 'operation.core.directory.create': 'deny', 'operation.core.directory.update': 'deny' } })).statusCode).toBe(200);
+    expect((await acct.client.post('/api/agenda', { title: 'İşlem yasağı', dueDate: TODAY })).statusCode).toBe(403);
+    expect((await acct.client.patch(`/api/agenda/${mine.id}`, { title: 'İşlem yasağı' })).statusCode).toBe(403);
+    expect((await w.c.put(accessPath, { operations: { 'operation.core.directory.create': 'default', 'operation.core.directory.update': 'default' }, levels: { 'core.directory': 'read' } })).statusCode).toBe(200);
+    expect((await acct.client.post('/api/agenda', { title: 'Salt okunur', dueDate: TODAY })).statusCode).toBe(403);
+    expect((await w.c.put(accessPath, { levels: { 'core.directory': 'default' } })).statusCode).toBe(200);
     expect((await acct.client.post('/api/agenda', { title: 'x', dueDate: TODAY, ownerId: null })).statusCode).toBe(403);
     expect((await acct.client.post('/api/agenda', { title: 'x', dueDate: TODAY, ownerId: w.s.userId })).statusCode).toBe(403);
     expect((await acct.client.patch(`/api/agenda/${today.id}`, { title: 'Ele geçirme' })).statusCode).toBe(403); // sahibin kalemi

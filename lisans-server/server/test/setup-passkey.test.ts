@@ -5,6 +5,7 @@ import { base32Decode, hotp, totpCounter } from '@erp/license-core';
 import { setupToken } from '../src/crypto';
 import { adminPasskeys, admins, auditLog } from '../src/db/schema';
 import { CSRF_HEADER, CSRF_VALUE } from '../src/modules/admin-auth';
+import { TOTP_ISSUER } from '../src/modules/admin-setup';
 import { DATA_KEY, adminClient, loginAdmin, makeServer, totpNow } from './helpers';
 import { authenticationResponse, makeAuthenticator, registrationResponse } from './webauthn';
 
@@ -52,7 +53,7 @@ describe('ilk yönetici kurulumu', () => {
     expect(ok.statusCode).toBe(200);
     const body = ok.json();
     expect(body.secret).toMatch(/^[A-Z2-7]{32}$/);
-    expect(body.otpauthUri).toBe(`otpauth://totp/Muhasebe%20Lisans:kurucu%40ornek.com?secret=${body.secret}&issuer=Muhasebe%20Lisans&algorithm=SHA1&digits=6&period=30`);
+    expect(body.otpauthUri).toBe(`otpauth://totp/${encodeURIComponent(TOTP_ISSUER)}:kurucu%40ornek.com?secret=${body.secret}&issuer=${encodeURIComponent(TOTP_ISSUER)}&algorithm=SHA1&digits=6&period=30`);
     expect(body.pending).not.toContain(body.secret);
   });
 
@@ -155,7 +156,7 @@ describe('giriş anahtarları (WebAuthn)', () => {
   it('kayıt seçenekleri: alan adı yapılandırmadan, keşfedilebilir anahtar ve kullanıcı doğrulaması zorunlu', async () => {
     const c = await adminClient(s);
     const { options } = await register(c);
-    expect(options.rp).toEqual({ name: 'Muhasebe Lisans', id: 'lisans.ornek.com' });
+    expect(options.rp).toEqual({ name: TOTP_ISSUER, id: 'lisans.ornek.com' });
     expect(options.user.name).toBe(c.admin.email);
     expect(options.authenticatorSelection).toMatchObject({ residentKey: 'required', requireResidentKey: true, userVerification: 'required' });
     expect(options.attestation).toBe('none');

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PARTY_TAX_STATUSES, PARTY_TAX_STATUS_LABELS } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
@@ -19,6 +20,7 @@ interface FormState {
   email: string;
   taxNumber: string;
   taxOffice: string;
+  taxStatus: (typeof PARTY_TAX_STATUSES)[number];
   address: string;
   currencyCode: string;
   creditLimit: string;
@@ -34,6 +36,7 @@ const empty: FormState = {
   email: '',
   taxNumber: '',
   taxOffice: '',
+  taxStatus: 'unknown',
   address: '',
   currencyCode: 'TRY',
   creditLimit: '',
@@ -49,6 +52,7 @@ const fromParty = (p: Party): FormState => ({
   email: p.email ?? '',
   taxNumber: p.taxNumber ?? '',
   taxOffice: p.taxOffice ?? '',
+  taxStatus: p.taxStatus ?? 'unknown',
   address: p.address ?? '',
   currencyCode: p.currencyCode,
   creditLimit: p.creditLimit ? p.creditLimit.replace(/\.?0+$/, '') : '',
@@ -97,6 +101,7 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
             email: f.email,
             taxNumber: f.taxNumber,
             taxOffice: f.taxOffice,
+            taxStatus: f.taxStatus,
             address: f.address,
             currencyCode: f.currencyCode,
             creditLimit: f.creditLimit === '' ? null : f.creditLimit,
@@ -116,6 +121,7 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
           email: f.email,
           taxNumber: f.taxNumber,
           taxOffice: f.taxOffice,
+          taxStatus: f.taxStatus,
           address: f.address,
           currencyCode: f.currencyCode,
           ...(f.creditLimit ? { creditLimit: f.creditLimit } : {}),
@@ -200,6 +206,11 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
           </Field>
           <Field label={t('parties.form.taxOffice')} error={errors.taxOffice}>
             {(id) => <Input id={id} value={f.taxOffice} onChange={(e) => set('taxOffice', e.target.value)} />}
+          </Field>
+          <Field label="Vergi durumu" error={errors.taxStatus}>
+            {(id) => <Select id={id} value={f.taxStatus} onChange={(e) => set('taxStatus', e.target.value as FormState['taxStatus'])}>
+              {PARTY_TAX_STATUSES.map(status => <option key={status} value={status}>{PARTY_TAX_STATUS_LABELS[status]}</option>)}
+            </Select>}
           </Field>
         </div>
         <Field label={t('parties.form.address')} error={errors.address}>

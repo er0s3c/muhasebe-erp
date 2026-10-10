@@ -15,12 +15,12 @@ const SIDE_TYPES = {
 const signed = (expr: string) => sql.raw(`v.sgn * case when v.type in ('sales_return', 'purchase_return') then -(${expr}) else (${expr}) end`);
 
 /** Fatura olayları: kayıt (+, fatura tarihi) ve iptal (−, iptal yevmiyesi tarihi). `invoice_date` olayın tarihidir. */
-const INVOICE_EVENTS = sql.raw(`(
-  select i.id, i.type, i.party_id, i.invoice_no, i.external_no, i.invoice_date, i.net_total_base, i.vat_total_base, i.gross_total_base,
+export const INVOICE_EVENTS = sql.raw(`(
+  select i.id, i.type, i.party_id, i.invoice_no, i.external_no, i.invoice_date, i.net_total_base, i.vat_total_base, i.gross_total_base, i.branch_id, i.created_by, i.return_of_id,
          1 as sgn, false as cancellation
     from invoices i where i.status in ('posted', 'cancelled')
   union all
-  select i.id, i.type, i.party_id, i.invoice_no, i.external_no, cj.entry_date, i.net_total_base, i.vat_total_base, i.gross_total_base,
+  select i.id, i.type, i.party_id, i.invoice_no, i.external_no, cj.entry_date, i.net_total_base, i.vat_total_base, i.gross_total_base, i.branch_id, i.created_by, i.return_of_id,
          -1, true
     from invoices i join journal_entries cj on cj.id = i.cancel_journal_entry_id
    where i.status = 'cancelled'
@@ -97,6 +97,26 @@ export async function salesReport(tx: Tx, side: keyof typeof SIDE_TYPES, q: Sale
       from invoice_lines l join ${INVOICE_EVENTS} v on v.id = l.invoice_id left join items i on i.id = l.item_id
       where ${base}
       group by i.id order by net desc, coalesce(i.name, 'Kartsız / serbest satırlar') collate ${TR}`;
+  } else if (q.groupBy === 'branch') {
+    query = sql`
+      select coalesce(b.id::text, '-') as key, coalesce(b.name, 'Şubeye atanmamış') as label, b.code,
+             ${docCountSql} as doc_count, null::text as qty,
+             sum(${invNet}) as net, sum(${invVat}) as vat, sum(${invGross}) as gross,
+             null::text as date, null::text as invoice_id, null::text as type, null::text as external_no
+      from ${INVOICE_EVENTS} v left join company_branches b on b.id=v.branch_id
+      where ${base}
+      group by b.id order by net desc, coalesce(b.name, 'Şubeye atanmamış') collate ${TR}`;
+  } else if (q.groupBy === 'creator') {
+    // Returns reduce the original preparer's amount, even if another user records the return.
+    query = sql`
+      select coalesce(u.id::text, '-') as key, coalesce(u.full_name, 'Kullanıcı bilgisi yok') as label, null::text as code,
+             ${docCountSql} as doc_count, null::text as qty,
+             sum(${invNet}) as net, sum(${invVat}) as vat, sum(${invGross}) as gross,
+             null::text as date, null::text as invoice_id, null::text as type, null::text as external_no
+      from ${INVOICE_EVENTS} v left join invoices original on original.id=v.return_of_id
+      left join users u on u.id=case when original.id is not null then original.created_by else v.created_by end
+      where ${base}
+      group by u.id order by net desc, coalesce(u.full_name, 'Kullanıcı bilgisi yok') collate ${TR}`;
   } else if (q.groupBy === 'month') {
     query = sql`
       select to_char(v.invoice_date, 'YYYY-MM') as key, to_char(v.invoice_date, 'YYYY-MM') as label, null::text as code,

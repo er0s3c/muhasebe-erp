@@ -2,7 +2,9 @@ import { BrandLogo } from '../../components/layout/Brand';
 import { FileText, LockKeyhole } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
 import { formatDateTR } from '../../lib/format';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { EMPTY_PORTAL_SCOPES, type PortalDocumentScopes } from '@erp/shared';
+import { PortalBusinessDocuments } from './PortalBusinessDocuments';
 import { PageHeader, Card } from '../../components/ui/Card';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { fileBase64 } from '../construction-control/offline';
@@ -13,6 +15,7 @@ import { saveBlob } from '../../lib/download';
 import { moneyIn } from '../../lib/format';
 
 type PortalData = {
+  documentScopes?: PortalDocumentScopes;
   company: string;
   party: { name: string; code: string };
   asOf: string;
@@ -34,22 +37,27 @@ export function PortalPage() {
   const [data, setData] = useState<PortalData | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const requestGeneration = useRef(0);
+  const accessLost = useCallback((message: string) => { requestGeneration.current++; setData(null); setPassword(''); setError(message); setBusy(false); }, []);
   async function login() {
+    const generation = ++requestGeneration.current;
     setBusy(true);
     setError('');
     try {
-      setData(
-        await api<PortalData>('/api/portal/view', {
+      const response = await api<PortalData>('/api/portal/view', {
           anonymous: true,
           method: 'POST',
           body: { token, password },
-        }),
-      );
+        });
+      if (requestGeneration.current !== generation) return;
+      setData(response); setRevision(value => value + 1);
     } catch (e) {
+      if (requestGeneration.current !== generation) return;
       setError((e as Error).message);
       setData(null);
     } finally {
-      setBusy(false);
+      if (requestGeneration.current === generation) setBusy(false);
     }
   }
   return (
@@ -105,13 +113,16 @@ export function PortalPage() {
             </Button>
             <Button
               onClick={() => {
+                requestGeneration.current++;
                 setData(null);
                 setPassword('');
+                setBusy(false);
               }}
             >
               Çıkış
             </Button>
           </div>
+          <PortalBusinessDocuments scopes={data.documentScopes ?? EMPTY_PORTAL_SCOPES} token={token} password={password} revision={revision} onAccessLost={accessLost} />
           {(
             [
               ['Ödemeniz gereken açık kalemler', data.receivables],
