@@ -146,8 +146,9 @@ echo "   $(grep -c '^COUNT ' "$WORK/fp.src") tablo, $(grep -c '^STRUCT ' "$WORK/
 grep -E '^COUNT public\.(journal_lines|parties|invoices|stock_movements|audit_log)=' "$WORK/fp.dst" | sed 's/^COUNT /   /'
 
 step "5/6 Davranış denetimi (erp_app ile RLS, sahip rolüyle değiştirilemezlik)"
-ORG="$(psql "$(owner_url "$SRC")" -Atq -c "select id from organizations limit 1")"
-COMPANY="$(psql "$(owner_url "$SRC")" -Atq -c "select id from companies limit 1")"
+# Demo birden fazla şirket yükler (ör. üretim şirketi); defter satırı olan şirket ve onun kuruluşu seçilir
+COMPANY="$(psql "$(owner_url "$SRC")" -Atq -c "select company_id from journal_lines group by company_id order by count(*) desc limit 1")"
+ORG="$(psql "$(owner_url "$SRC")" -Atq -c "select organization_id from companies where id = '$COMPANY'")"
 [ -n "$ORG" ] && [ -n "$COMPANY" ] || fail "demo şirketi bulunamadı"
 behavior "$SRC" "$ORG" "$COMPANY" > "$WORK/bh.src"
 behavior "$DST" "$ORG" "$COMPANY" > "$WORK/bh.dst"

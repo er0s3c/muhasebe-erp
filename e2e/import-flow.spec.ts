@@ -57,6 +57,8 @@ test('içe aktarma: cari (hatalı dosya engellenir → düzeltilmiş dosya), sto
   await dialog.getByRole('button', { name: 'Ön izleme' }).click();
   await expect(dialog.getByText('CR-000100 kodlu cari zaten var; atlandı')).toBeVisible();
   await page.keyboard.press('Escape');
+  // İçe aktarılmayan önizleme taslak sayılır; kapatırken onay istenir
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
 
   // 2) Stok kartları: xlsx dosyası (başlık satırı yok sayılmaz; kategori yoksa açılır)
   const xlsx = writeXlsx([

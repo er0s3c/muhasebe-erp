@@ -30,8 +30,7 @@ test('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ pag
     await expect(page.getByText('Beklenmeyen bir hata oluştu', { exact: false })).toHaveCount(0);
     if (path === 'planning') {
       await page.getByRole('button', { name: 'Yeni plan oluştur', exact: true }).click();
-      // Not: CI anlık görüntüsünde kontrol adımından sonra pencerenin erişilebilir adı görünmüyordu; başlıkla bulunur
-      const plan = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Yeni plan oluştur', exact: true }) });
+      const plan = page.getByRole('dialog', { name: 'Yeni plan oluştur', exact: true });
       const orderSelect = plan.getByLabel('Üretim emri', { exact: true });
       const [selectedOrder] = await orderSelect.selectOption({ label: 'URE-000001' });
       await plan.getByRole('button', { name: 'Ekle', exact: true }).click();
@@ -39,7 +38,7 @@ test('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ pag
       await expect(plan.getByText('URE-000001', { exact: true })).toBeVisible();
       await plan.getByRole('button', { name: 'Tarihe geç', exact: true }).click();
       await plan.getByRole('button', { name: 'Planı kontrol et', exact: true }).click();
-      await expect(plan.getByLabel('Süre (dakika)', { exact: true })).toHaveCount(2);
+      await expect(plan.getByRole('spinbutton', { name: 'Süre (dakika)', exact: true })).toHaveCount(2);
       const created = page.waitForResponse(
         (r) =>
           r.url().endsWith('/api/manufacturing/planning/schedules') &&

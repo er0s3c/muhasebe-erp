@@ -89,5 +89,6 @@ test('cari: kart aç → cariye bağlı yevmiye (zorunlu) → ekstre ve yaşland
 
   // 6) Genel bakışta toplam alacak
   await nav.getByRole('link', { name: 'Genel bakış' }).click();
-  await expect(page.getByRole('link', { name: /Toplam alacak/ })).toContainText('1.000,00');
+  // V3 panosu: "Açık alacaklar" kartı; ayrıntı bağlantısı kartın tamamını kaplar
+  await expect(page.getByRole('link', { name: 'Açık alacaklar ayrıntıları' }).locator('xpath=..')).toContainText('1.000,00');
 });

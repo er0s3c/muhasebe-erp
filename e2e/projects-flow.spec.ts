@@ -135,7 +135,7 @@ test('projeler: iş kırılımı → bütçe onayı → yevmiye, gider faturası
   await nav.getByRole('link', { name: 'Projeler' }).click();
   await page.getByRole('row', { name: /Güneş Sitesi/ }).click();
   await expect(page.getByRole('heading', { name: 'Güneş Sitesi', level: 1 })).toBeVisible();
-  const summary = page.getByText('Gerçekleşen maliyet', { exact: true }).locator('xpath=ancestor::*[self::div or self::section][1]');
+  const summary = page.getByText('Gerçekleşen maliyet', { exact: true }).locator('xpath=ancestor::*[self::div or self::section][2]');
   await expect(summary).toContainText('50.040,00');
   await expect(page.getByRole('row', { name: /01\.01 Temel/ })).toContainText('40.040,00');
   await expect(page.getByRole('row', { name: /01\.02 Karkas/ })).toContainText('10.000,00');
@@ -150,7 +150,7 @@ test('projeler: iş kırılımı → bütçe onayı → yevmiye, gider faturası
   // Temel: ETC = 100.000 × %50 = 50.000 → EAC 90.040; Karkas: ilerleme yok → ETC = 200.000 − 10.000 = 190.000 → EAC 200.000
   await expect(page.getByRole('row', { name: /01\.01 Temel/ })).toContainText('90.040,00');
   await expect(page.getByRole('row', { name: /01\.02 Karkas/ })).toContainText('200.000,00');
-  await expect(page.getByText('Tahmini toplam maliyet', { exact: true }).locator('xpath=ancestor::*[self::div or self::section][1]')).toContainText('290.040,00');
+  await expect(page.getByText('Tahmini toplam maliyet', { exact: true }).locator('xpath=ancestor::*[self::div or self::section][2]')).toContainText('290.040,00');
 
   // 9) Hareketler sekmesi: etiketli üç kaynak satırı
   await page.getByRole('tab', { name: 'Hareketler' }).click();

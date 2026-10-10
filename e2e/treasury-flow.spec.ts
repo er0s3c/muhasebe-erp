@@ -41,6 +41,8 @@ test('kasa ve banka: dövizli fatura → farklı kurlu tahsilat (kur kârı) →
   await page.getByRole('listbox').getByRole('option').first().click();
   await page.getByLabel('Para birimi', { exact: true }).selectOption('GBP');
   await page.getByLabel('Kur', { exact: true }).fill('40');
+  // Resmî kurdan farklı işlem kuru gerekçe ister
+  await page.getByLabel('Manuel kur gerekçesi').fill('Müşteriyle anlaşılan kur');
   await page.getByLabel('Açıklama 1').fill('Seramik satışı');
   await page.getByLabel('Miktar 1').fill('1');
   await page.getByLabel('Birim fiyat 1').fill('100');

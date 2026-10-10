@@ -37,6 +37,9 @@ async function prepare(page: Page) {
   await page.getByRole('button', { name: 'Paketi indir / yenile' }).click();
   await expect(page.getByText('Paket hazır.', { exact: false })).toBeVisible();
   await page.getByRole('link', { name: 'Çevrimdışı taslakları aç' }).click();
+  // Kurulum sayfasında da "Cihaz kodu" alanı var; tembel yüklenen taslak sayfası açılmadan doldurulmamalı
+  await expect(page).toHaveURL(/\/offline-drafts$/);
+  await expect(page.getByRole('button', { name: 'Paketi aç', exact: true })).toBeVisible();
   await page.getByLabel('Cihaz kodu', { exact: true }).fill('Depo-Cihaz-123');
   await page.getByRole('button', { name: 'Paketi aç', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Taslak kuyruğu' })).toBeVisible();
