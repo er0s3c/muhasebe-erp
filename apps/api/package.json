@@ -26,26 +26,26 @@
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/static": "^10.1.5",
     "@google/genai": "^2.28.0",
-    "@node-rs/argon2": "^2.2.1",
+    "@node-rs/argon2": "^2.2.2",
     "decimal.js": "^10.6.0",
     "drizzle-orm": "^0.45.3",
     "fast-xml-parser": "^5.11.2",
     "fastify": "^5.12.5",
     "fflate": "^0.8.3",
-    "nodemailer": "^10.0.13",
-    "pg": "^8.23.0",
+    "nodemailer": "^10.0.16",
+    "pg": "^8.23.1",
     "tesseract.js": "^7.0.0",
     "uuidv7": "^1.2.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.11",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.3"
   }
 }
