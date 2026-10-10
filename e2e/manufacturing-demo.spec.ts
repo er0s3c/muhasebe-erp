@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 const password = 'Demo-Sifre-123',
   companyName = 'Ada Üretim ve Toptan Ticaret Demo';

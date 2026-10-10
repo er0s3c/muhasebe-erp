@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('hesap güvenliği: posta kapalıyken genel sayfalar; yöneticinin geçici şifresiyle girişte şifre değiştirmeden ilerlenemez', async ({ page, request }) => {
   // 1) Posta yapılandırılmamış kurulum: "Şifremi unuttum" görünmez, sıfırlama sayfası nedenini açıklar

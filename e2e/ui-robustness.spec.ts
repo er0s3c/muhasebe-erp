@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 /**
  * Arayüz sağlamlığı (denetim düzeltmeleri 4): Türkçe sayı girişi, yetki ekranı, dar ekranda yatay kaydırma olmaması,

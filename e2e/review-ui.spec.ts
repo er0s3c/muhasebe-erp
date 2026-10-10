@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const companyId = '019b29e1-7ac3-7000-8000-000000000001';
 const otherId = '019b29e1-7ac3-7000-8000-000000000002';

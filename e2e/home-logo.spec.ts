@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('sol üstteki logo ve ad ana sayfaya götürür', async ({ page }) => {
   const email = `e2e-logo-${Date.now()}@example.com`;

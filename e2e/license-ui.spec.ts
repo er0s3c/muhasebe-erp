@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // Üretim paketi modunda (E2E_TARGET=bundle) gerçek lisans sunucusuyla etkinleştirilmiş kurulumda çalışır.
 test.skip(process.env.E2E_TARGET !== 'bundle', 'Üretim paketi modunda çalışır');

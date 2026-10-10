@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const localFields = (value: Date) => ({
   date: value.toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' }),

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('şirket bütçesi aylık sapmayı ve kaynağı gösterir; onaydan sonra yeni revizyon açılır', async ({
   page,

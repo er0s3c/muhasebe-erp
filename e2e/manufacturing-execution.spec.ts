@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('yürütme ekranları, açık üretim taahhüdü ve sarf edilmemiş demo teslimi', async ({
   page,

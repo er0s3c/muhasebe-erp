@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { writeXlsx } from '../apps/api/src/files/xlsx-write';
 
 async function signUpWithCompany(page: Page, tag: string) {

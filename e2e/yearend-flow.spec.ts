@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const PASSWORD = 'Sifre-12345-xyz';
 const year = new Date().getFullYear();

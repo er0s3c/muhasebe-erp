@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test, withOpenMenu } from './fixtures';
 
 const PASSWORD = 'Sifre-12345-xyz';
 /** Sunucuyla aynı "bugün" (Europe/Nicosia). */
@@ -127,7 +128,7 @@ test('bildirim: veri oluşur → tarama → zil sayacı → liste → okundu/kap
   await expect(page.getByTestId('notification-row')).toHaveCount(0);
 
   // İzleyici: yalnızca stok bildirimi (izni var); ajanda bildirimi (rehber izni yok) yok
-  const ctx = await browser.newContext({ locale: 'tr-TR', timezoneId: 'Europe/Nicosia' });
+  const ctx = await withOpenMenu(await browser.newContext({ locale: 'tr-TR', timezoneId: 'Europe/Nicosia' }));
   const vp = await ctx.newPage();
   await vp.goto('/login');
   await vp.getByLabel('E-posta').fill(viewerEmail);

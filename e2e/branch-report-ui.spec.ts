@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('satış ve alış raporunda şube/kullanıcı kırılımı mobil ve temalarda okunur, dışa aktarım aynı filtreyi kullanır', async ({ page }) => {
   const companyId = '019b29e1-7ac3-7000-8000-000000000001';
