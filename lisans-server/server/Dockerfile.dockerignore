@@ -16,3 +16,6 @@ apps/api/src
 apps/api/test
 apps/api/drizzle
 apps/web/public
+# Paylaşılan Brand bileşeni (yönetim paneli) logo işaretlerini içe aktarır
+!apps/web/public/logo-mark.webp
+!apps/web/public/logo-mark-on-dark.webp

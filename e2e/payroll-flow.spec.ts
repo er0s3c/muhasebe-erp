@@ -1,5 +1,6 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { setupKktcPayroll } from './country-payroll';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -19,10 +20,11 @@ async function signUpWithCompany(page: Page, tag: string) {
 const thisMonth = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Nicosia', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7);
 
 /**
- * Bordro: personel + puantaj → ücret şartı, parametre (TEST DEĞERİ, doğrulanmadı), kalem → bordro aç (taslak) → puantaj ayı açıkken
- * onay kapalı → elle ek ödeme → puantajı kapat → onayla (yevmiye) → pusula (iç belge, ⚠) → ödendi → ay açılamaz → geri al + iptal → ay açılır.
+ * Bordro (KKTC ülke motoru): personel + puantaj → ücret şartı, kalem → tarihli ülke kuralı (TEST DEĞERİ) doğrulanır ve etkinleşir →
+ * personel vergi profili → bordro aç (taslak) → puantaj ayı açıkken onay kapalı → elle ek ödeme → puantajı kapat → onayla (yevmiye)
+ * → pusula (iç belge) → ödendi → ay açılamaz → geri al + iptal → ay açılır.
  */
-test('bordro: ücret şartı → parametre (doğrulanmadı) → bordro → onay → pusula → ödeme → iptal; puantaj ayı kilidi', async ({ page }) => {
+test('bordro: ücret şartı → ülke kuralı ve vergi profili → bordro → onay → pusula → ödeme → iptal; puantaj ayı kilidi', async ({ page }) => {
   await signUpWithCompany(page, 'payroll');
   const nav = page.getByRole('navigation', { name: 'Ana menü' });
   const dialog = page.getByRole('dialog');
@@ -41,18 +43,11 @@ test('bordro: ücret şartı → parametre (doğrulanmadı) → bordro → onay 
   await page.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByText('Puantaj kaydedildi').first()).toBeVisible();
 
-  // Bordro ayarları: parametre yokken uyarı; parametre (test değeri) açık ama doğrulanmadı; ücret şartı; kalem
+  // Bordro ayarları: ülke motoru eski tarihli parametreleri kullanmaz; ücret şartı, kalem ve ülke kuralı girilir
   await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
   await page.getByRole('tab', { name: 'Bordro' }).click();
   await expect(page.getByRole('heading', { name: 'Bordro ayarları', level: 2 })).toBeVisible();
   await expect(page.getByText('Henüz parametre yok')).toBeVisible();
-  const paramForm = page.locator('form').filter({ has: page.getByLabel('Kaynak notu') });
-  await paramForm.getByLabel('Parametre', { exact: true }).selectOption('employee_social_pct');
-  await paramForm.getByLabel('Değer (yüzde)').fill('10');
-  await paramForm.getByLabel('Yeni parametre açık').click();
-  await paramForm.getByRole('button', { name: 'Ekle' }).click();
-  await expect(page.getByText('Parametre eklendi')).toBeVisible();
-  await expect(page.getByRole('row', { name: /İşçi sosyal güvenlik primi/ })).toContainText('Oranlar doğrulanmadı');
 
   const termForm = page.locator('form').filter({ has: page.getByLabel('Ücret tutarı') });
   const empSelect = termForm.getByLabel('Personel', { exact: true });
@@ -69,7 +64,10 @@ test('bordro: ücret şartı → parametre (doğrulanmadı) → bordro → onay 
   await itemForm.getByRole('button', { name: 'Ekle' }).click();
   await expect(page.getByText('Kalem eklendi')).toBeVisible();
 
-  // Bordro aç: taslak, doğrulanmadı rozeti, brüt 3.000 − işçi primi 300 = net 2.700
+  // Ülke kuralı: sigorta işçi %10, işveren %12 (test değeri); gelir vergisi kişisel indirimle sıfır
+  await setupKktcPayroll(page, { month, employees: ['Ali Demir'], employeeInsurancePct: '10', employerInsurancePct: '12' });
+
+  // Bordro aç: taslak, KKTC ülke kuralı, brüt 3.000 − sigorta işçi primi 300 = net 2.700
   await nav.getByRole('link', { name: 'Bordro', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Bordro', level: 1 })).toBeVisible();
   await expect(page.getByText(/resmî bordro değildir/).first()).toBeVisible();
@@ -77,7 +75,9 @@ test('bordro: ücret şartı → parametre (doğrulanmadı) → bordro → onay 
   await dialog.getByRole('button', { name: 'Bordro aç' }).click();
   await expect(page.getByRole('heading', { name: `${month} bordrosu`, level: 1 })).toBeVisible();
   await expect(page.getByText('Taslak', { exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 1 }).getByText('Oranlar doğrulanmadı')).toBeVisible();
+  await expect(page.getByText('KKTC', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Oranlar doğrulanmadı')).toHaveCount(0);
+  await expect(page.getByText(`E2E-TEST-KKTC-v1`).first()).toBeVisible();
   const row = page.getByRole('row', { name: /Ali Demir/ });
   await expect(row).toContainText('3.000,00');
   await expect(row).toContainText('300,00');
@@ -87,7 +87,7 @@ test('bordro: ücret şartı → parametre (doğrulanmadı) → bordro → onay 
   await expect(page.getByText(new RegExp(`${month} puantaj ayı kapalı değil`)).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Onayla' })).toBeDisabled();
 
-  // Elle ek ödeme: yemek 250 (prime/vergiye esas işaretli değil) → brüt 3.250; işçi primi prim esası 3.000 üzerinden 300 kalır → net 2.950
+  // Elle ek ödeme: yemek 250 (prime/vergiye esas işaretli değil) → brüt 3.250; sigorta primi 3.000 üzerinden 300 kalır → net 2.950
   await page.getByRole('button', { name: 'Ali Demir için ek ödeme veya kesinti' }).click();
   await dialog.getByLabel('Kalem', { exact: true }).selectOption({ index: 1 });
   await dialog.getByLabel('Tutar', { exact: true }).fill('250');
@@ -111,11 +111,11 @@ test('bordro: ücret şartı → parametre (doğrulanmadı) → bordro → onay 
   await expect(page.getByText('Onaylı', { exact: true })).toBeVisible();
   await expect(page.getByText(/Onaylandı; yevmiye kaydı: \S+/)).toBeVisible();
 
-  // Pusula: iç belge, doğrulanmadı uyarısı
+  // Pusula: iç belge notu kalır; doğrulanmış ülke kuralıyla "doğrulanmamış parametre" uyarısı çıkmaz
   await page.getByRole('link', { name: 'Ali Demir bordro pusulası' }).click();
   await expect(page.getByRole('heading', { name: 'Bordro pusulası', level: 1 })).toBeVisible();
   await expect(page.getByText('TASLAK / İÇ BELGE — RESMÎ BORDRO DEĞİLDİR')).toBeVisible();
-  await expect(page.getByText(/doğrulanmamış parametrelerden hesaplanmıştır/)).toBeVisible();
+  await expect(page.getByText(/doğrulanmamış parametrelerden hesaplanmıştır/)).toHaveCount(0);
   await expect(page.getByRole('row', { name: /Net ödenecek/ })).toContainText('2.950,00');
   await page.getByRole('link', { name: /BRD-/ }).click();
 

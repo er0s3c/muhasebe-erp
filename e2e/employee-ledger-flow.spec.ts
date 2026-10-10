@@ -1,5 +1,6 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { setupKktcPayroll } from './country-payroll';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -57,6 +58,8 @@ test('personel cari ve avans: avans ver → bordrodan kesinti → onay → maaş
   await termForm.getByLabel('Geçerlilik başlangıcı').fill(`${month}-01`);
   await termForm.getByRole('button', { name: 'Ekle' }).click();
   await expect(page.getByText('Ücret şartı eklendi')).toBeVisible();
+  // KKTC ülke kuralı: prim oranları 0 (test değeri) → net = brüt; bu senaryo avans/maaş carisini sınar
+  await setupKktcPayroll(page, { month, employees: ['Mehmet Kaya'], employeeInsurancePct: '0', employerInsurancePct: '0' });
 
   // Banka hesabı (TL)
   await nav.getByRole('link', { name: 'Hesaplar', exact: true }).click();

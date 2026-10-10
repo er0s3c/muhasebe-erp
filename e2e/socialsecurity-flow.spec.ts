@@ -1,5 +1,6 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { setupKktcPayroll } from './country-payroll';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -19,7 +20,7 @@ async function signUpWithCompany(page: Page, tag: string) {
 const thisMonth = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Nicosia', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7);
 
 /**
- * Sosyal güvenlik çıktıları: personel + puantaj + ücret + (TEST) oranlar → bordro onayı → sosyal güvenlik profili (numara maskeli) ve
+ * Sosyal güvenlik çıktıları: personel + puantaj + ücret + KKTC ülke kuralı (TEST oranları) → bordro onayı → sosyal güvenlik profili (numara maskeli) ve
  * destek kuralı (varsayılan kapalı → açık) + uygunluk → bildirim üret (GENEL düzen, resmî değil notu) → kesinleştir → bordro iptali ve
  * puantaj ayı açma engellenir → bildirimi yeniden aç → prim özeti.
  */
@@ -42,18 +43,9 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await page.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByText('Puantaj kaydedildi').first()).toBeVisible();
 
-  // Bordro ayarları: iki test oranı (açık) ve ücret şartı
+  // Bordro ayarları: ücret şartı ve KKTC ülke kuralı (sigorta işçi %10, işveren %12; test değeri)
   await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
   await page.getByRole('tab', { name: 'Bordro' }).click();
-  const paramForm = page.locator('form').filter({ has: page.getByLabel('Kaynak notu') });
-  for (const [key, value] of [['employee_social_pct', '10'], ['employer_social_pct', '12']] as const) {
-    await paramForm.getByLabel('Parametre', { exact: true }).selectOption(key);
-    await paramForm.getByLabel(/^Değer/).fill(value);
-    await paramForm.getByLabel('Yeni parametre açık').click();
-    await paramForm.getByRole('button', { name: 'Ekle' }).click();
-    await expect(page.getByText('Parametre eklendi')).toBeVisible();
-    await expect(page.getByText('Parametre eklendi')).toBeHidden();
-  }
   const termForm = page.locator('form').filter({ has: page.getByLabel('Ücret tutarı') });
   const empSelect = termForm.getByLabel('Personel', { exact: true });
   await empSelect.selectOption((await empSelect.locator('option', { hasText: 'Ali Demir' }).getAttribute('value'))!);
@@ -61,6 +53,7 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await termForm.getByLabel('Geçerlilik başlangıcı').fill(`${month}-01`);
   await termForm.getByRole('button', { name: 'Ekle' }).click();
   await expect(page.getByText('Ücret şartı eklendi')).toBeVisible();
+  await setupKktcPayroll(page, { month, employees: ['Ali Demir'], employeeInsurancePct: '10', employerInsurancePct: '12' });
 
   // Puantajı kapat, bordroyu aç ve onayla
   await nav.getByRole('link', { name: 'Puantaj' }).click();
