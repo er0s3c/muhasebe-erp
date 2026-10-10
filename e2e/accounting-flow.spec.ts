@@ -19,6 +19,7 @@ test('kayıt → şirket kurulumu → kur girişi → dövizli yevmiye → mizan
   await expect(page.getByRole('heading', { name: 'İlk şirketinizi kuralım' })).toBeVisible();
   await page.getByLabel('Şirket unvanı').fill('Yılmaz İnşaat Ltd.');
   await shot(page, '02-onboarding');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
 
   // 3) Genel bakış + kurulum kontrol listesi
@@ -97,6 +98,7 @@ test('sektör yalıtımı: başka şirketin verisi görünmez, koyu tema ve komu
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Demir Market A.Ş.');
   await page.getByLabel('Faaliyet alanı').selectOption('RETAIL_MARKET');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Mehmet' })).toBeVisible();
 

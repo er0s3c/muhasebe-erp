@@ -15,6 +15,7 @@ async function signUpWithCompany(page: Page, tag: string, sector?: string) {
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel Ltd.');
   if (sector) await page.getByLabel('Faaliyet alanı').selectOption(sector);
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }

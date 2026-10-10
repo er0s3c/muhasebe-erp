@@ -44,7 +44,7 @@ export default tseslint.config(
     rules: { 'no-empty': ['error', { allowEmptyCatch: true }], '@typescript-eslint/no-unused-vars': ['error', { caughtErrors: 'none' }] },
   },
   {
-    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'lisans-server/**/*.ts', 'lisans-server/tools/**/*.mjs', 'e2e/**/*.ts', 'installer/**/*.mjs', '*.ts', '*.js'],
+    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'lisans-server/**/*.ts', 'lisans-server/tools/**/*.mjs', 'e2e/**/*.ts', 'installer/**/*.mjs', 'apps/web/scripts/**/*.mjs', '*.ts', '*.js'],
     languageOptions: { globals: globals.node },
   },
   {

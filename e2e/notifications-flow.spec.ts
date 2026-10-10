@@ -13,6 +13,7 @@ async function signUpWithCompany(page: Page, tag: string): Promise<string> {
   await page.getByLabel('Şifre').fill(PASSWORD);
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
   return email;

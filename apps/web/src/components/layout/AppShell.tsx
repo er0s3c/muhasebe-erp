@@ -263,9 +263,10 @@ function Sidebar({
   const [filter, setFilter] = useState('');
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const groupId = useId();
+  const activeGroupKey = active?.group.key;
   useEffect(() => {
-    if (active) setExpanded(current => ({ ...current, [active.group.key]: true }));
-  }, [active?.group.key, location.pathname, location.search]);
+    if (activeGroupKey) setExpanded(current => ({ ...current, [activeGroupKey]: true }));
+  }, [activeGroupKey, location.pathname, location.search]);
   const labelOf = (item: DisplayNavItem) => item.label ?? t(item.labelKey as never);
   const query = normalizeHelpText(filter);
   const matches = query

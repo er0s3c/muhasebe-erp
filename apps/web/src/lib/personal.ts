@@ -19,7 +19,7 @@ export function usePreference<T>(key: PreferenceKey, parse: (value: unknown) => 
   const { data, isLoading } = usePreferences();
   const company = useCompany();
   const qc = useQueryClient();
-  const raw = data?.preferences[key];
+  const raw = data?.preferences?.[key];
   const value = raw === undefined ? fallback : (parse(raw) ?? fallback);
   const mutation = useCMutation<{ value: unknown }, T>((next, call) =>
     call(`/api/me/preferences/${encodeURIComponent(key)}`, { method: 'PUT', body: { value: next } }),
