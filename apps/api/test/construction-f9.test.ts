@@ -90,7 +90,9 @@ describe('inşaat ve gayrimenkul kararları (F9)', async () => {
     expect(Number((await c.get(`/api/progress-payments/${transfer.json().linkedId}`)).json().lines[0].thisQty)).toBe(50);
     expect((await c.post(`/api/construction/workflows/${prod.id}/transfer`, { version: transfer.json().item.version, quantity: 5 })).statusCode).toBe(409);
 
-    const diffs = (await c.get(`/api/construction/measurement-diffs?projectId=${project.id}`)).json();
+    const diffRes = await c.get(`/api/construction/measurement-diffs?projectId=${project.id}`);
+    expect(diffRes.statusCode, diffRes.body).toBe(200);
+    const diffs = diffRes.json();
     expect(diffs.withDifference).toBe(1);
     expect(diffs.items[0]).toMatchObject({ claimed: '60.0000', accepted: '50.0000', difference: '10.0000', transferred: '50.0000', remaining: '0.0000', note: 'Yeniden ölçümde 50 m3' });
   });
