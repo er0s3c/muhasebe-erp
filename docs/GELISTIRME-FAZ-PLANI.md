@@ -395,12 +395,12 @@ Tamamlanma ölçütü: Alan hesabı tutarlı; kalan parça ikinci stok değeri o
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 15 | Deri malzemesinden ürün maliyetine görünüm | İlk kapsam | Genişletilecek | Parça alanı, kullanılabilir alan, kusur bölgesi, damar yönü, kesim planı (LEATHER-FASHION) | Bekliyor |
-| 73 | Dijital kalıp ölçü ve revizyon doğrulaması | İlk kapsam | Genişletilecek | Kesim planı kalıp/model revizyonuna bağlı; ölçek ve geometri doğrulaması yok | Bekliyor |
-| 74 | Sipariş/set bazında ton uyumu | İlk kapsam | Genişletilecek | Deri malzemesinde renk/ton kaydı; set/sipariş bazında ton eşleştirme yok | Bekliyor |
-| 75 | Kusur bölgelerinin kullanım alanına etkisi | İlk kapsam | Genişletilecek | Kusur bölgesi kaydı var | Bekliyor |
-| 76 | Kalan deri parçalarını görsel bulma | İlk kapsam | Genişletilecek | Kalan parça ve maliyet izi | Bekliyor |
-| 79 | Aksesuar partilerinin ürün izi | İlk kapsam | Genişletilecek | Lot ve batch izi; aksesuar lotundan mamule geriye iz raporu yok | Bekliyor |
+| 15 | Deri malzemesinden ürün maliyetine görünüm | İlk kapsam | Genişletilecek | Parça alanı, kullanılabilir alan, kusur bölgesi, damar yönü, kesim planı (LEATHER-FASHION) | İlk kapsam tamam: emir bazında verilen/dönen/net deri alanı, kalıp alanına göre verim, birim mamule düşen deri ve diğer maliyet |
+| 73 | Dijital kalıp ölçü ve revizyon doğrulaması | İlk kapsam | Genişletilecek | Kesim planı kalıp/model revizyonuna bağlı; ölçek ve geometri doğrulaması yok | İlk kapsam tamam: ölçü kutusuyla ölçek denetimi; aynı kodla yeni revizyon öncekinin yerine geçer, emirde kullanılan revizyon korunur |
+| 74 | Sipariş/set bazında ton uyumu | İlk kapsam | Genişletilecek | Deri malzemesinde renk/ton kaydı; set/sipariş bazında ton eşleştirme yok | İlk kapsam tamam: kesim planında ve emrin tüm kesimlerinde aynı ton grubu; karışım gerekçe ister |
+| 75 | Kusur bölgelerinin kullanım alanına etkisi | İlk kapsam | Genişletilecek | Kusur bölgesi kaydı var | İlk kapsam tamam: delik her parçada, çizik/ton görünür parçada kullanılamaz; kesim planı görünür/gizli alanı ayrı denetler |
+| 76 | Kalan deri parçalarını görsel bulma | İlk kapsam | Genişletilecek | Kalan parça ve maliyet izi | İlk kapsam tamam: serbest alan (kalan − kusur sınıfı − rezervasyon), açık kesim planı hariç, çizimli arama |
+| 79 | Aksesuar partilerinin ürün izi | İlk kapsam | Genişletilecek | Lot ve batch izi; aksesuar lotundan mamule geriye iz raporu yok | İlk kapsam tamam: partiden üretim emri, mamul partisi ve müşteri sevkine ileri iz (transferler dahil) |
 | 77 | Yapıştırma ve kaplama işlem koşulları | Genişletme | Yeni | Yardımcı malzeme işlem koşulu kaydı yok | Bekliyor |
 | 78 | Dikiş hatası ve neden analizi | Genişletme | Genişletilecek | Yeniden işleme hata koduyla izleniyor; neden analizi raporu yok | Bekliyor |
 | 80 | Numune ve prototip maliyeti | Genişletme | Genişletilecek | Model/reçete/numune ve revizyon onayı var; numune maliyeti ayrı izlenmiyor | Bekliyor |
@@ -427,12 +427,12 @@ Tamamlanma ölçütü: Onaylanmamış değişiklik kesin gelir sayılmıyor; ayn
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 16 | İnşaat değişikliklerinde maliyet/süre/tahsilat etkisi | İlk kapsam | Genişletilecek | Proje 360: risk, çizim revizyonu, saha değişikliği, süre uzatımı, hakediş bağlantıları (CONSTRUCTION-360) | Bekliyor |
-| 84 | Şantiye iş cephesi hazırlığı | İlk kapsam | Genişletilecek | Proje 360 üç haftalık hazırlık: çizim, malzeme, ekip, onay engeli ve sorumlusu | Bekliyor |
-| 87 | İnşaat ekip ve ekipman dengeleme | İlk kapsam | Genişletilecek | Ekipman rezervasyonu ve çakışma engeli; kaynak dengeleme algoritması yok | Bekliyor |
-| 88 | Taşeron ölçüm ve kabul farkları | İlk kapsam | Genişletilecek | Proje 360 üretim → hakediş: kontrol/onay ve tekrar tahsis engeli; yeniden ölçüm farkı yok | Bekliyor |
-| 91 | Teslim öncesi aşamalı kontrol | İlk kapsam | Yeni | Aşamalı teslim kontrolü yok; temel: garanti/servis ve daire pasaportu | Bekliyor |
-| 92 | Gayrimenkul taksit planını yeniden yapılandırma | İlk kapsam | Genişletilecek | `realestate` modülü taksit planları | Bekliyor |
+| 16 | İnşaat değişikliklerinde maliyet/süre/tahsilat etkisi | İlk kapsam | Genişletilecek | Proje 360: risk, çizim revizyonu, saha değişikliği, süre uzatımı, hakediş bağlantıları (CONSTRUCTION-360) | İlk kapsam tamam: değişiklik etki dosyası; onaylı etki kesin, onay bekleyen olası (maliyet, gelir, katkı, gün) |
+| 84 | Şantiye iş cephesi hazırlığı | İlk kapsam | Genişletilecek | Proje 360 üç haftalık hazırlık: çizim, malzeme, ekip, onay engeli ve sorumlusu | İlk kapsam tamam: üç haftalık hazırlık; eksik kısıtlar, kritiklik, yedi gün içinde hazır olmayan iş riski |
+| 87 | İnşaat ekip ve ekipman dengeleme | İlk kapsam | Genişletilecek | Ekipman rezervasyonu ve çakışma engeli; kaynak dengeleme algoritması yok | İlk kapsam tamam: takvimde ekip kapasitesi, işte ekip ihtiyacı; bollukla sınırlı dengeleme önerisi (programı değiştirmez) |
+| 88 | Taşeron ölçüm ve kabul farkları | İlk kapsam | Genişletilecek | Proje 360 üretim → hakediş: kontrol/onay ve tekrar tahsis engeli; yeniden ölçüm farkı yok | İlk kapsam tamam: üretim onayında ölçümle kabul edilen miktar; hakedişe yalnız kabul edilen girer, fark raporu |
+| 91 | Teslim öncesi aşamalı kontrol | İlk kapsam | Yeni | Aşamalı teslim kontrolü yok; temel: garanti/servis ve daire pasaportu | İlk kapsam tamam: ön kontrol → eksik giderme → yeniden kontrol → müşteriyle gezi; başlatılmış kontrol tamamlanmadan teslim yok |
+| 92 | Gayrimenkul taksit planını yeniden yapılandırma | İlk kapsam | Genişletilecek | `realestate` modülü taksit planları | İlk kapsam tamam: kalan yeni vadelere aynı toplam ve defter tutarıyla devredilir; tahsilat ve eski taksitler korunur |
 | 83 | İhalede katılım kararı | Genişletme | Genişletilecek | Proje 360 ihale/teklif: fırsat, keşif, revizyon ve karar gerekçesi; katılım değerlendirme ölçütleri yok | Bekliyor |
 | 85 | IFC revizyonları arasında eleman/miktar farkı | Genişletme | Genişletilecek | IFC görünümü (`construction-control`) | Bekliyor |
 | 86 | Model çakışmalarını saha aksiyonuna bağlama | Genişletme | Yeni | IFC görünümü var; çakışma analizi yok | Bekliyor |
@@ -541,6 +541,14 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 122 öneri, 14 faza (F0, F1, F2a, F2b, F3–F12) birer kez atanmıştır: F0 2, F1 9, F2a 4, F2b 10, F3 8, F4 14, F5 10, F6 11, F7 11, F8 11, F9 11, F10 7, F11 9, F12 5 = 122. Öneri numaraları önceki yanıtlardaki numaralarla aynıdır. Teknik ve mali ortak kabul koşulları, ana fazı farklı olan işlerde de uygulanır.
 
 ## Değişiklik kaydı
+
+**12 Ekim 2026 — F8 ve F9 ilk teslimi**
+
+- F8 ilk kapsamı (15, 73, 74, 75, 76, 79) ve F9 ilk kapsamı (16, 84, 87, 88, 91, 92) `claude/f2b-baslangic` dalında. Sektör fazlarının (F5–F9) ilk kapsamları tamamlandı.
+- Taksit yeniden yapılandırması mevcut kasasız kalem kapatmasını (fesih ile aynı tablo, yapılandırma bağıyla) kullanır; fesih hesabı yapılandırmada devredilen kalanı tahsilat saymaz.
+- Aşamalı teslim kontrolü isteğe bağlıdır: birimde kontrol başlatılmışsa son aşama onaylanmadan teslim yapılmaz; başlatılmamış birimlerde teslim değişmez.
+- Aralıklı E2E hatası (işveren sözleşmesi) bulundu: kayıt sonrası sorgu yenilenince form kaldırılıyor, React Query kaldırılmış bileşenin geri çağrısını çalıştırmadığından yönlendirme atlanıyordu. Form artık her iki görünümde bağlı kalır.
+- Açık işler: F8 genişletmeleri (77, 78, 80–82) ve `LeatherPages.tsx` bölünmesi; F9 genişletmeleri (83, 85, 86, 89, 90); geri planlamada ekip dengeleme; değişiklik etkisinin işveren hakedişine bağlanması.
 
 **12 Ekim 2026 — F7 ilk teslimi**
 
