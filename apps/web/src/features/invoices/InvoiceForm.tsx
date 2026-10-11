@@ -26,6 +26,7 @@ import { SerialEntry } from '../inventory/SerialEntry';
 import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../projects/common';
 import { INVOICE_INVALIDATE, useLineAccountOptions, usePartyOptions, useTaxRates, vatRateFor } from './common';
 import { DeliveryPicker } from './DeliveryPicker';
+import { InvoiceTemplates } from './InvoiceTemplates';
 import { OrderLinePicker } from './OrderLinePicker';
 import type { DocumentTaxRuleView } from '../settings/DocumentTaxRulesSection';
 import { FX_RATE_TYPES, FX_RATE_TYPE_LABELS, type FxRateLookup, type FxRateType } from '@erp/shared';
@@ -541,6 +542,27 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         actions={
           <>
             <FormDetailToggle mode={detailMode} onChange={setDetailMode} />
+            {!initial && !returnOfId && !fromDelivery && (
+              <InvoiceTemplates
+                type={type}
+                current={() => ({
+                  partyId: partyId || null,
+                  vatIncluded,
+                  lines: lines.filter((l) => l.itemId || l.description.trim()).map((l) => ({
+                    itemId: l.itemId || null, description: l.description.trim(), quantity: l.quantity || '1', unitPrice: l.unitPrice,
+                    discountPct: l.discountPct, vatCode: l.vatCode || null, accountId: l.accountId || null,
+                  })),
+                })}
+                onApply={(tpl) => {
+                  setPartyId(tpl.partyId ?? '');
+                  setVatIncluded(tpl.vatIncluded);
+                  setLines(tpl.lines.map((l) => ({
+                    ...emptyLine(l.vatCode ?? ''), itemId: l.itemId ?? '', description: l.description, quantity: l.quantity,
+                    unit: (l.itemId && itemById.get(l.itemId)?.unit) || '', unitPrice: l.unitPrice, discountPct: l.discountPct, accountId: l.accountId ?? '',
+                  })));
+                }}
+              />
+            )}
             {initial && <>
               <Link to={`/workspace/documents?kind=invoice&id=${initial.invoice.id}`} className="link inline-flex items-center gap-2 text-sm"><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>
               {type === 'sales' && <Link to="/sales/campaigns" className="link text-sm">Kampanya uygula</Link>}

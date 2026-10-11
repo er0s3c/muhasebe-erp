@@ -56,5 +56,12 @@ describe('Kişisel arayüz tercihleri', () => {
     expect((await c.put('/api/me/preferences/form.detail', { value: { invoice: 'hidden' } })).statusCode).toBe(400);
     expect((await c.put('/api/me/preferences/form.detail', { value: { 'Fatura!': 'basic' } })).statusCode).toBe(400);
     expect((await c.put('/api/me/preferences/form.detail', { value: Object.fromEntries(Array.from({ length: 41 }, (_, i) => [`form-${i}`, 'basic'])) })).statusCode).toBe(400);
+    // Hızlı fatura şablonu (öneri 23): şemaya uyan şablon saklanır; bilinmeyen alan, geçersiz miktar ve fazla şablon reddedilir
+    const tpl = { id: '0190f1a2-0000-7000-8000-000000000001', name: 'Aylık kira', type: 'sales', partyId: null, vatIncluded: false, lines: [{ itemId: null, description: 'Kira', quantity: '1', unitPrice: '1000', discountPct: '', vatCode: 'KDV-16', accountId: null }] };
+    expect((await c.put('/api/me/preferences/invoice.templates', { value: [tpl] })).statusCode).toBe(200);
+    expect((await c.get('/api/me/preferences')).json().preferences['invoice.templates']).toEqual([tpl]);
+    expect((await c.put('/api/me/preferences/invoice.templates', { value: [{ ...tpl, extra: true }] })).statusCode).toBe(400);
+    expect((await c.put('/api/me/preferences/invoice.templates', { value: [{ ...tpl, lines: [{ ...tpl.lines[0], quantity: '1,5' }] }] })).statusCode).toBe(400);
+    expect((await c.put('/api/me/preferences/invoice.templates', { value: Array.from({ length: 21 }, () => tpl) })).statusCode).toBe(400);
   });
 });

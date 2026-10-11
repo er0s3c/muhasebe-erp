@@ -7,7 +7,7 @@ import { useCompany, useSession } from './session';
  * Kişisel arayüz tercihleri: favoriler, pano düzeni, tablo yoğunluğu. Sunucuda kullanıcı + şirket kapsamında saklanır
  * (cihazlar arası aynı görünür); iş verisi taşımaz. Son ziyaretler ise yalnız bu tarayıcıda tutulur.
  */
-export type PreferenceKey = 'favorites' | 'dashboard.layout' | 'table.density' | 'form.detail';
+export type PreferenceKey = 'favorites' | 'dashboard.layout' | 'table.density' | 'form.detail' | 'invoice.templates';
 type Preferences = Partial<Record<PreferenceKey, unknown>>;
 const PREF_KEY = ['me', 'preferences'] as const;
 
@@ -193,4 +193,18 @@ export function useFormDetail(formId: string) {
   const mode: FormDetailMode = value[formId] ?? 'detailed';
   const setMode = useCallback((next: FormDetailMode) => save({ ...value, [formId]: next }).catch(() => undefined), [formId, save, value]);
   return { detailed: mode === 'detailed', mode, setMode, saving };
+}
+
+// ---- Hızlı fatura şablonları (öneri 23) ----
+
+export interface InvoiceTemplateLine { itemId: string | null; description: string; quantity: string; unitPrice: string; discountPct: string; vatCode: string | null; accountId: string | null }
+export interface InvoiceTemplate { id: string; name: string; type: string; partyId: string | null; vatIncluded: boolean; lines: InvoiceTemplateLine[] }
+export const INVOICE_TEMPLATES_MAX = 20;
+export function parseInvoiceTemplates(value: unknown): InvoiceTemplate[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((t): t is InvoiceTemplate => !!t && typeof t.id === 'string' && typeof t.name === 'string' && typeof t.type === 'string' && Array.isArray(t.lines)).slice(0, INVOICE_TEMPLATES_MAX);
+}
+/** Kullanıcının bu şirketteki fatura şablonları (sunucuda tercihlerde; başka cihazda da açılır). */
+export function useInvoiceTemplates() {
+  return usePreference<InvoiceTemplate[]>('invoice.templates', parseInvoiceTemplates, []);
 }
