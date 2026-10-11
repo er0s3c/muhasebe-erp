@@ -16,6 +16,7 @@ import { forbidden, notFound, unprocessable } from '../../http/errors';
 import { retryOutboxMessage, sourceDeliveries } from '../outbox/service';
 import { invoiceDeliveries, sendInvoiceDocument, sendInvoiceDocumentSchema } from './deliveries';
 import { salesChain, salesChainQuerySchema } from '../sales/chain';
+import { runEach } from '../batch/runner';
 import { lockItems } from '../inventory/balances';
 import { lockOrderLines } from '../sales/usage';
 import { lockDeliveryLines } from './delivery-link';
@@ -130,6 +131,21 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, post, async (c) =>
       cancelInvoice(c.tx, invoiceCtx(c), idParam.parse(c.req.params).id, cancelInvoiceSchema.parse(c.req.body)),
     ),
+  );
+
+  // Önizlemeli toplu muhasebeleştirme (öneri 6): önizleme aynı kurallarla dener ve geri alır; uygulamada her fatura ayrı savepoint'tedir
+  app.post(
+    '/api/invoices/batch-post',
+    tenantRoute(app, { ...post, idempotent: true }, async (c) => {
+      const input = z.object({ ids: z.array(z.string().uuid()).min(1).max(100).transform((v) => [...new Set(v)]), dryRun: z.boolean() }).parse(c.req.body);
+      const results = await runEach(c.tx, input.ids, async (sp, id) => {
+        const { lines } = await getInvoice(sp, id);
+        await lockForPosting(sp, lines);
+        const posted = await postInvoice(sp, invoiceCtx(c), id);
+        return { invoiceNo: posted.invoice.invoiceNo as string | null, grossTotal: String(posted.invoice.grossTotal), currencyCode: posted.invoice.currencyCode as string };
+      }, { dryRun: input.dryRun });
+      return { dryRun: input.dryRun, results, summary: { ok: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length } };
+    }),
   );
 
   // Satış belge zinciri (öneri 3): teklif → sipariş → irsaliye → fatura/iade → tahsilat; her aşama kendi yetkisiyle görünür

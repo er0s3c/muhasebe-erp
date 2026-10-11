@@ -1,7 +1,9 @@
 import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
 import { SearchInput } from '../../components/ui/SearchInput';
 import { ListToolbar, ResultFooter } from '../../components/ui/ListTools';
-import { Layers, Plus, Receipt, Upload } from 'lucide-react';
+import { CheckCheck, Layers, Plus, Receipt, Upload } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { BatchActionDialog, type BatchResponse } from '../../components/layout/BatchAction';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
@@ -14,7 +16,7 @@ import { Table, TableWrap, Td, Th, Tr, ProgressiveRows } from '../../components/
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { cn } from '../../lib/cn';
 import { formatDateTR, moneyIn } from '../../lib/format';
-import { useCan, useCQuery } from '../../lib/queries';
+import { useCan, useCompanyApi, useCQuery } from '../../lib/queries';
 import type { InvoiceListRow, InvoiceStatus, InvoiceType } from '../../lib/types';
 import { ImportWizard } from '../imports/ImportWizard';
 import { InvoiceStatusBadge, InvoiceTypeBadge } from './common';
@@ -27,8 +29,12 @@ export const PurchaseInvoicesPage = () => <InvoicesPage side="purchases" />;
 function InvoicesPage({ side }: { side: InvoiceSide }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const canManage = useCan()('invoices.manage');
+  const can = useCan();
+  const canManage = can('invoices.manage');
   const [importing, setImporting] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const { call } = useCompanyApi();
+  const qc = useQueryClient();
   const year = todayIso().slice(0, 4);
   const types = invoiceTypesOf(side);
   const [type, setType] = useState<InvoiceType | ''>('');
@@ -52,6 +58,8 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
   if (query) qs.set('query', query);
   const { data, isPending, error, refetch, isFetching } = useCQuery<{ invoices: InvoiceListRow[]; total: number }>(['invoices', 'list', qs.toString()], `/api/invoices?${qs}`);
   const filtered = !!(type || status || query);
+  // Önizlemeli toplu muhasebeleştirme (öneri 6): listede görünen taslaklar
+  const drafts = (data?.invoices ?? []).filter((r) => r.status === 'draft').slice(0, 100);
 
   const newButtons = types.map((k, i) => (
     <Button key={k} variant={i === 0 ? 'primary' : 'secondary'} onClick={() => navigate(`/invoices/new?type=${k}`)}>
@@ -108,7 +116,21 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
           )}
         </Field>
         <SearchInput placeholder={t('invoices.searchPlaceholder')} value={text} onChange={setText} aria-label={t('common.search')} />
+        {status === 'draft' && can('invoices.post') && drafts.length > 0 && (
+          <Button onClick={() => setBatchOpen(true)}><CheckCheck className="size-4" aria-hidden />Taslakları toplu kaydet</Button>
+        )}
       </ListToolbar>
+      <BatchActionDialog<{ invoiceNo: string | null; grossTotal: string; currencyCode: string }>
+        open={batchOpen}
+        onOpenChange={setBatchOpen}
+        title="Taslak faturaları toplu kaydet"
+        description="Listede görünen taslaklar (en çok 100) muhasebeleştirilir. Önizleme her faturayı kurallarla dener ve hiçbir değişiklik yapmaz."
+        actionLabel={(n) => `${n} faturayı kaydet`}
+        items={drafts.map((r) => ({ id: r.id, label: r.partyName, detail: `${formatDateTR(r.invoiceDate)} · ${moneyIn(r.grossTotal, r.currencyCode)}` }))}
+        run={(ids, dryRun, idempotencyKey) => call<BatchResponse<{ invoiceNo: string | null; grossTotal: string; currencyCode: string }>>('/api/invoices/batch-post', { method: 'POST', body: { ids, dryRun }, idempotencyKey })}
+        describe={(v) => `${v.invoiceNo ?? 'Numara'} · ${moneyIn(v.grossTotal, v.currencyCode)}`}
+        onDone={() => void qc.invalidateQueries()}
+      />
 
       {isPending ? (
         <ListSkeleton />
