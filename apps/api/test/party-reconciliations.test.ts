@@ -22,7 +22,7 @@ describe('cari mutabakat', async () => {
     const base = `/api/parties/${cust.id}/reconciliations`;
     const create = (body: Record<string, unknown>, key: string) => app.inject({ method: 'POST', url: base, payload: body, headers: { authorization: `Bearer ${s.token}`, 'x-company-id': company.id, 'idempotency-key': key } });
 
-    expect((await create({ asOf: '2999-01-01' }, 'mutabakat-anahtari-001')).json().error.code).toBe('RECONCILIATION_FUTURE_DATE');
+    expect((await create({ asOf: new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10) }, 'mutabakat-anahtari-001')).json().error.code).toBe('RECONCILIATION_FUTURE_DATE');
     const plain = await create({ asOf: day(3, 31) }, 'mutabakat-anahtari-002');
     expect(plain.statusCode, plain.body).toBe(201);
     const first = plain.json().reconciliations[0];

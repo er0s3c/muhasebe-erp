@@ -16,7 +16,7 @@ describe('aylık kapanış kontrol listesi', async () => {
     const party = (await c.post('/api/parties', { name: 'Kapanış Müşterisi' })).json().party;
     const draft = await c.post('/api/invoices', { type: 'sales', partyId: party.id, invoiceDate: day(3, 10), lines: [{ description: 'Hizmet', accountId: ids['600'], quantity: '1', unitPrice: '100', vatCode: null }] });
     expect([200, 201], draft.body).toContain(draft.statusCode);
-    const lines = [{ accountId: ids['100'], debit: '50', credit: '0' }, { accountId: ids['600'], debit: '0', credit: '50' }];
+    const lines = [{ accountId: ids['100'], currency: 'TRY', debit: '50', credit: '0' }, { accountId: ids['600'], currency: 'TRY', debit: '0', credit: '50' }];
     const entry = (await c.post('/api/journal-entries', { entryDate: day(3, 12), description: 'Taslak fiş', lines })).json().entry as { id: string };
 
     const list = async () => {

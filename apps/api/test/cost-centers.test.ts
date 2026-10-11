@@ -17,9 +17,9 @@ describe('maliyet merkezi', async () => {
     expect((await c.post('/api/cost-centers', { code: 'SAT', name: 'Tekrar' })).statusCode).toBe(409);
 
     const entry = (lines: unknown[]) => c.post('/api/journal-entries', { entryDate: day(3, 5), description: 'Departman gideri', post: true, lines });
-    const ok = await entry([{ accountId: ids['770'], debit: '40', credit: '0', costCenterId: sales.id }, { accountId: ids['100'], debit: '0', credit: '40' }]);
+    const ok = await entry([{ accountId: ids['770'], currency: 'TRY', debit: '40', credit: '0', costCenterId: sales.id }, { accountId: ids['100'], currency: 'TRY', debit: '0', credit: '40' }]);
     expect([200, 201], ok.body).toContain(ok.statusCode);
-    expect((await entry([{ accountId: ids['770'], debit: '40', credit: '0' }, { accountId: ids['100'], debit: '0', credit: '40', costCenterId: sales.id }])).json().error.code).toBe('COST_CENTER_ACCOUNT');
+    expect((await entry([{ accountId: ids['770'], currency: 'TRY', debit: '40', credit: '0' }, { accountId: ids['100'], currency: 'TRY', debit: '0', credit: '40', costCenterId: sales.id }])).json().error.code).toBe('COST_CENTER_ACCOUNT');
 
     const party = (await c.post('/api/parties', { name: 'Departman Müşterisi' })).json().party;
     const inv = await c.post('/api/invoices', { post: true, type: 'sales', partyId: party.id, invoiceDate: day(3, 6), lines: [{ description: 'Hizmet', accountId: ids['600'], quantity: '1', unitPrice: '100', vatCode: null, costCenterId: sales.id }] });
@@ -30,14 +30,14 @@ describe('maliyet merkezi', async () => {
     expect(rows.filter((r) => r.code !== '600').every((r) => r.cost_center_id === null)).toBe(true);
 
     expect((await c.patch(`/api/cost-centers/${sales.id}`, { isActive: false })).json().costCenter.isActive).toBe(false);
-    expect((await entry([{ accountId: ids['770'], debit: '1', credit: '0', costCenterId: sales.id }, { accountId: ids['100'], debit: '0', credit: '1' }])).json().error.code).toBe('COST_CENTER_INACTIVE');
+    expect((await entry([{ accountId: ids['770'], currency: 'TRY', debit: '1', credit: '0', costCenterId: sales.id }, { accountId: ids['100'], currency: 'TRY', debit: '0', credit: '1' }])).json().error.code).toBe('COST_CENTER_INACTIVE');
     await expect(execAsOwner(`update cost_centers set code = 'X' where id = $1`, [sales.id])).rejects.toThrow(/değiştirilemez/);
 
     const s2 = await registerUser(app, 'DepartmanYabanci');
     const c2company = await createCompany(app, s2.token);
     const c2 = client(app, s2.token, c2company.id);
     const ids2 = await accountIds(app, s2.token, c2company.id);
-    const foreign = await c2.post('/api/journal-entries', { entryDate: day(3, 5), description: 'Yabancı', post: true, lines: [{ accountId: ids2['770'], debit: '1', credit: '0', costCenterId: sales.id }, { accountId: ids2['100'], debit: '0', credit: '1' }] });
+    const foreign = await c2.post('/api/journal-entries', { entryDate: day(3, 5), description: 'Yabancı', post: true, lines: [{ accountId: ids2['770'], currency: 'TRY', debit: '1', credit: '0', costCenterId: sales.id }, { accountId: ids2['100'], currency: 'TRY', debit: '0', credit: '1' }] });
     expect(foreign.json().error.code).toBe('COST_CENTER_NOT_FOUND');
   });
 });

@@ -627,8 +627,8 @@ describe('banka ekstresi: içe aktarma, eşleştirme ve mutabakat', async () => 
     await ok(stmt(c, 'commit', bank.id, [{ date: trDate(day(3, 26)), description: 'Toplu ödeme', reference: 'DKN-8', amount: '-1.000,00', balance: '6.745,50' }]));
     let data = await recon(c, bank.id);
     const line = lineBy(data, 'Toplu ödeme');
-    const ledger = (description: string) => data.unmatchedLedger.find((u) => u.description === description)!.journalLineId;
-    const kira = ledger('Kira ödemesi'), aidat = ledger('Aidat ödemesi'), ucret = ledger('Hesap işletim ücreti');
+    const ledger = (txnNo: string) => data.unmatchedLedger.find((u) => u.txnNo === txnNo)!.journalLineId;
+    const kira = ledger(x.t5.txnNo), aidat = ledger(x.t6.txnNo), ucret = ledger(x.t3.txnNo);
     const group = (ids: string[]) => c.post(`/api/bank-statement-lines/${line.id}/match-group`, { journalLineIds: ids });
 
     expect((await group([kira])).statusCode).toBe(400);
