@@ -184,9 +184,9 @@ Tamamlanma ölçütü: Aynı kullanıcı başka cihazda görünümünü açabili
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
 | 5 | Sunucuda kayıtlı filtreler ve ortak görünümler | İlk kapsam | Genişletilecek | `SavedViews.tsx` localStorage; `preferences/routes.ts` favori, pano düzeni ve tablo yoğunluğunu sunucuda tutuyor | İlk kapsam tamam: `saved_views` tablosu (kişisel/ekip, şube kapsamı, RLS), yerel görünümler bir kez sunucuya taşınır; lisans paneli tarayıcıda saklamaya devam eder |
-| 24 | Temel ve ayrıntılı form girişi | İlk kapsam | Genişletilecek | Bazı ekranlarda katlanır `<details>` bölümleri (12 dosya); formlarda temel/ayrıntılı ayrımı ve şirket bazlı zorunlu alan yok | İlk kapsam yapıldı: `form.detail` tercihi; fatura ve cari formlarında Temel görünüm boş ikincil alanları gizler. Şirket bazlı zorunlu alan ve rol varsayılanı F2b ile |
+| 24 | Temel ve ayrıntılı form girişi | İlk kapsam | Genişletilecek | Bazı ekranlarda katlanır `<details>` bölümleri (12 dosya); formlarda temel/ayrıntılı ayrımı ve şirket bazlı zorunlu alan yok | İlk kapsam tamam: `form.detail` tercihi; fatura ve cari formlarında Temel görünüm boş ikincil alanları gizler. Şirket bazlı zorunlu alan ve rol varsayılanı F2b ile |
 | 28 | Kullanılamayan işlemin sebebi ve çözüm bağlantısı | İlk kapsam | Genişletilecek | Nedenli pasif işlem yalnız modül erişimi ekranında (`MemberAccessSheet`); ortak bileşen yok | İlk kapsam tamam: engel hataları ilgili kaydı taşır (dönem, iade, kapatan hareket, banka hesabı); ortak `ErrorCallout`/`BlockedHint`; fatura ve kasa/banka ekranlarında yetkisiz işlem nedeniyle pasif |
-| 31 | Birim ve sayı girişinde tutarlılık kontrolü | İlk kapsam | Genişletilecek | Deri alanında dm²/ft² → m² sabit dönüşüm; genel birim dönüşümü, hassasiyet tanımı ve olağan dışı miktar uyarısı yok | İlk kapsam yapıldı: birim hassasiyeti ve `quantityIssues` (fazla ondalık, g→kg/kg→ton, olağan dışı büyüklük); fatura ve stok hareketi satırında uyarı. Sunucuda zorunlu kılma ve şirket bazlı hassasiyet sonraki teslimatta |
+| 31 | Birim ve sayı girişinde tutarlılık kontrolü | İlk kapsam | Genişletilecek | Deri alanında dm²/ft² → m² sabit dönüşüm; genel birim dönüşümü, hassasiyet tanımı ve olağan dışı miktar uyarısı yok | İlk kapsam tamam: birim hassasiyeti ve `quantityIssues` (fazla ondalık, g→kg/kg→ton, olağan dışı büyüklük); fatura ve stok hareketi satırında uyarı. Sunucuda zorunlu kılma ve şirket bazlı hassasiyet sonraki teslimatta |
 
 ### F2b — Başlangıç düzenleri ve gelişmiş giriş
 
@@ -546,6 +546,7 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 
 - Teslimat 2 (F1 ilk kapsamı: 19, 21, 120, 121) ve Teslimat 3 (F2a: 5, 24, 28, 31) `claude/f1-ai-islem` ve `claude/f2a-gorunumler` dallarında; dallar Teslimat 0 ve F0 dallarının üzerine yığılı, #24 birleşince PR olarak açılacak.
 - Değişmez dizisi gerçek bir test hatası yakaladı: iptal edilen tahsilatın eşleştirmesi tabloda kalır, geçerliliği hareketin durumundan okunur; değişmez sorgusu buna göre düzeltildi (ürün davranışı doğruydu).
+- Üretim demosundaki aralıklı "Uygun kaynak kapasitesi bulunamadı" hatasının nedeni bulundu: tohum kayıtları aynı işlemde oluştuğu için liste sırası rastgele UUID'ye kalıyor, plan penceresi bazen demo bakımı açık kalan MAK-01'i seçiyordu. Liste sırası kararlı hale getirildi, test kaynağı açıkça seçiyor. Demo bakım kaydının açık kalması (MAK-01'i 2. günden sonra kapatır) F7 demo verisi gözden geçirmesinde ele alınacak.
 - Açık işler: komut makbuzu saklama süresi (101), miktar hassasiyetinin sunucuda zorunlu kılınması ve şirket bazlı tanımı, temel görünümün rol paketleriyle varsayılan yapılması (F2b), F0 başlangıç ölçümleri (pilot kullanıcı gerekir).
 
 **11 Ekim 2026 — Teslimat 0 durumu**
