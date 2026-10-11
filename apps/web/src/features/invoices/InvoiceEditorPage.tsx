@@ -26,6 +26,7 @@ import { fmtDate } from '../../lib/license';
 import { InvoicePrintDocument } from './InvoicePrintDocument';
 import { InvoiceShareButton } from './InvoiceShareButton';
 import { InvoiceDelivery } from './InvoiceDelivery';
+import { DocumentChain } from '../sales/DocumentChain';
 import { DocumentApprovalPanel, useDocumentApprovals } from '../approvals/common';
 
 /**
@@ -320,6 +321,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
           </dl>
         </div>
 
+        <DocumentChain kind="invoice" id={inv.id} />
         <InvoiceDelivery data={data} />
         <p className="text-xs text-muted">{t('invoices.view.internalNote')}</p>
         <PrintSignatures labels={[t('printDoc.prepared'), t('printDoc.approved')]} />

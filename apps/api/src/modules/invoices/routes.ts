@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { forbidden, notFound, unprocessable } from '../../http/errors';
 import { retryOutboxMessage, sourceDeliveries } from '../outbox/service';
 import { invoiceDeliveries, sendInvoiceDocument, sendInvoiceDocumentSchema } from './deliveries';
+import { salesChain, salesChainQuerySchema } from '../sales/chain';
 import { lockItems } from '../inventory/balances';
 import { lockOrderLines } from '../sales/usage';
 import { lockDeliveryLines } from './delivery-link';
@@ -130,6 +131,9 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       cancelInvoice(c.tx, invoiceCtx(c), idParam.parse(c.req.params).id, cancelInvoiceSchema.parse(c.req.body)),
     ),
   );
+
+  // Satış belge zinciri (öneri 3): teklif → sipariş → irsaliye → fatura/iade → tahsilat; her aşama kendi yetkisiyle görünür
+  app.get('/api/sales-chain', tenantRoute(app, read, async (c) => salesChain(c, salesChainQuerySchema.parse(c.req.query))));
 
   // Belge gönderimi (öneri 7): dışa aktarma işlemi sayılır; ileti kalıcı outbox'a yazılır, gönderim zamanlayıcıdadır
   const send = { ...read, operation: 'export' } as const;
