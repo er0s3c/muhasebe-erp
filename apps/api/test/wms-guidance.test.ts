@@ -22,7 +22,7 @@ describe('depo yönlendirmesi', async () => {
     const item = async (code: string) => (await ok(c.post('/api/items', { code, name: code, unit: 'adet' }), 201)).item.id as string;
     const a = await item('YON-A'), b = await item('YON-B');
     const opening = (await ok(c.post('/api/stock-documents', { type: 'opening', docDate: TODAY_LOCAL, warehouseId: wh, lines: [{ itemId: a, quantity: '100', unitCost: '10' }, { itemId: b, quantity: '20', unitCost: '5' }] }), 201)).document.id;
-    const lot = async (code: string, itemId: string, quantity: string) => (await ok(c.post('/api/wms/lots', { code, itemId, warehouseId: wh, sourceDocumentId: opening, quantity }))).record.id as string;
+    const lot = async (code: string, itemId: string, quantity: string) => (await ok(c.post('/api/wms/lots', { code, itemId, warehouseId: wh, sourceDocumentId: opening, quantity, status: 'available' }))).record.id as string;
     const la = await lot('YON-LA', a, '100');
     await lot('YON-LB', b, '20');
     const bin = async (code: string, capacity: string, pickSequence: number, allowedItemIds: string[] = []) =>
