@@ -12,13 +12,14 @@ import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/u
 import { Input, Select } from '../../components/ui/Field';
 import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { Badge } from '../../components/ui/Badge';
 import { formatDateTR, money } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import { qtyText } from '../inventory/common';
 import { ImportStatusBadge } from './common';
 
-type Tab = 'files' | 'items';
+type Tab = 'files' | 'items' | 'recon';
 const STATUSES: readonly ImportFileStatus[] = ['draft', 'allocated', 'posted', 'cancelled'];
 
 /** İthalat dosyaları (Faz X4): liste ve kart bazında ithalat maliyeti raporu. */
@@ -45,10 +46,10 @@ export function ImportFilesPage() {
         <Callout tone="warning">{t('landed.notice')}</Callout>
       </div>
       <div className="mb-4">
-        <SegmentedTabs id="landed-ImportFilesPage-0" panelId={() => 'landed-ImportFilesPage-0-panel'} value={tab} onChange={setTab} items={[{ key: 'files', label: t('landed.tabs.files') }, { key: 'items', label: t('landed.tabs.items') }]} />
+        <SegmentedTabs id="landed-ImportFilesPage-0" panelId={() => 'landed-ImportFilesPage-0-panel'} value={tab} onChange={setTab} items={[{ key: 'files', label: t('landed.tabs.files') }, { key: 'items', label: t('landed.tabs.items') }, { key: 'recon', label: t('landed.tabs.recon') }]} />
       </div>
       <TabPanel id="landed-ImportFilesPage-0-panel" labelledBy={"landed-ImportFilesPage-0-" + (tab)}>
-{tab === 'files' ? <FilesTab /> : <ItemsTab />}
+{tab === 'files' ? <FilesTab /> : tab === 'items' ? <ItemsTab /> : <ReconTab />}
 </TabPanel>
     </>
   );
@@ -197,5 +198,152 @@ function ItemsTab() {
         </>
       )}
     </>
+  );
+}
+
+type ReconData = {
+  asOf: string;
+  clearingAccount: { id: string; code: string; name: string } | null;
+  clearingBalance: string | null;
+  linked: { invoiceId: string; invoiceNo: string | null; partyName: string | null; files: string; costBase: string; invoiceNetBase: string; difference: string; matched: boolean }[];
+  unlinkedCosts: { fileCode: string; description: string; amountBase: string }[];
+  orphanInvoices: { invoiceId: string; invoiceNo: string | null; invoiceDate: string; partyName: string | null; amountBase: string }[];
+  summary: { mismatched: number; unlinkedCosts: number; orphanInvoices: number; balanced: boolean };
+};
+
+/** Ek maliyet fark mutabakatı (öneri 51): dosya maliyeti ↔ fatura ↔ aktarım hesabı bakiyesi. */
+function ReconTab() {
+  const { t } = useTranslation();
+  const base = useCompany().baseCurrency;
+  const [asOf, setAsOf] = useState('');
+  const qs = asOf ? `?asOf=${asOf}` : '';
+  const { data, isPending, error, refetch, isFetching } = useCQuery<ReconData>(['import-report', 'reconciliation', asOf], `/api/import-files/reports/reconciliation${qs}`);
+  if (error && !data) return <ErrorState error={error} onRetry={() => void refetch()} retrying={isFetching} />;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <p className="max-w-2xl text-sm text-muted">{t('landed.recon.hint')}</p>
+        <label className="text-sm">
+          <span className="mb-1 block text-xs text-muted">{t('landed.recon.asOf')}</span>
+          <Input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} aria-label={t('landed.recon.asOf')} />
+        </label>
+      </div>
+      {isPending || !data ? (
+        <PageLoading />
+      ) : (
+        <>
+          {!data.clearingAccount ? (
+            <Callout tone="warning">{t('landed.recon.noClearing')}</Callout>
+          ) : (
+            <Card>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4 text-sm">
+                <span>
+                  {t('landed.recon.clearing')}: <span className="font-mono">{data.clearingAccount.code}</span> {data.clearingAccount.name}
+                </span>
+                <span>
+                  {t('landed.recon.balance')}: <strong className="tabular-nums">{money(data.clearingBalance ?? '0')} {base}</strong>
+                </span>
+                {data.summary.balanced ? <Badge tone="success" dot>{t('landed.recon.balanced')}</Badge> : <Badge tone="warning" dot>{t('landed.recon.unbalanced')}</Badge>}
+              </div>
+              {!data.summary.balanced && <p className="border-t border-border px-4 py-2 text-xs text-muted">{t('landed.recon.balanceHint')}</p>}
+            </Card>
+          )}
+          <section aria-labelledby="landed-recon-linked">
+            <h2 id="landed-recon-linked" className="mb-2 text-sm font-semibold">
+              {t('landed.recon.linked')} {data.summary.mismatched > 0 && <Badge tone="danger">{t('landed.recon.mismatchCount', { count: data.summary.mismatched })}</Badge>}
+            </h2>
+            {!data.linked.length ? (
+              <p className="text-sm text-muted">{t('landed.recon.none')}</p>
+            ) : (
+              <TableWrap>
+                <Table>
+                  <thead>
+                    <tr>
+                      <Th>{t('landed.recon.invoice')}</Th>
+                      <Th>{t('landed.recon.files')}</Th>
+                      <Th num>{t('landed.recon.cost')}</Th>
+                      <Th num>{t('landed.recon.invoiceNet')}</Th>
+                      <Th num>{t('landed.recon.difference')}</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.linked.map((l) => (
+                      <Tr key={l.invoiceId}>
+                        <Td>
+                          <Link className="link" to={`/invoices/${l.invoiceId}`}>{l.invoiceNo ?? '—'}</Link>
+                          {l.partyName && <span className="ml-2 text-xs text-muted">{l.partyName}</span>}
+                        </Td>
+                        <Td>{l.files}</Td>
+                        <Td num>{money(l.costBase)}</Td>
+                        <Td num>{money(l.invoiceNetBase)}</Td>
+                        <Td num>{l.matched ? <Badge tone="success" dot>{t('landed.recon.matched')}</Badge> : <span className="font-semibold text-danger">{money(l.difference)}</span>}</Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </TableWrap>
+            )}
+          </section>
+          <section aria-labelledby="landed-recon-unlinked">
+            <h2 id="landed-recon-unlinked" className="mb-2 text-sm font-semibold">{t('landed.recon.unlinked')}</h2>
+            {!data.unlinkedCosts.length ? (
+              <p className="text-sm text-muted">{t('landed.recon.none')}</p>
+            ) : (
+              <TableWrap>
+                <Table>
+                  <thead>
+                    <tr>
+                      <Th>{t('landed.code')}</Th>
+                      <Th>{t('landed.recon.description')}</Th>
+                      <Th num>{t('landed.recon.cost')}</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.unlinkedCosts.map((u, i) => (
+                      <Tr key={`${u.fileCode}-${i}`}>
+                        <Td>{u.fileCode}</Td>
+                        <Td>{u.description}</Td>
+                        <Td num>{money(u.amountBase)}</Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </TableWrap>
+            )}
+          </section>
+          <section aria-labelledby="landed-recon-orphans">
+            <h2 id="landed-recon-orphans" className="mb-2 text-sm font-semibold">{t('landed.recon.orphans')}</h2>
+            {!data.orphanInvoices.length ? (
+              <p className="text-sm text-muted">{t('landed.recon.none')}</p>
+            ) : (
+              <TableWrap>
+                <Table>
+                  <thead>
+                    <tr>
+                      <Th>{t('landed.recon.invoice')}</Th>
+                      <Th>{t('landed.recon.date')}</Th>
+                      <Th num>{t('landed.recon.amount')}</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.orphanInvoices.map((o) => (
+                      <Tr key={o.invoiceId}>
+                        <Td>
+                          <Link className="link" to={`/invoices/${o.invoiceId}`}>{o.invoiceNo ?? '—'}</Link>
+                          {o.partyName && <span className="ml-2 text-xs text-muted">{o.partyName}</span>}
+                        </Td>
+                        <Td>{formatDateTR(o.invoiceDate)}</Td>
+                        <Td num>{money(o.amountBase)}</Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </TableWrap>
+            )}
+          </section>
+          <p className="text-xs text-muted">{t('landed.recon.footnote', { currency: base })}</p>
+        </>
+      )}
+    </div>
   );
 }
