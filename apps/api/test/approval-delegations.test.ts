@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { roleDefaultPermissions, type Role } from '@erp/shared';
+import { canDecideRequest, currentStepDue } from '../src/modules/approvals/service';
 import { accountIds, addMember, client, createCompany, day, execAsOwner, makeApp, registerUser } from './helpers';
 
 /**
@@ -83,5 +85,56 @@ describe('onay vekâleti', async () => {
     // Başka şirket göremez
     const other = await world('VekaletYabanci');
     expect((await other.owner.post(`/api/approval-delegations/${ok.id}/revoke`, {})).statusCode).toBe(404);
+  });
+});
+
+/** Öneri 99: adım başına karar süresi; süre dolunca yönlendirme rolündeki onay yetkili üye de karar verebilir. */
+describe('onay süresi ve gecikme yönlendirmesi', async () => {
+  const { app } = await makeApp();
+
+  it('kural süre ve yönlendirme rolünü saklar; talep süresini taşır; süre dolmadan yönlendirme rolü karar veremez', async () => {
+    const s = await registerUser(app, 'OnaySure');
+    const company = await createCompany(app, s.token);
+    const owner = client(app, s.token, company.id);
+    const accountant = await addMember(app, owner, company.id, 'accountant');
+    const admin = await addMember(app, owner, company.id, 'admin');
+    const ids = await accountIds(app, s.token, company.id);
+    const party = (await owner.post('/api/parties', { name: 'Süre müşterisi' })).json().party;
+    const base = { docType: 'invoice', minAmount: '0', separateRequester: true, steps: [{ userId: accountant.userId }] };
+    expect((await owner.post('/api/document-approvals/rules', { ...base, escalateRole: 'admin' })).statusCode).toBe(400);
+    expect((await owner.post('/api/document-approvals/rules', { ...base, dueHours: 24, escalateRole: 'viewer' })).json().error.code).toBe('APPROVER_INVALID');
+    const rule = await owner.post('/api/document-approvals/rules', { ...base, dueHours: 24, escalateRole: 'admin' });
+    expect(rule.statusCode, rule.body).toBe(201);
+    expect(rule.json().rule).toMatchObject({ dueHours: 24, escalateRole: 'admin' });
+
+    const inv = (await owner.post('/api/invoices', { type: 'sales', partyId: party.id, invoiceDate: day(3, 10), lines: [{ description: 'Hizmet', accountId: ids['600'], quantity: '1', unitPrice: '100', vatCode: null }] })).json().invoice;
+    const req = (await owner.post(`/api/document-approvals/documents/invoice/${inv.id}/submit`, {})).json().request;
+    expect(req).toMatchObject({ dueHours: 24, escalateRole: 'admin', overdue: false });
+    expect(new Date(req.dueAt).getTime() - new Date(req.requestedAt).getTime()).toBe(24 * 3_600_000);
+    expect((await admin.client.post(`/api/document-approvals/${req.id}/decide`, { decision: 'approve' })).statusCode).toBe(403);
+    expect((await accountant.client.post(`/api/document-approvals/${req.id}/decide`, { decision: 'approve' })).statusCode).toBe(200);
+  });
+
+  it('süre dolunca yönlendirme rolü karar verebilir; süre önceki karardan başlar', () => {
+    const hour = 3_600_000;
+    const step = (no: number, extra: Record<string, unknown> = {}) => ({
+      id: `s${no}`, companyId: 'c', requestId: 'r', stepNo: no, approverRole: null, approverUserId: 'onaylayici', label: null,
+      status: 'pending', decidedBy: null, decidedAt: null, note: null, onBehalfOf: null, delegationId: null, ...extra,
+    });
+    const request = (requestedAgo: number, steps = [step(1)]) => ({
+      id: 'r', companyId: 'c', docType: 'invoice', docId: 'd', projectId: null, branchId: null, payloadHash: null, documentSnapshot: null,
+      amount: '100', status: 'pending', separateRequester: true, dueHours: 2, escalateRole: 'admin', requestedBy: 'gonderen',
+      requestedAt: new Date(Date.now() - requestedAgo), completedAt: null, steps,
+    });
+    const adminCtx = { companyId: 'c', userId: 'yonetici', role: 'admin' as Role, permissions: roleDefaultPermissions('admin') };
+    expect(canDecideRequest(request(hour), adminCtx)).toBe(false);
+    expect(canDecideRequest(request(3 * hour), adminCtx)).toBe(true);
+    // Başka rol süre dolsa da karar veremez; gönderen yönlendirmeyle de kendi talebini onaylayamaz
+    expect(canDecideRequest(request(3 * hour), { ...adminCtx, role: 'sales' as Role, permissions: roleDefaultPermissions('sales') })).toBe(false);
+    expect(canDecideRequest(request(3 * hour), { ...adminCtx, userId: 'gonderen' })).toBe(false);
+    // İkinci adımın süresi ilk adımın karar anından başlar
+    const twoSteps = request(10 * hour, [step(1, { status: 'approved', decidedBy: 'onaylayici', decidedAt: new Date(Date.now() - hour) }), step(2)]);
+    expect(currentStepDue(twoSteps)!.getTime()).toBeGreaterThan(Date.now());
+    expect(canDecideRequest(twoSteps, adminCtx)).toBe(false);
   });
 });

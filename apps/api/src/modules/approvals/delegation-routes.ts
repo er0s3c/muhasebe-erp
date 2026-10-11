@@ -55,6 +55,17 @@ export const approvalDelegationRoutes: FastifyPluginAsync = async (app) => {
     };
   }));
 
+  // Vekil adayları: şirketin etkin üyeleri (yalnız ad; e-posta ve rol dönmez). Vekil seçimi üye yöneticisi olmayan onaylayıcıya da açıktır.
+  app.get('/api/approval-delegations/candidates', tenantRoute(app, gate, async (c) => ({
+    candidates: await c.tx
+      .select({ userId: users.id, fullName: users.fullName })
+      .from(memberships)
+      .innerJoin(users, and(eq(users.id, memberships.userId), eq(users.isActive, true)))
+      .where(and(eq(memberships.companyId, c.company.id), sql`${users.id} <> ${c.user.id}`))
+      .orderBy(users.fullName)
+      .limit(500),
+  })));
+
   app.post('/api/approval-delegations', tenantRoute(app, { ...gate, operation: 'create' }, async (c) => {
     const input = createSchema.parse(c.req.body);
     const starts = new Date(input.startsAt), ends = new Date(input.endsAt);

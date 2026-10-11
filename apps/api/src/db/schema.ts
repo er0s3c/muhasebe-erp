@@ -668,6 +668,9 @@ export const approvalRules = pgTable(
     maxAmount: money(),
     /** true: belgeyi gönderen kendi belgesini onaylayamaz. */
     separateRequester: boolean().notNull().default(true),
+    /** Adım başına karar süresi (saat) ve süre dolunca karar verebilecek ek rol (öneri 99). */
+    dueHours: integer(),
+    escalateRole: text(),
     isActive: boolean().notNull().default(true),
     createdAt: createdAt(),
   },
@@ -680,6 +683,7 @@ export const approvalRules = pgTable(
     }),
     check('approval_rules_doc_type_ck', sql`${t.docType} in ('progress_payment','employer_claim','purchase_request','variation_order','invoice','sales_quote','payment','expense')`),
     check('approval_rules_range_ck', sql`${t.minAmount} >= 0 and (${t.maxAmount} is null or ${t.maxAmount} > ${t.minAmount})`),
+    check('approval_rules_due_ck', sql`(${t.dueHours} is null or ${t.dueHours} between 1 and 720) and (${t.escalateRole} is null or ${t.dueHours} is not null)`),
   ],
 );
 
@@ -730,6 +734,9 @@ export const approvalRequests = pgTable(
     /** pending | approved | rejected | cancelled */
     status: text().notNull().default('pending'),
     separateRequester: boolean().notNull().default(true),
+    /** Talep gönderildiği andaki kuraldan kopyalanır (sonradan kural değişse de bu talebin süresi değişmez). */
+    dueHours: integer(),
+    escalateRole: text(),
     requestedBy: uuid()
       .notNull()
       .references(() => users.id),
@@ -745,6 +752,7 @@ export const approvalRequests = pgTable(
       .where(sql`${t.status} = 'pending'`),
     index('approval_requests_status_idx').on(t.companyId, t.status),
     check('approval_requests_status_ck', sql`${t.status} in ('pending','approved','rejected','cancelled')`),
+    check('approval_requests_due_ck', sql`(${t.dueHours} is null or ${t.dueHours} between 1 and 720) and (${t.escalateRole} is null or ${t.dueHours} is not null)`),
   ],
 );
 

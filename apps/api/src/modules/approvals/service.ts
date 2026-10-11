@@ -98,6 +98,9 @@ async function assertApprovers(tx: Tx, companyId: string, input: CreateApprovalR
         (!isGeneralApprovalType(input.docType) && hasPermission(p, manage)))
     );
   };
+  if (input.escalateRole && !canDecide(input.escalateRole)) {
+    throw unprocessable('Yönlendirme rolü bu belge türünü onaylama iznine sahip değil', 'APPROVER_INVALID', { step: 'escalation' });
+  }
   for (const [i, s] of input.steps.entries()) {
     if (s.role && !canDecide(s.role)) {
       throw unprocessable(
@@ -150,6 +153,8 @@ export async function createRule(tx: Tx, companyId: string, input: CreateApprova
       minAmount: input.minAmount,
       maxAmount: input.maxAmount ?? null,
       separateRequester: input.separateRequester,
+      dueHours: input.dueHours ?? null,
+      escalateRole: input.escalateRole ?? null,
     })
     .returning();
   await tx.insert(approvalRuleSteps).values(
@@ -215,6 +220,8 @@ export async function resolveRule(
     return {
       ruleId: null,
       separateRequester: isGeneralApprovalType(docType),
+      dueHours: null,
+      escalateRole: null,
       steps: [{ approverRole: null, approverUserId: null, label: 'Onay' }] as StepSpec[],
     };
   }
@@ -226,6 +233,8 @@ export async function resolveRule(
   return {
     ruleId: rule.id,
     separateRequester: rule.separateRequester,
+    dueHours: rule.dueHours,
+    escalateRole: rule.escalateRole,
     steps: steps.map((s) => ({
       approverRole: s.approverRole,
       approverUserId: s.approverUserId,
@@ -275,6 +284,8 @@ export async function requestApproval(
       payloadHash: input.payloadHash ?? null,
       documentSnapshot: input.documentSnapshot ?? null,
       separateRequester: resolved.separateRequester,
+      dueHours: resolved.dueHours,
+      escalateRole: resolved.escalateRole,
       requestedBy: ctx.userId,
     })
     .returning();
@@ -297,7 +308,27 @@ export async function getRequest(tx: Tx, id: string) {
     .from(approvalSteps)
     .where(eq(approvalSteps.requestId, id))
     .orderBy(asc(approvalSteps.stepNo));
-  return { ...request, steps };
+  const due = currentStepDue({ ...request, steps });
+  return { ...request, steps, dueAt: due?.toISOString() ?? null, overdue: !!due && due.getTime() <= Date.now() };
+}
+
+/**
+ * Geçerli adımın karar süresi (öneri 99): önceki adımın karar anından, ilk adımda gönderimden itibaren `dueHours` saat.
+ * Süresiz kuralda ve sonuçlanmış talepte null.
+ */
+export function currentStepDue(request: Pick<typeof approvalRequests.$inferSelect, 'status' | 'dueHours' | 'requestedAt'> & { steps: (typeof approvalSteps.$inferSelect)[] }): Date | null {
+  if (request.status !== 'pending' || !request.dueHours) return null;
+  const decided = request.steps.filter((s) => s.decidedAt).map((s) => s.decidedAt!.getTime());
+  const from = decided.length ? Math.max(...decided) : request.requestedAt.getTime();
+  return new Date(from + request.dueHours * 3_600_000);
+}
+
+/** Adım kendisine atanmış olan ya da süre dolduğunda yönlendirme rolüyle karar verebilen üye. */
+function canActOnStep(request: ApprovalRequestWithSteps, step: StepSpec, ctx: ApprovalCtx): boolean {
+  if (stepMatches(step, ctx, request.docType)) return true;
+  const due = currentStepDue(request);
+  return !!request.escalateRole && !!due && due.getTime() <= Date.now() && request.escalateRole === ctx.role &&
+    hasPermission(ctx.permissions, approvePermission(request.docType));
 }
 
 export async function requestsForDoc(tx: Tx, docType: ApprovalDocType, docId: string) {
@@ -325,7 +356,7 @@ export function canDecideRequest(request: ApprovalRequestWithSteps, ctx: Approva
   const current = request.steps.find((step) => step.status === 'pending');
   if (request.status !== 'pending' || !current || !hasPermission(ctx.permissions, approvalReadPermission(request.docType))) return false;
   if (request.separateRequester && request.requestedBy === ctx.userId) return false;
-  return stepMatches(current, ctx, request.docType) || !!delegationFor(request, current, ctx, delegations);
+  return canActOnStep(request, current, ctx) || !!delegationFor(request, current, ctx, delegations);
 }
 
 // --- Vekâlet (öneri 98) --------------------------------------------------------------
@@ -375,7 +406,7 @@ export function delegationFor(request: ApprovalRequestWithSteps, step: StepSpec,
     d.docTypes.includes(request.docType) &&
     (d.maxAmount === null || Number(request.amount) <= Number(d.maxAmount)) &&
     !(request.separateRequester && request.requestedBy === d.delegatorId) &&
-    stepMatches(step, { ...ctx, userId: d.delegatorId, role: d.delegatorRole, permissions: d.delegatorPermissions }, request.docType),
+    canActOnStep(request, step, { ...ctx, userId: d.delegatorId, role: d.delegatorRole, permissions: d.delegatorPermissions }),
   ) ?? null;
 }
 
@@ -392,7 +423,7 @@ export async function pendingForMe(tx: Tx, ctx: ApprovalCtx) {
     const req = await getRequest(tx, id);
     const current = req.steps.find((s) => s.status === 'pending');
     if (!current || (req.separateRequester && req.requestedBy === ctx.userId)) continue;
-    if (stepMatches(current, ctx, req.docType)) { out.push(req); continue; }
+    if (canActOnStep(req, current, ctx)) { out.push(req); continue; }
     const delegation = hasPermission(ctx.permissions, approvalReadPermission(req.docType)) ? delegationFor(req, current, ctx, delegations) : null;
     if (delegation) out.push({ ...req, onBehalfOf: { userId: delegation.delegatorId, name: delegation.delegatorName } });
   }
@@ -431,7 +462,7 @@ export async function decide(
   }
   // Kendi adına onaylayamıyorsa geçerli bir vekâletle asıl onaylayıcı adına karar verir (karar anında yeniden denetlenir)
   let delegation: ActiveDelegation | null = null;
-  if (!stepMatches(current, ctx, req.docType)) {
+  if (!canActOnStep(req, current, ctx)) {
     if (hasPermission(ctx.permissions, approvalReadPermission(req.docType))) delegation = delegationFor(req, current, ctx, await activeDelegations(tx, ctx));
     if (!delegation) throw forbidden('Bu adımı onaylama yetkiniz yok');
   }

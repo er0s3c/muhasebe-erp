@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
+import { fmtDateTime } from '../../lib/license';
 import { formatDateTR, moneyIn } from '../../lib/format';
 import { useCan, useCanOperation, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany, useSession } from '../../lib/session';
@@ -33,6 +35,12 @@ export interface DocumentApproval {
   requestedAt: string;
   canDecide?: boolean;
   documentSnapshot: Record<string, unknown> | null;
+  /** Geçerli adımın karar süresi (öneri 99) ve süresinin geçip geçmediği. */
+  dueAt?: string | null;
+  overdue?: boolean;
+  escalateRole?: string | null;
+  /** Gelen kutusunda vekâletle gelen talep: asıl onaylayıcı (öneri 98). */
+  onBehalfOf?: { userId: string; name: string };
   steps: {
     id: string;
     stepNo: number;
@@ -40,6 +48,7 @@ export interface DocumentApproval {
     approverRole: string | null;
     status: string;
     note: string | null;
+    onBehalfOf?: string | null;
   }[];
 }
 export interface FinancialDraft {
@@ -125,16 +134,18 @@ export function ApprovalRequestCard({
     });
   };
   const pending = request.status === 'pending',
+    // Vekâletle gelen talepte karar hakkı vekâletten gelir; sunucu karar anında yeniden denetler
     mayDecide =
       pending &&
-      canUpdate &&
       request.requestedBy !== user?.id &&
       (request.canDecide ?? allowDecision) &&
-      can(
-        request.docType === 'invoice' || request.docType === 'sales_quote'
-          ? 'invoices.post'
-          : 'treasury.post',
-      );
+      (!!request.onBehalfOf ||
+        (canUpdate &&
+          can(
+            request.docType === 'invoice' || request.docType === 'sales_quote'
+              ? 'invoices.post'
+              : 'treasury.post',
+          )));
   const mayCancel =
     pending &&
     canUpdate &&
@@ -181,6 +192,17 @@ export function ApprovalRequestCard({
           </>
         )}
       </p>
+      {(request.onBehalfOf || (pending && request.dueAt)) && (
+        <p className="flex flex-wrap items-center gap-2 text-xs">
+          {request.onBehalfOf && <Badge tone="info">{request.onBehalfOf.name} adına (vekâlet)</Badge>}
+          {pending && request.dueAt && (
+            <span className={request.overdue ? 'text-danger' : 'text-muted'}>
+              {request.overdue ? 'Karar süresi geçti' : 'Karar süresi'}: {fmtDateTime(request.dueAt)}
+              {request.overdue && request.escalateRole && ' · yönlendirme rolü de karar verebilir'}
+            </span>
+          )}
+        </p>
+      )}
       <ol className="space-y-1 text-sm">
         {request.steps.map((step) => (
           <li key={step.id}>
@@ -190,6 +212,7 @@ export function ApprovalRequestCard({
               : step.status === 'approved'
                 ? 'Onaylandı'
                 : 'Reddedildi'}
+            {step.onBehalfOf && step.status !== 'pending' && <span className="text-xs text-muted"> · vekâletle</span>}
             {step.note && <p className="mt-1 break-words text-muted">{step.note}</p>}
           </li>
         ))}
