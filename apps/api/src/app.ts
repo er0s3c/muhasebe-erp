@@ -69,6 +69,7 @@ import { consolidationRoutes } from './modules/consolidation/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { yearEndRoutes } from './modules/yearend/routes';
 import { partyRoutes } from './modules/parties/routes';
+import { partyBankAccountRoutes } from './modules/parties/bank-accounts';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
 import { fetchProviderXml } from './modules/settings/fx-providers';
 import { settingsRoutes } from './modules/settings/routes';
@@ -282,6 +283,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(ledgerRoutes);
   await app.register(yearEndRoutes);
   await app.register(partyRoutes);
+  await app.register(partyBankAccountRoutes);
   await app.register(inventoryRoutes);
   await app.register(invoiceRoutes);
   await app.register(platformIntegrationRoutes);

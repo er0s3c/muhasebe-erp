@@ -7,6 +7,7 @@ export * from './offline-drafts';
 export * from './password';
 export * from './invoice-calc';
 export * from './units';
+export * from './iban';
 export * from './treasury-calc';
 export * from './project-cost';
 export * from './progress-calc';

@@ -12,6 +12,7 @@ import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { RelatedRecords } from '../../components/layout/RelatedRecords';
+import { PartyBankAccounts } from './PartyBankAccounts';
 import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
@@ -202,6 +203,7 @@ export function PartyDetailPage() {
         </Card>
       )}
       {tab === 'card' && party.kind !== 'employee' && <PartyPricingCard partyId={party.id} kind={party.kind} />}
+      {tab === 'card' && party.kind !== 'employee' && <PartyBankAccounts partyId={party.id} />}
       {tab === 'card' && party.kind !== 'employee' && <div className="mt-5"><RelatedContacts partyId={party.id} /></div>}
 
       <PartyFormSheet open={editing} onOpenChange={setEditing} party={party} onSaved={() => undefined} />

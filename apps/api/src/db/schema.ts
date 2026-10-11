@@ -6067,6 +6067,49 @@ export const savedViews = pgTable(
 );
 
 /**
+ * Cari banka hesabı ve değişiklik kontrolü (öneri 53). IBAN uygulama düzeyinde şifrelenir; aynı IBAN'ın başka caride
+ * kullanımını yakalamak için şirket içi HMAC tutulur. Yeni ya da değişen hesap "pending" başlar; talep edenden farklı,
+ * kasa/banka yönetim yetkili bir kullanıcı bağımsız teyitle doğrulamadan ödeme için kullanılabilir sayılmaz.
+ */
+export const partyBankAccounts = pgTable(
+  'party_bank_accounts',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    partyId: uuid().notNull(),
+    ibanEnc: text().notNull(),
+    ibanLast4: text().notNull(),
+    ibanHash: text().notNull(),
+    bankName: text(),
+    holderName: text().notNull(),
+    status: text().$type<'pending' | 'verified' | 'rejected' | 'revoked'>().notNull().default('pending'),
+    requestedBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    requestedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    requestNote: text(),
+    decidedBy: uuid().references(() => users.id),
+    decidedAt: timestamp({ withTimezone: true }),
+    verificationMethod: text().$type<'phone_callback' | 'signed_document' | 'bank_letter' | 'other'>(),
+    decisionNote: text(),
+    revokedBy: uuid().references(() => users.id),
+    revokedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({ name: 'party_bank_accounts_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    index('party_bank_accounts_party_idx').on(t.companyId, t.partyId),
+    uniqueIndex('party_bank_accounts_live_uq').on(t.companyId, t.partyId, t.ibanHash).where(sql`${t.status} in ('pending','verified')`),
+    check('party_bank_accounts_status_ck', sql`${t.status} in ('pending','verified','rejected','revoked')`),
+    check('party_bank_accounts_four_eyes_ck', sql`${t.decidedBy} is null or ${t.decidedBy} <> ${t.requestedBy}`),
+    check('party_bank_accounts_decision_ck', sql`(${t.status} = 'pending') = (${t.decidedAt} is null)`),
+    check('party_bank_accounts_verified_ck', sql`${t.status} not in ('verified','revoked') or (${t.verificationMethod} is not null and char_length(${t.decisionNote}) >= 3)`),
+    check('party_bank_accounts_holder_ck', sql`char_length(${t.holderName}) between 2 and 140`),
+  ],
+);
+
+/**
  * Kalıcı e-posta outbox'ı (öneri 7 ve 111): ileti iş kaydıyla aynı işlemde yazılır, gönderici kira alarak gönderir
  * (bkz. modules/outbox/contract). Sunucu yeniden başlasa da ileti kaybolmaz; deneme ve sonuç aynı kayıtta görünür.
  * `document`, gönderilen belgenin o anki sürümünü (içerik özeti) taşır. Hesap e-postaları (parola sıfırlama, doğrulama)

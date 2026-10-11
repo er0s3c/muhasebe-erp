@@ -518,5 +518,9 @@
   "0129_approval_due": {
     "sha256": "268d75bdf77a8faa31ac3956d0b11020166f75edb8a5340bc0a6f12df6a54119",
     "when": 1791723042730
+  },
+  "0130_party_bank_accounts": {
+    "sha256": "1d9eb12f9ca17d5e35821ff462d8802a68bf100997a0ed375710604a726341f8",
+    "when": 1791723745961
   }
 }

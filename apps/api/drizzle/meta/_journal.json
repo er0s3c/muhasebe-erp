@@ -911,6 +911,13 @@
       "when": 1791723042730,
       "tag": "0129_approval_due",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1791723745961,
+      "tag": "0130_party_bank_accounts",
+      "breakpoints": true
     }
   ]
 }
