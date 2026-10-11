@@ -5,7 +5,7 @@ import { tenantRoute, type TenantCtx } from '../../http/context';
 import { forbidden, notFound, unprocessable } from '../../http/errors';
 import { requireResourceOperation } from '../access/effective';
 import { requireDocumentAccess } from './document-access';
-import { GENERAL_APPROVAL_TYPES, isGeneralApprovalType } from './document-policy';
+import { GENERAL_APPROVAL_TYPES, approvalPermission, isGeneralApprovalType } from './document-policy';
 import {
   approvalContext,
   generalRequest,
@@ -18,6 +18,7 @@ import {
 } from './financial-service';
 import {
   cancelRequest,
+  activeDelegations,
   canDecideRequest,
   createRule,
   decide,
@@ -123,9 +124,10 @@ export const documentApprovalRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, { permission: 'workspace.use' }, async (c) => {
       const { type, id } = sourceParams.parse(c.req.params);
       requireDocumentAccess(c, type, 'read');
+      const delegations = await activeDelegations(c.tx, approvalContext(c));
       const requests = (await requestsForDoc(c.tx, type, id)).map((request) => ({
         ...request,
-        canDecide: canDecideRequest(request, approvalContext(c)),
+        canDecide: canDecideRequest(request, approvalContext(c), delegations),
       }));
       return { requests };
     }),
@@ -149,11 +151,9 @@ export const documentApprovalRoutes: FastifyPluginAsync = async (app) => {
     '/api/document-approvals/:id/decide',
     tenantRoute(app, { permission: 'workspace.use' }, async (c) => {
       const request = await generalRequest(c, idParam.parse(c.req.params).id);
-      requireDocumentAccess(
-        c,
-        request.docType as (typeof GENERAL_APPROVAL_TYPES)[number],
-        'approve',
-      );
+      const type = request.docType as (typeof GENERAL_APPROVAL_TYPES)[number];
+      // Kendi onay izni olmayan üye yalnız belgeyi görebiliyorsa ilerler: karar hakkını geçerli bir vekâlet verir (servis denetler)
+      requireDocumentAccess(c, type, c.can(approvalPermission(type)) ? 'approve' : 'read');
       return {
         request: await decide(
           c.tx,

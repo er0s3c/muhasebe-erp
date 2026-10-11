@@ -87,6 +87,7 @@ import { tenancyRoutes } from './modules/tenancy/routes';
 import { branchRoutes } from './modules/tenancy/branches';
 import { offlineDraftRoutes } from './modules/workspace/offline-drafts';
 import { documentApprovalRoutes } from './modules/approvals/document-routes';
+import { approvalDelegationRoutes } from './modules/approvals/delegation-routes';
 import { posRoutes } from './modules/pos/routes';
 import { manufacturingIntegrationRoutes } from './modules/manufacturing/integrations';
 import { manufacturingRoutes } from './modules/manufacturing/routes';
@@ -267,6 +268,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(branchRoutes);
   await app.register(offlineDraftRoutes);
   await app.register(documentApprovalRoutes);
+  await app.register(approvalDelegationRoutes);
   await app.register(memberRoutes);
   await app.register(accessRoutes);
   await app.register(settingsRoutes);

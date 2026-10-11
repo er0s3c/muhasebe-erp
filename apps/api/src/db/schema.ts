@@ -795,6 +795,9 @@ export const approvalSteps = pgTable(
     decidedBy: uuid().references(() => users.id),
     decidedAt: timestamp({ withTimezone: true }),
     note: text(),
+    /** Karar vekâletle verildiyse asıl onaylayıcı ve kullanılan vekâlet (öneri 98). */
+    onBehalfOf: uuid().references(() => users.id),
+    delegationId: uuid(),
   },
   (t) => [
     unique('approval_steps_uq').on(t.requestId, t.stepNo),
@@ -805,6 +808,47 @@ export const approvalSteps = pgTable(
     }),
     check('approval_steps_status_ck', sql`${t.status} in ('pending','approved','rejected')`),
     check('approval_steps_approver_ck', sql`not (${t.approverRole} is not null and ${t.approverUserId} is not null)`),
+  ],
+);
+
+/**
+ * Süre ve kapsam sınırlı onay vekâleti (öneri 98): vekil, belirtilen belge türlerinde ve tutar sınırında, süre içinde asıl
+ * onaylayıcının adına karar verir. Süre dolunca ya da geri alınınca hak kendiliğinden biter; karar adımda "adına" olarak kalır.
+ */
+export const approvalDelegations = pgTable(
+  'approval_delegations',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    delegatorUserId: uuid()
+      .notNull()
+      .references(() => users.id),
+    delegateUserId: uuid()
+      .notNull()
+      .references(() => users.id),
+    docTypes: text().array().notNull(),
+    /** Defter para biriminde üst sınır (dahil); null = sınırsız. */
+    maxAmount: money(),
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    endsAt: timestamp({ withTimezone: true }).notNull(),
+    reason: text().notNull(),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    revokedAt: timestamp({ withTimezone: true }),
+    revokedBy: uuid().references(() => users.id),
+  },
+  (t) => [
+    unique('approval_delegations_id_company_uq').on(t.id, t.companyId),
+    index('approval_delegations_delegate_idx').on(t.companyId, t.delegateUserId, t.endsAt),
+    check('approval_delegations_self_ck', sql`${t.delegatorUserId} <> ${t.delegateUserId}`),
+    check('approval_delegations_window_ck', sql`${t.endsAt} > ${t.startsAt} and ${t.endsAt} <= ${t.startsAt} + interval '90 days'`),
+    check('approval_delegations_types_ck', sql`cardinality(${t.docTypes}) between 1 and 8 and ${t.docTypes} <@ array['progress_payment','employer_claim','purchase_request','variation_order','invoice','sales_quote','payment','expense']::text[]`),
+    check('approval_delegations_amount_ck', sql`${t.maxAmount} is null or ${t.maxAmount} > 0`),
+    check('approval_delegations_reason_ck', sql`char_length(${t.reason}) between 3 and 300`),
   ],
 );
 

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm';
 import {
   hasPermission,
   roleDefaultPermissions,
@@ -10,6 +10,7 @@ import {
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import {
+  approvalDelegations,
   approvalRequests,
   approvalRuleSteps,
   approvalRules,
@@ -320,34 +321,80 @@ function stepMatches(step: StepSpec, ctx: ApprovalCtx, docType: string): boolean
   return hasPermission(ctx.permissions, approvePermission(docType));
 }
 
-export function canDecideRequest(request: ApprovalRequestWithSteps, ctx: ApprovalCtx): boolean {
+export function canDecideRequest(request: ApprovalRequestWithSteps, ctx: ApprovalCtx, delegations: readonly ActiveDelegation[] = []): boolean {
   const current = request.steps.find((step) => step.status === 'pending');
-  return (
-    request.status === 'pending' &&
-    !!current &&
-    stepMatches(current, ctx, request.docType) &&
-    hasPermission(ctx.permissions, approvalReadPermission(request.docType)) &&
-    !(request.separateRequester && request.requestedBy === ctx.userId)
-  );
+  if (request.status !== 'pending' || !current || !hasPermission(ctx.permissions, approvalReadPermission(request.docType))) return false;
+  if (request.separateRequester && request.requestedBy === ctx.userId) return false;
+  return stepMatches(current, ctx, request.docType) || !!delegationFor(request, current, ctx, delegations);
 }
 
-/** Bekleyen taleplerden sıradaki adımı bu kullanıcı için olanlar. */
+// --- Vekâlet (öneri 98) --------------------------------------------------------------
+
+/** Kullanıcıya şu an geçerli olan vekâlet: asıl onaylayıcının GÜNCEL rolü ve izinleriyle (yetkisini kaybeden vekâlet veremez). */
+export interface ActiveDelegation {
+  id: string;
+  delegatorId: string;
+  delegatorName: string;
+  delegatorRole: Role;
+  delegatorPermissions: PermissionSet;
+  docTypes: readonly string[];
+  maxAmount: string | null;
+}
+
+/** Süresi içinde, geri alınmamış ve asıl onaylayıcısı hâlâ etkin üye olan vekâletler. */
+export async function activeDelegations(tx: Tx, ctx: Pick<ApprovalCtx, 'companyId' | 'userId'>): Promise<ActiveDelegation[]> {
+  const now = new Date();
+  const rows = await tx
+    .select({
+      id: approvalDelegations.id, delegatorId: approvalDelegations.delegatorUserId, delegatorName: users.fullName, role: memberships.role,
+      docTypes: approvalDelegations.docTypes, maxAmount: approvalDelegations.maxAmount,
+    })
+    .from(approvalDelegations)
+    .innerJoin(memberships, and(eq(memberships.companyId, approvalDelegations.companyId), eq(memberships.userId, approvalDelegations.delegatorUserId)))
+    .innerJoin(users, and(eq(users.id, approvalDelegations.delegatorUserId), eq(users.isActive, true)))
+    .where(and(
+      eq(approvalDelegations.delegateUserId, ctx.userId),
+      isNull(approvalDelegations.revokedAt),
+      lte(approvalDelegations.startsAt, now),
+      gte(approvalDelegations.endsAt, now),
+    ));
+  const out: ActiveDelegation[] = [];
+  for (const row of rows) {
+    const access = await loadMemberAccess(tx, ctx.companyId, row.delegatorId, row.role as Role);
+    out.push({ id: row.id, delegatorId: row.delegatorId, delegatorName: row.delegatorName, delegatorRole: row.role as Role, delegatorPermissions: access.permissions, docTypes: row.docTypes, maxAmount: row.maxAmount });
+  }
+  return out;
+}
+
+/**
+ * Bu adımda kullanılabilecek vekâlet: belge türü ve tutar kapsamda, asıl onaylayıcı adımı kendisi onaylayabilir ve talebi
+ * kendisi göndermemiş olmalı. Vekil belgeyi görme iznine zaten sahip olmalıdır (kontrol çağıranda).
+ */
+export function delegationFor(request: ApprovalRequestWithSteps, step: StepSpec, ctx: ApprovalCtx, delegations: readonly ActiveDelegation[]): ActiveDelegation | null {
+  return delegations.find((d) =>
+    d.docTypes.includes(request.docType) &&
+    (d.maxAmount === null || Number(request.amount) <= Number(d.maxAmount)) &&
+    !(request.separateRequester && request.requestedBy === d.delegatorId) &&
+    stepMatches(step, { ...ctx, userId: d.delegatorId, role: d.delegatorRole, permissions: d.delegatorPermissions }, request.docType),
+  ) ?? null;
+}
+
+/** Bekleyen taleplerden sıradaki adımı bu kullanıcı için olanlar; vekâletle gelenler `onBehalfOf` taşır. */
 export async function pendingForMe(tx: Tx, ctx: ApprovalCtx) {
   const pending = await tx
     .select({ id: approvalRequests.id })
     .from(approvalRequests)
     .where(eq(approvalRequests.status, 'pending'))
     .orderBy(asc(approvalRequests.requestedAt));
-  const out = [];
+  const delegations = await activeDelegations(tx, ctx);
+  const out: (ApprovalRequestWithSteps & { onBehalfOf?: { userId: string; name: string } })[] = [];
   for (const { id } of pending) {
     const req = await getRequest(tx, id);
     const current = req.steps.find((s) => s.status === 'pending');
-    if (
-      current &&
-      stepMatches(current, ctx, req.docType) &&
-      !(req.separateRequester && req.requestedBy === ctx.userId)
-    )
-      out.push(req);
+    if (!current || (req.separateRequester && req.requestedBy === ctx.userId)) continue;
+    if (stepMatches(current, ctx, req.docType)) { out.push(req); continue; }
+    const delegation = hasPermission(ctx.permissions, approvalReadPermission(req.docType)) ? delegationFor(req, current, ctx, delegations) : null;
+    if (delegation) out.push({ ...req, onBehalfOf: { userId: delegation.delegatorId, name: delegation.delegatorName } });
   }
   return out;
 }
@@ -379,11 +426,21 @@ export async function decide(
     throw unprocessable('Bu talep zaten sonuçlanmış', 'APPROVAL_NOT_PENDING');
   const current = req.steps.find((s) => s.status === 'pending');
   if (!current) throw unprocessable('Bekleyen adım yok', 'APPROVAL_NOT_PENDING');
-  if (!stepMatches(current, ctx, req.docType)) throw forbidden('Bu adımı onaylama yetkiniz yok');
   if (req.separateRequester && req.requestedBy === ctx.userId) {
     throw unprocessable('Kendi gönderdiğiniz belgeyi onaylayamazsınız', 'APPROVAL_SELF_DECISION');
   }
-  await handlers.get(req.docType as ApprovalDocType)?.beforeDecision?.(tx, ctx, req, input);
+  // Kendi adına onaylayamıyorsa geçerli bir vekâletle asıl onaylayıcı adına karar verir (karar anında yeniden denetlenir)
+  let delegation: ActiveDelegation | null = null;
+  if (!stepMatches(current, ctx, req.docType)) {
+    if (hasPermission(ctx.permissions, approvalReadPermission(req.docType))) delegation = delegationFor(req, current, ctx, await activeDelegations(tx, ctx));
+    if (!delegation) throw forbidden('Bu adımı onaylama yetkiniz yok');
+  }
+  // Belge işleyicileri (canlı yetki/şube denetimi, nihai kayıt) asıl onaylayıcının güncel yetkisiyle çalışır; gerçek karar veren
+  // adımda decided_by, adına karar verilen on_behalf_of olarak kalır.
+  const effective: ApprovalCtx = delegation
+    ? { ...ctx, userId: delegation.delegatorId, role: delegation.delegatorRole, permissions: delegation.delegatorPermissions }
+    : ctx;
+  await handlers.get(req.docType as ApprovalDocType)?.beforeDecision?.(tx, effective, req, input);
   const approve = input.decision === 'approve';
   await tx
     .update(approvalSteps)
@@ -392,6 +449,8 @@ export async function decide(
       decidedBy: ctx.userId,
       decidedAt: new Date(),
       note: input.note ?? null,
+      onBehalfOf: delegation?.delegatorId ?? null,
+      delegationId: delegation?.id ?? null,
     })
     .where(eq(approvalSteps.id, current.id));
 
@@ -405,7 +464,7 @@ export async function decide(
       .set({ status: outcome, completedAt: new Date() })
       .where(eq(approvalRequests.id, requestId));
     const resolved = await getRequest(tx, requestId);
-    await handlers.get(req.docType as ApprovalDocType)?.onResolved(tx, ctx, resolved, outcome);
+    await handlers.get(req.docType as ApprovalDocType)?.onResolved(tx, effective, resolved, outcome);
   }
   return getRequest(tx, requestId);
 }
