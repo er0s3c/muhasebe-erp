@@ -19,7 +19,7 @@ import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCompanyApi, useCQuery, useIdempotencyKey } from '../../lib/queries';
 import type { AccountMapping, PriceResolution, DeliveryNoteDetail, InvoiceableOrderLine, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
-import { useUnitLabel, useWarehouses } from '../inventory/common';
+import { QuantityHint, quantityHintId, useUnitLabel, useWarehouses } from '../inventory/common';
 import { SerialEntry } from '../inventory/SerialEntry';
 import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../projects/common';
 import { INVOICE_INVALIDATE, useLineAccountOptions, usePartyOptions, useTaxRates, vatRateFor } from './common';
@@ -649,7 +649,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         onChange={(v) => pickItem(l.key, v)}
                       />
                       <Input className="col-span-2 lg:col-span-1" value={l.description} maxLength={300} aria-label={`${t('common.description')} ${i + 1}`} placeholder={t('common.description')} onChange={(e) => patch(l.key, { description: e.target.value })} />
-                      <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.quantity')} ${i + 1}`} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
+                      <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.quantity')} ${i + 1}`} aria-describedby={quantityHintId(`inv-${l.key}`, l.quantity, l.unit)} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
                       <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('invoices.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => { bumpSuggest(l.key); patch(l.key, { unitPrice: v, priceNote: '' }); }} />
                       <MoneyInput value={l.discountPct} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.discount')} ${i + 1}`} placeholder="%" className="text-right" onChange={(v) => patch(l.key, { discountPct: v })} />
                       <Select disabled={!!l.taxRuleId || !!l.sourceLineId} className="px-2 pr-6" value={l.vatCode} aria-label={`${t('invoices.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
@@ -672,6 +672,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         <X className="size-4" />
                       </button>
                     </div>
+                    <QuantityHint id={`quantity-hint-inv-${l.key}`} quantity={l.quantity} unit={l.unit} />
                     {(taxRules.length > 0 || l.taxRuleId) && <div className="mt-2 grid gap-2 rounded-lg bg-surface-2 p-3 sm:grid-cols-2">
                       <Field label={`İşlem vergisi kuralı ${i + 1}`} className="sm:col-span-2">{id => <Select id={id} value={l.taxRuleId ?? ''} disabled={!!l.sourceLineId} onChange={e => {
                         const rule = taxRules.find(candidate => candidate.id === e.target.value);

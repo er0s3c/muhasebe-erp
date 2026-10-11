@@ -61,7 +61,11 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
   await page.getByRole('button', { name: 'Yeni satış faturası' }).first().click();
   await pick('Müşteri', 'Ömer');
   await pick('Kart / hizmet 1', 'boya');
+  // Kesirli adet birimle tutarsızdır: satır altında açıklanır, kaydı engellemez (öneri 31)
+  await page.getByLabel('Miktar 1').fill('2,5');
+  await expect(page.getByTestId('quantity-hint')).toContainText('adet tam sayı olarak girilir');
   await page.getByLabel('Miktar 1').fill('4');
+  await expect(page.getByTestId('quantity-hint')).toHaveCount(0);
   await page.getByLabel('Birim fiyat 1').fill('100');
   await expect(page.getByTestId('gross-total')).toHaveText('₺464,00');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
