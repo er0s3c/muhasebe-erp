@@ -238,13 +238,13 @@ Tamamlanma ölçütü: Tekrarlı gönderim aynı iş kaydını çoğaltmıyor; d
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 3 | Uçtan uca işlem geçmişi | İlk kapsam | Genişletilecek | `workspace/records.ts` kayıt erişimi ve bağlantı görünürlüğü; satın alma/satış temel bağlantıları | Bekliyor |
-| 4 | Cari, ürün ve proje ortak kayıt görünümü | İlk kapsam | Genişletilecek | `workspace/records.ts`; kayıt detay sayfaları | Bekliyor |
-| 6 | Önizlemeli toplu işlemler | İlk kapsam | Genişletilecek | `sales/batch.ts` önizlemeli toplu fatura | Bekliyor |
-| 7 | Belge gönderimi ve gönderim geçmişi | İlk kapsam | Genişletilecek | `mail/` (mailer, şablonlar, bellek içi kuyruk); PDF şablonları ve arşiv | Bekliyor |
-| 98 | Süre/kapsam sınırlı onay vekâleti | İlk kapsam | Yeni | Yok; `approvals` modülü onay akışı | Bekliyor |
-| 99 | Onay süreleri ve yönlendirme | İlk kapsam | Genişletilecek | `approvals` modülü | Bekliyor |
-| 111 | Ortak outbox sözleşmesi | İlk kapsam | Genişletilecek | `manufacturing/channels.ts` outbox (0111/0112 migration'ları) | Bekliyor |
+| 3 | Uçtan uca işlem geçmişi | İlk kapsam | Genişletilecek | `workspace/records.ts` kayıt erişimi ve bağlantı görünürlüğü; satın alma/satış temel bağlantıları | İlk kapsam tamam: `GET /api/sales-chain` teklif → sipariş → irsaliye → fatura/iade → tahsilat yalnız kayıtlı bağlardan; yetkisiz aşama gizli; fatura, satış belgesi ve irsaliyede Belge zinciri |
+| 4 | Cari, ürün ve proje ortak kayıt görünümü | İlk kapsam | Genişletilecek | `workspace/records.ts`; kayıt detay sayfaları | İlk kapsam tamam: `GET /api/related` cari, ürün ve proje için modüller arası ilişkili kayıtlar; detay ekranlarında İlişkili kayıtlar sekmesi |
+| 6 | Önizlemeli toplu işlemler | İlk kapsam | Genişletilecek | `sales/batch.ts` önizlemeli toplu fatura | İlk kapsam tamam: genel önizlemeli toplu işlem çalıştırıcısı (savepoint; önizleme dener ve geri alır, numara harcanmaz) ve taslak faturaları toplu kaydetme |
+| 7 | Belge gönderimi ve gönderim geçmişi | İlk kapsam | Genişletilecek | `mail/` (mailer, şablonlar, bellek içi kuyruk); PDF şablonları ve arşiv | İlk kapsam tamam: satış faturası e-postayla kalıcı outbox'tan; belge sürümü, deneme ve sonuç geçmişi; teslim edilemeyen ileti yeniden denenir. PDF eki ve diğer belge türleri genişletmede |
+| 98 | Süre/kapsam sınırlı onay vekâleti | İlk kapsam | Yeni | Yok; `approvals` modülü onay akışı | İlk kapsam tamam: `approval_delegations` süre/tür/tutar sınırlı vekâlet; karar adımda "adına" kaydedilir; süresi dolan ya da geri alınan vekâlet hak vermez |
+| 99 | Onay süreleri ve yönlendirme | İlk kapsam | Genişletilecek | `approvals` modülü | İlk kapsam tamam: kuralda adım başına karar süresi ve gecikme yönlendirme rolü; onay kutusunda süre/gecikme gösterimi. Gecikme bildirimi genişletmede |
+| 111 | Ortak outbox sözleşmesi | İlk kapsam | Genişletilecek | `manufacturing/channels.ts` outbox (0111/0112 migration'ları) | İlk kapsam tamam: ortak outbox sözleşmesi (`modules/outbox/contract`: durum, kira, bekleme takvimi); webhook ve e-posta bu sözleşmede. Üretim stok kanalı outbox'ı genişletmede taşınacak |
 | 100 | Deneme modunda kullanıcı otomasyonları | Genişletme | Yeni | Kural motoru yok; yakın temel tekrarlayan taslaklar ve bildirim taraması | Bekliyor |
 
 ### F4 — Finans, ülke doğrulaması ve yönetim muhasebesi
@@ -267,11 +267,11 @@ Tamamlanma ölçütü: Fatura–cari–stok–yevmiye tutarlılığı ve geçmi�
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 9 | Muhasebe kapanış çalışma süreci | İlk kapsam | Genişletilecek | Dönem kilidi (`settings/periods.ts`), `yearend` modülü | Bekliyor |
-| 11 | Departman ve maliyet merkezi boyutu | İlk kapsam (alan) + Genişletme (rapor/dağıtım) | Yeni | Yok; departman bütçesi hesap/proje süzgeciyle çalışıyor (ENTERPRISE-EXPANSION) | Bekliyor |
-| 53 | Tedarikçi banka bilgisi değişiklik kontrolü | İlk kapsam | Yeni | Yok | Bekliyor |
-| 55 | Banka eşleştirmesinde çoktan bire ilişki | İlk kapsam | Genişletilecek | `bank-statements/matching.ts` birebir öneri puanlaması | Bekliyor |
-| 59 | Cari mutabakat mektubu ve cevap takibi | İlk kapsam | Genişletilecek | Cari açık kalemler (`parties/service.ts`) | Bekliyor |
+| 9 | Muhasebe kapanış çalışma süreci | İlk kapsam | Genişletilecek | Dönem kilidi (`settings/periods.ts`), `yearend` modülü | İlk kapsam tamam: dönem kapanış kontrol listesi (otomatik kontroller kaynağına bağlı) ve elle tamamlanan kapanış görevleri |
+| 11 | Departman ve maliyet merkezi boyutu | İlk kapsam (alan) + Genişletme (rapor/dağıtım) | Yeni | Yok; departman bütçesi hesap/proje süzgeciyle çalışıyor (ENTERPRISE-EXPANSION) | İlk kapsam (alan) tamam: `cost_centers`; yevmiye ve fatura satırında isteğe bağlı merkez, faturadan gelir/gider satırına taşınır. Bordro/gider taslağı alanı, raporlar ve dağıtım anahtarları genişletmede |
+| 53 | Tedarikçi banka bilgisi değişiklik kontrolü | İlk kapsam | Yeni | Yok | İlk kapsam tamam: cari banka hesabı (şifreli IBAN, mod-97), dört göz doğrulama ve teyit yöntemi, aynı IBAN başka caride uyarısı; tam IBAN yalnız doğrulanmış hesapta |
+| 55 | Banka eşleştirmesinde çoktan bire ilişki | İlk kapsam | Genişletilecek | `bank-statements/matching.ts` birebir öneri puanlaması | İlk kapsam tamam: bir ekstre satırı toplamı eşit birden çok defter satırıyla eşleşir (veritabanı denetler); iptal/ters kayıt korumaları grubu da görür. Otomatik grup önerisi genişletmede |
+| 59 | Cari mutabakat mektubu ve cevap takibi | İlk kapsam | Genişletilecek | Cari açık kalemler (`parties/service.ts`) | İlk kapsam tamam: tarihli bakiye görüntüsüyle mutabakat mektubu, isteğe bağlı e-posta, cevap ve fark takibi; gecikme işareti. Karşı tarafın çevrimiçi cevabı genişletmede |
 | 10 | Türkiye/KKTC doğrulanmış ülke kapsamı | Paralel dış hat | Dış erişim bekliyor | Ülke profili, tarihli vergi kuralları; mali pilot bekliyor (COUNTRY-IMPLEMENTATION) | Bekliyor |
 | 12 | Karar karşılaştırmalı nakit projeksiyonu | Genişletme | Genişletilecek | Sözleşme vadesi ve ödeme geçmişine dayalı projeksiyon | Bekliyor |
 | 54 | Toplu ödeme hazırlama | Genişletme | Yeni | Toplu ödeme/ödeme paketi ve banka dosyası yok; tekil ödeme ve çek/senet toplu tahsil var | Bekliyor |
@@ -541,6 +541,14 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 122 öneri, 14 faza (F0, F1, F2a, F2b, F3–F12) birer kez atanmıştır: F0 2, F1 9, F2a 4, F2b 10, F3 8, F4 14, F5 10, F6 11, F7 11, F8 11, F9 11, F10 7, F11 9, F12 5 = 122. Öneri numaraları önceki yanıtlardaki numaralarla aynıdır. Teknik ve mali ortak kabul koşulları, ana fazı farklı olan işlerde de uygulanır.
 
 ## Değişiklik kaydı
+
+**11 Ekim 2026 — Teslimat 4 (F3) ve F4 ilk teslimi**
+
+- F3 ilk kapsamı (3, 4, 6, 7, 98, 99, 111) ve F4 ilk kapsamı (9, 11, 53, 55, 59) `claude/t4-outbox` dalında; dal F2a dalının üzerine yığılı.
+- E-posta artık kalıcı outbox'tan gider (belge gönderimi, bildirim özeti, mutabakat mektubu); parola sıfırlama ve doğrulama iletileri bağlantı jetonu taşıdığı için saklanmaz, doğrudan gönderilir.
+- Belge zinciri kartı aynı belge numarasıyla ikinci bir bağlantı ekledi; bir E2E seçicisi tam adla daraltıldı.
+- Çoktan bire eşleştirme testi gerçek bir eksik yakaladı: ekstre satırının eşleşme kısıtı birebir bağ istiyordu; kısıt grup eşleşmesine izin verecek şekilde güncellendi (toplam ve en az iki satır kuralı tetikleyicide).
+- Açık işler: 100 (deneme modunda otomasyon), F4 genişletmeleri (10 paralel dış hat, 12, 54, 56–58, 60–62), maliyet merkezinin bordro/gider taslaklarına ve raporlara yayılması, üretim stok kanalı outbox'ının ortak sözleşmeye taşınması.
 
 **11 Ekim 2026 — Teslimat 2 ve 3 durumu**
 
