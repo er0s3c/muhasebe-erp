@@ -12,28 +12,39 @@ import type { EmployerSummary, ProjectDetail } from '../../lib/types';
 import { SubcontractFormSheet } from '../subcontracts/SubcontractFormSheet';
 import { ProgressList } from '../subcontracts/ProgressList';
 
-/** İşverene yapılan iş projesinde işveren sözleşmesi özeti: sözleşme, kümülatif hakediş, tahsilat ve kalan alacak. */
+/**
+ * İşverene yapılan iş projesinde işveren sözleşmesi özeti: sözleşme, kümülatif hakediş, tahsilat ve kalan alacak.
+ * Oluşturma formu her iki görünümde de aynı yerde bağlı kalır: kayıt sonrası sorgu yenilenip özet görünümüne geçildiğinde form
+ * kaldırılırsa kaydetmenin başarı geri çağrısı (sözleşmeye yönlendirme) çalışmaz.
+ */
 export function EmployerTab({ project }: { project: ProjectDetail }) {
+  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
+  return (
+    <>
+      <EmployerTabBody project={project} onCreate={() => setCreating(true)} />
+      <SubcontractFormSheet direction="receivable" open={creating} onOpenChange={setCreating} defaultProjectId={project.id} onSaved={(id) => navigate(`/subcontracts/${id}`)} />
+    </>
+  );
+}
+
+function EmployerTabBody({ project, onCreate }: { project: ProjectDetail; onCreate: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const canManage = useCan()('subcontracts.manage');
   const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ summary: EmployerSummary | null }>(['project', project.id, 'employer'], `/api/projects/${project.id}/employer-contract`);
-  const [creating, setCreating] = useState(false);
   if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending) return <PageLoading />;
   const s = data?.summary;
   if (!s) {
     return (
-      <>
-        <Card>
-          <EmptyState
-            title={t('subcontracts.employer.noContract')}
-            description={t('subcontracts.employer.noContractDesc')}
-            action={canManage ? <Button variant="primary" onClick={() => setCreating(true)}>{t('subcontracts.employer.add')}</Button> : undefined}
-          />
-        </Card>
-        <SubcontractFormSheet direction="receivable" open={creating} onOpenChange={setCreating} defaultProjectId={project.id} onSaved={(id) => navigate(`/subcontracts/${id}`)} />
-      </>
+      <Card>
+        <EmptyState
+          title={t('subcontracts.employer.noContract')}
+          description={t('subcontracts.employer.noContractDesc')}
+          action={canManage ? <Button variant="primary" onClick={onCreate}>{t('subcontracts.employer.add')}</Button> : undefined}
+        />
+      </Card>
     );
   }
   const cur = s.currencyCode;
