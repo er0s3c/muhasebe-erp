@@ -122,6 +122,10 @@ export const wmsBinSchema = z.object({
   code: name,
   name,
   capacity: quantityString.default('0'),
+  /** Rafa konabilecek kartlar (öneri 43); boşsa her kart kabul edilir. */
+  allowedItemIds: z.array(uuid).max(200).default([]),
+  /** Toplama güzergâhındaki sıra (öneri 44): küçük olan önce ziyaret edilir. */
+  pickSequence: z.coerce.number().int().min(0).max(99999).default(0),
 });
 export const wmsLotSchema = z.object({
   itemId: uuid,

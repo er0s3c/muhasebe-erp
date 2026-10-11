@@ -182,6 +182,9 @@ export const manufacturingWarehouseRoutes: FastifyPluginAsync = async (app) => {
       const lot = await getRecord(c.tx, input.lotId, 'lot', true),
         bin = await getRecord(c.tx, input.binId, 'bin', true);
       if (lot.warehouse_id !== bin.warehouse_id) throw fail('Raf aynı depoda olmalı');
+      // Raf uyumluluğu (öneri 43): tanımlı ürün listesi olan raf başka kartı kabul etmez
+      if (Array.isArray(bin.config.allowedItemIds) && bin.config.allowedItemIds.length && !bin.config.allowedItemIds.includes(lot.item_id))
+        throw fail('Bu raf bu stok kartını kabul etmiyor');
       const placed = await one(
         c.tx,
         sql`select coalesce(sum(coalesce(config->>'remainingQty',config->>'quantity')::numeric),0)::text as qty from manufacturing_records where kind='placement' and config->>'lotId'=${lot.id}`,

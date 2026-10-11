@@ -96,6 +96,7 @@ import { posRoutes } from './modules/pos/routes';
 import { manufacturingIntegrationRoutes } from './modules/manufacturing/integrations';
 import { manufacturingRoutes } from './modules/manufacturing/routes';
 import { manufacturingWarehouseRoutes } from './modules/manufacturing/warehouse-routes';
+import { wmsGuidanceRoutes } from './modules/manufacturing/wms-guidance';
 import { leatherRoutes } from './modules/leather/routes';
 
 export interface BuildAppOptions {
@@ -334,6 +335,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(leatherRoutes);
   await app.register(manufacturingRoutes);
   await app.register(manufacturingWarehouseRoutes);
+  await app.register(wmsGuidanceRoutes);
   await app.register(manufacturingIntegrationRoutes);
   await app.register(manufacturingAdapterRoutes);
 

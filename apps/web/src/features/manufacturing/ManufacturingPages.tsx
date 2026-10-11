@@ -1,3 +1,4 @@
+import { WmsGuidance } from './WmsGuidance';
 import { errorMessage } from '../../lib/errors';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -562,8 +563,10 @@ export function ManufacturingWarehousePage() {
                   options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
                 ),
                 numberField('capacity', 'Kapasite', '0'),
+                numberField('pickSequence', 'Toplama sırası', '0'),
+                selectField('allowedItemId', 'Yalnız bu karta ayrılmış (isteğe bağlı)', options(lookups.data?.items ?? [], (r) => String(r.name)), false),
               ]}
-              submit={(v) => save('/api/wms/bins', v)}
+              submit={({ allowedItemId, ...v }) => save('/api/wms/bins', { ...v, allowedItemIds: allowedItemId ? [allowedItemId] : [] })}
             />
           )}
           {selection === 'lots' && (
@@ -610,6 +613,7 @@ export function ManufacturingWarehousePage() {
               submit={(v) => save('/api/wms/placements', { ...v, requestKey: v._requestKey })}
             />
           )}
+          {selection === 'placements' && <WmsGuidance lots={lots.data?.records ?? []} onPlaced={() => void queries.invalidateQueries()} />}
         </>
       )}
       </TabPanel>
