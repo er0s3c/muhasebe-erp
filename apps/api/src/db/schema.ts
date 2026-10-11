@@ -6176,6 +6176,32 @@ export const bankStatementLineMatches = pgTable(
 );
 
 /**
+ * Aylık kapanışta elle yapılan görevler (öneri 9): amortisman, kur değerlemesi, tahakkuk gibi otomatik denetlenemeyen işler
+ * dönem başına kim tarafından ne zaman tamamlandığıyla işaretlenir. Kapalı dönemin işaretleri değişmez.
+ */
+export const periodCloseTasks = pgTable(
+  'period_close_tasks',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    periodId: uuid().notNull(),
+    taskKey: text().notNull(),
+    doneBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    doneAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    note: text(),
+  },
+  (t) => [
+    unique('period_close_tasks_uq').on(t.companyId, t.periodId, t.taskKey),
+    foreignKey({ name: 'period_close_tasks_period_fk', columns: [t.periodId, t.companyId], foreignColumns: [fiscalPeriods.id, fiscalPeriods.companyId] }),
+    check('period_close_tasks_key_ck', sql`${t.taskKey} ~ '^[a-z][a-z0-9_]{1,40}$'`),
+  ],
+);
+
+/**
  * Kalıcı e-posta outbox'ı (öneri 7 ve 111): ileti iş kaydıyla aynı işlemde yazılır, gönderici kira alarak gönderir
  * (bkz. modules/outbox/contract). Sunucu yeniden başlasa da ileti kaybolmaz; deneme ve sonuç aynı kayıtta görünür.
  * `document`, gönderilen belgenin o anki sürümünü (içerik özeti) taşır. Hesap e-postaları (parola sıfırlama, doğrulama)

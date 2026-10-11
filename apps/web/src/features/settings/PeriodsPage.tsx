@@ -1,9 +1,10 @@
-import { CalendarPlus, Lock, LockOpen } from 'lucide-react';
+import { CalendarPlus, ListChecks, Lock, LockOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
+import { PeriodCloseSheet } from './PeriodCloseSheet';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
@@ -29,6 +30,7 @@ export function PeriodsPage() {
   const [year, setYear] = useState(requested ?? currentYear);
   const { data, isPending, error: PeriodsPageQueryError, refetch: PeriodsPageQueryRetry, isFetching: PeriodsPageQueryFetching } = useCQuery<{ periods: Period[] }>(['periods', year], `/api/periods?year=${year}`);
   const [confirm, setConfirm] = useState<{ period: Period; action: 'close' | 'reopen' } | null>(null);
+  const [checklist, setChecklist] = useState<Period | null>(null);
 
   useEffect(() => {
     if (yearsData && yearsData.years.length > 0 && !yearsData.years.includes(year) && year !== requested) setYear(yearsData.years[0]!);
@@ -104,6 +106,11 @@ export function PeriodsPage() {
                   </div>
                   <Badge tone={closed ? 'neutral' : 'success'}>{closed ? t('settings.periods.closed') : t('settings.periods.open')}</Badge>
                 </div>
+                {can('ledger.read') && (
+                  <Button size="sm" variant="ghost" onClick={() => setChecklist(p)}>
+                    <ListChecks className="size-3.5" aria-hidden />Kapanış listesi
+                  </Button>
+                )}
                 {canClose && (
                   <Button size="sm" onClick={() => setConfirm({ period: p, action: closed ? 'reopen' : 'close' })}>
                     {closed ? <LockOpen className="size-3.5" aria-hidden /> : <Lock className="size-3.5" aria-hidden />}
@@ -116,6 +123,7 @@ export function PeriodsPage() {
         </div>
       )}
 
+      <PeriodCloseSheet periodId={checklist?.id ?? null} title={checklist ? `${months[checklist.month - 1]} ${checklist.year}` : ''} onOpenChange={(o) => !o && setChecklist(null)} />
       <Modal
         open={confirm !== null}
         onOpenChange={(o) => !o && setConfirm(null)}
