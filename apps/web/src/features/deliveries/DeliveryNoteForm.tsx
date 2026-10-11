@@ -87,6 +87,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
   const [driverName, setDriverName] = useState(initial?.note.driverName ?? '');
   const [description, setDescription] = useState(initial?.note.description ?? '');
   const [returnOfId, setReturnOfId] = useState(initial?.note.returnOfId ?? '');
+  const [inspectionRequired, setInspectionRequired] = useState(initial?.note.inspectionRequired ?? false);
   const [lines, setLines] = useState<LineState[]>(() =>
     initial
       ? initial.lines.map((l) => ({
@@ -179,6 +180,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
     noteDate,
     externalNo: showExternal ? externalNo.trim() || undefined : undefined,
     returnOfId: isReturn && returnOfId ? returnOfId : null,
+    ...(type === 'sales_return' ? { inspectionRequired } : {}),
     warehouseId: effectiveWh || null,
     vehiclePlate: vehiclePlate.trim() || undefined,
     driverName: driverName.trim() || undefined,
@@ -277,6 +279,15 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
                   </Select>
                 )}
               </Field>
+            )}
+            {type === 'sales_return' && (
+              <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" className="mt-0.5 size-4" checked={inspectionRequired} onChange={(e) => setInspectionRequired(e.target.checked)} />
+                <span>
+                  {t('deliveries.form.inspectionRequired')}
+                  <span className="block text-xs text-muted">{t('deliveries.form.inspectionRequiredHint')}</span>
+                </span>
+              </label>
             )}
             <Field label={t('deliveries.form.noteDate')} required>
               {(id) => <Input id={id} type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} />}

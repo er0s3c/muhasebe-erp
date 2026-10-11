@@ -734,6 +734,8 @@ export interface DeliveryNoteDetail {
     externalNo: string | null;
     returnOfId: string | null;
     returnOfNo: string | null;
+    /** Satış iadesinde: kalite kararı bekleniyor (öneri 52). */
+    inspectionRequired?: boolean;
     noteDate: string;
     partyId: string;
     partyCode: string;

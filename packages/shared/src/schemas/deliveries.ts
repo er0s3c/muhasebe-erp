@@ -95,6 +95,8 @@ const deliveryBase = z.object({
   lines: z.array(deliveryLineSchema).min(1, 'En az bir satır gerekli').max(300),
   /** true ise taslak beklemeden kaydedilir ve stok hareketi işlenir. */
   post: z.boolean().default(false),
+  /** Yalnız satış iadesinde: dönen miktar kalite kararı verilene kadar satışa kapalı kalır (öneri 52). */
+  inspectionRequired: z.boolean().optional(),
 });
 type DeliveryBase = z.infer<typeof deliveryBase>;
 
@@ -107,6 +109,9 @@ export function refineDelivery(doc: DeliveryBase & { type?: DeliveryNoteType }, 
   }
   if (doc.returnOfId && !meta.isReturn) {
     ctx.addIssue({ code: 'custom', path: ['returnOfId'], message: 'Orijinal irsaliye yalnızca iade irsaliyesinde seçilir' });
+  }
+  if (doc.inspectionRequired && doc.type !== 'sales_return') {
+    ctx.addIssue({ code: 'custom', path: ['inspectionRequired'], message: 'Kalite kararı yalnız satış iadesinde istenir' });
   }
   doc.lines.forEach((l, i) => {
     if (doc.type !== 'purchase' && (l.unitCost !== undefined || l.currency !== undefined || l.fxRate !== undefined)) {
@@ -171,3 +176,28 @@ export const returnableLinesQuerySchema = z.object({
   noteId: uuid.optional(),
 });
 export type ReturnableLinesQuery = z.infer<typeof returnableLinesQuerySchema>;
+
+// --- İade kalite kararı (öneri 52) ----------------------------------------------
+
+/** `restock`: satılabilir stoğa al; `scrap`: hurdaya ayır (fire stok belgesi). */
+export const RETURN_DECISIONS = ['restock', 'scrap'] as const;
+export type ReturnDecision = (typeof RETURN_DECISIONS)[number];
+export const RETURN_REASONS = ['defective', 'damaged', 'wrong_item', 'unwanted', 'other'] as const;
+export type ReturnReason = (typeof RETURN_REASONS)[number];
+
+export const returnDecisionSchema = z.object({
+  noteLineId: uuid,
+  quantity: positiveQuantity,
+  decision: z.enum(RETURN_DECISIONS),
+  reason: z.enum(RETURN_REASONS),
+  note: optionalText(300),
+  /** Hurda kararında fire belgesinin tarihi; boşsa bugün. */
+  date: isoDate.optional(),
+});
+export type ReturnDecisionInput = z.infer<typeof returnDecisionSchema>;
+
+export const listReturnInspectionsQuerySchema = z.object({
+  status: z.enum(['pending', 'decided', 'all']).default('pending'),
+  noteId: uuid.optional(),
+});
+export type ListReturnInspectionsQuery = z.infer<typeof listReturnInspectionsQuerySchema>;

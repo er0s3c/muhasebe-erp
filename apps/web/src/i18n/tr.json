@@ -1616,6 +1616,25 @@
     }
   },
   "deliveries": {
+    "inspection": {
+      "title": "İade kalite kararı",
+      "hint": "Karar bekleyen miktar satış irsaliyesiyle çıkarılamaz. Satışa açılan miktar stokta kalır; hurdaya ayrılan miktar fire stok belgesiyle düşülür. Karar verilmiş iade irsaliyesi iptal edilemez.",
+      "pendingBadge": "{{qty}} karar bekliyor",
+      "done": "Tüm kararlar verildi",
+      "item": "Kart",
+      "quantity": "Miktar",
+      "pending": "Bekleyen",
+      "decisions": "Kararlar",
+      "decide": "Karar ver",
+      "decisionLabel": "Karar",
+      "reasonLabel": "Neden",
+      "note": "Not",
+      "save": "Kararı kaydet",
+      "saved": "Kalite kararı kaydedildi",
+      "scrapHint": "Hurda kararı bugünün tarihiyle fire stok belgesi keser; geri alınamaz.",
+      "decision": { "restock": "Satışa aç", "scrap": "Hurda" },
+      "reason": { "defective": "Kusurlu", "damaged": "Hasarlı", "wrong_item": "Yanlış ürün", "unwanted": "Müşteri vazgeçti", "other": "Diğer" }
+    },
     "salesReturns": {
       "title": "Satış iade irsaliyeleri",
       "subtitle": "Müşteriden geri alınan mal: kayıt stoğa orijinal sevkin maliyetiyle girer; yevmiye yoktur. Değer iadesi için iade faturası kesin.",
@@ -1713,6 +1732,8 @@
       "deleted": "Taslak silindi",
       "returnOf": "Orijinal irsaliye",
       "returnOfHint": "Seçilirse satırlar orijinalden gelir ve iade miktarı teslim edilenle sınırlanır.",
+      "inspectionRequired": "Kalite kararı beklet",
+      "inspectionRequiredHint": "Dönen miktar, kalite kararı verilene kadar satışa kapalı kalır.",
       "returnFree": "Orijinale bağlama (serbest iade)",
       "returnable": "İade edilebilir: {{qty}}",
       "returnQtyExceeded": "İade miktarı, orijinal irsaliyede iade edilebilir miktarı aşıyor."

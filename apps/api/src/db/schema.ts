@@ -2694,6 +2694,8 @@ export const deliveryNotes = pgTable(
     noteNo: text(),
     /** İade irsaliyesinde bağlı orijinal irsaliye (isteğe bağlı). */
     returnOfId: uuid(),
+    /** Satış iadesinde: dönen miktar kalite kararı verilene kadar satışa kapalıdır (öneri 52). */
+    inspectionRequired: boolean().notNull().default(false),
     /** Tedarikçinin irsaliye numarası (alış). */
     externalNo: text(),
     noteDate: date({ mode: 'string' }).notNull(),
@@ -2749,6 +2751,7 @@ export const deliveryNotes = pgTable(
     }),
     check('delivery_notes_type_ck', sql`${t.type} in ('sales','purchase','sales_return','purchase_return')`),
     check('delivery_notes_status_ck', sql`${t.status} in ('draft','posted','cancelled')`),
+    check('delivery_notes_inspection_ck', sql`not ${t.inspectionRequired} or ${t.type} = 'sales_return'`),
     check(
       'delivery_notes_posted_ck',
       sql`${t.status} = 'draft' or (${t.noteNo} is not null and ${t.postedAt} is not null and ${t.stockDocumentId} is not null)`,
@@ -6311,3 +6314,37 @@ export * from './leather-schema';
 export * from './pos-schema';
 
 export * from './manufacturing-schema';
+
+/**
+ * İade kalite kararı (öneri 52): kalite kararı istenen satış iadesi satırının dönen miktarı parça parça karara bağlanır.
+ * `restock` miktarı satılabilir stoğa açar; `scrap` fire stok belgesiyle stoktan düşer. Kayıtlar değişmez ve silinmez;
+ * satır başına karar toplamı iade miktarını aşamaz (veritabanı da denetler).
+ */
+export const returnDecisions = pgTable(
+  'return_decisions',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    noteLineId: uuid().notNull(),
+    decision: text().$type<'restock' | 'scrap'>().notNull(),
+    reason: text().$type<'defective' | 'damaged' | 'wrong_item' | 'unwanted' | 'other'>().notNull(),
+    quantity: numeric({ precision: 19, scale: 4 }).notNull(),
+    note: text(),
+    stockDocumentId: uuid(),
+    decidedBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    decidedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ name: 'return_decisions_line_fk', columns: [t.noteLineId, t.companyId], foreignColumns: [deliveryNoteLines.id, deliveryNoteLines.companyId] }),
+    foreignKey({ name: 'return_decisions_stock_document_fk', columns: [t.stockDocumentId, t.companyId], foreignColumns: [stockDocuments.id, stockDocuments.companyId] }),
+    index('return_decisions_line_idx').on(t.companyId, t.noteLineId),
+    check('return_decisions_decision_ck', sql`${t.decision} in ('restock','scrap')`),
+    check('return_decisions_reason_ck', sql`${t.reason} in ('defective','damaged','wrong_item','unwanted','other')`),
+    check('return_decisions_qty_ck', sql`${t.quantity} > 0`),
+    check('return_decisions_scrap_ck', sql`(${t.decision} = 'scrap') = (${t.stockDocumentId} is not null)`),
+  ],
+);
