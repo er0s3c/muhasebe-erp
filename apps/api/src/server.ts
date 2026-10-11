@@ -5,6 +5,7 @@ import { withDatabaseReadiness } from './db/readiness';
 import { buildApp } from './app';
 import { BUILD_ENFORCED } from './licensing';
 import { startNotificationScheduler } from './modules/notifications/scheduler';
+import { startOutboxDispatcher } from './modules/outbox/scheduler';
 import { startConstructionScheduler } from './modules/construction-control/jobs';
 import { startAdministrationScheduler } from './modules/administration/scheduler';
 import { startPlatformWebhookScheduler } from './modules/platform-integrations/events';
@@ -69,6 +70,7 @@ const stopNotificationScheduler = startNotificationScheduler(app);
 const stopConstructionScheduler = startConstructionScheduler(app);
 const stopAdministrationScheduler = startAdministrationScheduler(app);
 const stopPlatformWebhookScheduler=startPlatformWebhookScheduler(app);
+const stopOutboxDispatcher = startOutboxDispatcher(app);
 const stopFxScheduler = startFxScheduler(app);
 
 let closing = false;
@@ -87,6 +89,7 @@ const shutdown = async (signal: string) => {
     stopConstructionScheduler();
     stopAdministrationScheduler();
     stopPlatformWebhookScheduler();
+    stopOutboxDispatcher();
     stopFxScheduler();
     await app.close();
     await handle.close();

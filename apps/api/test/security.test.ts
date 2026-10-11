@@ -434,12 +434,13 @@ describe('sözleşme testleri', async () => {
       // installation_owner_org / claim_installation_owner: kurulumun sahibi kuruluşun kimliği (lisans/güncelleme/cihaz yönetimi);
       // directory_mark_merged: birleştirme bayrağını yalnızca işlev içinden geçerli kılar;
       // member_module_access_cleanup: rol değişince/üyelik silinince o üyenin özel modül erişim satırlarını siler (kendi üyeliğini silen yöneticinin satırları da kalmaz);
+      // outbox_due_targets: e-posta göndericisi için yalnız zamanı gelmiş iletisi olan şirketlerin kimliklerini listeler (ileti içeriği dönmez);
       // notification_scan_targets: bildirim zamanlayıcısı için yalnızca şirket/kuruluş kimliklerini listeler; notification_prune: yalnızca app_company_id() şirketinin KAPANMIŞ eski bildirimlerini siler
       // Şube helper'ları yalnız oturumun şirketini sorgular: app_branch_has_access üyelik kapsamını,
       // company_has_finalized_records ve document_tax_rule_last_used_date aktif şubeden bağımsız geçmiş korumasını doğrular.
       expect(definers.rows.map((r) => r.proname)).toEqual([
         'app_branch_has_access', 'audit_row_change', 'can_manage_user', 'claim_installation_owner', 'company_has_finalized_records', 'company_has_members', 'directory_anonymize_contact', 'directory_mark_merged',
-        'directory_repoint_notes', 'directory_subject_notes', 'document_tax_rule_last_used_date', 'enqueue_invoice_webhooks', 'installation_owner_org', 'license_company_count', 'member_module_access_cleanup', 'notification_prune', 'notification_scan_targets', 'rate_limit_step', 'user_company_mfa_required',
+        'directory_repoint_notes', 'directory_subject_notes', 'document_tax_rule_last_used_date', 'enqueue_invoice_webhooks', 'installation_owner_org', 'license_company_count', 'member_module_access_cleanup', 'notification_prune', 'notification_scan_targets', 'outbox_due_targets', 'rate_limit_step', 'user_company_mfa_required',
       ]);
       const branchHelpers=await q(`select p.proname,p.proconfig,exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a where a.grantee=0 and a.privilege_type='EXECUTE') as public_execute from pg_proc p where p.pronamespace='public'::regnamespace and p.proname in ('app_branch_has_access','company_has_finalized_records','document_tax_rule_last_used_date','enqueue_invoice_webhooks')`);
       expect(branchHelpers.rows).toHaveLength(4);

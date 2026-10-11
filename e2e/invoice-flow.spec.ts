@@ -70,6 +70,10 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
   await expect(page.getByTestId('gross-total')).toHaveText('₺464,00');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByRole('heading', { name: /SF-\d{4}-000001/, level: 1 })).toBeVisible();
+  // Bu ortamda giden posta yok: gönderim düğmesi nedeniyle pasif görünür (öneri 7, 28)
+  const mailSection = page.getByRole('region', { name: 'E-posta gönderimleri' });
+  await expect(mailSection.getByRole('button', { name: 'E-postayla gönder' })).toBeDisabled();
+  await expect(mailSection).toContainText('giden e-posta yapılandırılmamış');
   await expect(page.getByText('Kaydedildi', { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId('gross-total')).toHaveText('₺464,00');
 

@@ -52,6 +52,8 @@ export function errorFix(err: unknown, can: Can): Pick<Blocker, 'fix' | 'ask'> |
       const id = uuid(d.accountId);
       return id ? { fix: { label: 'Banka ekstresi eşleşmesini aç', to: `/treasury/accounts/${id}?tab=bank` } } : null;
     }
+    case 'MAIL_DISABLED':
+      return { ask: 'Giden e-posta ayarı için sistem yöneticinize başvurun.' };
     case 'MODULE_DISABLED':
       return can('settings.manage') ? { fix: { label: 'Modülleri yönet', to: '/settings/modules' } } : { ask: ASK_ADMIN };
     default:

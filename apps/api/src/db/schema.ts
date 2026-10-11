@@ -6015,6 +6015,53 @@ export const savedViews = pgTable(
 );
 
 /**
+ * Kalıcı e-posta outbox'ı (öneri 7 ve 111): ileti iş kaydıyla aynı işlemde yazılır, gönderici kira alarak gönderir
+ * (bkz. modules/outbox/contract). Sunucu yeniden başlasa da ileti kaybolmaz; deneme ve sonuç aynı kayıtta görünür.
+ * `document`, gönderilen belgenin o anki sürümünü (içerik özeti) taşır. Hesap e-postaları (parola sıfırlama, doğrulama)
+ * bağlantı jetonu içerdiği için burada saklanmaz.
+ */
+export const outboxMessages = pgTable(
+  'outbox_messages',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    channel: text().$type<'email'>().notNull().default('email'),
+    kind: text().$type<'invoice_document' | 'notification_digest'>().notNull(),
+    /** Aynı iş olayının ikinci kez kuyruğa girmesini engeller (şirket içinde tekil). */
+    dedupeKey: text().notNull(),
+    sourceType: text(),
+    sourceId: uuid(),
+    recipient: text().notNull(),
+    subject: text().notNull(),
+    bodyText: text().notNull(),
+    bodyHtml: text(),
+    document: jsonb().$type<{ type: string; id: string; no: string | null; version: string; status: string }>(),
+    status: text().$type<'pending' | 'sending' | 'delivered' | 'dead_letter' | 'cancelled'>().notNull().default('pending'),
+    attempts: integer().notNull().default(0),
+    maxAttempts: integer().notNull().default(6),
+    nextAttemptAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    leaseToken: uuid(),
+    leaseUntil: timestamp({ withTimezone: true }),
+    deliveredAt: timestamp({ withTimezone: true }),
+    lastError: text(),
+    createdBy: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('outbox_messages_dedupe_uq').on(t.companyId, t.dedupeKey),
+    index('outbox_messages_due_idx').on(t.companyId, t.status, t.nextAttemptAt),
+    index('outbox_messages_source_idx').on(t.companyId, t.sourceType, t.sourceId),
+    check('outbox_messages_status_ck', sql`${t.status} in ('pending','sending','delivered','dead_letter','cancelled')`),
+    check('outbox_messages_channel_ck', sql`${t.channel} = 'email'`),
+    check('outbox_messages_attempts_ck', sql`${t.attempts} >= 0 and ${t.maxAttempts} between 1 and 20`),
+    check('outbox_messages_recipient_ck', sql`char_length(${t.recipient}) between 3 and 254`),
+  ],
+);
+
+/**
  * Günlük e-posta özeti kaydı (kullanıcı + şirket + gün): özet o gün için TALEP EDİLDİĞİNDE yazılır; aynı gün ikinci özet doğmaz
  * (gönderim "en çok bir kez": SMTP hatasında aynı gün yeniden denenmez).
  */

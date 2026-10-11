@@ -11,7 +11,10 @@ import {
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { tenantRoute, type TenantCtx } from '../../http/context';
-import { forbidden } from '../../http/errors';
+import { z } from 'zod';
+import { forbidden, notFound, unprocessable } from '../../http/errors';
+import { retryOutboxMessage, sourceDeliveries } from '../outbox/service';
+import { invoiceDeliveries, sendInvoiceDocument, sendInvoiceDocumentSchema } from './deliveries';
 import { lockItems } from '../inventory/balances';
 import { lockOrderLines } from '../sales/usage';
 import { lockDeliveryLines } from './delivery-link';
@@ -126,6 +129,33 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, post, async (c) =>
       cancelInvoice(c.tx, invoiceCtx(c), idParam.parse(c.req.params).id, cancelInvoiceSchema.parse(c.req.body)),
     ),
+  );
+
+  // Belge gönderimi (öneri 7): dışa aktarma işlemi sayılır; ileti kalıcı outbox'a yazılır, gönderim zamanlayıcıdadır
+  const send = { ...read, operation: 'export' } as const;
+  app.get(
+    '/api/invoices/:id/deliveries',
+    tenantRoute(app, read, async ({ tx, req }) => invoiceDeliveries(tx, idParam.parse(req.params).id)),
+  );
+  app.post(
+    '/api/invoices/:id/deliveries',
+    tenantRoute(app, { ...send, idempotent: true }, async (c) => {
+      if (!app.mailer.enabled) throw unprocessable('Giden e-posta bu kurulumda yapılandırılmamış', 'MAIL_DISABLED');
+      const key = c.req.headers['idempotency-key'];
+      const result = await sendInvoiceDocument(c.tx, { companyId: c.company.id, userId: c.user.id }, idParam.parse(c.req.params).id, sendInvoiceDocumentSchema.parse(c.req.body), typeof key === 'string' ? key : null);
+      c.reply.code(result.created ? 201 : 200);
+      return { delivery: result.delivery };
+    }),
+  );
+  app.post(
+    '/api/invoices/:id/deliveries/:deliveryId/retry',
+    tenantRoute(app, send, async ({ tx, req }) => {
+      const { id, deliveryId } = z.object({ id: z.string().uuid(), deliveryId: z.string().uuid() }).parse(req.params);
+      const own = (await sourceDeliveries(tx, 'invoice', id)).some((d) => d.id === deliveryId);
+      if (!own) throw notFound('Gönderim kaydı');
+      const row = await retryOutboxMessage(tx, deliveryId);
+      return { delivery: { id: row.id, status: row.status } };
+    }),
   );
 
   app.get(

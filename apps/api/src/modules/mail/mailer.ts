@@ -6,6 +6,8 @@ export interface MailMessage {
   subject: string;
   text: string;
   html?: string;
+  /** Kalıcı outbox'tan gelen iletinin sabit kimliği (`<id@outbox.ada-erp>`): yeniden gönderimde alıcı tekrarı ayıklayabilir. */
+  messageId?: string;
 }
 
 export interface Mailer {
@@ -36,7 +38,7 @@ export function createMailer(config: Pick<Config, 'MAIL_MODE' | 'SMTP_URL' | 'MA
   return {
     enabled: true,
     send: async (m) => {
-      await transport.sendMail({ from: config.MAIL_FROM, to: m.to, subject: m.subject, text: m.text, html: m.html });
+      await transport.sendMail({ from: config.MAIL_FROM, to: m.to, subject: m.subject, text: m.text, html: m.html, ...(m.messageId ? { messageId: m.messageId } : {}) });
     },
   };
 }

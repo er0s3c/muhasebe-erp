@@ -9,12 +9,14 @@ import { loadMemberAccess,isModuleDenied } from '../access/effective';
 import { decryptField } from '../hr/crypto';
 import { webhookSignature } from './crypto';
 import type { WebhookTransport } from './transport';
+import { OUTBOX_LEASE_MS,outboxOutcome } from '../outbox/contract';
 
 declare module 'fastify' {interface FastifyInstance {webhookTransport:WebhookTransport;}}
 export async function enqueueInvoiceWebhook(tx:Tx,invoiceId:string,type:PlatformWebhookEventType){
  await tx.execute(sql`select enqueue_invoice_webhooks(${invoiceId}::uuid,${type})`);
 }
-const retryMs=[30000,120000,600000,3600000,21600000];
+/** Ortak outbox sözleşmesine göre (modules/outbox/contract): kira, 6 deneme ve ortak bekleme takvimi. */
+const WEBHOOK_MAX_ATTEMPTS=6;
 export async function processPlatformWebhooks(app:FastifyInstance,now=new Date()){
  const license=await app.license.current();if(license.enforced&&!['active','grace'].includes(license.state))return;
  const targets=(await app.db.execute<{company_id:string;organization_id:string}>(sql`select company_id,organization_id from notification_scan_targets()`)).rows;
@@ -36,7 +38,7 @@ export async function processPlatformWebhooks(app:FastifyInstance,now=new Date()
      await setContext(tx,{companyId:target.company_id,orgId:target.organization_id});await tx.update(webhookEvents).set({status:'cancelled',lastError:'Bağlantı sahibinin güncel şirket, şube veya modül erişimi yok',leaseToken:null,leaseUntil:null}).where(eq(webhookEvents.id,event.id));return {skip:true} as const;
     }
     await setContext(tx,{companyId:target.company_id,orgId:target.organization_id});
-    const leaseToken=uuidv7();await tx.update(webhookEvents).set({status:'sending',attempts:event.attempts+1,leaseToken,leaseUntil:new Date(now.getTime()+60000)}).where(eq(webhookEvents.id,event.id));
+    const leaseToken=uuidv7();await tx.update(webhookEvents).set({status:'sending',attempts:event.attempts+1,leaseToken,leaseUntil:new Date(now.getTime()+OUTBOX_LEASE_MS)}).where(eq(webhookEvents.id,event.id));
     return {event:{...event,attempts:event.attempts+1},subscription,leaseToken,skip:false} as const;
    });
    if(!claimed)break;if(claimed.skip)continue;
@@ -48,8 +50,8 @@ export async function processPlatformWebhooks(app:FastifyInstance,now=new Date()
    }catch(failure){error=failure instanceof Error?failure.message.slice(0,500):'Bildirim teslim edilemedi';}
    await withContext(app.db,{companyId:target.company_id,orgId:target.organization_id},async(tx)=>{
     await tx.execute(sql`select set_config('app.worker','platform-webhook',true)`);
-    const delivered=!error,dead=claimed.event.attempts>=6;
-    await tx.update(webhookEvents).set({status:delivered?'delivered':dead?'dead_letter':'pending',deliveredAt:delivered?new Date():null,lastHttpStatus:status,lastError:error,nextAttemptAt:new Date(Date.now()+(retryMs[Math.min(claimed.event.attempts-1,retryMs.length-1)]??21600000)),leaseToken:null,leaseUntil:null}).where(and(eq(webhookEvents.id,claimed.event.id),eq(webhookEvents.leaseToken,claimed.leaseToken)));
+    const outcome=outboxOutcome(claimed.event.attempts,WEBHOOK_MAX_ATTEMPTS,error,new Date());
+    await tx.update(webhookEvents).set({...outcome,lastHttpStatus:status,leaseToken:null,leaseUntil:null}).where(and(eq(webhookEvents.id,claimed.event.id),eq(webhookEvents.leaseToken,claimed.leaseToken)));
    });
   }
  }
