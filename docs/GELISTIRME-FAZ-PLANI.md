@@ -208,11 +208,11 @@ Tamamlanma ölçütü: Yeni şirket sektör paketiyle kurulduğunda yalnız ilgi
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 1 | Ürünü sektör ve kullanıcı görevine göre paketleme | İlk kapsam | Genişletilecek | Modül açma/kapama; `workspace/setup.ts` kurulum kontrol listesi | Bekliyor |
-| 2 | Rol bazlı başlangıç panoları | İlk kapsam | Genişletilecek | `dashboard.layout` tercihi; `workspace/alerts.ts` iş uyarıları ve bekleyen onaylar | Bekliyor |
-| 8 | Kurulum, veri aktarımı ve mutabakat | İlk kapsam | Genişletilecek | `imports` modülü: sütun eşleme, önizleme, atomik yazma | Bekliyor |
-| 23 | Kullanıcıya özel hızlı giriş şablonları | İlk kapsam | Yeni | Kullanıcı şablonu yok; yakın temel `/settings/recurring` takvimli belge taslakları | Bekliyor |
-| 29 | Tutar hesaplama açıklamaları | İlk kapsam | Genişletilecek | Ülke bordrosu (`CountryPayrollBreakdown`) ve üretim kontrolünde hesap dökümü; fatura/stok/hakediş için ortak döküm yok | Bekliyor |
+| 1 | Ürünü sektör ve kullanıcı görevine göre paketleme | İlk kapsam | Genişletilecek | Modül açma/kapama; `workspace/setup.ts` kurulum kontrol listesi | İlk kapsam tamam: sektör paketleri (`start-packages.ts`) kurulum adımlarına ve panodaki başlangıç kartına bağlı |
+| 2 | Rol bazlı başlangıç panoları | İlk kapsam | Genişletilecek | `dashboard.layout` tercihi; `workspace/alerts.ts` iş uyarıları ve bekleyen onaylar | İlk kapsam tamam: rol bazlı varsayılan pano yerleşimi ve başlangıç kartı; kayıtlı yerleşim varsa o kullanılır |
+| 8 | Kurulum, veri aktarımı ve mutabakat | İlk kapsam | Genişletilecek | `imports` modülü: sütun eşleme, önizleme, atomik yazma | İlk kapsam tamam: açılış aktarımlarında dosya ↔ kayıt mutabakat tablosu (cari, defter, stok) |
+| 23 | Kullanıcıya özel hızlı giriş şablonları | İlk kapsam | Yeni | Kullanıcı şablonu yok; yakın temel `/settings/recurring` takvimli belge taslakları | İlk kapsam tamam: kullanıcıya özel fatura şablonları (`invoice.templates` tercihi); diğer belgeler genişletmede |
+| 29 | Tutar hesaplama açıklamaları | İlk kapsam | Genişletilecek | Ülke bordrosu (`CountryPayrollBreakdown`) ve üretim kontrolünde hesap dökümü; fatura/stok/hakediş için ortak döküm yok | İlk kapsam tamam: fatura satırı için "Tutar nasıl hesaplandı" dökümü (`explainLine`); stok/hakediş genişletmede |
 | 25 | Yazım hatası ve alternatif isimle arama | Genişletme | Genişletilecek | `workspace/search`; bulanık eşleşme (pg_trgm vb.) yok | Bekliyor |
 | 26 | Taslak sürüm geçmişi | Genişletme | Genişletilecek | Çevrimdışı taslaklar (`workspace/offline-drafts.ts`) | Bekliyor |
 | 27 | Eşzamanlı düzenlemede alan bazlı çakışma çözümü | Genişletme | Yeni | Sunucuda iyimser sürüm denetimi yok; çevrimdışı kuyrukta revizyon çakışması açıklamayla bekletiliyor | Bekliyor |
@@ -301,11 +301,11 @@ Tamamlanma ölçütü: Yerleştirme/toplama ikinci stok hareketi oluşturmuyor; 
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 43 | Yönlendirmeli depo yerleştirme | İlk kapsam | Yeni | Raf/lokasyon modeli yok (yalnız depo); üretimde konum/sahiplik kayıtları var | Bekliyor |
-| 44 | Sipariş toplama sırası ve güzergâhı | İlk kapsam | Yeni | Toplama işi/listesi yok; satış tahsisi ve kısmi sevk var | Bekliyor |
-| 45 | Döngüsel sayım ve bağımsız yeniden sayım | İlk kapsam | Genişletilecek | `inventory/counts.ts`, `stockCounts` tabloları | Bekliyor |
-| 51 | Alış ek maliyetleri ve fark mutabakatı | İlk kapsam | Genişletilecek | `landed` modülü | Bekliyor |
-| 52 | İade kabulünden son karara iş akışı | İlk kapsam | Genişletilecek | İade akışları (returns testleri) | Bekliyor |
+| 43 | Yönlendirmeli depo yerleştirme | İlk kapsam | Yeni | Raf/lokasyon modeli yok (yalnız depo); üretimde konum/sahiplik kayıtları var | İlk kapsam tamam: raf uyumluluğu (kart kısıtı), kapasite ve aynı kart önceliğiyle yerleştirme önerisi |
+| 44 | Sipariş toplama sırası ve güzergâhı | İlk kapsam | Yeni | Toplama işi/listesi yok; satış tahsisi ve kısmi sevk var | İlk kapsam tamam: sevk irsaliyesinden raf sırasına göre toplama listesi ve raf dışı eksik |
+| 45 | Döngüsel sayım ve bağımsız yeniden sayım | İlk kapsam | Genişletilecek | `inventory/counts.ts`, `stockCounts` tabloları | İlk kapsam tamam: kör sayım, toleranslı bağımsız yeniden sayım, döngüsel sayım ön doldurması |
+| 51 | Alış ek maliyetleri ve fark mutabakatı | İlk kapsam | Genişletilecek | `landed` modülü | İlk kapsam tamam: dosya maliyeti ↔ fatura ↔ aktarım hesabı mutabakatı (ithalat ekranında sekme) |
+| 52 | İade kabulünden son karara iş akışı | İlk kapsam | Genişletilecek | İade akışları (returns testleri) | İlk kapsam tamam: kalite kararı beklenen satış iadesi satışa ve üretim kullanılabilirliğine kapalı; satışa aç / hurda kararı |
 | 46 | Talep değişkenliğine göre stok önerileri | Genişletme | Genişletilecek | `procurement/replenishment.ts` min–hedef önerisi | Bekliyor |
 | 47 | Son kullanma ve raf ömrü riski | Genişletme | Yeni | Son kullanma/raf ömrü alanı yok; lot statüleri (serbest/hasarlı/bloke) var | Bekliyor |
 | 48 | Açık ağırlıklarla tedarikçi değerlendirme | Genişletme | Genişletilecek | Malzeme bazında tedarikçi kabul geçmişi (örnek sayısı, ortalama süre/fiyat), inşaat firma performansı; ağırlıklı puan yok | Bekliyor |
@@ -541,6 +541,13 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 122 öneri, 14 faza (F0, F1, F2a, F2b, F3–F12) birer kez atanmıştır: F0 2, F1 9, F2a 4, F2b 10, F3 8, F4 14, F5 10, F6 11, F7 11, F8 11, F9 11, F10 7, F11 9, F12 5 = 122. Öneri numaraları önceki yanıtlardaki numaralarla aynıdır. Teknik ve mali ortak kabul koşulları, ana fazı farklı olan işlerde de uygulanır.
 
 ## Değişiklik kaydı
+
+**11 Ekim 2026 — F2b ve F5 ilk teslimi**
+
+- F2b ilk kapsamı (1, 2, 8, 23, 29) ve F5 ilk kapsamı (43, 44, 45, 51, 52) `claude/f2b-baslangic` dalında; dal Teslimat 4 dalının üzerine yığılı.
+- Envanterdeki "raf modeli yok" notu eskiydi: üretim WMS'inde raf ve lot yerleşimi vardı; yönlendirme ve toplama bu kayıtlar üzerine kuruldu, ikinci stok hareketi oluşturmaz.
+- Kalite kararı iade irsaliyesinde isteğe bağlıdır (varsayılan kapalı); açılınca dönen miktar satış irsaliyesiyle çıkarılamaz, karar verilmiş iade iptal edilemez.
+- Açık işler: F2b genişletmeleri (25–27, 30, 32), F5 genişletmeleri (46–50), iade kararında tedarikçiye iade ve onarım seçenekleri, kalite bekleyen miktarın stok listesinde ayrı sütun olarak gösterilmesi.
 
 **11 Ekim 2026 — Teslimat 4 (F3) ve F4 ilk teslimi**
 
