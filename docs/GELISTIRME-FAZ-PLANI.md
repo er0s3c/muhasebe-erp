@@ -331,12 +331,12 @@ Tamamlanma ölçütü: Teklif maliyet kaynağı açıklanıyor; iade/iptal ticar
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 13 | Satış sorumlusu, hedef ve ticari kârlılık | İlk kapsam | Genişletilecek | Satış raporunda şube ve kaydı oluşturan kullanıcı kırılımı; sorumlu modeli yok | Bekliyor |
-| 33 | Teklif geçerliliği ve güncel maliyet farkı | İlk kapsam | Genişletilecek | Teklifte `validUntil` var; maliyet/kur görüntüsü ve güncel fark yok | Bekliyor |
-| 34 | Müzakere ve ticari taviz geçmişi | İlk kapsam | Yeni | Satış teklifi revizyonu yok; inşaat ihale tekliflerinde revizyon ve karar gerekçesi var | Bekliyor |
-| 35 | Asgari katkı kontrolü | İlk kapsam | Yeni | Onay kapısı yok; satış kârlılık analizi (`invoices/analytics.ts`) temel olabilir | Bekliyor |
-| 38 | Müşteri risk limiti kontrolü | İlk kapsam | Genişletilecek | `parties.creditLimit`; satış faturası kaydında uyarı (`invoices/posting.ts`) | Bekliyor |
-| 39 | Ticari itiraz ve anlaşmazlık dosyası | İlk kapsam | Yeni | İtiraz/anlaşmazlık kaydı yok | Bekliyor |
+| 13 | Satış sorumlusu, hedef ve ticari kârlılık | İlk kapsam | Genişletilecek | Satış raporunda şube ve kaydı oluşturan kullanıcı kırılımı; sorumlu modeli yok | İlk kapsam tamam: cari ve belge sorumlusu, gerekçeli değişiklik geçmişi, aylık hedef, sorumlu bazında kazanma/sipariş/satış/katkı raporu (`/sales/reps`) |
+| 33 | Teklif geçerliliği ve güncel maliyet farkı | İlk kapsam | Genişletilecek | Teklifte `validUntil` var; maliyet/kur görüntüsü ve güncel fark yok | İlk kapsam tamam: gönderim/onay anındaki maliyet ve kur görüntüsü; bugünkü maliyet farkı ve geçerlilik süresi teklif ekranında |
+| 34 | Müzakere ve ticari taviz geçmişi | İlk kapsam | Yeni | Satış teklifi revizyonu yok; inşaat ihale tekliflerinde revizyon ve karar gerekçesi var | İlk kapsam tamam: her gönderim bir revizyon; satır fiyat/iskonto değişikliği, taviz tutarı ve geri alma gerekçeleri |
+| 35 | Asgari katkı kontrolü | İlk kapsam | Yeni | Onay kapısı yok; satış kârlılık analizi (`invoices/analytics.ts`) temel olabilir | İlk kapsam tamam: şirket politikası (asgari katkı, kapalı/uyar/engelle); engel onay yetkilisinin gerekçesiyle geçilir ve saklanır |
+| 38 | Müşteri risk limiti kontrolü | İlk kapsam | Genişletilecek | `parties.creditLimit`; satış faturası kaydında uyarı (`invoices/posting.ts`) | İlk kapsam tamam: teklif gönderimi ve sipariş onayında alacak bakiyesi + faturalanmamış onaylı siparişler + belge ile limit kontrolü |
+| 39 | Ticari itiraz ve anlaşmazlık dosyası | İlk kapsam | Yeni | İtiraz/anlaşmazlık kaydı yok | İlk kapsam tamam: belgeye bağlanabilen itiraz dosyası; atama, inceleme, çözüm/ret, değişmez olay geçmişi (cari ekranında) |
 | 36 | Set, paket ve birleşik ürün yönetimi | Genişletme | Yeni | Set/paket ürün modeli yok | Bekliyor |
 | 37 | Müşteri seçenekleriyle ürün yapılandırma | Genişletme (F7 temeli) | Genişletilecek | Deri varyant ve kişiselleştirme, inşaat alıcı seçenekleri; genel yapılandırıcı yok | Bekliyor |
 | 40 | Sözleşme ve müşteri yenileme fırsatları | Genişletme | Yeni | Yenileme fırsatı yok; temel: tekrarlayan faturalar ve gayrimenkul sözleşmeleri | Bekliyor |
@@ -541,6 +541,14 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 122 öneri, 14 faza (F0, F1, F2a, F2b, F3–F12) birer kez atanmıştır: F0 2, F1 9, F2a 4, F2b 10, F3 8, F4 14, F5 10, F6 11, F7 11, F8 11, F9 11, F10 7, F11 9, F12 5 = 122. Öneri numaraları önceki yanıtlardaki numaralarla aynıdır. Teknik ve mali ortak kabul koşulları, ana fazı farklı olan işlerde de uygulanır.
 
 ## Değişiklik kaydı
+
+**12 Ekim 2026 — F6 ilk teslimi**
+
+- F6 ilk kapsamı (13, 33, 34, 35, 38, 39) `claude/f2b-baslangic` dalında.
+- Ticari kontrol fatura aşamasından teklif gönderimi ve sipariş onayına taşındı; varsayılan politika "uyar" olduğu için mevcut akışlar değişmez, engel şirket ayarıyla açılır.
+- Maliyet görüntüsü stok defteri ortalamasıdır (yoksa son alış); hizmet ve kartsız satırların maliyeti bilinmez ve açıkça işaretlenir. Kur bulunamazsa kontrol tahmin yapmaz, uyarı bırakır.
+- F5 CI'ında WMS testi gerçek bir varsayımı yakaladı: yeni lot kalite karantinasında açılır ve satışa kapalıdır; test lotu serbest açacak şekilde düzeltildi.
+- Açık işler: F6 genişletmeleri (36, 37, 40–42), prim hesabının sorumlu raporuna bağlanması, itiraz dosyasının fatura/irsaliye ekranlarından açılması.
 
 **11 Ekim 2026 — F2b ve F5 ilk teslimi**
 
