@@ -95,7 +95,7 @@ export async function listRecords(tx: Tx, kind: string) {
         left join leather_production_orders o on o.id=r.order_id and o.company_id=r.company_id
         left join parties p on p.id=nullif(r.config->>'partyId','')::uuid and p.company_id=r.company_id
         ${kind === 'calendar' ? sql`left join manufacturing_records maintenance on maintenance.id::text=r.config->>'maintenanceId' and maintenance.company_id=r.company_id and maintenance.kind='maintenance'` : sql``}
-        where r.kind=${kind} order by r.created_at desc,r.id desc`,
+        where r.kind=${kind} order by r.created_at desc,r.code,r.id desc`,
     )
   ).map(recordShape);
 }
