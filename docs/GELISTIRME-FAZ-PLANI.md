@@ -22,7 +22,7 @@ Bir kişi veya küçük ekiple, aynı anda bir ana teslimat üzerinde ilerleme v
 Pilot dört sektörü birlikte kapsar: **ticaret/muhasebe, üretim, inşaat ve deri**. Bu nedenle:
 
 - F0–F4 sektörden bağımsız ortak temel olarak tutulur; sektöre özgü iş bu fazlara sızdırılmaz.
-- F0'da her sektör için bir, ayrıca bir ortak görev seçilir (toplam beş görev):
+- F0'da her sektör için bir, ayrıca bir ortak görev seçilir (toplam beş görev). Görev kartları, hazırlık verisi ve kayıt formu: [PILOT-OLCUM-PROTOKOLU.md](PILOT-OLCUM-PROTOKOLU.md).
 
 | Sektör | Pilot görevi | İlgili fazlar |
 |---|---|---|
@@ -95,7 +95,7 @@ Sonraki teslimat F4'ün ilk kapsamıdır (kapanış kontrolü, departman boyutu 
 
 ## Detaylı uygulama kapsamı
 
-"Mevcut temel" sütunu, 10 Ekim 2026 kod incelemesinde doğrulanan başlangıç noktasını gösterir. "F0'da doğrulanacak" yazan satırlar henüz kodla karşılaştırılmamıştır.
+"Sınıf" ve "Mevcut temel" sütunları F0 envanterinde (11 Ekim 2026) kod, şema ve kabul kayıtlarıyla karşılaştırılarak dolduruldu. **Genişletilecek:** temel kodda var, öneri onu tamamlıyor (83). **Yeni:** karşılık gelen model veya akış yok (38). **Dış erişim bekliyor:** uzman, hesap veya cihaz gerekiyor (1). Kodda eksiksiz bulunan öneri olmadı.
 
 ### F0 — Kapsam ve pilot hazırlığı
 
@@ -105,16 +105,37 @@ Bağımlılık: Teslimat 0. Göreli büyüklük: Küçük.
 
 İş sırası:
 
-1. "F0'da doğrulanacak" satırlarını kodla karşılaştır; her öneriyi mevcut / genişletilecek / yeni / dış erişim bekleyen olarak işaretle.
-2. [Pilot kapsamındaki](#pilot-kapsamı) beş görev için ölçüm protokolünü yaz: görev başlangıç/bitiş zamanı, hata, yardım ihtiyacı, tamamlanamayan adım. `/reports/activity` olay sayısını çalışma süresi olarak kullanmaz; bu yüzden ilk ölçüm gözlemle yapılır, gerekiyorsa görev başlangıç/bitişi için hafif bir ölçüm kaydı eklenir.
+1. ~~Öneri envanteri~~ — tamamlandı (11 Ekim 2026): her öneri sınıflandırıldı, "Mevcut temel" sütunu dolduruldu.
+2. [Pilot kapsamındaki](#pilot-kapsamı) beş görev için ölçüm protokolü — yazıldı: [PILOT-OLCUM-PROTOKOLU.md](PILOT-OLCUM-PROTOKOLU.md). Başlangıç ölçümü pilot kullanıcılarla yapılacak: görev başlangıç/bitiş zamanı, hata, yardım ihtiyacı, tamamlanamayan adım. `/reports/activity` olay sayısını çalışma süresi olarak kullanmaz; bu yüzden ilk ölçüm gözlemle yapılır, gerekiyorsa görev başlangıç/bitişi için hafif bir ölçüm kaydı eklenir.
 3. Başlangıç ölçümünü kaydet; modül sınırları ve güncel kabul belgeleri için tek izleme kaydı oluştur.
 
 Tamamlanma ölçütü: Beş görev için başlangıç kaydı, kabul senaryosu ve ilk teslimat kapsamı hazır; tablolardaki "Mevcut temel" sütunu boş satır içermiyor.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 22 | Kod sınırları, özellik durumları ve dokümantasyon | İlk kapsam | Kabul kayıtları `docs/` altında dağınık; `LeatherPages.tsx` ~3.100 satır | Bekliyor |
-| 122 | Geliştirmenin gerçek kullanım etkisi | İlk kapsam | `/reports/activity` olay kaydı var, süre ölçümü yok | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 22 | Kod sınırları, özellik durumları ve dokümantasyon | İlk kapsam | Genişletilecek | Kabul kayıtları `docs/` altında dağınık; `LeatherPages.tsx` ~3.100 satır | Devam ediyor — öneri envanteri bu dosyada tamamlandı |
+| 122 | Geliştirmenin gerçek kullanım etkisi | İlk kapsam | Yeni | `/reports/activity` olay kaydı var, süre ölçümü yok | Devam ediyor — protokol yazıldı, başlangıç ölçümü pilot kullanıcı bekliyor |
+
+**F0 envanter özeti (11 Ekim 2026)**
+
+| Faz | Genişletilecek | Yeni (öneri no) |
+|---|---|---|
+| F0 | 1 | 122 |
+| F1 | 7 | 116, 117 |
+| F2a | 4 | — |
+| F2b | 8 | 23, 27 |
+| F3 | 6 | 98, 100 |
+| F4 | 8 | 11, 53, 54, 56, 61 |
+| F5 | 5 | 43, 44, 47, 49, 50 |
+| F6 | 5 | 34, 35, 36, 39, 40, 41 |
+| F7 | 8 | 63, 64, 70 |
+| F8 | 10 | 77 |
+| F9 | 9 | 86, 91 |
+| F10 | 3 | 93, 95, 96, 97 |
+| F11 | 7 | 105, 106 |
+| F12 | 2 | 113, 114, 115 |
+
+Dış erişim bekleyen: 10 (Türkiye/KKTC uzman doğrulaması). Yeni önerilerin çoğu depo (raf, toplama, son kullanma), satış (teklif revizyonu, itiraz, set ürün), üretim kaynakları (hazırlık süresi, takım/aparat, sayısal kalite) ve personel akışlarındadır; bunlar şema değişikliği gerektirir ve ilk teslimlerde migration planıyla birlikte ele alınmalıdır.
 
 ### F1 — Güven, test altyapısı ve temel işletim
 
@@ -134,17 +155,17 @@ Tamamlanma ölçütü: Şirket/şube sınırı, kritik görev erişilebilirliği
 
 İlk teslimata alınacak öneriler: 19, 21, 120, 121.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 19 | AI dış çağrılarını uzun DB işlemlerinden ayırma | İlk kapsam | `ai/routes.ts` sağlayıcı çağrısına `c.tx` veriyor; işlem cevap boyunca açık | Bekliyor |
-| 21 | Güvenlik, kurtarma ve erişilebilirlik kabul koşulları | İlk kapsam | RLS, MFA, denetim izi, CI'da geri yükleme tatbikatı | Bekliyor |
-| 120 | İş kuralları için değişmez doğrulama koşulları | İlk kapsam | Mali regresyon testleri var; özellik tabanlı/değişmez test altyapısı yok | Bekliyor |
-| 121 | Ağ kesintisi ve eşzamanlılık kabulü | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 101 | Kayıt türüne göre veri saklama politikası | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 102 | Destek verisini önizleme ve maskeleme | Genişletme | `system/feedback.ts` geri bildirim ekranı | Bekliyor |
-| 116 | Sürümlü şifreleme anahtarı yenileme | Genişletme | Yok; `BACKUP_SIGNING_KEY` tek anahtar | Bekliyor |
-| 117 | Dosyayı açmadan içerik/zararlı yazılım kontrolü | Genişletme | Yok | Bekliyor |
-| 118 | Onaylı belge paketinde bütünlük kontrolü | Genişletme | `approvals/document-hash.ts` | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 19 | AI dış çağrılarını uzun DB işlemlerinden ayırma | İlk kapsam | Genişletilecek | `ai/routes.ts` sağlayıcı çağrısına `c.tx` veriyor; işlem cevap boyunca açık | Bekliyor |
+| 21 | Güvenlik, kurtarma ve erişilebilirlik kabul koşulları | İlk kapsam | Genişletilecek | RLS, MFA, denetim izi, CI'da geri yükleme tatbikatı | Bekliyor |
+| 120 | İş kuralları için değişmez doğrulama koşulları | İlk kapsam | Genişletilecek | Mali regresyon testleri var; özellik tabanlı/değişmez test altyapısı yok | Bekliyor |
+| 121 | Ağ kesintisi ve eşzamanlılık kabulü | İlk kapsam | Genişletilecek | Komut tekrarına karşı `requestKey` + içerik özeti (üretim, deri, POS, çevrimdışı taslak; 36 dosya); ağ kesintisi kabul senaryosu yok | Bekliyor |
+| 101 | Kayıt türüne göre veri saklama politikası | Genişletme | Genişletilecek | `hr/privacy.ts` kişisel veri envanteri (amaç, hukuki dayanak); yedeklerde 30 gün saklama; kayıt türü bazlı saklama/anonimleştirme yok | Bekliyor |
+| 102 | Destek verisini önizleme ve maskeleme | Genişletme | Genişletilecek | `system/feedback.ts` geri bildirim ekranı | Bekliyor |
+| 116 | Sürümlü şifreleme anahtarı yenileme | Genişletme | Yeni | Yok; `BACKUP_SIGNING_KEY` tek anahtar | Bekliyor |
+| 117 | Dosyayı açmadan içerik/zararlı yazılım kontrolü | Genişletme | Yeni | Yok | Bekliyor |
+| 118 | Onaylı belge paketinde bütünlük kontrolü | Genişletme | Genişletilecek | `approvals/document-hash.ts` | Bekliyor |
 
 ### F2a — Ortak kullanıcı deneyimi: temel
 
@@ -160,12 +181,12 @@ Bağımlılık: F1'in ilk teslimi. Göreli büyüklük: Orta.
 
 Tamamlanma ölçütü: Aynı kullanıcı başka cihazda görünümünü açabiliyor; paylaşılan görünüm yetkisiz kayıt göstermiyor; yanlış birim ve işlem engeli açıklanıyor.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 5 | Sunucuda kayıtlı filtreler ve ortak görünümler | İlk kapsam | `SavedViews.tsx` localStorage; `preferences/routes.ts` favori, pano düzeni ve tablo yoğunluğunu sunucuda tutuyor | Bekliyor |
-| 24 | Temel ve ayrıntılı form girişi | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 28 | Kullanılamayan işlemin sebebi ve çözüm bağlantısı | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 31 | Birim ve sayı girişinde tutarlılık kontrolü | İlk kapsam | F0'da doğrulanacak | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 5 | Sunucuda kayıtlı filtreler ve ortak görünümler | İlk kapsam | Genişletilecek | `SavedViews.tsx` localStorage; `preferences/routes.ts` favori, pano düzeni ve tablo yoğunluğunu sunucuda tutuyor | Bekliyor |
+| 24 | Temel ve ayrıntılı form girişi | İlk kapsam | Genişletilecek | Bazı ekranlarda katlanır `<details>` bölümleri (12 dosya); formlarda temel/ayrıntılı ayrımı ve şirket bazlı zorunlu alan yok | Bekliyor |
+| 28 | Kullanılamayan işlemin sebebi ve çözüm bağlantısı | İlk kapsam | Genişletilecek | Nedenli pasif işlem yalnız modül erişimi ekranında (`MemberAccessSheet`); ortak bileşen yok | Bekliyor |
+| 31 | Birim ve sayı girişinde tutarlılık kontrolü | İlk kapsam | Genişletilecek | Deri alanında dm²/ft² → m² sabit dönüşüm; genel birim dönüşümü, hassasiyet tanımı ve olağan dışı miktar uyarısı yok | Bekliyor |
 
 ### F2b — Başlangıç düzenleri ve gelişmiş giriş
 
@@ -185,18 +206,18 @@ Tamamlanma ölçütü: Yeni şirket sektör paketiyle kurulduğunda yalnız ilgi
 
 İlk teslimata alınacak öneriler: 1, 2, 8, 23, 29.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 1 | Ürünü sektör ve kullanıcı görevine göre paketleme | İlk kapsam | Modül açma/kapama; `workspace/setup.ts` kurulum kontrol listesi | Bekliyor |
-| 2 | Rol bazlı başlangıç panoları | İlk kapsam | `dashboard.layout` tercihi; `workspace/alerts.ts` iş uyarıları ve bekleyen onaylar | Bekliyor |
-| 8 | Kurulum, veri aktarımı ve mutabakat | İlk kapsam | `imports` modülü: sütun eşleme, önizleme, atomik yazma | Bekliyor |
-| 23 | Kullanıcıya özel hızlı giriş şablonları | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 29 | Tutar hesaplama açıklamaları | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 25 | Yazım hatası ve alternatif isimle arama | Genişletme | `workspace/search`; bulanık eşleşme (pg_trgm vb.) yok | Bekliyor |
-| 26 | Taslak sürüm geçmişi | Genişletme | Çevrimdışı taslaklar (`workspace/offline-drafts.ts`) | Bekliyor |
-| 27 | Eşzamanlı düzenlemede alan bazlı çakışma çözümü | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 30 | Kayıtları yan yana karşılaştırma | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 32 | İş üstünde eğitim senaryoları | Genişletme | Demo şirketleri ve roller | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 1 | Ürünü sektör ve kullanıcı görevine göre paketleme | İlk kapsam | Genişletilecek | Modül açma/kapama; `workspace/setup.ts` kurulum kontrol listesi | Bekliyor |
+| 2 | Rol bazlı başlangıç panoları | İlk kapsam | Genişletilecek | `dashboard.layout` tercihi; `workspace/alerts.ts` iş uyarıları ve bekleyen onaylar | Bekliyor |
+| 8 | Kurulum, veri aktarımı ve mutabakat | İlk kapsam | Genişletilecek | `imports` modülü: sütun eşleme, önizleme, atomik yazma | Bekliyor |
+| 23 | Kullanıcıya özel hızlı giriş şablonları | İlk kapsam | Yeni | Kullanıcı şablonu yok; yakın temel `/settings/recurring` takvimli belge taslakları | Bekliyor |
+| 29 | Tutar hesaplama açıklamaları | İlk kapsam | Genişletilecek | Ülke bordrosu (`CountryPayrollBreakdown`) ve üretim kontrolünde hesap dökümü; fatura/stok/hakediş için ortak döküm yok | Bekliyor |
+| 25 | Yazım hatası ve alternatif isimle arama | Genişletme | Genişletilecek | `workspace/search`; bulanık eşleşme (pg_trgm vb.) yok | Bekliyor |
+| 26 | Taslak sürüm geçmişi | Genişletme | Genişletilecek | Çevrimdışı taslaklar (`workspace/offline-drafts.ts`) | Bekliyor |
+| 27 | Eşzamanlı düzenlemede alan bazlı çakışma çözümü | Genişletme | Yeni | Sunucuda iyimser sürüm denetimi yok; çevrimdışı kuyrukta revizyon çakışması açıklamayla bekletiliyor | Bekliyor |
+| 30 | Kayıtları yan yana karşılaştırma | Genişletme | Genişletilecek | Çizim revizyonlarını üst üste karşılaştırma, fizibilite senaryoları, bütçe revizyonları; genel kayıt karşılaştırma bileşeni yok | Bekliyor |
+| 32 | İş üstünde eğitim senaryoları | Genişletme | Genişletilecek | Demo şirketleri ve roller | Bekliyor |
 
 ### F3 — Kayıt bağlantıları, belge ve ortak iş akışları
 
@@ -215,16 +236,16 @@ Tamamlanma ölçütü: Tekrarlı gönderim aynı iş kaydını çoğaltmıyor; d
 
 İlk teslimata alınacak öneriler: 3, 4, 6, 7, 98, 99, 111.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 3 | Uçtan uca işlem geçmişi | İlk kapsam | `workspace/records.ts` kayıt erişimi ve bağlantı görünürlüğü; satın alma/satış temel bağlantıları | Bekliyor |
-| 4 | Cari, ürün ve proje ortak kayıt görünümü | İlk kapsam | `workspace/records.ts`; kayıt detay sayfaları | Bekliyor |
-| 6 | Önizlemeli toplu işlemler | İlk kapsam | `sales/batch.ts` önizlemeli toplu fatura | Bekliyor |
-| 7 | Belge gönderimi ve gönderim geçmişi | İlk kapsam | `mail/` (mailer, şablonlar, bellek içi kuyruk); PDF şablonları ve arşiv | Bekliyor |
-| 98 | Süre/kapsam sınırlı onay vekâleti | İlk kapsam | Yok; `approvals` modülü onay akışı | Bekliyor |
-| 99 | Onay süreleri ve yönlendirme | İlk kapsam | `approvals` modülü | Bekliyor |
-| 111 | Ortak outbox sözleşmesi | İlk kapsam | `manufacturing/channels.ts` outbox (0111/0112 migration'ları) | Bekliyor |
-| 100 | Deneme modunda kullanıcı otomasyonları | Genişletme | Yok (WORK-REVIEW kalan yol haritası) | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 3 | Uçtan uca işlem geçmişi | İlk kapsam | Genişletilecek | `workspace/records.ts` kayıt erişimi ve bağlantı görünürlüğü; satın alma/satış temel bağlantıları | Bekliyor |
+| 4 | Cari, ürün ve proje ortak kayıt görünümü | İlk kapsam | Genişletilecek | `workspace/records.ts`; kayıt detay sayfaları | Bekliyor |
+| 6 | Önizlemeli toplu işlemler | İlk kapsam | Genişletilecek | `sales/batch.ts` önizlemeli toplu fatura | Bekliyor |
+| 7 | Belge gönderimi ve gönderim geçmişi | İlk kapsam | Genişletilecek | `mail/` (mailer, şablonlar, bellek içi kuyruk); PDF şablonları ve arşiv | Bekliyor |
+| 98 | Süre/kapsam sınırlı onay vekâleti | İlk kapsam | Yeni | Yok; `approvals` modülü onay akışı | Bekliyor |
+| 99 | Onay süreleri ve yönlendirme | İlk kapsam | Genişletilecek | `approvals` modülü | Bekliyor |
+| 111 | Ortak outbox sözleşmesi | İlk kapsam | Genişletilecek | `manufacturing/channels.ts` outbox (0111/0112 migration'ları) | Bekliyor |
+| 100 | Deneme modunda kullanıcı otomasyonları | Genişletme | Yeni | Kural motoru yok; yakın temel tekrarlayan taslaklar ve bildirim taraması | Bekliyor |
 
 ### F4 — Finans, ülke doğrulaması ve yönetim muhasebesi
 
@@ -244,22 +265,22 @@ Tamamlanma ölçütü: Fatura–cari–stok–yevmiye tutarlılığı ve geçmi�
 
 İlk teslimata alınacak öneriler: 9, 11 (yalnız boyut alanı), 53, 55, 59. Öneri 10 [paralel dış hatta](#paralel-dış-hat) yürür.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 9 | Muhasebe kapanış çalışma süreci | İlk kapsam | Dönem kilidi (`settings/periods.ts`), `yearend` modülü | Bekliyor |
-| 11 | Departman ve maliyet merkezi boyutu | İlk kapsam (alan) + Genişletme (rapor/dağıtım) | Yok; departman bütçesi hesap/proje süzgeciyle çalışıyor (ENTERPRISE-EXPANSION) | Bekliyor |
-| 53 | Tedarikçi banka bilgisi değişiklik kontrolü | İlk kapsam | Yok | Bekliyor |
-| 55 | Banka eşleştirmesinde çoktan bire ilişki | İlk kapsam | `bank-statements/matching.ts` birebir öneri puanlaması | Bekliyor |
-| 59 | Cari mutabakat mektubu ve cevap takibi | İlk kapsam | Cari açık kalemler (`parties/service.ts`) | Bekliyor |
-| 10 | Türkiye/KKTC doğrulanmış ülke kapsamı | Paralel dış hat | Ülke profili, tarihli vergi kuralları; mali pilot bekliyor (COUNTRY-IMPLEMENTATION) | Bekliyor |
-| 12 | Karar karşılaştırmalı nakit projeksiyonu | Genişletme | Sözleşme vadesi ve ödeme geçmişine dayalı projeksiyon | Bekliyor |
-| 54 | Toplu ödeme hazırlama | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 56 | Banka masraflarının hizmet bazında analizi | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 57 | Düzenli mali yükümlülük takvimi | Genişletme | `/settings/recurring` takvimli taslaklar | Bekliyor |
-| 58 | Kaynakları açıklanan döviz pozisyonu | Genişletme | Kur kaynakları (`settings/` TCMB/KKTCMB) | Bekliyor |
-| 60 | Demirbaş satış ve elden çıkarma | Genişletme | Demirbaş kartı ve amortisman var; elden çıkarma yok | Bekliyor |
-| 61 | Varlık kullanımının gerçek maliyetle ilişkisi | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 62 | Şirketler arası mutabakat ve mahsuplaşma | Genişletme | `consolidation` modülü | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 9 | Muhasebe kapanış çalışma süreci | İlk kapsam | Genişletilecek | Dönem kilidi (`settings/periods.ts`), `yearend` modülü | Bekliyor |
+| 11 | Departman ve maliyet merkezi boyutu | İlk kapsam (alan) + Genişletme (rapor/dağıtım) | Yeni | Yok; departman bütçesi hesap/proje süzgeciyle çalışıyor (ENTERPRISE-EXPANSION) | Bekliyor |
+| 53 | Tedarikçi banka bilgisi değişiklik kontrolü | İlk kapsam | Yeni | Yok | Bekliyor |
+| 55 | Banka eşleştirmesinde çoktan bire ilişki | İlk kapsam | Genişletilecek | `bank-statements/matching.ts` birebir öneri puanlaması | Bekliyor |
+| 59 | Cari mutabakat mektubu ve cevap takibi | İlk kapsam | Genişletilecek | Cari açık kalemler (`parties/service.ts`) | Bekliyor |
+| 10 | Türkiye/KKTC doğrulanmış ülke kapsamı | Paralel dış hat | Dış erişim bekliyor | Ülke profili, tarihli vergi kuralları; mali pilot bekliyor (COUNTRY-IMPLEMENTATION) | Bekliyor |
+| 12 | Karar karşılaştırmalı nakit projeksiyonu | Genişletme | Genişletilecek | Sözleşme vadesi ve ödeme geçmişine dayalı projeksiyon | Bekliyor |
+| 54 | Toplu ödeme hazırlama | Genişletme | Yeni | Toplu ödeme/ödeme paketi ve banka dosyası yok; tekil ödeme ve çek/senet toplu tahsil var | Bekliyor |
+| 56 | Banka masraflarının hizmet bazında analizi | Genişletme | Yeni | Banka masrafı ayrı izlenmiyor; gider kartları ve banka ekstresi eşleştirmesi temel olabilir | Bekliyor |
+| 57 | Düzenli mali yükümlülük takvimi | Genişletme | Genişletilecek | `/settings/recurring` takvimli taslaklar | Bekliyor |
+| 58 | Kaynakları açıklanan döviz pozisyonu | Genişletme | Genişletilecek | Döviz pozisyonu raporu var (`consolidation/fx-position.ts`); varsayımsal kur senaryosu yok | Bekliyor |
+| 60 | Demirbaş satış ve elden çıkarma | Genişletme | Genişletilecek | Demirbaş kartı ve amortisman var; elden çıkarma yok | Bekliyor |
+| 61 | Varlık kullanımının gerçek maliyetle ilişkisi | Genişletme | Yeni | Kullanım bazlı maliyet yok; temel: demirbaş kartı, inşaat ekipman rezervasyonu ve bakım kayıtları | Bekliyor |
+| 62 | Şirketler arası mutabakat ve mahsuplaşma | Genişletme | Genişletilecek | `consolidation` modülü | Bekliyor |
 
 ### F5 — Depo ve satın alma
 
@@ -278,18 +299,18 @@ Tamamlanma ölçütü: Yerleştirme/toplama ikinci stok hareketi oluşturmuyor; 
 
 İlk teslimata alınacak öneriler: 43, 44, 45, 51, 52.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 43 | Yönlendirmeli depo yerleştirme | İlk kapsam | Raf/lokasyon modeli yok (F0'da doğrulanacak) | Bekliyor |
-| 44 | Sipariş toplama sırası ve güzergâhı | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 45 | Döngüsel sayım ve bağımsız yeniden sayım | İlk kapsam | `inventory/counts.ts`, `stockCounts` tabloları | Bekliyor |
-| 51 | Alış ek maliyetleri ve fark mutabakatı | İlk kapsam | `landed` modülü | Bekliyor |
-| 52 | İade kabulünden son karara iş akışı | İlk kapsam | İade akışları (returns testleri) | Bekliyor |
-| 46 | Talep değişkenliğine göre stok önerileri | Genişletme | `procurement/replenishment.ts` min–hedef önerisi | Bekliyor |
-| 47 | Son kullanma ve raf ömrü riski | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 48 | Açık ağırlıklarla tedarikçi değerlendirme | Genişletme | `procurement/performance.ts` | Bekliyor |
-| 49 | Çerçeve satın alma anlaşmaları | Genişletme | `procurement/commitments.ts` (F0'da kapsamı doğrulanacak) | Bekliyor |
-| 50 | Tedarik teslimat randevuları | Genişletme | F0'da doğrulanacak | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 43 | Yönlendirmeli depo yerleştirme | İlk kapsam | Yeni | Raf/lokasyon modeli yok (yalnız depo); üretimde konum/sahiplik kayıtları var | Bekliyor |
+| 44 | Sipariş toplama sırası ve güzergâhı | İlk kapsam | Yeni | Toplama işi/listesi yok; satış tahsisi ve kısmi sevk var | Bekliyor |
+| 45 | Döngüsel sayım ve bağımsız yeniden sayım | İlk kapsam | Genişletilecek | `inventory/counts.ts`, `stockCounts` tabloları | Bekliyor |
+| 51 | Alış ek maliyetleri ve fark mutabakatı | İlk kapsam | Genişletilecek | `landed` modülü | Bekliyor |
+| 52 | İade kabulünden son karara iş akışı | İlk kapsam | Genişletilecek | İade akışları (returns testleri) | Bekliyor |
+| 46 | Talep değişkenliğine göre stok önerileri | Genişletme | Genişletilecek | `procurement/replenishment.ts` min–hedef önerisi | Bekliyor |
+| 47 | Son kullanma ve raf ömrü riski | Genişletme | Yeni | Son kullanma/raf ömrü alanı yok; lot statüleri (serbest/hasarlı/bloke) var | Bekliyor |
+| 48 | Açık ağırlıklarla tedarikçi değerlendirme | Genişletme | Genişletilecek | Malzeme bazında tedarikçi kabul geçmişi (örnek sayısı, ortalama süre/fiyat), inşaat firma performansı; ağırlıklı puan yok | Bekliyor |
+| 49 | Çerçeve satın alma anlaşmaları | Genişletme | Yeni | Çerçeve anlaşma yok; `procurement/commitments.ts` proje taahhüdüdür | Bekliyor |
+| 50 | Tedarik teslimat randevuları | Genişletme | Yeni | Tedarik teslim randevusu yok; inşaatta garanti/servis randevusu var | Bekliyor |
 
 ### F6 — Satış ve ticari kararlar
 
@@ -308,19 +329,19 @@ Tamamlanma ölçütü: Teklif maliyet kaynağı açıklanıyor; iade/iptal ticar
 
 İlk teslimata alınacak öneriler: 13, 33, 34, 35, 38, 39.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 13 | Satış sorumlusu, hedef ve ticari kârlılık | İlk kapsam | Satış raporunda şube ve kaydı oluşturan kullanıcı kırılımı; sorumlu modeli yok | Bekliyor |
-| 33 | Teklif geçerliliği ve güncel maliyet farkı | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 34 | Müzakere ve ticari taviz geçmişi | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 35 | Asgari katkı kontrolü | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 38 | Müşteri risk limiti kontrolü | İlk kapsam | `parties.creditLimit`; satış faturası kaydında uyarı (`invoices/posting.ts`) | Bekliyor |
-| 39 | Ticari itiraz ve anlaşmazlık dosyası | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 36 | Set, paket ve birleşik ürün yönetimi | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 37 | Müşteri seçenekleriyle ürün yapılandırma | Genişletme (F7 temeli) | F0'da doğrulanacak | Bekliyor |
-| 40 | Sözleşme ve müşteri yenileme fırsatları | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 41 | Açıklanabilir satış primi hesabı | Genişletme | Yok | Bekliyor |
-| 42 | Sadakat ve müşteri avantajı geçmişi | Genişletme | `/sales/campaigns` yüzdelik promosyon | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 13 | Satış sorumlusu, hedef ve ticari kârlılık | İlk kapsam | Genişletilecek | Satış raporunda şube ve kaydı oluşturan kullanıcı kırılımı; sorumlu modeli yok | Bekliyor |
+| 33 | Teklif geçerliliği ve güncel maliyet farkı | İlk kapsam | Genişletilecek | Teklifte `validUntil` var; maliyet/kur görüntüsü ve güncel fark yok | Bekliyor |
+| 34 | Müzakere ve ticari taviz geçmişi | İlk kapsam | Yeni | Satış teklifi revizyonu yok; inşaat ihale tekliflerinde revizyon ve karar gerekçesi var | Bekliyor |
+| 35 | Asgari katkı kontrolü | İlk kapsam | Yeni | Onay kapısı yok; satış kârlılık analizi (`invoices/analytics.ts`) temel olabilir | Bekliyor |
+| 38 | Müşteri risk limiti kontrolü | İlk kapsam | Genişletilecek | `parties.creditLimit`; satış faturası kaydında uyarı (`invoices/posting.ts`) | Bekliyor |
+| 39 | Ticari itiraz ve anlaşmazlık dosyası | İlk kapsam | Yeni | İtiraz/anlaşmazlık kaydı yok | Bekliyor |
+| 36 | Set, paket ve birleşik ürün yönetimi | Genişletme | Yeni | Set/paket ürün modeli yok | Bekliyor |
+| 37 | Müşteri seçenekleriyle ürün yapılandırma | Genişletme (F7 temeli) | Genişletilecek | Deri varyant ve kişiselleştirme, inşaat alıcı seçenekleri; genel yapılandırıcı yok | Bekliyor |
+| 40 | Sözleşme ve müşteri yenileme fırsatları | Genişletme | Yeni | Yenileme fırsatı yok; temel: tekrarlayan faturalar ve gayrimenkul sözleşmeleri | Bekliyor |
+| 41 | Açıklanabilir satış primi hesabı | Genişletme | Yeni | Yok | Bekliyor |
+| 42 | Sadakat ve müşteri avantajı geçmişi | Genişletme | Genişletilecek | `/sales/campaigns` yüzdelik promosyon | Bekliyor |
 
 ### F7 — Ortak üretim motorunun derinleştirilmesi
 
@@ -340,19 +361,19 @@ Tamamlanma ölçütü: Deneme planı gerçek stok/takvimi değiştirmiyor; uygun
 
 İlk teslimata alınacak öneriler: 14, 63, 64, 65, 66, 72.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 14 | Üretim planı ile gerçekleşen sonuçların karşılaştırılması | İlk kapsam | ATP/CTP, sonlu kapasite, plan sürümleri, müdahale listesi (MANUFACTURING-ACCEPTANCE) | Bekliyor |
-| 63 | Üretimde sıraya bağlı hazırlık süreleri | İlk kapsam | Yok | Bekliyor |
-| 64 | Kalıp, takım ve aparat kapasitesi | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 65 | Operatör becerisi ve iş ataması | İlk kapsam | Yok | Bekliyor |
-| 66 | Yakın dönem üretim planını sabitleme | İlk kapsam | Plan sürümleri (F0'da doğrulanacak) | Bekliyor |
-| 72 | Üretim maliyet sapmasının bileşenleri | İlk kapsam | Standart malzeme karşılaştırması (F0'da doğrulanacak) | Bekliyor |
-| 67 | Acil siparişin diğer işlere etkisi | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 68 | Fason kapsam ve sonuç doğrulama | Genişletme | Fason miktar/maliyet izi (`subcontracts`) | Bekliyor |
-| 69 | Ağırlık/hacim esaslı üretim dengesi | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 70 | Sayısal kalite ölçümlerinin analizi | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 71 | Sayaç ve durum bilgisine dayalı bakım | Genişletme | Takvimli bakım | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 14 | Üretim planı ile gerçekleşen sonuçların karşılaştırılması | İlk kapsam | Genişletilecek | ATP/CTP, sonlu kapasite, plan sürümleri, müdahale listesi (MANUFACTURING-ACCEPTANCE) | Bekliyor |
+| 63 | Üretimde sıraya bağlı hazırlık süreleri | İlk kapsam | Yeni | Yok | Bekliyor |
+| 64 | Kalıp, takım ve aparat kapasitesi | İlk kapsam | Yeni | Takım/aparat kaynağı yok; kaynaklar makine/istasyon | Bekliyor |
+| 65 | Operatör becerisi ve iş ataması | İlk kapsam | Genişletilecek | Canlı iş başlangıcında operatör kontrolü var; beceri/sertifika tanımı yok | Bekliyor |
+| 66 | Yakın dönem üretim planını sabitleme | İlk kapsam | Genişletilecek | Plan sürümleri; yayımlanmış plan düzenlenmez; dondurma penceresi yok | Bekliyor |
+| 72 | Üretim maliyet sapmasının bileşenleri | İlk kapsam | Genişletilecek | Maliyet kapanışında standart malzeme sapması; fiyat/miktar/işçilik/fason ayrımı yok | Bekliyor |
+| 67 | Acil siparişin diğer işlere etkisi | Genişletme | Genişletilecek | What-if senaryosu ve plan sürüm ağacı; acil sipariş etki raporu yok | Bekliyor |
+| 68 | Fason kapsam ve sonuç doğrulama | Genişletme | Genişletilecek | Fason miktar/maliyet izi (`subcontracts`) | Bekliyor |
+| 69 | Ağırlık/hacim esaslı üretim dengesi | Genişletme | Genişletilecek | Malzeme mutabakatı (teslim/iade/sarf), normal fire ve onaylı anormal kayıp; ağırlık/hacim dengesi yok | Bekliyor |
+| 70 | Sayısal kalite ölçümlerinin analizi | Genişletme | Yeni | Kalite kabul/ret ve yeniden işleme var; sayısal ölçüm ve kalibrasyon yok | Bekliyor |
+| 71 | Sayaç ve durum bilgisine dayalı bakım | Genişletme | Genişletilecek | Takvimli bakım | Bekliyor |
 
 ### F8 — Deri atölyesi
 
@@ -372,19 +393,19 @@ Tamamlanma ölçütü: Alan hesabı tutarlı; kalan parça ikinci stok değeri o
 
 İlk teslimata alınacak öneriler: 15, 73, 74, 75, 76, 79.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 15 | Deri malzemesinden ürün maliyetine görünüm | İlk kapsam | Parça alanı, kullanılabilir alan, kusur bölgesi, damar yönü, kesim planı (LEATHER-FASHION) | Bekliyor |
-| 73 | Dijital kalıp ölçü ve revizyon doğrulaması | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 74 | Sipariş/set bazında ton uyumu | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 75 | Kusur bölgelerinin kullanım alanına etkisi | İlk kapsam | Kusur bölgesi kaydı var | Bekliyor |
-| 76 | Kalan deri parçalarını görsel bulma | İlk kapsam | Kalan parça ve maliyet izi | Bekliyor |
-| 79 | Aksesuar partilerinin ürün izi | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 77 | Yapıştırma ve kaplama işlem koşulları | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 78 | Dikiş hatası ve neden analizi | Genişletme | Rework akışı | Bekliyor |
-| 80 | Numune ve prototip maliyeti | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 81 | Sezon ve ürün yaşam döngüsü | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 82 | Özel ölçü siparişinde müşteri kabulü | Genişletme | F0'da doğrulanacak | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 15 | Deri malzemesinden ürün maliyetine görünüm | İlk kapsam | Genişletilecek | Parça alanı, kullanılabilir alan, kusur bölgesi, damar yönü, kesim planı (LEATHER-FASHION) | Bekliyor |
+| 73 | Dijital kalıp ölçü ve revizyon doğrulaması | İlk kapsam | Genişletilecek | Kesim planı kalıp/model revizyonuna bağlı; ölçek ve geometri doğrulaması yok | Bekliyor |
+| 74 | Sipariş/set bazında ton uyumu | İlk kapsam | Genişletilecek | Deri malzemesinde renk/ton kaydı; set/sipariş bazında ton eşleştirme yok | Bekliyor |
+| 75 | Kusur bölgelerinin kullanım alanına etkisi | İlk kapsam | Genişletilecek | Kusur bölgesi kaydı var | Bekliyor |
+| 76 | Kalan deri parçalarını görsel bulma | İlk kapsam | Genişletilecek | Kalan parça ve maliyet izi | Bekliyor |
+| 79 | Aksesuar partilerinin ürün izi | İlk kapsam | Genişletilecek | Lot ve batch izi; aksesuar lotundan mamule geriye iz raporu yok | Bekliyor |
+| 77 | Yapıştırma ve kaplama işlem koşulları | Genişletme | Yeni | Yardımcı malzeme işlem koşulu kaydı yok | Bekliyor |
+| 78 | Dikiş hatası ve neden analizi | Genişletme | Genişletilecek | Yeniden işleme hata koduyla izleniyor; neden analizi raporu yok | Bekliyor |
+| 80 | Numune ve prototip maliyeti | Genişletme | Genişletilecek | Model/reçete/numune ve revizyon onayı var; numune maliyeti ayrı izlenmiyor | Bekliyor |
+| 81 | Sezon ve ürün yaşam döngüsü | Genişletme | Genişletilecek | Koleksiyon bilgisi var; yaşam döngüsü aşaması yok | Bekliyor |
+| 82 | Özel ölçü siparişinde müşteri kabulü | Genişletme | Genişletilecek | `/leather/custom-orders` özel ölçü, müşteri onayı ve termin; sürümlü ölçü ve değişiklik etkisi yok | Bekliyor |
 
 ### F9 — İnşaat ve gayrimenkul
 
@@ -404,19 +425,19 @@ Tamamlanma ölçütü: Onaylanmamış değişiklik kesin gelir sayılmıyor; ayn
 
 İlk teslimata alınacak öneriler: 16, 84, 87, 88, 91, 92.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 16 | İnşaat değişikliklerinde maliyet/süre/tahsilat etkisi | İlk kapsam | Proje 360: risk, çizim revizyonu, saha değişikliği, süre uzatımı, hakediş bağlantıları (CONSTRUCTION-360) | Bekliyor |
-| 84 | Şantiye iş cephesi hazırlığı | İlk kapsam | Hazırlık kontrolleri (F0'da doğrulanacak) | Bekliyor |
-| 87 | İnşaat ekip ve ekipman dengeleme | İlk kapsam | İş bağımlılıkları/program | Bekliyor |
-| 88 | Taşeron ölçüm ve kabul farkları | İlk kapsam | `subcontracts`, metraj | Bekliyor |
-| 91 | Teslim öncesi aşamalı kontrol | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 92 | Gayrimenkul taksit planını yeniden yapılandırma | İlk kapsam | `realestate` modülü taksit planları | Bekliyor |
-| 83 | İhalede katılım kararı | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 85 | IFC revizyonları arasında eleman/miktar farkı | Genişletme | IFC görünümü (`construction-control`) | Bekliyor |
-| 86 | Model çakışmalarını saha aksiyonuna bağlama | Genişletme | RFI kayıtları | Bekliyor |
-| 89 | İş güvenliği olayında neden/takip dosyası | Genişletme | Güvenlik aksiyonları | Bekliyor |
-| 90 | Hava ve saha koşullarının program etkisi | Genişletme | Günlük rapor | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 16 | İnşaat değişikliklerinde maliyet/süre/tahsilat etkisi | İlk kapsam | Genişletilecek | Proje 360: risk, çizim revizyonu, saha değişikliği, süre uzatımı, hakediş bağlantıları (CONSTRUCTION-360) | Bekliyor |
+| 84 | Şantiye iş cephesi hazırlığı | İlk kapsam | Genişletilecek | Proje 360 üç haftalık hazırlık: çizim, malzeme, ekip, onay engeli ve sorumlusu | Bekliyor |
+| 87 | İnşaat ekip ve ekipman dengeleme | İlk kapsam | Genişletilecek | Ekipman rezervasyonu ve çakışma engeli; kaynak dengeleme algoritması yok | Bekliyor |
+| 88 | Taşeron ölçüm ve kabul farkları | İlk kapsam | Genişletilecek | Proje 360 üretim → hakediş: kontrol/onay ve tekrar tahsis engeli; yeniden ölçüm farkı yok | Bekliyor |
+| 91 | Teslim öncesi aşamalı kontrol | İlk kapsam | Yeni | Aşamalı teslim kontrolü yok; temel: garanti/servis ve daire pasaportu | Bekliyor |
+| 92 | Gayrimenkul taksit planını yeniden yapılandırma | İlk kapsam | Genişletilecek | `realestate` modülü taksit planları | Bekliyor |
+| 83 | İhalede katılım kararı | Genişletme | Genişletilecek | Proje 360 ihale/teklif: fırsat, keşif, revizyon ve karar gerekçesi; katılım değerlendirme ölçütleri yok | Bekliyor |
+| 85 | IFC revizyonları arasında eleman/miktar farkı | Genişletme | Genişletilecek | IFC görünümü (`construction-control`) | Bekliyor |
+| 86 | Model çakışmalarını saha aksiyonuna bağlama | Genişletme | Yeni | IFC görünümü var; çakışma analizi yok | Bekliyor |
+| 89 | İş güvenliği olayında neden/takip dosyası | Genişletme | Genişletilecek | Çalışma izinleri ve risk radarında güvenlik; olay/temel neden dosyası yok | Bekliyor |
+| 90 | Hava ve saha koşullarının program etkisi | Genişletme | Genişletilecek | Saha raporu ve süre uzatımı dosyası; hava/saha koşulu kaydı yok | Bekliyor |
 
 ### F10 — Mobil kullanım ve personel
 
@@ -435,15 +456,15 @@ Tamamlanma ölçütü: Ağ kesintisi sonrası taslak korunuyor; tekrar eşitleme
 
 İlk teslimata alınacak öneriler: 17, 93, 94, 97.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 17 | Göreve göre mobil ve çevrimdışı deneyim | İlk kapsam | PWA, kamera barkodu, şifreli çevrimdışı taslak | Bekliyor |
-| 93 | Çalışan kişisel belge ve ücret portalı | İlk kapsam | Yok; `workspace/portal.ts` müşteri portalı | Bekliyor |
-| 94 | Puantaj düzeltme talepleri | İlk kapsam | `hr/attendance.ts` | Bekliyor |
-| 97 | İşe giriş/ayrılış kontrol listeleri | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 95 | İzin/vardiya talebinde ekip kapasitesi | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 96 | Çalışan hedefi ve değerlendirme geçmişi | Genişletme | Yok | Bekliyor |
-| 112 | PDKS/cihaz aktarım doğrulaması | Genişletme | F0'da doğrulanacak | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 17 | Göreve göre mobil ve çevrimdışı deneyim | İlk kapsam | Genişletilecek | PWA, kamera barkodu, şifreli çevrimdışı taslak | Bekliyor |
+| 93 | Çalışan kişisel belge ve ücret portalı | İlk kapsam | Yeni | Yok; `workspace/portal.ts` müşteri portalı | Bekliyor |
+| 94 | Puantaj düzeltme talepleri | İlk kapsam | Genişletilecek | `hr/attendance.ts` | Bekliyor |
+| 97 | İşe giriş/ayrılış kontrol listeleri | İlk kapsam | Yeni | İşe giriş/ayrılış kontrol listesi yok | Bekliyor |
+| 95 | İzin/vardiya talebinde ekip kapasitesi | Genişletme | Yeni | İzin talebi akışı yok; puantajda izin günleri var | Bekliyor |
+| 96 | Çalışan hedefi ve değerlendirme geçmişi | Genişletme | Yeni | Yok | Bekliyor |
+| 112 | PDKS/cihaz aktarım doğrulaması | Genişletme | Genişletilecek | PDKS dosya aktarımı (`/api/integrations/connections/:id/attendance-file`); ham olay–eşleme–inceleme yok, canlı cihaz bağlantısı dış erişim ister | Bekliyor |
 
 ### F11 — AI, OCR ve dış bağlantılar
 
@@ -462,17 +483,17 @@ Tamamlanma ölçütü: AI/OCR doğrudan mali kesinleştirme yapmıyor; yetki kay
 
 İlk teslimata alınacak öneriler: 18, 103, 104, 108, 109, 110.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 18 | Kaynak ve kapsam açıklayan AI yanıtları | İlk kapsam | `ai` modülü kontrollü araçlarla veri okuyor (ADA-AI) | Bekliyor |
-| 103 | Alan kaynaklı OCR doğrulaması | İlk kapsam | OCR ertelenmiş (COUNTRY-IMPLEMENTATION) | Bekliyor |
-| 104 | İçerik üzerinden belge tekrar kontrolü | İlk kapsam | Dosya hash kontrolü | Bekliyor |
-| 108 | Kanallar arası stok farkı çözümü | İlk kapsam | `platform-integrations`, elle stok gönderimi | Bekliyor |
-| 109 | SKU/lokasyon eşleme yaşam döngüsü | İlk kapsam | Kanal eşlemeleri | Bekliyor |
-| 110 | Entegrasyon hata ve yetki senaryoları | İlk kapsam | F0'da doğrulanacak | Bekliyor |
-| 105 | Açıklanabilir olağan dışı işlem incelemesi | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 106 | Doğal dilden rapor filtresi | Genişletme | F0'da doğrulanacak | Bekliyor |
-| 107 | Onaylı işletme içi bilgi araması | Genişletme | Yok | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 18 | Kaynak ve kapsam açıklayan AI yanıtları | İlk kapsam | Genişletilecek | `ai` modülü kontrollü araçlarla veri okuyor (ADA-AI) | Bekliyor |
+| 103 | Alan kaynaklı OCR doğrulaması | İlk kapsam | Genişletilecek | Proje 360 OCR yardımcısı (PDF/görüntü, insan doğrulamalı taslak); alan bazında kaynak işareti yok, genel fatura OCR ertelendi | Bekliyor |
+| 104 | İçerik üzerinden belge tekrar kontrolü | İlk kapsam | Genişletilecek | Dosya hash kontrolü | Bekliyor |
+| 108 | Kanallar arası stok farkı çözümü | İlk kapsam | Genişletilecek | `platform-integrations`, elle stok gönderimi | Bekliyor |
+| 109 | SKU/lokasyon eşleme yaşam döngüsü | İlk kapsam | Genişletilecek | Kanal eşlemeleri | Bekliyor |
+| 110 | Entegrasyon hata ve yetki senaryoları | İlk kapsam | Genişletilecek | Shopify HMAC, olay kimliği/sürümü, backoff, dead-letter ve elle tekrar; sistematik hata senaryosu seti yok | Bekliyor |
+| 105 | Açıklanabilir olağan dışı işlem incelemesi | Genişletme | Yeni | Olağan dışı işlem analizi yok | Bekliyor |
+| 106 | Doğal dilden rapor filtresi | Genişletme | Yeni | Doğal dilden filtre yok; Ada AI yalnız okuma araçlarıyla yanıtlıyor | Bekliyor |
+| 107 | Onaylı işletme içi bilgi araması | Genişletme | Genişletilecek | Proje 360 kaynaklı yerel asistan (kayıt/belge/OCR arama); şirket geneli onaylı bilgi kaynağı yok | Bekliyor |
 
 ### F12 — Büyük veri ve sürüm işletimi
 
@@ -491,13 +512,13 @@ Tamamlanma ölçütü: Tanımlı veri hacminde süre/bellek hedefi sağlanıyor;
 
 İlk teslimata alınacak öneriler: 20, 113, 114, 119.
 
-| Öneri | İş | Teslimat | Mevcut temel | Durum |
-|---|---|---|---|---|
-| 20 | Arka planda büyük rapor hazırlama | İlk kapsam | XLSX akışla yazılıyor; rapor sorguları belleğe alınıyor (ENTERPRISE-EXPANSION) | Bekliyor |
-| 113 | Uçtan uca teknik izleme | İlk kapsam | Yok (OpenTelemetry yok) | Bekliyor |
-| 114 | Veritabanı performans eğilimleri | İlk kapsam | Yok (pg_stat_statements kullanılmıyor); PERFORMANCE kaydı | Bekliyor |
-| 119 | Güncelleme öncesi uyumluluk/deneme kurulumu | İlk kapsam | `system/updates.ts` | Bekliyor |
-| 115 | Dosya ve işlem kapasitesi bütçesi | Genişletme | F0'da doğrulanacak | Bekliyor |
+| Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
+|---|---|---|---|---|---|
+| 20 | Arka planda büyük rapor hazırlama | İlk kapsam | Genişletilecek | XLSX akışla yazılıyor; rapor sorguları belleğe alınıyor (ENTERPRISE-EXPANSION) | Bekliyor |
+| 113 | Uçtan uca teknik izleme | İlk kapsam | Yeni | Yok (OpenTelemetry yok) | Bekliyor |
+| 114 | Veritabanı performans eğilimleri | İlk kapsam | Yeni | Yok (pg_stat_statements kullanılmıyor); PERFORMANCE kaydı | Bekliyor |
+| 119 | Güncelleme öncesi uyumluluk/deneme kurulumu | İlk kapsam | Genişletilecek | `system/updates.ts` | Bekliyor |
+| 115 | Dosya ve işlem kapasitesi bütçesi | Genişletme | Yeni | Kullanım/kota takibi yok | Bekliyor |
 
 ## Paralel dış hat
 
