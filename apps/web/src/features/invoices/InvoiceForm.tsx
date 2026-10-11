@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, ITEM_UNITS, calcInvoice, calculateDocumentTaxes, calculateDocumentStamp, applyRate, dec, formatTR, todayIso, type DocumentTaxRuleSnapshot, type DocumentTaxCalculation, type MoneyValue } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
+import { ErrorCallout } from '../../components/layout/Blocked';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -519,7 +520,6 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   if (loading) return <PageLoading />;
 
   const gridCols = 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_84px_minmax(0,1fr)_68px_140px_minmax(0,1fr)_32px]';
-  const fxNeedsLink = error && (error as { code?: string }).code === 'FX_RATE_MISSING';
 
   return (
     <FormGuard captureAll scopeKey="invoice-editor" pending={save.isPending || remove.isPending}>
@@ -538,20 +538,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       />
 
       <div className="flex flex-col gap-5">
-        {(error || fieldError) && (
-          <Callout
-            tone="danger"
-            action={
-              fxNeedsLink ? (
-                <Link to="/settings/currencies" className="shrink-0 text-sm link">
-                  {t('ledger.journal.enterFx')}
-                </Link>
-              ) : undefined
-            }
-          >
-            {error ? errorMessage(error) : fieldError}
-          </Callout>
-        )}
+        {error ? <ErrorCallout error={error} /> : fieldError && <Callout tone="danger">{fieldError}</Callout>}
         {returnOfId && (
           <Callout>
             {t('invoices.form.returnOf')}{' '}

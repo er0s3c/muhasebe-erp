@@ -513,10 +513,11 @@ export async function cancelInvoice(tx: Tx, ctx: InvoiceCtx, id: string, input: 
   if (inv.status !== 'posted') throw unprocessable('Yalnızca kaydedilmiş fatura iptal edilebilir', 'INVOICE_NOT_POSTED');
   if ((await tx.execute(sql`select id from pos_sales where invoice_id=${id}::uuid limit 1`)).rows.length) throw unprocessable('Mağaza satışının mali kayıtlarını POS iade/değişim akışından düzeltin','POS_INVOICE_PROTECTED');
 
-  const active = await tx.execute<{ invoice_no: string }>(sql`
-    select invoice_no from invoices where return_of_id = ${id} and status = 'posted' limit 1`);
+  const active = await tx.execute<{ id: string; invoice_no: string }>(sql`
+    select id, invoice_no from invoices where return_of_id = ${id} and status = 'posted' limit 1`);
   if (active.rows.length > 0) {
-    throw unprocessable(`Bu faturaya ${active.rows[0]!.invoice_no} numaralı iade kesilmiş; önce iadeyi iptal edin`, 'INVOICE_HAS_RETURNS');
+    const ret = active.rows[0]!;
+    throw unprocessable(`Bu faturaya ${ret.invoice_no} numaralı iade kesilmiş; önce iadeyi iptal edin`, 'INVOICE_HAS_RETURNS', { invoiceId: ret.id, invoiceNo: ret.invoice_no });
   }
   // Tahsil edilmiş/ödenmiş (eşleştirilmiş) fatura iptal edilemez: kapatma havada kalır, yaşlandırma defterden ayrışır (ACC-1)
   const settled = await entrySettlements(tx, inv.journalEntryId!);
@@ -524,6 +525,7 @@ export async function cancelInvoice(tx: Tx, ctx: InvoiceCtx, id: string, input: 
     throw unprocessable(
       `Bu fatura kapatılmış: ${describeSettlements(settled)}. Önce tahsilatı/ödemeyi iptal edin (Kasa/Banka > hareket > İptal); çek/senet ya da fesihle kapatıldıysa faturayı iptal etmek yerine iade faturası kesin`,
       'INVOICE_HAS_PAYMENTS',
+      { settlements: settled },
     );
   }
 

@@ -397,7 +397,7 @@ describe('banka ekstresi: içe aktarma, eşleştirme ve mutabakat', async () => 
 
     const cancel = await c.post(`/api/treasury/transactions/${t1.id}/cancel`, { reason: 'Vazgeçildi', date: day(3, 2) });
     expect(cancel.statusCode).toBe(422);
-    expect(cancel.json().error.code).toBe('TXN_RECONCILED');
+    expect(cancel.json().error).toMatchObject({ code: 'TXN_RECONCILED', details: { accountId: bank.id } });
     const reverse = await c.post(`/api/journal-entries/${first.match!.entryId}/reverse`, { description: 'Ters', entryDate: day(3, 2) });
     expect(reverse.statusCode).toBe(422);
     // Hareketin yevmiyesi kaynaklıdır (treasury): doğrudan ters kayıt zaten kaynak korumasıyla reddedilir

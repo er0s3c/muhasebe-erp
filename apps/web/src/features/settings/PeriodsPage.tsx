@@ -1,11 +1,12 @@
 import { CalendarPlus, Lock, LockOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { PageLoading, ErrorState } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
@@ -21,13 +22,17 @@ export function PeriodsPage() {
   const months = t('months', { returnObjects: true }) as string[];
   const { data: yearsData } = useCQuery<{ years: number[] }>(['period-years'], '/api/periods/years');
   const currentYear = Number(todayIso().slice(0, 4));
-  const [year, setYear] = useState(currentYear);
+  // Kapalı/tanımsız dönem hatasındaki çözüm bağlantısı (?year=) ilgili yılı açar
+  const [params] = useSearchParams();
+  const asked = Number(params.get('year'));
+  const requested = Number.isInteger(asked) && asked >= 1900 && asked <= 2999 ? asked : null;
+  const [year, setYear] = useState(requested ?? currentYear);
   const { data, isPending, error: PeriodsPageQueryError, refetch: PeriodsPageQueryRetry, isFetching: PeriodsPageQueryFetching } = useCQuery<{ periods: Period[] }>(['periods', year], `/api/periods?year=${year}`);
   const [confirm, setConfirm] = useState<{ period: Period; action: 'close' | 'reopen' } | null>(null);
 
   useEffect(() => {
-    if (yearsData && yearsData.years.length > 0 && !yearsData.years.includes(year)) setYear(yearsData.years[0]!);
-  }, [yearsData, year]);
+    if (yearsData && yearsData.years.length > 0 && !yearsData.years.includes(year) && year !== requested) setYear(yearsData.years[0]!);
+  }, [yearsData, year, requested]);
 
   const generate = useCMutation((y: number, call) => call('/api/periods/generate', { method: 'POST', body: { year: y } }), [['period-years'], ['periods']]);
   const change = useCMutation(
@@ -36,6 +41,14 @@ export function PeriodsPage() {
   );
 
   const maxYear = Math.max(currentYear, ...(yearsData?.years ?? []));
+  const missingYear = yearsData && !yearsData.years.includes(year) ? year : null;
+  const addYear = (y: number) => generate.mutate(y, {
+    onSuccess: () => {
+      toast.success(t('settings.periods.yearAdded', { year: y }));
+      setYear(y);
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
   const canClose = can('ledger.close_period');
 
   if (PeriodsPageQueryError && !data) return <ErrorState error={PeriodsPageQueryError} onRetry={() => void PeriodsPageQueryRetry()} retrying={PeriodsPageQueryFetching} />;
@@ -47,7 +60,7 @@ export function PeriodsPage() {
         actions={
           <>
             <Select className="w-28" value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label={t('common.year')}>
-              {(yearsData?.years ?? [year]).map((y) => (
+              {[...new Set([...(yearsData?.years ?? []), year])].sort((a, b) => b - a).map((y) => (
                 <option key={y} value={y}>
                   {y}
                 </option>
@@ -56,15 +69,7 @@ export function PeriodsPage() {
             {can('settings.manage') && (
               <Button
                 loading={generate.isPending}
-                onClick={() =>
-                  generate.mutate(maxYear + 1, {
-                    onSuccess: () => {
-                      toast.success(t('settings.periods.yearAdded', { year: maxYear + 1 }));
-                      setYear(maxYear + 1);
-                    },
-                    onError: (e) => toast.error(errorMessage(e)),
-                  })
-                }
+                onClick={() => addYear(maxYear + 1)}
               >
                 <CalendarPlus className="size-4" aria-hidden />
                 {t('settings.periods.addYear')}
@@ -74,6 +79,14 @@ export function PeriodsPage() {
         }
       />
 
+      {missingYear !== null && (
+        <div className="mb-4">
+          <Callout tone="warning" title={`${missingYear} için mali dönem tanımlı değil`}
+            action={can('settings.manage') ? <Button size="sm" loading={generate.isPending} onClick={() => addYear(missingYear)}><CalendarPlus className="size-4" aria-hidden />{missingYear} yılını oluştur</Button> : undefined}>
+            {can('settings.manage') ? 'Bu yıla tarihli kayıtlar için önce yılın dönemlerini oluşturun.' : 'Yılın dönemlerini oluşturması için şirket yöneticinize başvurun.'}
+          </Callout>
+        </div>
+      )}
       {isPending ? (
         <PageLoading />
       ) : (

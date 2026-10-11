@@ -325,7 +325,7 @@ export async function cancelTreasuryTransaction(tx: Tx, ctx: LedgerCtx, id: stri
     select 1 from bank_statement_lines b join journal_lines l on l.id = b.journal_line_id
     where b.status = 'matched' and l.entry_id = ${txn.journalEntryId} limit 1`);
   if (reconciled.rows.length > 0) {
-    throw unprocessable('Bu hareketin banka satırı ekstreyle eşleşmiş; iptal etmeden önce Banka ekstresi sekmesinden eşleşmeyi kaldırın', 'TXN_RECONCILED');
+    throw unprocessable('Bu hareketin banka satırı ekstreyle eşleşmiş; iptal etmeden önce Banka ekstresi sekmesinden eşleşmeyi kaldırın', 'TXN_RECONCILED', { accountId: txn.accountId });
   }
 
   const date = input.date ?? todayIso();

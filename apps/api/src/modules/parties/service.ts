@@ -448,18 +448,18 @@ export async function assertAllocatable(tx: Tx, control: PartyControlType, items
 
 /** Fişin cari kalemlerini kapatan etkin işlemler (kasa/banka, çek/senet, fesih). Belge iptali/ters kayıt öncesi denetim için. */
 export async function entrySettlements(tx: Tx, entryId: string) {
-  const r = await tx.execute<{ kind: string; ref: string | null }>(sql`
-    select 'treasury' as kind, t.txn_no as ref
+  const r = await tx.execute<{ kind: string; id: string; ref: string | null }>(sql`
+    select 'treasury' as kind, t.id::text as id, t.txn_no as ref
       from party_allocations a
       join journal_lines l on l.id = a.charge_line_id
       join treasury_transactions t on t.id = a.transaction_id and t.status = 'posted'
      where l.entry_id = ${entryId}
     union all
-    select 'cheque', c.doc_no
+    select 'cheque', c.id::text, c.doc_no
       from cheque_allocations a join journal_lines l on l.id = a.charge_line_id join cheques c on c.id = a.cheque_id
      where l.entry_id = ${entryId}
     union all
-    select 'writeoff', null
+    select 'writeoff', w.entry_id::text, null
       from sales_writeoffs w join journal_lines l on l.id = w.charge_line_id
      where l.entry_id = ${entryId}`);
   return r.rows;

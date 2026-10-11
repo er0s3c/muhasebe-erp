@@ -89,7 +89,21 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByRole('heading', { name: /SIF-\d{4}-000001/, level: 1 })).toBeVisible();
 
-  // İadesi olan fatura iptal edilemez; önce iade iptal edilir
+  // İadesi olan fatura iptal edilemez: neden ve iade faturasına giden çözüm bağlantısı pencerede kalır (öneri 28)
+  await nav.getByRole('link', { name: 'Satış faturaları' }).click();
+  await expect(async () => {
+    await page.getByRole('row', { name: /SF-\d{4}-000001/ }).click({ timeout: 3_000 });
+    await expect(page.getByRole('button', { name: 'Faturayı iptal et' })).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 25_000 });
+  await page.getByRole('button', { name: 'Faturayı iptal et' }).click();
+  await dialog.getByLabel('İptal nedeni').fill('Yanlış fatura');
+  await dialog.getByRole('button', { name: 'Faturayı iptal et' }).click();
+  await expect(dialog).toContainText('numaralı iade kesilmiş');
+  await dialog.getByRole('link', { name: /SIF-\d{4}-000001 faturasını aç/ }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: /SIF-\d{4}-000001/, level: 1 })).toBeVisible();
+
+  // Önce iade iptal edilir
   await page.getByRole('button', { name: 'Faturayı iptal et' }).click();
   await dialog.getByLabel('İptal nedeni').fill('Yanlış iade');
   await dialog.getByRole('button', { name: 'Faturayı iptal et' }).click();

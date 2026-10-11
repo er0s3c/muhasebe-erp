@@ -320,7 +320,8 @@ describe('fatura', async () => {
 
     // İadesi olan fatura iptal edilemez; önce iade iptal edilir
     const ret = await posted(c, { type: 'sales_return', partyId: cust.id, returnOfId: next.invoice.id, invoiceDate: day(3, 13), lines: [line(item.id, '1', '100', { sourceLineId: next.lines[0].id })] });
-    expect((await c.post(`/api/invoices/${next.invoice.id}/cancel`, { reason: 'Deneme' })).json().error.code).toBe('INVOICE_HAS_RETURNS');
+    // Engel, çözüm bağlantısı için iade belgesini de taşır (öneri 28)
+    expect((await c.post(`/api/invoices/${next.invoice.id}/cancel`, { reason: 'Deneme' })).json().error).toMatchObject({ code: 'INVOICE_HAS_RETURNS', details: { invoiceId: ret.invoice.id, invoiceNo: ret.invoice.invoiceNo } });
     expect((await c.post(`/api/invoices/${ret.invoice.id}/cancel`, { reason: 'İade hatalı', date: day(3, 14) })).statusCode).toBe(200);
     expect((await c.post(`/api/invoices/${next.invoice.id}/cancel`, { reason: 'Deneme', date: day(3, 15) })).statusCode).toBe(200);
     expect(await recon(c)).toMatchObject({ difference: '0.0000' });

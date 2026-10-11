@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DELIVERY_NOTE_TYPE_META, INVOICE_TYPES, INVOICE_TYPE_META, INVOICE_PRINT_TEMPLATES, INVOICE_PRINT_TEMPLATE_LABELS, dec, todayIso, type InvoicePrintTemplate } from '@erp/shared';
+import { BlockedHint, ErrorCallout } from '../../components/layout/Blocked';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -11,6 +12,7 @@ import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
+import { permissionBlocker } from '../../lib/blockers';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
@@ -83,7 +85,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
   const [printPreview, setPrintPreview] = useState(false);
   const printTemplate = selectedTemplate ?? formatSettings.data?.invoicePrintTemplate ?? 'detailed';
   // İptal reddedilirse (ör. tahsil edilmiş fatura) gerekçe ve yönlendirme pencerede kalır: kullanıcı önce tahsilatı iptal eder
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<unknown>(null);
   const creditLimit = (location.state as { creditLimit?: { limit: string; balance: string } } | null)?.creditLimit;
 
   const cancel = useCMutation(
@@ -92,8 +94,15 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
   );
 
   const listPath = meta.side === 'sales' ? '/invoices/sales' : '/invoices/purchases';
-  const canReturn = inv.status === 'posted' && !meta.isReturn && inv.type !== 'expense' && can('invoices.manage');
-  const canCancel = inv.status === 'posted' && can('invoices.post');
+  // Kayıtlı belgede işlem görünür kalır; yetki yoksa pasif düğmenin altında nedeni ve çözüm yolu yazılır (öneri 28)
+  const returnable = inv.status === 'posted' && !meta.isReturn && inv.type !== 'expense';
+  const canReturn = returnable && can('invoices.manage');
+  const cancellable = inv.status === 'posted';
+  const canCancel = cancellable && can('invoices.post');
+  const blockers = [
+    returnable && !canReturn && { id: 'invoice-return-blocked', ...permissionBlocker('İade faturası kesmek', can) },
+    cancellable && !canCancel && { id: 'invoice-cancel-blocked', ...permissionBlocker('Faturayı iptal etmek', can) },
+  ].filter((b) => !!b);
   const returnType: InvoiceType = inv.type === 'sales' ? 'sales_return' : 'purchase_return';
   const showQtyReturned = lines.some((l) => l.returnedQty && dec(l.returnedQty).gt(0));
 
@@ -126,14 +135,14 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
             {t('invoices.view.print')}
           </Button>
           <InvoiceShareButton data={data} />
-          {canReturn && (
-            <Button onClick={() => navigate(`/invoices/new?type=${returnType}&returnOf=${inv.id}`)}>
+          {returnable && (
+            <Button disabled={!canReturn} aria-describedby={canReturn ? undefined : 'invoice-return-blocked'} onClick={() => navigate(`/invoices/new?type=${returnType}&returnOf=${inv.id}`)}>
               <Undo2 className="size-4" aria-hidden />
               {t('invoices.view.createReturn')}
             </Button>
           )}
-          {canCancel && (
-            <Button variant="danger" onClick={() => setCancelling(true)}>
+          {cancellable && (
+            <Button variant="danger" disabled={!canCancel} aria-describedby={canCancel ? undefined : 'invoice-cancel-blocked'} onClick={() => setCancelling(true)}>
               <Ban className="size-4" aria-hidden />
               {t('invoices.view.cancel')}
             </Button>
@@ -143,6 +152,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
       />
 
       <div className="flex flex-col gap-4">
+        {blockers.length > 0 && <div className="flex flex-col gap-1">{blockers.map(({ id, ...b }) => <BlockedHint key={id} id={id} blocker={b} />)}</div>}
         <DocumentApprovalPanel type="invoice" id={inv.id} status={inv.status}/>
         {inv.status === 'cancelled' && (
           <Callout tone="danger" title={t('invoices.view.cancelledTitle', { date: inv.cancelledAt ? fmtDate(inv.cancelledAt) : '' })}>
@@ -336,7 +346,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                       toast.success(t('invoices.view.cancelledMsg'));
                       setCancelling(false);
                     },
-                    onError: (e) => setCancelError(errorMessage(e)),
+                    onError: (e) => setCancelError(e),
                   },
                 )
               }
@@ -347,11 +357,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
         }
       >
         <div className="flex flex-col gap-4">
-          {cancelError && (
-            <Callout tone="danger" title={t('invoices.view.cancelBlocked')}>
-              {cancelError}
-            </Callout>
-          )}
+          {cancelError != null && <ErrorCallout error={cancelError} title={t('invoices.view.cancelBlocked')} discardDraft onNavigate={() => { setCancelling(false); setCancelError(null); }} />}
           <Field label={t('invoices.view.cancelDate')}>{(fid) => <Input id={fid} type="date" value={cancelDate} min={inv.invoiceDate} onChange={(e) => setCancelDate(e.target.value)} />}</Field>
           <Field label={t('invoices.view.cancelReason')} required>{(fid) => <Input id={fid} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />}</Field>
         </div>

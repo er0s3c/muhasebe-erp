@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { applyRate, dec, formatTR, proportionalBase, roundMoney, settlementFxDiff, todayIso, type MoneyValue, formatMoney } from '@erp/shared';
+import { ErrorCallout } from '../../components/layout/Blocked';
 import { Button } from '../../components/ui/Button';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { Callout } from '../../components/ui/Feedback';
@@ -12,7 +13,6 @@ import { SegmentedTabs } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
-import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCMutation, useCQuery, useIdempotencyKey } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
@@ -326,7 +326,6 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
     setItems((cur) => Object.fromEntries(Object.entries(cur).map(([k, v]) => [k, { ...v, settle: null }])));
   };
 
-  const fxMissing = error instanceof ApiError && error.code === 'FX_RATE_MISSING';
   const accountOptions = accounts.map((a) => (
     <option key={a.id} value={a.id}>
       {accountLabel(a)}
@@ -362,20 +361,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
       }
     >
       <div className="flex flex-col gap-6">
-        {error && (
-          <Callout
-            tone="danger"
-            action={
-              fxMissing ? (
-                <Link to="/settings/currencies" className="shrink-0 text-sm link" onClick={() => onOpenChange(false)}>
-                  {t('ledger.journal.enterFx')}
-                </Link>
-              ) : undefined
-            }
-          >
-            {errorMessage(error)}
-          </Callout>
-        )}
+        {error && <ErrorCallout error={error} onNavigate={() => onOpenChange(false)} />}
 
         {accData && accounts.length === 0 && (
           <Callout tone="warning" title={t('treasury.sheet.noAccounts')}>
