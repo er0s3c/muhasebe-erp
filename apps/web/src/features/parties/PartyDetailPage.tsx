@@ -11,6 +11,7 @@ import { Stat } from '../../components/ui/Stat';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
+import { RelatedRecords } from '../../components/layout/RelatedRecords';
 import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
@@ -27,7 +28,7 @@ import { PartyFormSheet } from './PartyFormSheet';
 import { PartyPricingCard } from '../pricing/PartyPricingCard';
 import { RelatedContacts } from '../directory/RelatedContacts';
 
-type Tab = 'statement' | 'openItems' | 'card';
+type Tab = 'statement' | 'openItems' | 'card' | 'related';
 
 export function PartyDetailPage() {
   const { t } = useTranslation();
@@ -142,12 +143,13 @@ export function PartyDetailPage() {
         className="mb-5"
         value={tab}
         onChange={setTab}
-        items={(['statement', 'openItems', 'card'] as const).map((k) => ({ key: k, label: t(`parties.detail.tabs.${k}`) }))}
+        items={(['statement', 'openItems', 'related', 'card'] as const).map((k) => ({ key: k, label: t(`parties.detail.tabs.${k}`) }))}
       />
 
       <TabPanel id="parties-PartyDetailPage-0-panel" labelledBy={"parties-PartyDetailPage-0-" + (tab)}>
 {tab === 'statement' && <StatementTab partyId={party.id} />}
       {tab === 'openItems' && <OpenItemsTab partyId={party.id} />}
+      {tab === 'related' && <RelatedRecords kind="party" id={party.id} />}
       {tab === 'card' && (
         <Card>
           <CardHeader

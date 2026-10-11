@@ -1115,7 +1115,8 @@
       "tabs": {
         "statement": "Ekstre",
         "openItems": "Açık kalemler",
-        "card": "Kart bilgileri"
+        "card": "Kart bilgileri",
+        "related": "İlişkili kayıtlar"
       },
       "balance": "Bakiye",
       "owesUs": "Bize borçlu",
@@ -1266,7 +1267,8 @@
       "tabs": {
         "statement": "Kart ekstresi",
         "warehouses": "Depolar",
-        "card": "Kart bilgileri"
+        "card": "Kart bilgileri",
+        "related": "İlişkili kayıtlar"
       },
       "onHand": "Eldeki miktar",
       "avgCost": "Ortalama maliyet",

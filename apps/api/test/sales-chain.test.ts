@@ -67,8 +67,23 @@ describe('satış belge zinciri', async () => {
     const restricted = (await chain(sales, 'invoice', invoice.invoice.id)).nodes.find((n) => n.kind === 'payment');
     expect(restricted).toMatchObject({ restricted: true, no: null, amount: null, path: null });
 
+    // Öneri 4: cari ve ürünün modüller arası ilişkili kayıtları; her bölüm kendi izniyle
+    const related = async (client: typeof c, kind: string, id: string) => {
+      const r = await client.get(`/api/related?kind=${kind}&id=${id}`);
+      expect(r.statusCode, r.body).toBe(200);
+      return Object.fromEntries((r.json().sections as { key: string; total: number; recent: { id: string; path: string }[] }[]).map((s) => [s.key, s]));
+    };
+    const party = await related(c, 'party', cust.id);
+    expect(Object.fromEntries(Object.entries(party).map(([k, v]) => [k, v.total]))).toEqual({ quotes: 1, orders: 1, deliveries: 1, invoices: 2, payments: 1 });
+    expect(party.payments!.recent[0]).toMatchObject({ id: receipt.id, path: `/treasury/transactions?open=${receipt.id}` });
+    const product = await related(c, 'item', item.id);
+    expect(Object.keys(product).sort()).toEqual(['deliveries', 'invoices', 'orders']);
+    expect(product.invoices!.total).toBe(2);
+    expect(Object.keys(await related(sales, 'party', cust.id))).not.toContain('payments');
+
     // Başka şirketin belgesi bulunamaz; geçersiz istek reddedilir
     const other = await k.setup('ZincirYabanci');
+    expect((await other.c.get(`/api/related?kind=party&id=${cust.id}`)).statusCode).toBe(404);
     expect((await other.c.get(`/api/sales-chain?kind=invoice&id=${invoice.invoice.id}`)).statusCode).toBe(404);
     expect((await c.get('/api/sales-chain?kind=payment&id=' + receipt.id)).statusCode).toBe(400);
   });

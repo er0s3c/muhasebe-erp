@@ -12,6 +12,7 @@ import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { RelatedRecords } from '../../components/layout/RelatedRecords';
 import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
@@ -26,7 +27,7 @@ import { ItemFormSheet } from './ItemFormSheet';
 import { MovementDetailSheet } from './MovementDetailSheet';
 import { MovementFormSheet, type MovementType } from './MovementFormSheet';
 
-type Tab = 'statement' | 'warehouses' | 'card';
+type Tab = 'statement' | 'warehouses' | 'card' | 'related';
 
 export function ItemDetailPage() {
   const { t } = useTranslation();
@@ -135,12 +136,13 @@ export function ItemDetailPage() {
 
       <SegmentedTabs id="inventory-ItemDetailPage-0" panelId={() => 'inventory-ItemDetailPage-0-panel'}
         className="mb-5"
-        value={goods ? tab : 'card'}
+        value={goods || tab === 'related' ? tab : 'card'}
         onChange={setTab}
-        items={(goods ? (['statement', 'warehouses', 'card'] as const) : (['card'] as const)).map((k) => ({ key: k, label: t(`inventory.detail.tabs.${k}`) }))}
+        items={(goods ? (['statement', 'warehouses', 'related', 'card'] as const) : (['card', 'related'] as const)).map((k) => ({ key: k, label: t(`inventory.detail.tabs.${k}`) }))}
       />
 
-      <TabPanel id="inventory-ItemDetailPage-0-panel" labelledBy={"inventory-ItemDetailPage-0-" + (goods ? tab : 'card')}>
+      <TabPanel id="inventory-ItemDetailPage-0-panel" labelledBy={"inventory-ItemDetailPage-0-" + (goods || tab === 'related' ? tab : 'card')}>
+      {tab === 'related' && <RelatedRecords kind="item" id={item.id} />}
 {goods && tab === 'statement' && <StatementTab itemId={item.id} unit={unit} onOpenDoc={setOpenDoc} />}
       {goods && tab === 'warehouses' && (
         <TableWrap>

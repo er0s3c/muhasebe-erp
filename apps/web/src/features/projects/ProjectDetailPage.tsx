@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { PageTitle } from '../../components/ui/Card';
 import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Modal } from '../../components/ui/Sheet';
+import { RelatedRecords } from '../../components/layout/RelatedRecords';
 import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
@@ -23,7 +24,7 @@ import { EmployerTab } from './EmployerTab';
 import { TransactionsTab } from './TransactionsTab';
 import { WbsTab } from './WbsTab';
 
-type Tab = 'overview' | 'wbs' | 'budget' | 'transactions' | 'employer' | 'sales';
+type Tab = 'overview' | 'wbs' | 'budget' | 'transactions' | 'employer' | 'sales' | 'related';
 
 /** Durum geçişi düğmesinin biçimi: hedef duruma göre etiket (yeniden açma ve iptal ayrı anlatılır). */
 type TransitionLabel = 'start' | 'reopen' | 'restore' | 'hold' | 'complete' | 'cancel';
@@ -157,6 +158,7 @@ export function ProjectDetailPage() {
           { key: 'transactions', label: t('projects.tabs.transactions') },
           ...(p.kind === 'contract' && subcontractsOn && canReadContracts ? [{ key: 'employer' as const, label: t('projects.tabs.employer') }] : []),
           ...(p.kind === 'own' && realEstateOn && canReadSales ? [{ key: 'sales' as const, label: t('projects.tabs.sales') }] : []),
+          { key: 'related', label: 'İlişkili kayıtlar' },
         ]}
       />
 
@@ -167,6 +169,7 @@ export function ProjectDetailPage() {
       {tab === 'transactions' && <TransactionsTab project={p} />}
       {tab === 'employer' && <EmployerTab project={p} />}
       {tab === 'sales' && <SalesTab project={p} />}
+      {tab === 'related' && <RelatedRecords kind="project" id={p.id} />}
       </TabPanel>
 
       <ProjectFormSheet open={editing} onOpenChange={setEditing} project={p} onSaved={() => undefined} />
