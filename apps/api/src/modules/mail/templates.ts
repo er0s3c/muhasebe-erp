@@ -105,3 +105,22 @@ export function invoiceDocumentMail(to: string, d: InvoiceDocumentMailInput, for
     `<p style="color:#6d6c6b;font-size:12px">${esc(footer)}</p></div>`;
   return { to, subject: `${d.company} — ${d.invoiceNo} numaralı fatura`, text, html };
 }
+
+/**
+ * Cari mutabakat mektubu (öneri 59): tarih itibarıyla kayıtlardaki bakiye ve cevap isteği. Alıcıdan, kendi kayıtlarındaki
+ * bakiyeyi bildirerek yanıt vermesi istenir; cevap uygulamaya kullanıcı tarafından işlenir.
+ */
+export function partyReconciliationMail(to: string, d: { company: string; partyName: string; asOf: string; lines: readonly string[]; note: string | null; reference: string }): MailMessage {
+  const date = d.asOf.split('-').reverse().join('.');
+  const paragraphs = [
+    ...(d.note ? [d.note] : []),
+    `${date} tarihi itibarıyla kayıtlarımızda firmanızın bakiyesi aşağıdaki gibidir:`,
+    ...d.lines.map((l) => `• ${l}`),
+    'Kendi kayıtlarınızla karşılaştırarak mutabık olup olmadığınızı, değilseniz kayıtlarınızdaki bakiyeyi ve farkın nedenini bu iletiyi yanıtlayarak bildirmenizi rica ederiz.',
+    `Mutabakat referansı: ${d.reference}`,
+  ];
+  const text = [`Sayın ${d.partyName},`, '', ...paragraphs, '', d.company].join('\n');
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0c0a08;line-height:1.5"><p>Sayın ${esc(d.partyName)},</p>` +
+    paragraphs.map((p) => `<p>${esc(p)}</p>`).join('') + `<p>${esc(d.company)}</p></div>`;
+  return { to, subject: `${d.company} — ${date} tarihli cari mutabakat`, text, html };
+}

@@ -6110,6 +6110,48 @@ export const partyBankAccounts = pgTable(
 );
 
 /**
+ * Cari mutabakat mektubu ve cevabı (öneri 59). Mektup oluşturulduğu andaki bakiye ve açık kalemlerin değişmez görüntüsünü
+ * taşır; karşı tarafın cevabı (mutabık / değil ve onların bakiyesi) aynı kayda yazılır. Sonradan değişen defter mektubu değiştirmez.
+ */
+export const partyReconciliations = pgTable(
+  'party_reconciliations',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    partyId: uuid().notNull(),
+    asOf: date({ mode: 'string' }).notNull(),
+    baseCurrency: text().notNull(),
+    /** Defter para biriminde borç (+) / alacak (−) bakiyesi. */
+    baseBalance: money().notNull(),
+    byCurrency: jsonb().$type<{ currency: string; balance: string }[]>().notNull(),
+    snapshot: jsonb().$type<Record<string, unknown>>().notNull(),
+    snapshotHash: text().notNull(),
+    status: text().$type<'open' | 'agreed' | 'disputed' | 'cancelled'>().notNull().default('open'),
+    sentTo: text(),
+    outboxMessageId: uuid(),
+    note: text(),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    respondedAt: timestamp({ withTimezone: true }),
+    respondedBy: uuid().references(() => users.id),
+    counterBalance: money(),
+    responseNote: text(),
+  },
+  (t) => [
+    foreignKey({ name: 'party_reconciliations_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    index('party_reconciliations_party_idx').on(t.companyId, t.partyId, t.asOf),
+    index('party_reconciliations_status_idx').on(t.companyId, t.status),
+    check('party_reconciliations_status_ck', sql`${t.status} in ('open','agreed','disputed','cancelled')`),
+    check('party_reconciliations_response_ck', sql`(${t.status} in ('agreed','disputed')) = (${t.respondedAt} is not null)`),
+    check('party_reconciliations_hash_ck', sql`${t.snapshotHash} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
+/**
  * Kalıcı e-posta outbox'ı (öneri 7 ve 111): ileti iş kaydıyla aynı işlemde yazılır, gönderici kira alarak gönderir
  * (bkz. modules/outbox/contract). Sunucu yeniden başlasa da ileti kaybolmaz; deneme ve sonuç aynı kayıtta görünür.
  * `document`, gönderilen belgenin o anki sürümünü (içerik özeti) taşır. Hesap e-postaları (parola sıfırlama, doğrulama)
@@ -6123,7 +6165,7 @@ export const outboxMessages = pgTable(
       .notNull()
       .references(() => companies.id),
     channel: text().$type<'email'>().notNull().default('email'),
-    kind: text().$type<'invoice_document' | 'notification_digest'>().notNull(),
+    kind: text().$type<'invoice_document' | 'notification_digest' | 'party_reconciliation'>().notNull(),
     /** Aynı iş olayının ikinci kez kuyruğa girmesini engeller (şirket içinde tekil). */
     dedupeKey: text().notNull(),
     sourceType: text(),

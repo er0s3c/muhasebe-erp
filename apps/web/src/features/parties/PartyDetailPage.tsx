@@ -13,6 +13,7 @@ import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { RelatedRecords } from '../../components/layout/RelatedRecords';
 import { PartyBankAccounts } from './PartyBankAccounts';
+import { PartyReconciliations } from './PartyReconciliations';
 import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
@@ -149,6 +150,7 @@ export function PartyDetailPage() {
 
       <TabPanel id="parties-PartyDetailPage-0-panel" labelledBy={"parties-PartyDetailPage-0-" + (tab)}>
 {tab === 'statement' && <StatementTab partyId={party.id} />}
+      {tab === 'statement' && party.kind !== 'employee' && <PartyReconciliations partyId={party.id} partyEmail={party.email ?? null} />}
       {tab === 'openItems' && <OpenItemsTab partyId={party.id} />}
       {tab === 'related' && <RelatedRecords kind="party" id={party.id} />}
       {tab === 'card' && (
