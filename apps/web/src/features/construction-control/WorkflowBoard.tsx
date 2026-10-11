@@ -1,3 +1,4 @@
+import { ChangeImpactPanel, MeasurementDiffPanel, ReadinessAndLeveling } from './DecisionPanels';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Printer, ArrowUpRight, History } from 'lucide-react';
@@ -295,6 +296,8 @@ export function WorkflowBoard({
                   action: decision.action,
                   note,
                   ...(contractId ? { contractId } : {}),
+                  // Üretim onayında ölçümle kabul edilen miktar (öneri 88)
+                  ...(decision.action === 'approve' && decision.row.kind === 'production' && quantity ? { acceptedQuantity: Number(quantity) } : {}),
                 },
         },
       );
@@ -319,7 +322,10 @@ export function WorkflowBoard({
   return (
     <div className="mt-5 space-y-5">
       {group === 'program' && <ProgramPanel projectId={projectId} />}
+      {group === 'program' && <ReadinessAndLeveling projectId={projectId} />}
       {group === 'commercial' && <Scorecards projectId={projectId} />}
+      {group === 'commercial' && <ChangeImpactPanel projectId={projectId} />}
+      {group === 'field' && <MeasurementDiffPanel projectId={projectId} />}
       {group === 'customer' && <SalesPipeline projectId={projectId} />}
       {group === 'field' && can('hr.read') && <Productivity projectId={projectId} />}
       <Card>
@@ -673,6 +679,11 @@ export function WorkflowBoard({
                   onChange={(e) => setNote(e.target.value)}
                 />
               )}
+            </Field>
+          )}
+          {decision?.action === 'approve' && decision.row.kind === 'production' && (
+            <Field label="Ölçümle kabul edilen miktar" hint={`Beyan: ${String(decision.row.payload.quantity ?? '')} ${String(decision.row.payload.unit ?? '')}. Boşsa beyan edilen miktar kabul edilir; farkın gerekçesini açıklamaya yazın.`}>
+              {(id) => <Input id={id} type="number" min={0} step="any" value={quantity} onChange={(e) => setQuantity(e.target.value)} />}
             </Field>
           )}
           {decision?.action === 'contracted' && (

@@ -981,6 +981,13 @@
       "when": 1791753441476,
       "tag": "0139_operator_skills",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1791756619573,
+      "tag": "0140_sales_restructures",
+      "breakpoints": true
     }
   ]
 }

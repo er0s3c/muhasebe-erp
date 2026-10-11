@@ -294,6 +294,16 @@ export async function handoverContract(tx: Tx, ctx: SalesCtx, id: string, date?:
       'HANDOVER_BEFORE_ACTIVATION',
     );
   await requireOpenPeriod(tx, on);
+  // Aşamalı teslim kontrolü başlatılmış birimde (öneri 91) müşteriyle gezi onaylanmadan ve açık kontrol varken teslim yapılmaz
+  const checks = await tx.execute<{ status: string; stage: string }>(
+    sql`select status, payload->>'stage' as stage from construction_workflows where kind = 'handover_check' and payload->>'unitId' = ${c.unitId} and status <> 'cancelled'`,
+  );
+  if (checks.rows.length) {
+    if (checks.rows.some((r) => ['draft', 'submitted'].includes(r.status)))
+      throw unprocessable('Birimde sonuçlanmamış teslim kontrolü var', 'HANDOVER_CHECK_OPEN');
+    if (!checks.rows.some((r) => r.stage === 'customer_walkthrough' && ['approved', 'closed'].includes(r.status)))
+      throw unprocessable('Teslim için müşteriyle gezi aşaması onaylanmalı', 'HANDOVER_CHECK_INCOMPLETE');
+  }
   const acc = await requireMappings(tx, ['deferred_revenue', 'property_revenue']);
   const [base] = await tx
     .execute<{ base: string }>(
@@ -416,13 +426,22 @@ export async function getContract(tx: Tx, id: string) {
   if (contract.status === 'terminated') {
     for (const w of (
       await tx.execute<{ id: string; amount: string }>(
-        sql`select charge_line_id as id, sum(amount)::text as amount from sales_writeoffs where contract_id = ${id} group by charge_line_id`,
+        sql`select charge_line_id as id, sum(amount)::text as amount from sales_writeoffs where contract_id = ${id} and restructure_id is null group by charge_line_id`,
       )
     ).rows)
       writtenOff.set(w.id, w.amount);
   }
+  // Yeniden yapılandırmayla yeni plana devredilen kalan (öneri 92): ödenmiş sayılmaz
+  const restructured = new Map<string, string>();
+  for (const w of (
+    await tx.execute<{ id: string; amount: string }>(
+      sql`select charge_line_id as id, sum(amount)::text as amount from sales_writeoffs where contract_id = ${id} and restructure_id is not null group by charge_line_id`,
+    )
+  ).rows)
+    restructured.set(w.id, w.amount);
   const rows = inst.map((i) => {
     const raw = i.journalLineId ? remainingBy.get(i.journalLineId) : undefined;
+    const moved = i.journalLineId ? dec(restructured.get(i.journalLineId) ?? 0) : dec(0);
     const open = raw && dec(raw.remaining).gt(0) ? raw : undefined;
     const off = i.journalLineId ? writtenOff.get(i.journalLineId) : undefined;
     const closed = contract.status === 'terminated';
@@ -434,9 +453,9 @@ export async function getContract(tx: Tx, id: string) {
           : dec(0)
         : dec(i.amount);
     const paid = closed
-      ? dec(i.amount).minus(off ?? 0)
+      ? dec(i.amount).minus(off ?? 0).minus(moved)
       : live
-        ? dec(i.amount).minus(remaining)
+        ? dec(i.amount).minus(remaining).minus(moved)
         : dec(0);
     return {
       id: i.id,
@@ -450,6 +469,9 @@ export async function getContract(tx: Tx, id: string) {
       paid: paid.toFixed(2),
       remaining: remaining.toFixed(2),
       daysOverdue: open && open.daysOverdue > 0 ? open.daysOverdue : 0,
+      restructureId: i.restructureId,
+      restructuredIn: i.restructuredIn,
+      restructuredAmount: moved.toFixed(2),
     };
   });
   const priced = rows.filter((r) => r.kind !== 'fee');

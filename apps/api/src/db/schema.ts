@@ -4065,6 +4065,9 @@ export const salesInstallments = pgTable(
     /** Alıcıdan tahsil edilen fon/harç satırı (kind = 'fee'): kaynak tarife ve etiket. Bedele sayılmaz; 329 yükümlülüğüne yazılır. */
     feeScheduleId: uuid(),
     label: text(),
+    /** Yeniden yapılandırmayla açılan taksit (öneri 92) ve eski taksidin kalanını devreden yapılandırma. */
+    restructureId: uuid(),
+    restructuredIn: uuid(),
   },
   (t) => [
     unique('sales_installments_seq_uq').on(t.contractId, t.seq),
@@ -4157,6 +4160,8 @@ export const salesWriteoffs = pgTable(
      */
     amount: money().notNull(),
     amountBase: money().notNull(),
+    /** Boşsa fesih kapatması; doluysa taksit yeniden yapılandırmasında yeni plana devredilen kalan (öneri 92). */
+    restructureId: uuid(),
     createdAt: createdAt(),
   },
   (t) => [
@@ -6560,4 +6565,32 @@ export const manufacturingPolicies = pgTable(
     updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check('manufacturing_policies_freeze_ck', sql`${t.freezeHours} between 0 and 720`)],
+);
+
+/** Taksit planı yeniden yapılandırması (öneri 92): eski ve yeni plan görüntüsü, gerekçe ve devir yevmiyesi. Değişmez. */
+export const salesRestructures = pgTable(
+  'sales_restructures',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    contractId: uuid().notNull(),
+    restructureDate: date({ mode: 'string' }).notNull(),
+    reason: text().notNull(),
+    oldPlan: jsonb().$type<Record<string, unknown>[]>().notNull(),
+    newPlan: jsonb().$type<Record<string, unknown>[]>().notNull(),
+    amount: money().notNull(),
+    entryId: uuid(),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('sales_restructures_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'sales_restructures_contract_fk', columns: [t.contractId, t.companyId], foreignColumns: [salesContracts.id, salesContracts.companyId] }),
+    foreignKey({ name: 'sales_restructures_entry_fk', columns: [t.entryId, t.companyId], foreignColumns: [journalEntries.id, journalEntries.companyId] }),
+    index('sales_restructures_contract_idx').on(t.companyId, t.contractId),
+  ],
 );

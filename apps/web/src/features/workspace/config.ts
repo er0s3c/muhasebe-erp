@@ -119,6 +119,8 @@ export const fields: Record<OperationKind, FieldDef[]> = {
     { key: 'start', label: 'Planlanan başlangıç', type: 'date', required: true },
     { key: 'end', label: 'Planlanan bitiş', type: 'date', required: true },
     { key: 'progress', label: 'Tamamlanma (%)', type: 'number', numeric: true, required: true },
+    { key: 'crew', label: 'Ekip (dengeleme için)', type: 'text' },
+    { key: 'crewSize', label: 'Ekipte kişi sayısı', type: 'number', numeric: true },
   ],
   equipment: [
     { key: 'code', label: 'Ekipman kodu / plaka', type: 'text', required: true },

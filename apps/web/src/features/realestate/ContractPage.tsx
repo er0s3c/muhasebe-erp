@@ -1,3 +1,4 @@
+import { RestructureSection } from './RestructureSection';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -257,7 +258,7 @@ export function SalesContractPage() {
                       {!editable && (
                         <Td>
                           {d && (status === 'active' || status === 'handed_over') ? (
-                            dec(d.remaining).isZero() ? <Badge tone="success">{t('realEstate.installments.paid')}</Badge> : d.daysOverdue > 0 ? <Badge tone="danger">{t('realEstate.installments.daysOverdue', { n: d.daysOverdue })}</Badge> : <Badge tone="neutral">{t('realEstate.installments.upcoming')}</Badge>
+                            d.restructuredIn ? <Badge tone="neutral">Yapılandırıldı</Badge> : dec(d.remaining).isZero() ? <Badge tone="success">{t('realEstate.installments.paid')}</Badge> : d.daysOverdue > 0 ? <Badge tone="danger">{t('realEstate.installments.daysOverdue', { n: d.daysOverdue })}</Badge> : <Badge tone="neutral">{t('realEstate.installments.upcoming')}</Badge>
                           ) : null}
                         </Td>
                       )}
@@ -301,6 +302,15 @@ export function SalesContractPage() {
             <div className="col-span-full"><dt className="text-muted">{t('realEstate.contracts.reason')}</dt><dd>{detail.termination.reason}</dd></div>
           </dl>
         </Card>
+      )}
+
+      {c && detail && (status === 'active' || status === 'handed_over') && (
+        <RestructureSection
+          contractId={c.id}
+          currency={cur}
+          canEdit={can('realestate.approve')}
+          open={detail.installments.filter((i) => i.kind !== 'fee').reduce((s, i) => s.plus(i.remaining), dec(0)).toFixed(2)}
+        />
       )}
 
       {c?.activatedOn && (

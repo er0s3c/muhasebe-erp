@@ -1914,6 +1914,10 @@ export interface SalesInstallmentRow {
   paid: string;
   remaining: string;
   daysOverdue: number;
+  /** Yeniden yapılandırma (öneri 92): yeni taksidin yapılandırması, eski taksidin devredildiği yapılandırma ve devredilen kalan. */
+  restructureId?: string | null;
+  restructuredIn?: string | null;
+  restructuredAmount?: string;
 }
 
 export interface SalesContractDetail {

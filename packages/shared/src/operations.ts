@@ -40,6 +40,10 @@ export const operationPayloads = {
       milestone: z.boolean().default(false),
       wbsId: uuid.optional(),
       dependencies: z.array(uuid).max(100).default([]),
+      /** Ekip ve kişi sayısı (öneri 87: ekip dengeleme). */
+      crew: z.string().trim().max(60).optional(),
+      /** 0 ya da boş: ekip ihtiyacı girilmemiş. */
+      crewSize: z.number().int().min(0).max(10000).optional(),
     })
     .refine((v) => v.start <= v.end, 'Bitiş başlangıçtan önce olamaz.'),
   equipment: z.object({

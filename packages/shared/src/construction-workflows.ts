@@ -13,6 +13,8 @@ const devices = z
   .max(100);
 const dateRange = { start: isoDate, end: isoDate };
 const range = <T extends { start: string; end: string }>(v: T) => v.end >= v.start;
+export const HANDOVER_STAGES = ['pre_inspection', 'snag_fix', 'reinspection', 'customer_walkthrough'] as const;
+export type HandoverStage = (typeof HANDOVER_STAGES)[number];
 export const WORKFLOW_PAYLOADS = {
   calendar: z.object({
     weekdays: z
@@ -21,6 +23,8 @@ export const WORKFLOW_PAYLOADS = {
       .max(7)
       .refine((v) => new Set(v).size === v.length),
     holidays: z.array(isoDate).max(366).default([]),
+    /** Ekip kapasitesi (öneri 87): program işlerinin ekip ihtiyacı bu sınırla dengelenir. */
+    crews: z.array(z.object({ name: text, size: z.coerce.number().int().min(1).max(10000) })).max(50).default([]),
   }),
   baseline: z.object({ note, snapshot: z.array(z.unknown()).max(5000).default([]) }),
   readiness: z.object({
@@ -246,6 +250,13 @@ export const WORKFLOW_PAYLOADS = {
     customerConfirmation: note,
   }),
   passport: z.object({ unitId: uuid, contractId: uuid, devices, maintenance: note }),
+  /** Teslim öncesi aşamalı kontrol (öneri 91): ön kontrol → eksik giderme → yeniden kontrol → müşteriyle gezi. */
+  handover_check: z.object({
+    unitId: uuid,
+    stage: z.enum(HANDOVER_STAGES),
+    items: z.array(z.object({ label: text, ok: z.boolean(), note })).min(1).max(200),
+    photoIds: refs,
+  }),
 } as const;
 export const WORKFLOW_KINDS = Object.keys(WORKFLOW_PAYLOADS) as (keyof typeof WORKFLOW_PAYLOADS)[];
 export type WorkflowKind = keyof typeof WORKFLOW_PAYLOADS;
@@ -298,6 +309,7 @@ export const WORKFLOW_LABELS: Record<WorkflowKind, string> = {
   buyer_option: 'Daire seçenekleri',
   warranty: 'Garanti ve servis',
   passport: 'Dijital daire pasaportu',
+  handover_check: 'Teslim öncesi kontrol',
 };
 export const WORKFLOW_GROUPS: Record<
   WorkflowKind,
@@ -324,6 +336,7 @@ export const WORKFLOW_GROUPS: Record<
   buyer_option: 'customer',
   warranty: 'customer',
   passport: 'customer',
+  handover_check: 'customer',
 };
 export function analyzeUnitRate(v: WorkflowPayload<'rate_analysis'>) {
   return {
@@ -370,6 +383,9 @@ export interface CalendarActivity {
   dependencies: string[];
   milestone?: boolean;
   wbsId?: string | null;
+  /** Ekip ve kişi sayısı (öneri 87). */
+  crew?: string;
+  crewSize?: number;
 }
 export function criticalPath(
   activities: CalendarActivity[],
@@ -475,4 +491,94 @@ export function criticalPath(
     };
   });
   return { finish, activities: rows.reverse() };
+}
+
+// --- F9: iş cephesi hazırlığı ve ekip dengeleme ---------------------------------
+
+export type ReadinessConstraint = 'drawing' | 'material' | 'crew' | 'approval';
+
+/** Hazırlık kaydının eksik kısıtları; kayıt yoksa durum bilinmez (öneri 84). */
+export function readinessStatus(payload: Record<string, unknown> | null | undefined): { status: 'ready' | 'blocked' | 'unknown'; missing: ReadinessConstraint[] } {
+  if (!payload) return { status: 'unknown', missing: [] };
+  const missing: ReadinessConstraint[] = [];
+  if (!payload.drawingReady) missing.push('drawing');
+  if (!payload.materialReady) missing.push('material');
+  if (!payload.crewReady) missing.push('crew');
+  if (!payload.approvalReady) missing.push('approval');
+  return { status: missing.length ? 'blocked' : 'ready', missing };
+}
+
+export interface LevelingActivity {
+  id: string;
+  title: string;
+  computedStart: string;
+  computedEnd: string;
+  slack: number;
+  crew?: string;
+  crewSize?: number;
+  progress: number;
+}
+
+/**
+ * Ekip dengeleme önerisi (öneri 87): her çalışma gününde ekip ihtiyacı kapasiteyi aşarsa, aşımdaki işlerden en çok bolluğu olan
+ * bolluğu kadar ileri kaydırılır (kritik işler kaydırılmaz). Öneridir; programı değiştirmez. Bağımlılıklar bolluk içinde korunur.
+ */
+export function levelCrews(
+  activities: readonly LevelingActivity[],
+  crews: readonly { name: string; size: number }[],
+  weekdays: number[] = [1, 2, 3, 4, 5],
+  holidays: string[] = [],
+) {
+  const holiday = new Set(holidays);
+  const working = (date: string) => weekdays.includes(new Date(date + 'T12:00:00Z').getUTCDay()) && !holiday.has(date);
+  const next = (date: string, n = 1) => {
+    const d = new Date(date + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const shiftWorking = (date: string, n: number) => {
+    let d = date;
+    for (let guard = 0; n > 0 && guard < 20000; guard++) {
+      d = next(d);
+      if (working(d)) n--;
+    }
+    return d;
+  };
+  const capacity = new Map(crews.map((c) => [c.name, c.size]));
+  const work = activities
+    .filter((a) => a.crew && a.crewSize && a.progress < 100 && capacity.has(a.crew))
+    .map((a) => ({ ...a, start: a.computedStart, end: a.computedEnd, shift: 0 }));
+  const load = (crew: string) => {
+    const days = new Map<string, number>();
+    for (const a of work.filter((w) => w.crew === crew))
+      for (let d = a.start, g = 0; d <= a.end && g < 20000; d = next(d), g++) if (working(d)) days.set(d, (days.get(d) ?? 0) + (a.crewSize ?? 0));
+    return days;
+  };
+  const overloadsOf = (crew: string) => [...load(crew).entries()].filter(([, n]) => n > (capacity.get(crew) ?? 0)).sort(([a], [b]) => a.localeCompare(b));
+  const before = crews.map((c) => ({ crew: c.name, capacity: c.size, overloadDays: overloadsOf(c.name).map(([day, demand]) => ({ day, demand })) }));
+  for (const c of crews) {
+    for (let guard = 0; guard < 500; guard++) {
+      const first = overloadsOf(c.name)[0];
+      if (!first) break;
+      const [day] = first;
+      const candidates = work
+        .filter((a) => a.crew === c.name && a.start <= day && a.end >= day && a.slack - a.shift > 0)
+        .sort((a, b) => b.slack - b.shift - (a.slack - a.shift) || b.start.localeCompare(a.start));
+      const pick = candidates[0];
+      if (!pick) break;
+      // Aşım gününden sonraya taşı: gereken kaydırma bolluğu aşmaz
+      let need = 0;
+      for (let d = pick.start; d <= day; d = next(d)) if (working(d)) need++;
+      const step = Math.min(need, pick.slack - pick.shift);
+      pick.start = shiftWorking(pick.start, step);
+      pick.end = shiftWorking(pick.end, step);
+      pick.shift += step;
+    }
+  }
+  const after = crews.map((c) => ({ crew: c.name, capacity: c.size, overloadDays: overloadsOf(c.name).map(([day, demand]) => ({ day, demand })) }));
+  return {
+    before,
+    after,
+    shifts: work.filter((a) => a.shift > 0).map((a) => ({ id: a.id, title: a.title, crew: a.crew!, shiftDays: a.shift, from: a.computedStart, to: a.start, slack: a.slack })),
+  };
 }

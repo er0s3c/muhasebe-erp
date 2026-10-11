@@ -59,6 +59,7 @@ import { constructionJobRoutes } from './modules/construction-control/jobs';
 import { constructionAssistantRoutes } from './modules/construction-control/assistant';
 import { constructionWorkflowRoutes } from './modules/construction-control/workflows';
 import { constructionControlRoutes } from './modules/construction-control/routes';
+import { constructionInsightRoutes } from './modules/construction-control/insights';
 import { operationRoutes } from './modules/workspace/operations';
 import { scenarioRoutes } from './modules/workspace/scenarios';
 import { portalRoutes } from './modules/workspace/portal';
@@ -309,6 +310,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(operationRoutes);
   await app.register(constructionControlRoutes);
   await app.register(constructionWorkflowRoutes);
+  await app.register(constructionInsightRoutes);
   await app.register(constructionAnalyticsRoutes);
   await app.register(constructionJobRoutes);
   await app.register(constructionAssistantRoutes);
