@@ -1,3 +1,4 @@
+import { LotTraceForward } from '../leather/LeatherInsights';
 import { WmsGuidance } from './WmsGuidance';
 import { errorMessage } from '../../lib/errors';
 import { useState, type ReactNode } from 'react';
@@ -614,6 +615,7 @@ export function ManufacturingWarehousePage() {
             />
           )}
           {selection === 'placements' && <WmsGuidance lots={lots.data?.records ?? []} onPlaced={() => void queries.invalidateQueries()} />}
+          {selection === 'lots' && <LotTraceForward lots={lots.data?.records ?? []} />}
         </>
       )}
       </TabPanel>

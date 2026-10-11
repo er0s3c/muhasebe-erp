@@ -47,6 +47,7 @@ import { manufacturingExecutionRoutes } from './execution-routes';
 import { purchaseProposals } from './promise';
 import { command } from './commands';
 import { manufacturingPlanningRulesRoutes } from './planning-rules';
+import { leatherInsightRoutes } from '../leather/insights';
 
 export const manufacturingCtx = (c: TenantCtx): LeatherCtx => ({
   companyId: c.company.id,
@@ -61,6 +62,7 @@ export const manufacturingRoutes: FastifyPluginAsync = async (app) => {
   await app.register(manufacturingSupportRoutes);
   await app.register(manufacturingExecutionRoutes);
   await app.register(manufacturingPlanningRulesRoutes);
+  await app.register(leatherInsightRoutes);
   const gate = (area: string, write = false) => ({
     module: area,
     permission: (area + (write ? '.manage' : '.read')) as never,

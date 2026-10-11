@@ -1,3 +1,4 @@
+import { LeatherCostCard, RemnantSearch } from './LeatherInsights';
 import { useState } from 'react';
 import { TransfersPanel } from '../manufacturing/TransfersPanel';
 import { ReworkExecutionPanel } from '../manufacturing/ExecutionPanels';
@@ -1288,6 +1289,7 @@ export function LeatherMaterialsPage() {
         description="Tabaklanmış deriyi fiziksel parça ve gerçek alanıyla kabul edin; kesimde kullanılan, fire ve kalan alanı birlikte kaydedin."
       />
       <LeatherCutPlanningPanel pieces={pieces.data?.pieces ?? []} />
+      <RemnantSearch />
       {can('leather.materials.manage') && can('leather.costs.manage') && (
         <OperationForm
           title="Tabaklanmış deri kabulü"
@@ -2156,6 +2158,7 @@ function ProductionDetail({ orderId }: { orderId: string }) {
           },
         ]}
       />
+      <LeatherCostCard orderId={orderId} />
     </>
   );
 }
