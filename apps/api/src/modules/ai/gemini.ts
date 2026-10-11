@@ -1,7 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import type { AiChatMessage } from '@erp/shared';
-import type { AiSessionContext, AiExecutionResult } from './types';
-import type { Tx } from '../../db/client';
+import type { AiSessionContext, AiExecutionResult, AiToolRunner } from './types';
 import { toolRegistry } from './tools';
 
 let cachedClient: GoogleGenAI | null = null;
@@ -23,13 +22,14 @@ export interface CallGeminiParams {
   history?: AiChatMessage[];
   message: string;
   context?: AiSessionContext;
-  tx?: Tx;
+  /** Verilmezse araç tanımı gönderilmez. Her çağrı kendi kısa işleminde çalışır (bkz. tenantReadSessionRoute). */
+  runTool?: AiToolRunner;
 }
 
 export async function callGemini(
   params: CallGeminiParams,
 ): Promise<AiExecutionResult> {
-  const { apiKey, model, systemInstruction, history = [], message, context, tx } = params;
+  const { apiKey, model, systemInstruction, history = [], message, context, runTool } = params;
 
   if (!apiKey || apiKey.trim() === '') {
     return {
@@ -55,8 +55,8 @@ export async function callGemini(
       },
     ];
 
-    // Kayıtlı ERP araçlarını hazırla (eğer DB oturumu varsa)
-    const toolDeclarations = tx && context ? toolRegistry.getDeclarations(context) : [];
+    // Kayıtlı ERP araçlarını hazırla (araç yürütücüsü varsa)
+    const toolDeclarations = runTool && context ? toolRegistry.getDeclarations(context) : [];
     const toolsConfig = toolDeclarations.length > 0 ? [{ functionDeclarations: toolDeclarations }] : undefined;
 
     const response = await client.models.generateContent({
@@ -75,20 +75,18 @@ export async function callGemini(
       response.functionCalls &&
       response.functionCalls.length > 0 &&
       context &&
-      tx &&
+      runTool &&
       response.candidates?.[0]?.content
     ) {
       const candidateContent = response.candidates[0].content;
 
-      // Her aracı güvenle çalıştır ve sonucunu topla
+      // Her aracı sırayla, kendi kısa işleminde çalıştır ve sonucunu topla
       const functionResponseParts = [];
       for (const [index, call] of response.functionCalls.entries()) {
           const callName = call.name ?? '';
-          const result = index >= 8 ? { result: null, error: 'Tek istekte en fazla 8 araç kullanılabilir.' } : await toolRegistry.execute(
+          const result = index >= 8 ? { result: null, error: 'Tek istekte en fazla 8 araç kullanılabilir.' } : await runTool(
             callName,
             (call.args as Record<string, unknown>) || {},
-            context,
-            tx,
           );
           functionResponseParts.push({
             functionResponse: {

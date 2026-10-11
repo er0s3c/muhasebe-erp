@@ -205,118 +205,179 @@ function requiresAllBranches(path:string,method:string):boolean {
  * RLS bağlamını (app.company_id) kurar, izin ve modül kontrolü yapar.
  * Tüm istek tek işlemde çalışır; hata olursa hepsi geri alınır.
  */
+type LicenseGrant = Awaited<ReturnType<typeof assertLicensed>>;
+interface TenantEntry { license: LicenseGrant; user: AuthUser; companyId: string }
+
+/** İşlem açılmadan yapılan istek kontrolleri: lisans, kimlik, oran sınırı ve şirket başlığı. */
+async function prepareTenant(app: FastifyInstance, req: FastifyRequest, reply: FastifyReply, options: TenantRouteOptions): Promise<TenantEntry> {
+  const license = await assertLicensed(app.license, req);
+  const user = await authenticate(app, req);
+  if (options.limit) {
+    const r = await app.limiter.consume(`${options.limit.name}:${user.id}`, options.limit.max, options.limit.windowMs);
+    if (!r.ok) {
+      void reply.header('retry-after', String(r.retryAfterSec));
+      throw new AppError(429, 'RATE_LIMITED', 'Çok fazla istek; lütfen biraz sonra tekrar deneyin');
+    }
+  }
+  const companyId = req.headers['x-company-id'];
+  if (typeof companyId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(companyId)) {
+    throw badRequest('X-Company-Id başlığı gerekli', 'COMPANY_REQUIRED');
+  }
+  return { license, user, companyId };
+}
+
+/**
+ * İşlem içinde üyeliği ve rolü bulur, RLS bağlamını (app.company_id) kurar, izin, modül ve şube kontrolü yapar.
+ * `readOnly`: istek kayıt yazmaz; bakım ve maliyet sırası gibi yazma kilitleri alınmaz, işlem salt okunur olur.
+ */
+async function enterTenant(
+  app: FastifyInstance,
+  tx: Tx,
+  req: FastifyRequest,
+  reply: FastifyReply,
+  { license, user, companyId }: TenantEntry,
+  options: TenantRouteOptions,
+  readOnly: boolean,
+): Promise<TenantCtx> {
+  const writes = !readOnly && !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+  const [member] = await tx
+    .select({
+      role: memberships.role,
+      isActive: users.isActive,
+      mustChangePassword: users.mustChangePassword,
+      sessionOpen: sessionOpen(user),
+    })
+    .from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId))
+    .where(and(eq(memberships.companyId, companyId), eq(memberships.userId, user.id)));
+  if (member && !member.sessionOpen) throw unauthorized();
+  if (!member || !member.isActive) throw forbidden('Bu şirkete erişiminiz yok', 'NOT_A_MEMBER');
+  if (member.mustChangePassword) throw passwordChangeRequired();
+  if (!readOnly) await maintenanceWriteGuard(tx, req);
+
+  await setContext(tx, { userId: user.id, orgId: user.orgId, companyId, ip: req.ip });
+  // Aynı şirkette ülke geçişi ve mali belge kesinleştirme eşzamanlı olamaz.
+  const profileActivation = req.routeOptions.url === '/api/company/profile/activate';
+  if (profileActivation) await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'company-profile:' + companyId},0))`);
+  else if (writes) await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${'company-profile:' + companyId},0))`);
+  const securityPolicy = (await tx.execute<{ required: boolean; enabled: boolean }>(sql`select coalesce((select (settings->>'requireMfa')::boolean from company_operations_settings),false) as required,exists(select 1 from user_mfa where user_id=${user.id}::uuid and enabled_at is not null) as enabled`)).rows[0];
+  if(securityPolicy?.required && !securityPolicy.enabled) throw forbidden('Bu şirket iki adımlı doğrulama gerektiriyor. Hesap güvenliği ekranından MFA kurulumunu tamamlayın.','MFA_SETUP_REQUIRED');
+
+  const [company] = await tx
+    .select({
+      id: companies.id,
+      name: companies.name,
+      sector: companies.sector,
+      baseCurrency: companies.baseCurrency,
+      reportingCurrency: companies.reportingCurrency,
+      allowNegativeStock: companies.allowNegativeStock,
+      jurisdiction: companies.jurisdiction,
+      profileMode: companies.profileMode,
+      profileVersionId: companies.profileVersionId,
+      timeZone: companies.timeZone,
+      fxProvider: companies.fxProvider,
+      taxSetupStatus: companies.taxSetupStatus,
+    })
+    .from(companies)
+    .where(eq(companies.id, companyId));
+  if (!company) throw forbidden('Bu şirkete erişiminiz yok', 'NOT_A_MEMBER');
+  // Şirketin sektörü lisansın kapsamında olmalı (veritabanında sektörü elle değiştirmek yetki kazandırmaz).
+  if (license && !app.license.sectorAllowed(license, company.sector)) {
+    throw forbidden('Lisansınız bu şirketin sektörünü kapsamıyor', 'LICENSE_SECTOR_MISMATCH');
+  }
+
+  const overrides = await tx
+    .select({ module: companyModules.module, enabled: companyModules.enabled })
+    .from(companyModules);
+  const enabledModules = resolveEnabledModules(company.sector as Sector, overrides);
+
+  const role = member.role as Role;
+  const branch=await loadBranchContext(tx,companyId,user.id,req);
+  if((branch.mode==='restricted'||branch.selection!=='all')&&requiresAllBranches(req.routeOptions.url??'',req.method)) throw forbidden('Bu şirket geneli işlem tüm şubelere erişim ve tüm şubeler görünümü gerektirir','BRANCH_COMPANY_WIDE_DENIED');
+  if (options.module && !enabledModules.has(options.module)) {
+    throw forbidden('Bu modül şirketinizde etkin değil', 'MODULE_DISABLED');
+  }
+  // Kullanıcı bazlı modül erişimi: şirket düzeyindeki modül anahtarından SONRA, izinden ÖNCE uygulanır
+  const access = await loadMemberAccess(tx, companyId, user.id, role);
+  if (options.module && isModuleDenied(access, options.module)) throw moduleAccessDenied();
+  if (options.permission && !access.permissions.has(options.permission)) throw denialFor(access, options.permission);
+  const operation = options.operation ?? inferResourceOperation(req.method, req.routeOptions.url ?? req.url.split('?')[0]!);
+  const operationModule = options.module ?? (options.permission ? areaOfPermission(options.permission) : null);
+  if (operation !== 'read' && operationModule) {
+    const ownAgenda = options.personalAgenda && options.module === 'core.directory' &&
+      access.permissions.has('directory.read') && access.overrides['core.directory'] !== 'read' &&
+      access.overrides[`operation.core.directory.${operation}`] !== 'none';
+    if (!ownAgenda) requireResourceOperation(access, operationModule, operation);
+  }
+  // Dönüşüm mevcut kaydı değiştirirken yeni belge de açar; oluşturma yasağı aşılmaz.
+  if (operationModule && req.method === 'POST' && req.routeOptions.url?.endsWith('/convert')) requireResourceOperation(access, operationModule, 'create');
+
+  // Serialize cost provenance before document, item and treasury row locks.
+  if (writes && ['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector) && req.routeOptions.url !== '/api/companies/:companyId/feedback') {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'leather-costs:' + companyId}, 0))`);
+  }
+  // Salt okunur oturumda veritabanı düzeyinde de kayıt yazılamaz.
+  if (readOnly) await tx.execute(sql`select set_config('transaction_read_only', 'on', true)`);
+
+  return {
+    tx,
+    user,
+    req,
+    reply,
+    role,
+    branch,
+    enabledModules,
+    access,
+    can: (permission) => access.permissions.has(permission),
+    require: (permission) => requirePermission(access, permission),
+    company: { ...company, sector: company.sector as Sector },
+  };
+}
+
 export function tenantRoute<T>(
   app: FastifyInstance,
   options: TenantRouteOptions,
   handler: (ctx: TenantCtx) => Promise<T>,
 ): RouteHandlerMethod {
   const route: RouteHandlerMethod = async (req, reply) => {
-    const license = await assertLicensed(app.license, req);
-    const user = await authenticate(app, req);
-    if (options.limit) {
-      const r = await app.limiter.consume(`${options.limit.name}:${user.id}`, options.limit.max, options.limit.windowMs);
-      if (!r.ok) {
-        void reply.header('retry-after', String(r.retryAfterSec));
-        throw new AppError(429, 'RATE_LIMITED', 'Çok fazla istek; lütfen biraz sonra tekrar deneyin');
-      }
-    }
-    const companyId = req.headers['x-company-id'];
-    if (typeof companyId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(companyId)) {
-      throw badRequest('X-Company-Id başlığı gerekli', 'COMPANY_REQUIRED');
-    }
-
-    return withContext(app.db, { userId: user.id, orgId: user.orgId, ip: req.ip }, async (tx) => {
-      const [member] = await tx
-        .select({
-          role: memberships.role,
-          isActive: users.isActive,
-          mustChangePassword: users.mustChangePassword,
-          sessionOpen: sessionOpen(user),
-        })
-        .from(memberships)
-        .innerJoin(users, eq(users.id, memberships.userId))
-        .where(and(eq(memberships.companyId, companyId), eq(memberships.userId, user.id)));
-      if (member && !member.sessionOpen) throw unauthorized();
-      if (!member || !member.isActive) throw forbidden('Bu şirkete erişiminiz yok', 'NOT_A_MEMBER');
-      if (member.mustChangePassword) throw passwordChangeRequired();
-      await maintenanceWriteGuard(tx, req);
-
-      await setContext(tx, { userId: user.id, orgId: user.orgId, companyId, ip: req.ip });
-      // Aynı şirkette ülke geçişi ve mali belge kesinleştirme eşzamanlı olamaz.
-      const profileActivation = req.routeOptions.url === '/api/company/profile/activate';
-      if (profileActivation) await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'company-profile:' + companyId},0))`);
-      else if (!['GET','HEAD','OPTIONS'].includes(req.method)) await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${'company-profile:' + companyId},0))`);
-      const securityPolicy = (await tx.execute<{ required: boolean; enabled: boolean }>(sql`select coalesce((select (settings->>'requireMfa')::boolean from company_operations_settings),false) as required,exists(select 1 from user_mfa where user_id=${user.id}::uuid and enabled_at is not null) as enabled`)).rows[0];
-      if(securityPolicy?.required && !securityPolicy.enabled) throw forbidden('Bu şirket iki adımlı doğrulama gerektiriyor. Hesap güvenliği ekranından MFA kurulumunu tamamlayın.','MFA_SETUP_REQUIRED');
-
-      const [company] = await tx
-        .select({
-          id: companies.id,
-          name: companies.name,
-          sector: companies.sector,
-          baseCurrency: companies.baseCurrency,
-          reportingCurrency: companies.reportingCurrency,
-          allowNegativeStock: companies.allowNegativeStock,
-          jurisdiction: companies.jurisdiction,
-          profileMode: companies.profileMode,
-          profileVersionId: companies.profileVersionId,
-          timeZone: companies.timeZone,
-          fxProvider: companies.fxProvider,
-          taxSetupStatus: companies.taxSetupStatus,
-        })
-        .from(companies)
-        .where(eq(companies.id, companyId));
-      if (!company) throw forbidden('Bu şirkete erişiminiz yok', 'NOT_A_MEMBER');
-      // Şirketin sektörü lisansın kapsamında olmalı (veritabanında sektörü elle değiştirmek yetki kazandırmaz).
-      if (license && !app.license.sectorAllowed(license, company.sector)) {
-        throw forbidden('Lisansınız bu şirketin sektörünü kapsamıyor', 'LICENSE_SECTOR_MISMATCH');
-      }
-
-      const overrides = await tx
-        .select({ module: companyModules.module, enabled: companyModules.enabled })
-        .from(companyModules);
-      const enabledModules = resolveEnabledModules(company.sector as Sector, overrides);
-
-      const role = member.role as Role;
-      const branch=await loadBranchContext(tx,companyId,user.id,req);
-      if((branch.mode==='restricted'||branch.selection!=='all')&&requiresAllBranches(req.routeOptions.url??'',req.method)) throw forbidden('Bu şirket geneli işlem tüm şubelere erişim ve tüm şubeler görünümü gerektirir','BRANCH_COMPANY_WIDE_DENIED');
-      if (options.module && !enabledModules.has(options.module)) {
-        throw forbidden('Bu modül şirketinizde etkin değil', 'MODULE_DISABLED');
-      }
-      // Kullanıcı bazlı modül erişimi: şirket düzeyindeki modül anahtarından SONRA, izinden ÖNCE uygulanır
-      const access = await loadMemberAccess(tx, companyId, user.id, role);
-      if (options.module && isModuleDenied(access, options.module)) throw moduleAccessDenied();
-      if (options.permission && !access.permissions.has(options.permission)) throw denialFor(access, options.permission);
-      const operation = options.operation ?? inferResourceOperation(req.method, req.routeOptions.url ?? req.url.split('?')[0]!);
-      const operationModule = options.module ?? (options.permission ? areaOfPermission(options.permission) : null);
-      if (operation !== 'read' && operationModule) {
-        const ownAgenda = options.personalAgenda && options.module === 'core.directory' &&
-          access.permissions.has('directory.read') && access.overrides['core.directory'] !== 'read' &&
-          access.overrides[`operation.core.directory.${operation}`] !== 'none';
-        if (!ownAgenda) requireResourceOperation(access, operationModule, operation);
-      }
-      // Dönüşüm mevcut kaydı değiştirirken yeni belge de açar; oluşturma yasağı aşılmaz.
-      if (operationModule && req.method === 'POST' && req.routeOptions.url?.endsWith('/convert')) requireResourceOperation(access, operationModule, 'create');
-
-      // Serialize cost provenance before document, item and treasury row locks.
-      if (['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(company.sector) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.routeOptions.url !== '/api/companies/:companyId/feedback') {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'leather-costs:' + companyId}, 0))`);
-      }
-
-      return withCompanyTimeZone(company.timeZone, () => handler({
-        tx,
-        user,
-        req,
-        reply,
-        role,
-        branch,
-        enabledModules,
-        access,
-        can: (permission) => access.permissions.has(permission),
-        require: (permission) => requirePermission(access, permission),
-        company: { ...company, sector: company.sector as Sector },
-      }));
+    const entry = await prepareTenant(app, req, reply, options);
+    return withContext(app.db, { userId: entry.user.id, orgId: entry.user.orgId, ip: req.ip }, async (tx) => {
+      const ctx = await enterTenant(app, tx, req, reply, entry, options, false);
+      return withCompanyTimeZone(ctx.company.timeZone, () => handler(ctx));
     });
+  };
+  return Object.assign(route, {
+    [GUARD]: { kind: 'tenant', permission: options.permission, module: options.module } satisfies GuardMeta,
+  });
+}
+
+export interface TenantReadSession {
+  user: AuthUser;
+  companyId: string;
+  req: FastifyRequest;
+  reply: FastifyReply;
+  /** Kısa, salt okunur bir işlem açar; üyelik, oturum, lisans, modül, izin ve şube kapsamı o anki durumla yeniden denetlenir. */
+  read: <R>(work: (ctx: TenantCtx) => Promise<R>) => Promise<R>;
+}
+
+/**
+ * Yavaş dış çağrı yapan ve kayıt yazmayan şirket rotası (ör. yapay zekâ sağlayıcısı). İstek boyunca veritabanı işlemi ve
+ * bağlantısı tutulmaz; her `read` ayrı kısa işlemdir ve yetkiler o anda yeniden denetlenir. Bakım/maliyet yazma kilitleri
+ * alınmaz; işlem veritabanı düzeyinde salt okunurdur. Dış çağrı hiçbir zaman `read` içinde yapılmamalıdır.
+ */
+export function tenantReadSessionRoute<T>(
+  app: FastifyInstance,
+  options: TenantRouteOptions,
+  handler: (session: TenantReadSession) => Promise<T>,
+): RouteHandlerMethod {
+  const route: RouteHandlerMethod = async (req, reply) => {
+    const entry = await prepareTenant(app, req, reply, options);
+    const read = <R>(work: (ctx: TenantCtx) => Promise<R>) =>
+      withContext(app.db, { userId: entry.user.id, orgId: entry.user.orgId, ip: req.ip }, async (tx) => {
+        const ctx = await enterTenant(app, tx, req, reply, entry, options, true);
+        return withCompanyTimeZone(ctx.company.timeZone, () => work(ctx));
+      });
+    return handler({ user: entry.user, companyId: entry.companyId, req, reply, read });
   };
   return Object.assign(route, {
     [GUARD]: { kind: 'tenant', permission: options.permission, module: options.module } satisfies GuardMeta,

@@ -11,11 +11,12 @@ import { callGemini } from '../src/modules/ai/gemini';
 import { toolRegistry } from '../src/modules/ai/tools';
 
 const context: AiSessionContext = { user: { id: 'u', role: 'owner' }, company: { id: 'c', name: 'Firma', sector: 'COMMERCE', baseCurrency: 'TRY' }, today: '2026-10-09', allowedTools: new Set(['list_critical_stock']) };
-const request = { apiKey: 'test-key', model: 'test-model', systemInstruction: 'Read-only', message: 'Stok durumu?', context, tx: {} as Tx };
+// Rota her aracı kendi kısa işleminde çalıştırır; burada aynı yürütücü sahte işlemle çağrılır
+const request = { apiKey: 'test-key', model: 'test-model', systemInstruction: 'Read-only', message: 'Stok durumu?', context, runTool: (name: string, args: Record<string, unknown>) => toolRegistry.execute(name, args, context, {} as Tx) };
 beforeEach(() => { vi.restoreAllMocks(); provider.generate.mockReset(); });
 
 describe('Asistan sağlayıcı yürütmesi', () => {
-  it('aynı DB oturumunda araçlar sırayla çalışır; sekiz çağrı sınırından sonra SQL aracı yürütülmez', async () => {
+  it('araçlar sırayla çalışır; sekiz çağrı sınırından sonra SQL aracı yürütülmez', async () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const execute = vi.spyOn(toolRegistry, 'execute').mockImplementation(async (name) => {
