@@ -81,7 +81,7 @@ test('satış: teklif → kabul → sipariş → kısmi/tam teslim → toplu fat
   await page.getByLabel('Miktar 1').fill('6');
   await page.getByRole('button', { name: 'Kaydet ve stoğa işle' }).click();
   await expect(page.getByRole('heading', { name: /SIR-\d{4}-000001/, level: 1 })).toBeVisible();
-  await page.getByRole('link', { name: /SSP-\d{4}-000001/ }).click();
+  await page.getByRole('link', { name: /^SSP-\d{4}-000001$/ }).click();
   await expect(page.getByText('Teslim: kısmi')).toBeVisible();
 
   // 3) Kalan 4 teslim → tam
@@ -89,7 +89,7 @@ test('satış: teklif → kabul → sipariş → kısmi/tam teslim → toplu fat
   await expect(page.getByLabel('Miktar 1')).toHaveValue('4');
   await page.getByRole('button', { name: 'Kaydet ve stoğa işle' }).click();
   await expect(page.getByRole('heading', { name: /SIR-\d{4}-000002/, level: 1 })).toBeVisible();
-  await page.getByRole('link', { name: /SSP-\d{4}-000001/ }).click();
+  await page.getByRole('link', { name: /^SSP-\d{4}-000001$/ }).click();
   await expect(page.getByText('Teslim: tam')).toBeVisible();
   await expect(page.getByText('Fatura: yok')).toBeVisible();
 
