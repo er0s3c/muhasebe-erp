@@ -7,7 +7,7 @@ import { useCompany, useSession } from './session';
  * Kişisel arayüz tercihleri: favoriler, pano düzeni, tablo yoğunluğu. Sunucuda kullanıcı + şirket kapsamında saklanır
  * (cihazlar arası aynı görünür); iş verisi taşımaz. Son ziyaretler ise yalnız bu tarayıcıda tutulur.
  */
-export type PreferenceKey = 'favorites' | 'dashboard.layout' | 'table.density';
+export type PreferenceKey = 'favorites' | 'dashboard.layout' | 'table.density' | 'form.detail';
 type Preferences = Partial<Record<PreferenceKey, unknown>>;
 const PREF_KEY = ['me', 'preferences'] as const;
 
@@ -174,4 +174,23 @@ export function useRecordRecent(item: Omit<RecentItem, 'at'> | null | undefined)
 export type TableDensity = 'comfortable' | 'compact';
 export function useTableDensity() {
   return usePreference<TableDensity>('table.density', v => (v === 'compact' || v === 'comfortable' ? v : null), 'comfortable');
+}
+
+// ---- Form görünümü: temel / ayrıntılı (öneri 24) ----
+
+export type FormDetailMode = 'basic' | 'detailed';
+export function parseFormDetail(value: unknown): Record<string, FormDetailMode> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, FormDetailMode] =>
+    /^[a-z][a-z0-9-]{1,40}$/.test(entry[0]) && (entry[1] === 'basic' || entry[1] === 'detailed')).slice(0, 40));
+}
+/**
+ * Formun temel/ayrıntılı görünümü kullanıcı + şirket başına saklanır; tanımsızsa ayrıntılı (bugünkü tam form) açılır.
+ * Temel görünüm yalnız boş ve varsayılan değerli ikincil alanları gizler; değer taşıyan veya hatalı alan her zaman görünür.
+ */
+export function useFormDetail(formId: string) {
+  const { value, save, saving } = usePreference('form.detail', parseFormDetail, {});
+  const mode: FormDetailMode = value[formId] ?? 'detailed';
+  const setMode = useCallback((next: FormDetailMode) => save({ ...value, [formId]: next }).catch(() => undefined), [formId, save, value]);
+  return { detailed: mode === 'detailed', mode, setMode, saving };
 }

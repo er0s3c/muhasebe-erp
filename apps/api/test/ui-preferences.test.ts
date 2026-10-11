@@ -50,5 +50,11 @@ describe('Kişisel arayüz tercihleri', () => {
     expect(tooMany.statusCode).toBe(400);
     const badDensity = await c.put('/api/me/preferences/table.density', { value: 'tiny' });
     expect(badDensity.statusCode).toBe(400);
+    // Form görünümü: bilinen biçimde form adı ve yalnız temel/ayrıntılı
+    expect((await c.put('/api/me/preferences/form.detail', { value: { invoice: 'basic', party: 'detailed' } })).statusCode).toBe(200);
+    expect((await c.get('/api/me/preferences')).json().preferences['form.detail']).toEqual({ invoice: 'basic', party: 'detailed' });
+    expect((await c.put('/api/me/preferences/form.detail', { value: { invoice: 'hidden' } })).statusCode).toBe(400);
+    expect((await c.put('/api/me/preferences/form.detail', { value: { 'Fatura!': 'basic' } })).statusCode).toBe(400);
+    expect((await c.put('/api/me/preferences/form.detail', { value: Object.fromEntries(Array.from({ length: 41 }, (_, i) => [`form-${i}`, 'basic'])) })).statusCode).toBe(400);
   });
 });

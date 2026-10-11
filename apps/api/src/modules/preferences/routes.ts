@@ -21,6 +21,10 @@ const PREFERENCE_SCHEMAS = {
     })
     .strict(),
   'table.density': z.enum(['comfortable', 'compact']),
+  /** Form başına temel/ayrıntılı giriş görünümü (öneri 24): { invoice: 'basic', party: 'detailed' } */
+  'form.detail': z
+    .record(z.string().regex(/^[a-z][a-z0-9-]{1,40}$/), z.enum(['basic', 'detailed']))
+    .refine((value) => Object.keys(value).length <= 40, 'En fazla 40 form'),
 } as const;
 type PreferenceKey = keyof typeof PREFERENCE_SCHEMAS;
 const isKey = (key: string): key is PreferenceKey => Object.hasOwn(PREFERENCE_SCHEMAS, key);
