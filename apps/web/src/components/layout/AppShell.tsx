@@ -24,7 +24,7 @@ import {
   Keyboard,
   Rows3,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Outlet, useLocation, useMatches, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/cn';
@@ -268,6 +268,10 @@ function Sidebar({
   }, [active?.group.key, location.pathname, location.search]);
   const labelOf = (item: DisplayNavItem) => item.label ?? t(item.labelKey as never);
   const query = normalizeHelpText(filter);
+  const handleSearchItemClose = useCallback(() => {
+    setFilter('');
+    onClose();
+  }, [onClose]);
   const matches = query
     ? groups.flatMap(group => group.items.filter(item => normalizeHelpText(`${labelOf(item)} ${group.label}`).includes(query)).map(item => ({ group, item })))
     : [];
@@ -325,7 +329,7 @@ function Sidebar({
             <ul className="space-y-0.5">
               {matches.map(({ group, item }) => (
                 <li key={item.key}>
-                  <SidebarLink item={item} hint={group.label} active={active?.item.key === item.key} onClose={() => { setFilter(''); onClose(); }} />
+                  <SidebarLink item={item} hint={group.label} active={active?.item.key === item.key} onClose={handleSearchItemClose} />
                 </li>
               ))}
             </ul>
@@ -505,7 +509,7 @@ function DensityButton({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function SidebarLink({ item, active, onClose, hint, ...props }: { item: DisplayNavItem; active: boolean; onClose: () => void; hint?: string } & Omit<React.ComponentProps<typeof Link>, 'to'>) {
+const SidebarLink = memo(function SidebarLink({ item, active, onClose, hint, ...props }: { item: DisplayNavItem; active: boolean; onClose: () => void; hint?: string } & Omit<React.ComponentProps<typeof Link>, 'to'>) {
   const { t } = useTranslation();
   const Icon = navIcon(item.icon);
   return <Link
@@ -525,7 +529,7 @@ function SidebarLink({ item, active, onClose, hint, ...props }: { item: DisplayN
     <span className="min-w-0 flex-1 truncate">{item.label ?? t(item.labelKey as never)}</span>
     {hint && <span className="shrink-0 truncate text-[11px] text-muted">{hint}</span>}
   </Link>;
-}
+});
 
 function ShellBreadcrumbs({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();

@@ -1,3 +1,4 @@
+/* global URL, console */
 // Derleme sonrası ön sıkıştırma: dist içindeki metin varlıkları için .br ve .gz kopyaları üretir.
 // API (@fastify/static preCompressed) tarayıcının kabul ettiği kopyayı doğrudan sunar; Caddy'siz masaüstü kurulumda
 // ilk yük birkaç kat küçülür. Kaynak harita (.map) dosyaları sıkıştırılmaz.

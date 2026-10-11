@@ -1,0 +1,5 @@
+1. **Understand the problem**: Identify a meaningful small performance improvement. `SidebarLink` inside `AppShell.tsx` renders multiple times, and since there can be many navigation items in the sidebar, this is a prime candidate for `React.memo` to prevent unnecessary re-renders.
+2. **Implement `React.memo` on `SidebarLink`**: Wrap `SidebarLink` with `React.memo`. Because it takes a few props like `item`, `active`, and `onClose`, these props might change reference but checking `item.key` and `active` should be sufficient. Since `onClose` is passed down often as an inline function in `AppShell.tsx` (`onClose={() => { setFilter(''); onClose(); }}` or similar), we should also consider providing a custom comparison function for `memo` to avoid re-renders just because of inline `onClose` callbacks.
+3. **Verify the changes**: Ensure lint and tests pass. Check the site loads correctly.
+4. **Pre-commit checks**: Run `pre_commit_instructions` and fix any issues.
+5. **Submit PR**: Create PR with a title indicating performance improvement.
