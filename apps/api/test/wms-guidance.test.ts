@@ -46,10 +46,13 @@ describe('depo yönlendirmesi', async () => {
 
     // Toplama listesi: R1 (sıra 2) önce, sonra R3; B rafta olmadığı için raf dışı
     const party = (await ok(c.post('/api/parties', { name: 'Toplama Müşterisi', kind: 'customer' }), 201)).party.id;
-    const note = (await ok(c.post('/api/delivery-notes', { type: 'sales', partyId: party, noteDate: TODAY_LOCAL, warehouseId: wh, post: true, lines: [{ itemId: a, quantity: '50' }, { itemId: b, quantity: '5' }] }), 201)).note.id;
+    const note = (await ok(c.post('/api/delivery-notes', { type: 'sales', partyId: party, noteDate: TODAY_LOCAL, warehouseId: wh, lines: [{ itemId: a, quantity: '50' }, { itemId: b, quantity: '5' }] }), 201)).note.id;
     const list = await ok(c.get(`/api/wms/pick-list?deliveryNoteId=${note}`));
     expect(list.stops.map((x: { binCode: string; quantity: string }) => [x.binCode, x.quantity])).toEqual([['R1', '40.0000'], ['R3', '10.0000']]);
     expect(list.shortfalls).toEqual([{ itemCode: 'YON-B', itemName: 'YON-B', quantity: '5.0000' }]);
+    // Kaydedilen irsaliye için liste hazırlanmaz (raf miktarları kayıtla düşer)
+    await ok(c.post(`/api/delivery-notes/${note}/post`, {}));
+    expect((await c.get(`/api/wms/pick-list?deliveryNoteId=${note}`)).json().error.code).toBe('PICK_LIST_NOTE_POSTED');
     void r2;
   });
 });

@@ -13,7 +13,7 @@ const qty = (v: string) => formatTR(v, 4).replace(/,?0+$/, '');
 
 /**
  * Yönlendirmeli yerleştirme ve toplama güzergâhı (öneri 43, 44). Raf önerisi kayıt yapmaz; seçilen öneri mevcut yerleştirme
- * ucuyla kaydedilir. Toplama listesi irsaliye için raf sırasına göre durak verir, stok hareketi oluşturmaz.
+ * ucuyla kaydedilir. Toplama listesi sevkten önce taslak irsaliye için raf sırasına göre durak verir, stok hareketi oluşturmaz.
  */
 export function WmsGuidance({ lots, onPlaced }: { lots: { id: string; code?: unknown }[]; onPlaced: () => void }) {
   const toast = useToast();
@@ -22,7 +22,7 @@ export function WmsGuidance({ lots, onPlaced }: { lots: { id: string; code?: unk
   const [noteId, setNoteId] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const suggestions = useCQuery<{ unplaced: string; suggestions: Suggestion[] }>(['wms', 'suggest', lotId], lotId ? `/api/wms/lots/${lotId}/placement-suggestions` : null);
-  const notes = useCQuery<{ notes: { id: string; noteNo: string | null; partyName: string }[] }>(['wms', 'sales-notes'], '/api/delivery-notes?type=sales&status=posted&limit=100');
+  const notes = useCQuery<{ notes: { id: string; noteNo: string | null; partyName: string }[] }>(['wms', 'sales-notes'], '/api/delivery-notes?type=sales&status=draft&limit=100');
   const pick = useCQuery<PickList>(['wms', 'pick', noteId], noteId ? `/api/wms/pick-list?deliveryNoteId=${noteId}` : null);
   const place = async (s: Suggestion) => {
     setBusy(s.binId);
@@ -64,7 +64,7 @@ export function WmsGuidance({ lots, onPlaced }: { lots: { id: string; code?: unk
           <h3 className="text-sm font-semibold">Toplama listesi</h3>
           <Select aria-label="Satış irsaliyesi" value={noteId} onChange={(e) => setNoteId(e.target.value)}>
             <option value="">Satış irsaliyesi seçin</option>
-            {(notes.data?.notes ?? []).map((n) => <option key={n.id} value={n.id}>{n.noteNo ?? 'İrsaliye'} · {n.partyName}</option>)}
+            {(notes.data?.notes ?? []).map((n) => <option key={n.id} value={n.id}>{n.noteNo ?? 'Taslak irsaliye'} · {n.partyName}</option>)}
           </Select>
           {pick.error && <ErrorCallout error={pick.error} />}
           {pick.data && <>

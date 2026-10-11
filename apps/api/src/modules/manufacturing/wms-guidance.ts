@@ -56,12 +56,14 @@ export interface PickStop { sequence: number; binId: string | null; binCode: str
 /**
  * Sipariş toplama sırası ve güzergâhı (öneri 44): satış irsaliyesinin kalemleri, kartın yerleştirildiği raflardan raf
  * toplama sırasına göre (aynı rafta en eski parti önce) dağıtılır. Rafta bulunmayan miktar "raf dışı" durağında gösterilir.
- * Liste stok hareketi oluşturmaz; çıkış irsaliyenin kendi kaydıyla zaten yapılır.
+ * Liste taslak irsaliye için hazırlanır ve stok hareketi oluşturmaz; çıkış irsaliyenin kendi kaydıyla yapılır.
  */
 export async function pickList(tx: Tx, deliveryNoteId: string) {
-  const [note] = await all(tx, sql`select id, note_no, type, warehouse_id from delivery_notes where id = ${deliveryNoteId}::uuid`);
+  const [note] = await all(tx, sql`select id, note_no, type, status, warehouse_id from delivery_notes where id = ${deliveryNoteId}::uuid`);
   if (!note) throw fail('İrsaliye bulunamadı');
   if (note.type !== 'sales') throw fail('Toplama listesi satış irsaliyesi için hazırlanır');
+  // Toplama sevkten önce yapılır: kaydedilen irsaliye raf miktarlarını zaten düşmüştür
+  if (note.status !== 'draft') throw fail('Toplama listesi kaydedilmemiş (taslak) irsaliye için hazırlanır', 'PICK_LIST_NOTE_POSTED');
   const lines = await all(tx, sql`
     select l.item_id, i.code, i.name, sum(l.quantity)::text as quantity
       from delivery_note_lines l join items i on i.id = l.item_id
