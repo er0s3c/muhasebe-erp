@@ -363,12 +363,12 @@ Tamamlanma ölçütü: Deneme planı gerçek stok/takvimi değiştirmiyor; uygun
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 14 | Üretim planı ile gerçekleşen sonuçların karşılaştırılması | İlk kapsam | Genişletilecek | ATP/CTP, sonlu kapasite, plan sürümleri, müdahale listesi (MANUFACTURING-ACCEPTANCE) | Bekliyor |
-| 63 | Üretimde sıraya bağlı hazırlık süreleri | İlk kapsam | Yeni | Yok | Bekliyor |
-| 64 | Kalıp, takım ve aparat kapasitesi | İlk kapsam | Yeni | Takım/aparat kaynağı yok; kaynaklar makine/istasyon | Bekliyor |
-| 65 | Operatör becerisi ve iş ataması | İlk kapsam | Genişletilecek | Canlı iş başlangıcında operatör kontrolü var; beceri/sertifika tanımı yok | Bekliyor |
-| 66 | Yakın dönem üretim planını sabitleme | İlk kapsam | Genişletilecek | Plan sürümleri; yayımlanmış plan düzenlenmez; dondurma penceresi yok | Bekliyor |
-| 72 | Üretim maliyet sapmasının bileşenleri | İlk kapsam | Genişletilecek | Maliyet kapanışında standart malzeme sapması; fiyat/miktar/işçilik/fason ayrımı yok | Bekliyor |
+| 14 | Üretim planı ile gerçekleşen sonuçların karşılaştırılması | İlk kapsam | Genişletilecek | ATP/CTP, sonlu kapasite, plan sürümleri, müdahale listesi (MANUFACTURING-ACCEPTANCE) | İlk kapsam tamam: yayımlı plan işleri çalışma oturumlarıyla eşleşir; başlangıç/bitiş gecikmesi, dakika farkı, zamanında bitme oranı (Planlama > Planlanan–gerçekleşen) |
+| 63 | Üretimde sıraya bağlı hazırlık süreleri | İlk kapsam | Yeni | Yok | İlk kapsam tamam: kaynakta aileler arası hazırlık matrisi; ileri planlamada önceki işin ailesine göre hazırlık eklenir (geri planlamada yalnız varsayılan) |
+| 64 | Kalıp, takım ve aparat kapasitesi | İlk kapsam | Yeni | Takım/aparat kaynağı yok; kaynaklar makine/istasyon | İlk kapsam tamam: `tool` kaynak türü; eş takım sayısı kadar eşzamanlı kullanım, bakım/arıza kapatır |
+| 65 | Operatör becerisi ve iş ataması | İlk kapsam | Genişletilecek | Canlı iş başlangıcında operatör kontrolü var; beceri/sertifika tanımı yok | İlk kapsam tamam: operatör becerisi ve sertifika geçerliliği; kaynağın gerektirdiği beceri yoksa canlı iş başlamaz, uygun operatör listesi |
+| 66 | Yakın dönem üretim planını sabitleme | İlk kapsam | Genişletilecek | Plan sürümleri; yayımlanmış plan düzenlenmez; dondurma penceresi yok | İlk kapsam tamam: yayımlı planın sürümü yerine geçer; dondurma penceresindeki taşıma/çıkarma/ekleme gerekçe ister ve saklanır |
+| 72 | Üretim maliyet sapmasının bileşenleri | İlk kapsam | Genişletilecek | Maliyet kapanışında standart malzeme sapması; fiyat/miktar/işçilik/fason ayrımı yok | İlk kapsam tamam: maliyet kapanışında malzeme fiyat/miktar sapması ve saatlik maliyetle işçilik verimlilik sapması; fason/genel gider yalnız gerçekleşen |
 | 67 | Acil siparişin diğer işlere etkisi | Genişletme | Genişletilecek | What-if senaryosu ve plan sürüm ağacı; acil sipariş etki raporu yok | Bekliyor |
 | 68 | Fason kapsam ve sonuç doğrulama | Genişletme | Genişletilecek | Fason miktar/maliyet izi (`subcontracts`) | Bekliyor |
 | 69 | Ağırlık/hacim esaslı üretim dengesi | Genişletme | Genişletilecek | Malzeme mutabakatı (teslim/iade/sarf), normal fire ve onaylı anormal kayıp; ağırlık/hacim dengesi yok | Bekliyor |
@@ -541,6 +541,13 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 122 öneri, 14 faza (F0, F1, F2a, F2b, F3–F12) birer kez atanmıştır: F0 2, F1 9, F2a 4, F2b 10, F3 8, F4 14, F5 10, F6 11, F7 11, F8 11, F9 11, F10 7, F11 9, F12 5 = 122. Öneri numaraları önceki yanıtlardaki numaralarla aynıdır. Teknik ve mali ortak kabul koşulları, ana fazı farklı olan işlerde de uygulanır.
 
 ## Değişiklik kaydı
+
+**12 Ekim 2026 — F7 ilk teslimi**
+
+- F7 ilk kapsamı (14, 63, 64, 65, 66, 72) `claude/f2b-baslangic` dalında.
+- Davranış değişikliği: yayımlı planın senaryosu yayımlanınca eski plan "yerine geçildi" durumuna alınır ve kapasiteden düşülür; önceden ikisi birlikte yayımlı kalıyordu.
+- Toplama listesi (44) artık yalnız taslak satış irsaliyesi için hazırlanır: kayıt raf yerleşimlerini düştüğü için kayıttan sonraki liste kalanı gösteriyordu (CI yakaladı).
+- Açık işler: F7 genişletmeleri (67–71), geri planlamada sıraya bağlı hazırlık, plan oluşturucuda birden çok kalıp seçimi, beceri gereğinin operasyon düzeyine indirilmesi.
 
 **12 Ekim 2026 — F6 ilk teslimi**
 
