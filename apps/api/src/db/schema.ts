@@ -3255,7 +3255,8 @@ export const bankStatementLines = pgTable(
     check('bank_statement_lines_amount_ck', sql`${t.amount} <> 0`),
     check(
       'bank_statement_lines_match_ck',
-      sql`(${t.status} = 'matched') = (${t.journalLineId} is not null and ${t.matchedAt} is not null)`,
+      // Grup eşleşmesinde (öneri 55) journal_line_id boştur; grup toplamını tetikleyici denetler
+      sql`(${t.status} = 'matched') = (${t.matchedAt} is not null) and (${t.journalLineId} is null or ${t.status} = 'matched')`,
     ),
   ],
 );
