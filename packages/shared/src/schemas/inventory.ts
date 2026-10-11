@@ -267,8 +267,16 @@ export const createStockCountSchema = z.object({
   warehouseId: uuid,
   countDate: isoDate,
   description: optionalText(200),
-  /** 'in_stock': depoda bakiyesi olan kartlarla doldur; 'empty': boş başla. */
-  prefill: z.enum(['in_stock', 'empty']).default('in_stock'),
+  /**
+   * 'in_stock': depoda bakiyesi olan kartlarla doldur; 'empty': boş başla; 'cycle': döngüsel sayım (öneri 45) — en uzun süredir
+   * sayılmamış, sonra değeri en yüksek kartlardan `cycleLimit` kadar.
+   */
+  prefill: z.enum(['in_stock', 'empty', 'cycle']).default('in_stock'),
+  cycleLimit: z.coerce.number().int().min(1).max(500).default(20),
+  /** Kör sayım: sayan kişi sistem miktarını ve farkı görmez. */
+  blind: z.boolean().default(false),
+  /** Bu yüzdeyi aşan farkta bağımsız yeniden sayım zorunludur. */
+  recountTolerancePct: z.string().regex(/^\d{1,3}(\.\d{1,2})?$/).nullable().optional().refine((v) => v == null || Number(v) <= 100, 'Tolerans 0–100 arasında olmalı'),
 });
 export type CreateStockCountInput = z.infer<typeof createStockCountSchema>;
 
@@ -282,6 +290,12 @@ export const updateStockCountSchema = z.object({
     .optional(),
 });
 export type UpdateStockCountInput = z.infer<typeof updateStockCountSchema>;
+
+/** Bağımsız yeniden sayım (öneri 45): ilk sayımı girenden farklı kişi girer; işlemede bu miktar esas alınır. */
+export const recountStockCountSchema = z.object({
+  lines: z.array(z.object({ itemId: uuid, recountQty: quantityString })).min(1).max(2000),
+});
+export type RecountStockCountInput = z.infer<typeof recountStockCountSchema>;
 
 export const listStockCountsQuerySchema = z.object({
   status: z.enum(['draft', 'posted']).optional(),

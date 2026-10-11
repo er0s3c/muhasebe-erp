@@ -2449,6 +2449,10 @@ export const stockCounts = pgTable(
     warehouseId: uuid().notNull(),
     description: text(),
     status: text().notNull().default('draft'),
+    /** Kör sayım (öneri 45): sayan kişi sistem miktarını ve farkı görmez. */
+    blind: boolean().notNull().default(false),
+    /** Bu yüzdeyi aşan farkta bağımsız yeniden sayım zorunludur; null = istenmez. Sistem miktarı sıfırken her fark aşar. */
+    recountTolerancePct: numeric({ precision: 9, scale: 4 }),
     /** Fark varsa işleme anında üretilen 'count' türü stok belgesi. */
     documentId: uuid(),
     postedAt: timestamp({ withTimezone: true }),
@@ -2471,6 +2475,7 @@ export const stockCounts = pgTable(
       foreignColumns: [stockDocuments.id, stockDocuments.companyId],
     }),
     check('stock_counts_status_ck', sql`${t.status} in ('draft','posted')`),
+    check('stock_counts_tolerance_ck', sql`${t.recountTolerancePct} is null or ${t.recountTolerancePct} between 0 and 100`),
     check(
       'stock_counts_posted_ck',
       sql`${t.status} = 'draft' or (${t.countNo} is not null and ${t.postedAt} is not null)`,
@@ -2492,9 +2497,14 @@ export const stockCountLines = pgTable(
     /** İşleme anında doldurulur: depodaki sistem miktarı ve fark (sayılan − sistem). */
     systemQty: qty(),
     diffQty: qty(),
+    /** İlk sayımı giren ve bağımsız yeniden sayım (öneri 45): yeniden sayan farklı kişi olmalıdır; işlemede yeniden sayım esas alınır. */
+    countedBy: uuid().references(() => users.id),
+    recountQty: qty(),
+    recountedBy: uuid().references(() => users.id),
   },
   (t) => [
     unique('stock_count_lines_uq').on(t.countId, t.itemId),
+    check('stock_count_lines_recount_ck', sql`(${t.recountQty} is null) = (${t.recountedBy} is null) and (${t.recountedBy} is null or ${t.countedBy} is null or ${t.recountedBy} <> ${t.countedBy}) and (${t.recountQty} is null or ${t.recountQty} >= 0)`),
     foreignKey({
       name: 'stock_count_lines_count_fk',
       columns: [t.countId, t.companyId],

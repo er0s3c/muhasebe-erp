@@ -474,6 +474,8 @@ export interface StockCountDetail {
     countDate: string;
     status: 'draft' | 'posted';
     description: string | null;
+    blind?: boolean;
+    recountTolerancePct?: string | null;
     warehouseId: string;
     warehouseName: string;
     documentId: string | null;
@@ -488,8 +490,11 @@ export interface StockCountDetail {
     countedQty: string | null;
     systemQty: string | null;
     diffQty: string | null;
+    countedBy?: string | null;
+    recountQty?: string | null;
+    recountRequired?: boolean | null;
   }[];
-  summary: { lines: number; counted: number; uncounted: number; surplus: number; shortage: number };
+  summary: { lines: number; counted: number; uncounted: number; surplus: number | null; shortage: number | null; recountRequired?: number | null };
   warnings?: { zeroCostItems: string[] };
 }
 
