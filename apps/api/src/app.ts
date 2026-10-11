@@ -45,6 +45,7 @@ import { socialSecurityRoutes } from './modules/socialsecurity/routes';
 import { foreignWorkerRoutes } from './modules/foreignworkers/routes';
 import { chequeRoutes } from './modules/cheques/routes';
 import { salesRoutes } from './modules/sales/routes';
+import { salesCommercialRoutes } from './modules/sales/commercial-routes';
 import { pricingRoutes } from './modules/sales/pricing-routes';
 import { serialRoutes } from './modules/inventory/serial-routes';
 import { landedRoutes } from './modules/landed/routes';
@@ -296,6 +297,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(platformIntegrationRoutes);
   await app.register(deliveryRoutes);
   await app.register(salesRoutes);
+  await app.register(salesCommercialRoutes);
   await app.register(pricingRoutes);
   await app.register(serialRoutes);
   await app.register(landedRoutes);

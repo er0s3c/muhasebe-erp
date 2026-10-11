@@ -846,6 +846,9 @@ export interface SalesDocDetail {
     warehouseId: string | null;
     warehouseName: string | null;
     notes: string | null;
+    /** Satış sorumlusu (F6: öneri 13). */
+    salesRepId?: string | null;
+    salesRepName?: string | null;
     quoteId: string | null;
     quoteNo: string | null;
     orderId: string | null;

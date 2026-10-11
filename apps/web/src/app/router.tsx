@@ -169,6 +169,7 @@ const routes: RouteObject[] = [
                     children: [
                       { path: 'sales/quotes', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesQuotesPage', 'invoices.read') },
                       { path: 'sales/orders', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesOrdersPage', 'invoices.read') },
+                      { path: 'sales/reps', ...page(() => import('../features/sales/SalesRepsPage'), 'SalesRepsPage', 'invoices.read') },
                       { path: 'sales/docs/new', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage', 'invoices.manage') },
                       { path: 'sales/docs/:id', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage', 'invoices.read') },
                     ],

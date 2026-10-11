@@ -440,6 +440,15 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
     permission: 'invoices.read',
   },
   {
+    key: 'sales-reps',
+    labelKey: 'nav.salesReps',
+    path: '/sales/reps',
+    icon: 'users',
+    group: 'invoices',
+    module: 'invoices.orders',
+    permission: 'invoices.read',
+  },
+  {
     key: 'price-lists',
     labelKey: 'nav.priceLists',
     path: '/price-lists',

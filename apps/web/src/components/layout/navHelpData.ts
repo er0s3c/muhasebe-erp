@@ -156,6 +156,11 @@ export const NAV_ITEM_HELP: Record<string, NavHelpEntry> = {
     description: 'Müşteri tarafından kabul edilen ve depo hazırlığı / tedarik sürecine başlanan kesinleşmiş sipariş kayıtlarıdır.',
     example: 'Örnek: Teklifi onaylanan müşterinin siparişi işlenir; depodaki ilgili mallar rezerve edilerek başka müşteriye satılması önlenir.',
   },
+  'sales-reps': {
+    title: 'Satış Sorumluları',
+    description: 'Sorumlu başına teklif kazanma oranı, onaylı sipariş, faturalı net satış, katkı ve aylık hedef gerçekleşmesi; teklif/sipariş için asgari katkı ve kredi limiti politikası.',
+    example: 'Örnek: Asgari katkı %20 ve "Engelle" seçilirse %15 katkılı teklif gönderilemez; satış müdürü gerekçe yazarak geçer, gerekçe teklif görüntüsüyle saklanır.',
+  },
   'price-lists': {
     title: 'Fiyat Listeleri',
     description: 'Farklı müşteri kitleleri için (Bayi, Toptan, Perakende, İhracat) tanımlanan özel birim fiyat katalogları ve para birimleridir.',

@@ -568,6 +568,8 @@ export const parties = pgTable(
     purchasePriceListId: uuid(),
     salesDiscountPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
     purchaseDiscountPct: numeric({ precision: 7, scale: 4 }).notNull().default('0'),
+    /** Müşteriden sorumlu satış temsilcisi (öneri 13); değişiklikler `sales_rep_changes` tablosunda saklanır. */
+    salesRepId: uuid().references(() => users.id),
     createdAt: createdAt(),
   },
   (t) => [
@@ -4695,6 +4697,8 @@ export const salesOrders = pgTable(
     notes: text(),
     /** Siparişi doğuran teklif. */
     quoteId: uuid(),
+    /** Belgenin satış sorumlusu (öneri 13): taslakta carinin sorumlusundan gelir, taslak dışında değişmez. */
+    salesRepId: uuid().references(() => users.id),
     netTotal: money().notNull().default('0'),
     vatTotal: money().notNull().default('0'),
     grossTotal: money().notNull().default('0'),
@@ -6346,5 +6350,176 @@ export const returnDecisions = pgTable(
     check('return_decisions_reason_ck', sql`${t.reason} in ('defective','damaged','wrong_item','unwanted','other')`),
     check('return_decisions_qty_ck', sql`${t.quantity} > 0`),
     check('return_decisions_scrap_ck', sql`(${t.decision} = 'scrap') = (${t.stockDocumentId} is not null)`),
+  ],
+);
+
+/** Ticari politika (öneri 35, 38): teklif gönderimi ve sipariş onayında asgari katkı ve kredi limiti kontrolü. */
+export const salesPolicies = pgTable(
+  'sales_policies',
+  {
+    companyId: uuid()
+      .primaryKey()
+      .references(() => companies.id),
+    /** Asgari katkı yüzdesi (net satış − maliyet) / net satış; boşsa kontrol yok. */
+    minMarginPct: numeric({ precision: 7, scale: 2 }),
+    marginMode: text().$type<'off' | 'warn' | 'block'>().notNull().default('warn'),
+    creditMode: text().$type<'off' | 'warn' | 'block'>().notNull().default('warn'),
+    updatedBy: uuid().references(() => users.id),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('sales_policies_margin_mode_ck', sql`${t.marginMode} in ('off','warn','block')`),
+    check('sales_policies_credit_mode_ck', sql`${t.creditMode} in ('off','warn','block')`),
+    check('sales_policies_min_margin_ck', sql`${t.minMarginPct} is null or ${t.minMarginPct} between -100 and 100`),
+  ],
+);
+
+/**
+ * Teklif gönderimi / sipariş onayı anındaki ticari görüntü (öneri 33, 34, 35, 38): satır fiyatı, iskonto, birim maliyet,
+ * kur, katkı ve kredi riski. Her gönderim bir revizyondur; sonraki revizyonla fark müzakere/taviz geçmişini verir. Değişmez.
+ */
+export const salesDocSnapshots = pgTable(
+  'sales_doc_snapshots',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    orderId: uuid().notNull(),
+    event: text().$type<'sent' | 'confirmed'>().notNull(),
+    revisionNo: integer().notNull(),
+    currencyCode: text().notNull(),
+    /** Belge tarihinde kur bulunamadıysa boş; tutarlar o zaman hesaplanmaz (FX_RATE_MISSING uyarısı). */
+    fxRate: numeric({ precision: 19, scale: 8 }),
+    netBase: money().notNull(),
+    costBase: money().notNull(),
+    marginPct: numeric({ precision: 9, scale: 2 }),
+    minMarginPct: numeric({ precision: 7, scale: 2 }),
+    creditLimit: money(),
+    exposure: money(),
+    warnings: jsonb().$type<string[]>().notNull(),
+    overrideReason: text(),
+    lines: jsonb().$type<Record<string, unknown>[]>().notNull(),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ name: 'sales_doc_snapshots_order_fk', columns: [t.orderId, t.companyId], foreignColumns: [salesOrders.id, salesOrders.companyId] }),
+    unique('sales_doc_snapshots_rev_uq').on(t.orderId, t.event, t.revisionNo),
+    check('sales_doc_snapshots_event_ck', sql`${t.event} in ('sent','confirmed')`),
+  ],
+);
+
+/** Müşteri sorumlusu değişiklik geçmişi (öneri 13). Değişmez. */
+export const salesRepChanges = pgTable(
+  'sales_rep_changes',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    partyId: uuid().notNull(),
+    fromUserId: uuid().references(() => users.id),
+    toUserId: uuid().references(() => users.id),
+    reason: text(),
+    changedBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    changedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ name: 'sales_rep_changes_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    index('sales_rep_changes_party_idx').on(t.companyId, t.partyId, t.changedAt),
+  ],
+);
+
+/** Aylık satış hedefi (öneri 13): defter para biriminde net satış. */
+export const salesRepTargets = pgTable(
+  'sales_rep_targets',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    year: integer().notNull(),
+    month: integer().notNull(),
+    amount: money().notNull(),
+    updatedBy: uuid().references(() => users.id),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('sales_rep_targets_uq').on(t.companyId, t.userId, t.year, t.month),
+    check('sales_rep_targets_month_ck', sql`${t.month} between 1 and 12 and ${t.year} between 2000 and 2100`),
+    check('sales_rep_targets_amount_ck', sql`${t.amount} >= 0`),
+  ],
+);
+
+/** Ticari itiraz ve anlaşmazlık dosyası (öneri 39): müşteriye ve isteğe bağlı olarak belgeye bağlı. */
+export const commercialDisputes = pgTable(
+  'commercial_disputes',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    partyId: uuid().notNull(),
+    sourceType: text().$type<'invoice' | 'delivery_note' | 'sales_order'>(),
+    sourceId: uuid(),
+    category: text().$type<'price' | 'quantity' | 'quality' | 'delivery' | 'payment' | 'other'>().notNull(),
+    subject: text().notNull(),
+    amount: money(),
+    currencyCode: text().references(() => currencies.code),
+    status: text().$type<'open' | 'in_review' | 'resolved' | 'rejected'>().notNull().default('open'),
+    ownerId: uuid().references(() => users.id),
+    dueDate: date({ mode: 'string' }),
+    resolution: text(),
+    resolvedAt: timestamp({ withTimezone: true }),
+    resolvedBy: uuid().references(() => users.id),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('commercial_disputes_id_company_uq').on(t.id, t.companyId),
+    foreignKey({ name: 'commercial_disputes_party_fk', columns: [t.partyId, t.companyId], foreignColumns: [parties.id, parties.companyId] }),
+    index('commercial_disputes_party_idx').on(t.companyId, t.partyId, t.status),
+    index('commercial_disputes_source_idx').on(t.companyId, t.sourceType, t.sourceId),
+    check('commercial_disputes_status_ck', sql`${t.status} in ('open','in_review','resolved','rejected')`),
+    check('commercial_disputes_category_ck', sql`${t.category} in ('price','quantity','quality','delivery','payment','other')`),
+    check('commercial_disputes_source_ck', sql`(${t.sourceType} is null) = (${t.sourceId} is null) and (${t.sourceType} is null or ${t.sourceType} in ('invoice','delivery_note','sales_order'))`),
+    check('commercial_disputes_amount_ck', sql`(${t.amount} is null) = (${t.currencyCode} is null) and (${t.amount} is null or ${t.amount} >= 0)`),
+    check('commercial_disputes_closed_ck', sql`(${t.status} in ('resolved','rejected')) = (${t.resolvedAt} is not null) and (${t.status} not in ('resolved','rejected') or ${t.resolution} is not null)`),
+  ],
+);
+
+/** İtiraz dosyası olayları: not, durum değişikliği, sorumlu ataması. Değişmez. */
+export const commercialDisputeEvents = pgTable(
+  'commercial_dispute_events',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    disputeId: uuid().notNull(),
+    kind: text().$type<'created' | 'note' | 'status' | 'assign'>().notNull(),
+    fromStatus: text(),
+    toStatus: text(),
+    note: text(),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ name: 'commercial_dispute_events_dispute_fk', columns: [t.disputeId, t.companyId], foreignColumns: [commercialDisputes.id, commercialDisputes.companyId] }),
+    index('commercial_dispute_events_dispute_idx').on(t.companyId, t.disputeId, t.createdAt),
+    check('commercial_dispute_events_kind_ck', sql`${t.kind} in ('created','note','status','assign')`),
   ],
 );

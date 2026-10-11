@@ -58,7 +58,7 @@ export const NAV_MERGES: ReadonlyArray<{ key: string; label: string; path: strin
 const MERGE_OF = new Map(NAV_MERGES.flatMap(m => m.from.map(key => [key, m] as const)));
 const ORDER: Record<string, readonly string[]> = {
   overview: ['/', '/workspace', '/workspace/documents', '/notifications'],
-  sales: ['/sales/quotes', '/sales/orders', '/price-lists', '/party-prices', '/sales/campaigns', '/pos', '/logistics'],
+  sales: ['/sales/quotes', '/sales/orders', '/sales/reps', '/price-lists', '/party-prices', '/sales/campaigns', '/pos', '/logistics'],
   procurement: ['/purchasing/requests', '/purchasing/rfqs', '/purchasing/orders', '/purchasing/matching', '/purchasing/replenishment'],
 };
 
