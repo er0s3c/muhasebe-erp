@@ -53,7 +53,7 @@ describe('değişmez kurallar: karışık işlem dizileri', async () => {
         const op = pick(['purchase', 'purchase', 'sale', 'sale', 'return', 'receipt', 'cancelReceipt', 'cancelSale'] as const);
         if (op === 'purchase') {
           const qty = int(1, 8);
-          await json(c.post('/api/invoices', { post: true, type: 'purchase', partyId: supplier, invoiceDate: date, lines: [{ itemId: item, description: 'Alış', quantity: String(qty), unitPrice: `${int(40, 60)}.25`, vatCode: 'KDV-16' }] }), `adım ${step} alış`);
+          await json(c.post('/api/invoices', { post: true, type: 'purchase', partyId: supplier, invoiceDate: date, externalNo: `A-${seed}-${step}`, lines: [{ itemId: item, description: 'Alış', quantity: String(qty), unitPrice: `${int(40, 60)}.25`, vatCode: 'KDV-16' }] }), `adım ${step} alış`);
           onHand += qty;
           log.push(`alış ${qty}`);
         } else if (op === 'sale') {
