@@ -157,10 +157,10 @@ Tamamlanma ölçütü: Şirket/şube sınırı, kritik görev erişilebilirliği
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 19 | AI dış çağrılarını uzun DB işlemlerinden ayırma | İlk kapsam | Genişletilecek | `ai/routes.ts` sağlayıcı çağrısına `c.tx` veriyor; işlem cevap boyunca açık | Bekliyor |
-| 21 | Güvenlik, kurtarma ve erişilebilirlik kabul koşulları | İlk kapsam | Genişletilecek | RLS, MFA, denetim izi, CI'da geri yükleme tatbikatı | Bekliyor |
-| 120 | İş kuralları için değişmez doğrulama koşulları | İlk kapsam | Genişletilecek | Mali regresyon testleri var; özellik tabanlı/değişmez test altyapısı yok | Bekliyor |
-| 121 | Ağ kesintisi ve eşzamanlılık kabulü | İlk kapsam | Genişletilecek | Komut tekrarına karşı `requestKey` + içerik özeti (üretim, deri, POS, çevrimdışı taslak; 36 dosya); ağ kesintisi kabul senaryosu yok | Bekliyor |
+| 19 | AI dış çağrılarını uzun DB işlemlerinden ayırma | İlk kapsam | Genişletilecek | `ai/routes.ts` sağlayıcı çağrısına `c.tx` veriyor; işlem cevap boyunca açık | İlk kapsam tamam: AI oturumu her araç çağrısında kısa salt okunur işlem açar (`tenantReadSessionRoute`); sağlayıcı beklerken yazma kilitlenmez, yetki değişikliği sohbet içinde uygulanır |
+| 21 | Güvenlik, kurtarma ve erişilebilirlik kabul koşulları | İlk kapsam | Genişletilecek | RLS, MFA, denetim izi, CI'da geri yükleme tatbikatı | İlk kapsam tamam: kritik akışın yalnız klavyeyle tamamlandığı E2E (`keyboard-flow.spec.ts`); kurtarma tatbikatı CI'da |
+| 120 | İş kuralları için değişmez doğrulama koşulları | İlk kapsam | Genişletilecek | Mali regresyon testleri var; özellik tabanlı/değişmez test altyapısı yok | İlk kapsam tamam: `test/invariants.ts` (defter dengesi, stok, cari kapatma, tahsis) ve tohumlu karışık işlem dizileri |
+| 121 | Ağ kesintisi ve eşzamanlılık kabulü | İlk kapsam | Genişletilecek | Komut tekrarına karşı `requestKey` + içerik özeti (üretim, deri, POS, çevrimdışı taslak; 36 dosya); ağ kesintisi kabul senaryosu yok | İlk kapsam tamam: fatura, yevmiye ve kasa/banka kayıtlarında `Idempotency-Key` + komut makbuzu (`command_receipts`); aynı anahtarla farklı içerik 409. Makbuz saklama süresi 101 ile |
 | 101 | Kayıt türüne göre veri saklama politikası | Genişletme | Genişletilecek | `hr/privacy.ts` kişisel veri envanteri (amaç, hukuki dayanak); yedeklerde 30 gün saklama; kayıt türü bazlı saklama/anonimleştirme yok | Bekliyor |
 | 102 | Destek verisini önizleme ve maskeleme | Genişletme | Genişletilecek | `system/feedback.ts` geri bildirim ekranı | Bekliyor |
 | 116 | Sürümlü şifreleme anahtarı yenileme | Genişletme | Yeni | Yok; `BACKUP_SIGNING_KEY` tek anahtar | Bekliyor |
@@ -183,10 +183,10 @@ Tamamlanma ölçütü: Aynı kullanıcı başka cihazda görünümünü açabili
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 5 | Sunucuda kayıtlı filtreler ve ortak görünümler | İlk kapsam | Genişletilecek | `SavedViews.tsx` localStorage; `preferences/routes.ts` favori, pano düzeni ve tablo yoğunluğunu sunucuda tutuyor | Bekliyor |
-| 24 | Temel ve ayrıntılı form girişi | İlk kapsam | Genişletilecek | Bazı ekranlarda katlanır `<details>` bölümleri (12 dosya); formlarda temel/ayrıntılı ayrımı ve şirket bazlı zorunlu alan yok | Bekliyor |
-| 28 | Kullanılamayan işlemin sebebi ve çözüm bağlantısı | İlk kapsam | Genişletilecek | Nedenli pasif işlem yalnız modül erişimi ekranında (`MemberAccessSheet`); ortak bileşen yok | Bekliyor |
-| 31 | Birim ve sayı girişinde tutarlılık kontrolü | İlk kapsam | Genişletilecek | Deri alanında dm²/ft² → m² sabit dönüşüm; genel birim dönüşümü, hassasiyet tanımı ve olağan dışı miktar uyarısı yok | Bekliyor |
+| 5 | Sunucuda kayıtlı filtreler ve ortak görünümler | İlk kapsam | Genişletilecek | `SavedViews.tsx` localStorage; `preferences/routes.ts` favori, pano düzeni ve tablo yoğunluğunu sunucuda tutuyor | İlk kapsam tamam: `saved_views` tablosu (kişisel/ekip, şube kapsamı, RLS), yerel görünümler bir kez sunucuya taşınır; lisans paneli tarayıcıda saklamaya devam eder |
+| 24 | Temel ve ayrıntılı form girişi | İlk kapsam | Genişletilecek | Bazı ekranlarda katlanır `<details>` bölümleri (12 dosya); formlarda temel/ayrıntılı ayrımı ve şirket bazlı zorunlu alan yok | İlk kapsam yapıldı: `form.detail` tercihi; fatura ve cari formlarında Temel görünüm boş ikincil alanları gizler. Şirket bazlı zorunlu alan ve rol varsayılanı F2b ile |
+| 28 | Kullanılamayan işlemin sebebi ve çözüm bağlantısı | İlk kapsam | Genişletilecek | Nedenli pasif işlem yalnız modül erişimi ekranında (`MemberAccessSheet`); ortak bileşen yok | İlk kapsam tamam: engel hataları ilgili kaydı taşır (dönem, iade, kapatan hareket, banka hesabı); ortak `ErrorCallout`/`BlockedHint`; fatura ve kasa/banka ekranlarında yetkisiz işlem nedeniyle pasif |
+| 31 | Birim ve sayı girişinde tutarlılık kontrolü | İlk kapsam | Genişletilecek | Deri alanında dm²/ft² → m² sabit dönüşüm; genel birim dönüşümü, hassasiyet tanımı ve olağan dışı miktar uyarısı yok | İlk kapsam yapıldı: birim hassasiyeti ve `quantityIssues` (fazla ondalık, g→kg/kg→ton, olağan dışı büyüklük); fatura ve stok hareketi satırında uyarı. Sunucuda zorunlu kılma ve şirket bazlı hassasiyet sonraki teslimatta |
 
 ### F2b — Başlangıç düzenleri ve gelişmiş giriş
 
@@ -541,6 +541,12 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 122 öneri, 14 faza (F0, F1, F2a, F2b, F3–F12) birer kez atanmıştır: F0 2, F1 9, F2a 4, F2b 10, F3 8, F4 14, F5 10, F6 11, F7 11, F8 11, F9 11, F10 7, F11 9, F12 5 = 122. Öneri numaraları önceki yanıtlardaki numaralarla aynıdır. Teknik ve mali ortak kabul koşulları, ana fazı farklı olan işlerde de uygulanır.
 
 ## Değişiklik kaydı
+
+**11 Ekim 2026 — Teslimat 2 ve 3 durumu**
+
+- Teslimat 2 (F1 ilk kapsamı: 19, 21, 120, 121) ve Teslimat 3 (F2a: 5, 24, 28, 31) `claude/f1-ai-islem` ve `claude/f2a-gorunumler` dallarında; dallar Teslimat 0 ve F0 dallarının üzerine yığılı, #24 birleşince PR olarak açılacak.
+- Değişmez dizisi gerçek bir test hatası yakaladı: iptal edilen tahsilatın eşleştirmesi tabloda kalır, geçerliliği hareketin durumundan okunur; değişmez sorgusu buna göre düzeltildi (ürün davranışı doğruydu).
+- Açık işler: komut makbuzu saklama süresi (101), miktar hassasiyetinin sunucuda zorunlu kılınması ve şirket bazlı tanımı, temel görünümün rol paketleriyle varsayılan yapılması (F2b), F0 başlangıç ölçümleri (pilot kullanıcı gerekir).
 
 **11 Ekim 2026 — Teslimat 0 durumu**
 
