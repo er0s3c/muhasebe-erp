@@ -45,7 +45,8 @@ export function SavedViews({ views, onApply, onSave, onRemove, onShare, error, b
   onApply: (filters: ViewFilters) => void;
   onSave: (name: string, shared: boolean) => Promise<boolean>;
   onRemove: (id: string) => void;
-  onShare: (id: string, shared: boolean) => void;
+  /** Verilmezse paylaşım seçenekleri gösterilmez (ör. yalnız tarayıcıda saklanan görünümler). */
+  onShare?: (id: string, shared: boolean) => void;
   error?: string;
   busy?: boolean;
   description?: string;
@@ -72,17 +73,39 @@ export function SavedViews({ views, onApply, onSave, onRemove, onShare, error, b
       }}>Kaydet</Button></>}>
       <div data-form-guard="off" className="space-y-4">
         <Field label="Görünüm adı" error={error} required>{(id) => <Input id={id} value={name} maxLength={40} onChange={(event) => setName(event.target.value)} />}</Field>
-        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={shared} onChange={(event) => setShared(event.target.checked)} />
-          <span>Ekiple paylaş<span className="block text-xs text-muted">Aynı şirket ve şube seçimindeki üyeler görür; herkes sonuçları kendi yetkisiyle görür.</span></span></label>
+        {onShare && <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={shared} onChange={(event) => setShared(event.target.checked)} />
+          <span>Ekiple paylaş<span className="block text-xs text-muted">Aynı şirket ve şube seçimindeki üyeler görür; herkes sonuçları kendi yetkisiyle görür.</span></span></label>}
         {full && <p className="text-xs text-muted">En fazla {SAVED_VIEWS_MAX} görünüm saklanabilir. Yeni görünüm için eskilerden birini kaldırın.</p>}
         {mine.map((view) => <div key={view.id} className="flex items-center justify-between gap-3 border-t border-border pt-3 text-sm">
           <span className="min-w-0 break-words">{view.name}{view.shared && <span className="ml-2 text-xs text-muted">ortak</span>}</span>
           <span className="flex shrink-0 gap-1">
-            <Button size="sm" variant="ghost" aria-label={view.shared ? `${view.name} paylaşımını kaldır` : `${view.name} görünümünü ekiple paylaş`} aria-pressed={view.shared} onClick={() => onShare(view.id, !view.shared)}><Users className="size-4" aria-hidden /></Button>
+            {onShare && <Button size="sm" variant="ghost" aria-label={view.shared ? `${view.name} paylaşımını kaldır` : `${view.name} görünümünü ekiple paylaş`} aria-pressed={view.shared} onClick={() => onShare(view.id, !view.shared)}><Users className="size-4" aria-hidden /></Button>}
             <Button size="sm" variant="ghost" aria-label={`${view.name} görünümünü kaldır`} onClick={() => onRemove(view.id)}><Trash2 className="size-4" aria-hidden /></Button>
           </span>
         </div>)}
       </div>
     </Modal>
   </div>;
+}
+
+/**
+ * Yalnız bu tarayıcıda saklanan görünümler: hesap/şirket API'si olmayan uygulamalar (ör. lisans yönetim paneli) için.
+ * Şirket ekranları sunucuda saklayan CompanySavedViews'i kullanır.
+ */
+export function BrowserSavedViews({ scope, filters, onApply, description }: { scope: readonly string[]; filters: ViewFilters; onApply: (filters: ViewFilters) => void; description?: string }) {
+  const key = savedViewsKey(scope);
+  const [views, setViews] = useState(() => readSavedViews(key, filters));
+  const [error, setError] = useState<string>();
+  const persist = (next: typeof views) => {
+    try { localStorage.setItem(key, JSON.stringify(next)); setViews(next); setError(undefined); return true; }
+    catch { setError('Bu tarayıcıda görünümler saklanamıyor. Tarayıcı depolama ayarlarını kontrol edin.'); return false; }
+  };
+  return <SavedViews
+    views={views.map((view) => ({ ...view, shared: false, mine: true, ownerName: null }))}
+    onApply={onApply}
+    error={error}
+    description={description}
+    onSave={async (name) => persist([...views, { id: crypto.randomUUID(), name, filters }])}
+    onRemove={(id) => persist(views.filter((view) => view.id !== id))}
+  />;
 }

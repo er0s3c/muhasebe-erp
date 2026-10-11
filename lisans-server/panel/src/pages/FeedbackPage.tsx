@@ -10,7 +10,7 @@ import { Sheet } from '@ui/Sheet';
 import { SegmentedTabs } from '@ui/Tabs';
 import { useToast } from '@ui/Toast';
 import { markFormSaved, useUnsavedChanges } from '@ui/UnsavedChanges';
-import { SavedViews } from '@ui/SavedViews';
+import { BrowserSavedViews } from '@ui/SavedViews';
 import {
   api,
   errorText,
@@ -307,7 +307,7 @@ export function FeedbackPage() {
             },
           ]}
         />
-        <SavedViews key={admin.id} scope={['license-admin', admin.id, 'feedback']} description="Yalnızca bu tarayıcıdaki yönetici hesabınız için saklanır. Arama metni ve müşteri bilgileri kaydedilmez." filters={{ status: filter }} onApply={(filters) => {
+        <BrowserSavedViews key={admin.id} scope={['license-admin', admin.id, 'feedback']} description="Yalnızca bu tarayıcıdaki yönetici hesabınız için saklanır. Arama metni ve müşteri bilgileri kaydedilmez." filters={{ status: filter }} onApply={(filters) => {
           const status = String(filters.status);
           if (status === 'all' || status in labels) { setFilter(status as Filter); setOffset(0); }
         }} />

@@ -7,7 +7,7 @@ import { Button } from '@ui/Button';
 import { PageHeader } from '@ui/Card';
 import { EmptyState, ErrorState, PageLoading } from '@ui/Feedback';
 import { Select } from '@ui/Field';
-import { SavedViews } from '@ui/SavedViews';
+import { BrowserSavedViews } from '@ui/SavedViews';
 import { Table, TableWrap, Td, Th, Tr } from '@ui/Table';
 import { api, errorText, type License } from '../api';
 import { CodeModal } from '../components/CodeModal';
@@ -77,7 +77,7 @@ export function LicensesPage() {
             Müşteri süzgecini kaldır
           </Button>
         )}
-        <SavedViews key={admin.id} scope={['license-admin', admin.id, 'licenses']} description="Yalnızca bu tarayıcıdaki yönetici hesabınız için saklanır. Arama metni ve müşteri bilgileri kaydedilmez." filters={{ status, flagged: flaggedOnly }} onApply={(filters) => {
+        <BrowserSavedViews key={admin.id} scope={['license-admin', admin.id, 'licenses']} description="Yalnızca bu tarayıcıdaki yönetici hesabınız için saklanır. Arama metni ve müşteri bilgileri kaydedilmez." filters={{ status, flagged: flaggedOnly }} onApply={(filters) => {
           const next = new URLSearchParams(params);
           const savedStatus = String(filters.status);
           if (savedStatus in STATUS_LABELS) next.set('status', savedStatus); else next.delete('status');
