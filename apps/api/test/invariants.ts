@@ -35,9 +35,12 @@ export async function companyInvariantViolations(companyId: string): Promise<str
      where m.company_id = $1
      group by m.item_id, m.warehouse_id having sum(m.qty) = 0 and sum(m.value) <> 0`);
 
+  // İptal edilen tahsilat/ödemenin eşleştirmesi silinmez; geçerliliği işlemin durumundan okunur (bkz. parties/service)
   await rows('cari kalem tutarından fazla kapatıldı', `
     select a.charge_line_id, sum(a.amount)::text as allocated, (l.debit + l.credit)::text as line_amount
-      from party_allocations a join journal_lines l on l.id = a.charge_line_id and l.company_id = a.company_id
+      from party_allocations a
+      join journal_lines l on l.id = a.charge_line_id and l.company_id = a.company_id
+      join treasury_transactions t on t.id = a.transaction_id and t.company_id = a.company_id and t.status = 'posted'
      where a.company_id = $1
      group by a.charge_line_id, l.debit, l.credit having sum(a.amount) > l.debit + l.credit`);
 
