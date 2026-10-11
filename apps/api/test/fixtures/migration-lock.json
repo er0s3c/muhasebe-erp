@@ -502,5 +502,9 @@
   "0125_command_receipts": {
     "sha256": "1286badf45a7f67fa011346240e491724f8394a0f04297ccaeee61b222be376a",
     "when": 1791706355130
+  },
+  "0126_saved_views": {
+    "sha256": "a013db0edffdad5ab4e2101abf1703703abefa666fa576120365dfe94a7d2335",
+    "when": 1791707397343
   }
 }

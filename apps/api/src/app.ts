@@ -63,6 +63,7 @@ import { scenarioRoutes } from './modules/workspace/scenarios';
 import { portalRoutes } from './modules/workspace/portal';
 import { notificationRoutes } from './modules/notifications/routes';
 import { preferenceRoutes } from './modules/preferences/routes';
+import { viewRoutes } from './modules/views/routes';
 import { dashboardRoutes } from './modules/dashboard/routes';
 import { consolidationRoutes } from './modules/consolidation/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
@@ -302,6 +303,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(portalRoutes);
   await app.register(notificationRoutes);
   await app.register(preferenceRoutes);
+  await app.register(viewRoutes);
   await app.register(dashboardRoutes);
   await app.register(consolidationRoutes);
   await app.register(treasuryRoutes);

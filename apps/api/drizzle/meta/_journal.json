@@ -883,6 +883,13 @@
       "when": 1791706355130,
       "tag": "0125_command_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1791707397343,
+      "tag": "0126_saved_views",
+      "breakpoints": true
     }
   ]
 }

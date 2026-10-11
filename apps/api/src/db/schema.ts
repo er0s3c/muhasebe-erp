@@ -5982,6 +5982,39 @@ export const commandReceipts = pgTable(
 );
 
 /**
+ * Liste ekranı kayıtlı görünümü (öneri 5): yalnız açık filtre seçimleri saklanır; arama metni, kayıt veya kimlik bilgisi
+ * saklanmaz. Kişisel görünümü yalnız sahibi, ortak görünümü aynı şube kapsamındaki şirket üyeleri görür; sonuçlar her
+ * kullanıcının kendi yetkisiyle hesaplanır. Değiştirme/silme yalnız sahibine açıktır (RLS).
+ */
+export const savedViews = pgTable(
+  'saved_views',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    ownerUserId: uuid()
+      .notNull()
+      .references(() => users.id),
+    /** Görünümün kaydedildiği şube seçimi: 'all', 'unassigned' veya şube kimliği. */
+    branchScope: text().notNull(),
+    page: text().notNull(),
+    name: text().notNull(),
+    filters: jsonb().$type<Record<string, string | boolean>>().notNull(),
+    shared: boolean().notNull().default(false),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('saved_views_page_idx').on(t.companyId, t.page, t.branchScope),
+    check('saved_views_page_ck', sql`${t.page} ~ '^[a-z][a-z0-9-]{1,60}$'`),
+    check('saved_views_branch_ck', sql`${t.branchScope} ~ '^(all|unassigned|[0-9a-f-]{36})$'`),
+    check('saved_views_name_ck', sql`char_length(${t.name}) between 1 and 40`),
+    check('saved_views_filters_ck', sql`jsonb_typeof(${t.filters}) = 'object' and octet_length(${t.filters}::text) <= 4096`),
+  ],
+);
+
+/**
  * Günlük e-posta özeti kaydı (kullanıcı + şirket + gün): özet o gün için TALEP EDİLDİĞİNDE yazılır; aynı gün ikinci özet doğmaz
  * (gönderim "en çok bir kez": SMTP hatasında aynı gün yeniden denenmez).
  */
