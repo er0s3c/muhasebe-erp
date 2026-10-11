@@ -8,6 +8,7 @@ export * from './password';
 export * from './invoice-calc';
 export * from './units';
 export * from './iban';
+export * from './start-packages';
 export * from './treasury-calc';
 export * from './project-cost';
 export * from './progress-calc';
