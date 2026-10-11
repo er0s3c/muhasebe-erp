@@ -18,6 +18,7 @@ import {
   manufacturingDepartmentSchema,
   manufacturingCustomFieldSchema,
   manufacturingCommandSchema,
+  publishScheduleSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { forbidden } from '../../http/errors';
@@ -45,6 +46,7 @@ import { productionOrderScope } from '../leather/visibility';
 import { manufacturingExecutionRoutes } from './execution-routes';
 import { purchaseProposals } from './promise';
 import { command } from './commands';
+import { manufacturingPlanningRulesRoutes } from './planning-rules';
 
 export const manufacturingCtx = (c: TenantCtx): LeatherCtx => ({
   companyId: c.company.id,
@@ -58,6 +60,7 @@ export const manufacturingRoutes: FastifyPluginAsync = async (app) => {
   await app.register(manufacturingCoreRoutes);
   await app.register(manufacturingSupportRoutes);
   await app.register(manufacturingExecutionRoutes);
+  await app.register(manufacturingPlanningRulesRoutes);
   const gate = (area: string, write = false) => ({
     module: area,
     permission: (area + (write ? '.manage' : '.read')) as never,
@@ -287,7 +290,7 @@ export const manufacturingRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(
       app,
       { module: 'manufacturing.planning', permission: 'manufacturing.planning.approve' },
-      async (c) => ({ record: await publishSchedule(c.tx, manufacturingCtx(c), id(c)) }),
+      async (c) => ({ record: await publishSchedule(c.tx, manufacturingCtx(c), id(c), publishScheduleSchema.parse(c.req.body ?? {})) }),
     ),
   );
   app.post(

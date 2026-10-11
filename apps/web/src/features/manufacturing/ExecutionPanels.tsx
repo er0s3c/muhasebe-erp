@@ -164,6 +164,11 @@ export function ProductionCostClosePanel({ orderId }: { orderId: string }) {
     materialActualValue: string;
     materialVariance: string;
     standardSource: string;
+    variance?: {
+      material: { standard: string; actual: string; price: string; usage: string; total: string; traceDifference: string; items: { itemId: string; code: string | null; name: string | null; standardQty: string; standardUnitCost: string; actualQty: string; actualValue: string; priceVariance: string; usageVariance: string }[] };
+      labor: { operations: { operationKey: string; name: string; standardMinutes: string; actualMinutes: string; minuteVariance: string; hourlyCost: string | null; efficiencyVariance: string | null }[]; minuteVariance: string; efficiencyVariance: string | null };
+      other: { kind: string; actual: string }[];
+    };
   }>(
     ['manufacturing', 'cost-close', orderId],
     `/api/manufacturing/production/orders/${orderId}/cost-close`,
@@ -221,6 +226,40 @@ export function ProductionCostClosePanel({ orderId }: { orderId: string }) {
               },
             ]}
           />
+          {report.data.variance && (
+            <details className="text-sm" open>
+              <summary className="cursor-pointer py-1 font-medium">Sapma bileşenleri</summary>
+              <p className="my-2 text-xs text-muted">
+                Fiyat sapması = (gerçek birim − tahmini birim) × gerçek miktar; miktar sapması = (gerçek − tahmini miktar) × tahmini birim. Gerçek değer üretim çıkış/iade belgelerinden;
+                maliyet izi farkı {moneyIn(report.data.variance.material.traceDifference, company.baseCurrency)}. Fason ve genel gider için tahmin tutulmaz.
+              </p>
+              <Records
+                rows={report.data.variance.material.items.map((m) => ({ id: m.itemId, ...m }))}
+                columns={[
+                  { label: 'Malzeme', render: (r) => `${r.code ?? ''} ${r.name ?? ''}`.trim() },
+                  { label: 'Tahmini miktar', numeric: true, render: (r) => r.standardQty },
+                  { label: 'Gerçek miktar', numeric: true, render: (r) => r.actualQty },
+                  { label: 'Fiyat sapması', numeric: true, render: (r) => moneyIn(r.priceVariance, company.baseCurrency) },
+                  { label: 'Miktar sapması', numeric: true, render: (r) => moneyIn(r.usageVariance, company.baseCurrency) },
+                ]}
+              />
+              <Records
+                rows={report.data.variance.labor.operations.map((o) => ({ id: o.operationKey, ...o }))}
+                columns={[
+                  { label: 'Operasyon', render: (r) => r.name },
+                  { label: 'Tahmini dk', numeric: true, render: (r) => r.standardMinutes },
+                  { label: 'Gerçek dk', numeric: true, render: (r) => r.actualMinutes },
+                  { label: 'Dakika farkı', numeric: true, render: (r) => r.minuteVariance },
+                  { label: 'Verimlilik sapması', numeric: true, render: (r) => (r.efficiencyVariance === null ? 'Saatlik maliyet yok' : moneyIn(r.efficiencyVariance, company.baseCurrency)) },
+                ]}
+              />
+              {report.data.variance.other.length > 0 && (
+                <p className="mt-2 text-xs text-muted">
+                  Diğer gerçekleşen: {report.data.variance.other.map((o) => `${o.kind} ${moneyIn(o.actual, company.baseCurrency)}`).join(' · ')}
+                </p>
+              )}
+            </details>
+          )}
         </>
       )}
     </section>

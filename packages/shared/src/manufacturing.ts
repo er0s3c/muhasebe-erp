@@ -37,7 +37,8 @@ export const manufacturingMrpSchema = z.object({
 export const manufacturingResourceSchema = z.object({
   code: name,
   name,
-  type: z.enum(['machine', 'person', 'center']),
+  /** `tool`: kalıp/takım/aparat (öneri 64); takvim gerektirmez, yalnız bakım/arıza kapatır, kapasitesi eş takım sayısıdır. */
+  type: z.enum(['machine', 'person', 'center', 'tool']),
   capacity: z.number().int().min(1).max(100).default(1),
   standardMinutes: quantityString.default('0'),
   department: z.string().max(160).default(''),
@@ -94,6 +95,10 @@ export const manufacturingScheduleSchema = z.object({
         priority: z.number().int().min(0).max(100).default(0),
         predecessor: name.optional(),
         durationSource: z.enum(['actual', 'blended', 'standard', 'manual']).optional(),
+        /** Sıraya bağlı hazırlık (öneri 63): aynı ailedeki ardışık işte hazırlık yoktur. */
+        setupFamily: z.string().trim().min(1).max(60).optional(),
+        /** Operasyonun boyunca meşgul edeceği kalıp/takım/aparat kaynakları (öneri 64). */
+        toolIds: z.array(uuid).max(5).optional(),
       }),
     )
     .min(1)
@@ -298,6 +303,27 @@ export interface ScheduledOperation {
   priority: number;
   predecessor?: string;
   segments?: { start: string; end: string }[];
+  setupFamily?: string;
+  /** Plana eklenen hazırlık süresi (dakika); `minutes` işleme süresidir. */
+  setupMinutes?: number;
+  toolIds?: string[];
+}
+
+/** Kaynak başına hazırlık kuralı: `matrix` anahtarı `önceki|sonraki` ailedir (`*` her aile). */
+export interface SetupRule {
+  defaultMinutes: number;
+  matrix: Readonly<Record<string, number>>;
+}
+export interface SchedulingRules {
+  setup?: Readonly<Record<string, SetupRule>>;
+}
+
+/** Önceki aileden sonrakine geçiş hazırlığı; aynı aile 0, aile yoksa 0, kural yoksa varsayılan. */
+export function setupMinutesFor(rule: SetupRule | undefined, previous: string | undefined, next: string | undefined) {
+  if (!rule || !next) return 0;
+  if (previous !== undefined && previous === next) return 0;
+  const key = (previous ?? '*') + '|' + next;
+  return rule.matrix[key] ?? rule.matrix['*|' + next] ?? rule.defaultMinutes;
 }
 export type SchedulingJob = z.infer<typeof manufacturingScheduleSchema>['jobs'][number];
 /** Work spans may cross shifts; only working segments occupy resource capacity. */
@@ -308,6 +334,7 @@ export function finiteManufacturingSchedule(
   direction: 'forward' | 'backward',
   capacities: Readonly<Record<string, number>> = {},
   occupied: readonly ScheduledOperation[] = [],
+  rules: SchedulingRules = {},
 ): ScheduledOperation[] {
   const ordered = [...jobs].sort((a, b) => b.priority - a.priority);
   const result: ScheduledOperation[] = [];
@@ -338,9 +365,16 @@ export function finiteManufacturingSchedule(
       last: number | undefined,
       count = 0;
     const slots: number[] = [];
+    const all = [...occupied, ...result];
+    const overlaps = (o: ScheduledOperation, t: number) => (o.segments ?? [o]).some((s) => Date.parse(s.start) < t + 60000 && Date.parse(s.end) > t);
+    const blockedAt = (resourceId: string, t: number) =>
+      calendars.some((c) => c.resourceId === resourceId && !c.available && Date.parse(c.start) < t + 60000 && capacityIntervalEnd(c) > t);
+    // Hazırlık ilk uygun dakikada, kaynaktaki bir önceki (geri planlamada bir sonraki) işin ailesine göre belirlenir
+    let needed: number | undefined;
+    let setupMinutes = 0;
     for (
       let scanned = 0;
-      scanned < 525600 && count < job.minutes;
+      scanned < 525600 && count < (needed ?? job.minutes);
       scanned++, cursor += sign * 60000
     ) {
       const t = direction === 'forward' ? cursor : cursor - 60000;
@@ -348,21 +382,34 @@ export function finiteManufacturingSchedule(
       const allowed = relevant.some(
         (c) => c.available && Date.parse(c.start) <= t && capacityIntervalEnd(c) >= t + 60000,
       );
-      const blocked = relevant.some(
-        (c) => !c.available && Date.parse(c.start) < t + 60000 && capacityIntervalEnd(c) > t,
-      );
-      const busy = [...occupied, ...result].filter(
-        (o) =>
-          o.resourceId === job.resourceId &&
-          (o.segments ?? [o]).some((s) => Date.parse(s.start) < t + 60000 && Date.parse(s.end) > t),
-      ).length;
+      const blocked = blockedAt(job.resourceId, t);
+      const busy = all.filter((o) => o.resourceId === job.resourceId && overlaps(o, t)).length;
       if (!allowed || blocked || busy >= (capacities[job.resourceId] ?? 1)) continue;
+      // Takım/aparat: her dakikada eş takım sayısı kadar iş; bakım/arıza aralığı kapatır
+      if (
+        (job.toolIds ?? []).some(
+          (tool) => blockedAt(tool, t) || all.filter((o) => (o.toolIds ?? []).includes(tool) && overlaps(o, t)).length >= (capacities[tool] ?? 1),
+        )
+      )
+        continue;
+      if (needed === undefined) {
+        const neighbour =
+          direction === 'forward'
+            ? all.filter((o) => o.resourceId === job.resourceId && Date.parse(o.end) <= t).sort((a, b) => Date.parse(b.end) - Date.parse(a.end))[0]
+            : all.filter((o) => o.resourceId === job.resourceId && Date.parse(o.start) >= t + 60000).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0];
+        const rule = rules.setup?.[job.resourceId];
+        setupMinutes =
+          direction === 'forward'
+            ? setupMinutesFor(rule, neighbour?.setupFamily, job.setupFamily)
+            : setupMinutesFor(rule, undefined, job.setupFamily);
+        needed = job.minutes + setupMinutes;
+      }
       slots.push(t);
       first = first === undefined ? t : Math.min(first, t);
       last = last === undefined ? t + 60000 : Math.max(last, t + 60000);
       count++;
     }
-    if (count !== job.minutes || first === undefined || last === undefined)
+    if (count !== (needed ?? job.minutes) || first === undefined || last === undefined)
       throw new Error('Uygun kapasite bulunamadı');
     const segments: { start: string; end: string }[] = [];
     for (const t of slots.sort((a, b) => a - b)) {
@@ -377,7 +424,74 @@ export function finiteManufacturingSchedule(
       start: new Date(first).toISOString(),
       end: new Date(last).toISOString(),
       segments,
+      ...(setupMinutes > 0 ? { setupMinutes } : {}),
     });
   }
   return result;
+}
+
+// --- F7: kaynak kuralları, operatör becerisi, plan dondurma ---------------------------
+
+/** Kaynak kuralları (öneri 63, 64, 65, 72): hazırlık matrisi, gereken beceriler ve saatlik maliyet. */
+export const manufacturingResourceRulesSchema = z.object({
+  defaultSetupMinutes: z.number().int().min(0).max(1440).default(0),
+  setupMatrix: z
+    .array(z.object({ from: z.string().trim().min(1).max(60), to: z.string().trim().min(1).max(60), minutes: z.number().int().min(0).max(1440) }))
+    .max(400)
+    .default([])
+    .refine((rows) => new Set(rows.map((r) => r.from + '|' + r.to)).size === rows.length, 'Aynı geçiş bir kez tanımlanır'),
+  requiredSkills: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
+  hourlyCost: unitCostString.optional(),
+});
+export type ManufacturingResourceRules = z.infer<typeof manufacturingResourceRulesSchema>;
+
+export const setupRuleFromConfig = (config: { defaultSetupMinutes?: number; setupMatrix?: { from: string; to: string; minutes: number }[] }): SetupRule => ({
+  defaultMinutes: config.defaultSetupMinutes ?? 0,
+  matrix: Object.fromEntries((config.setupMatrix ?? []).map((r) => [r.from + '|' + r.to, r.minutes])),
+});
+
+export const operatorSkillSchema = z.object({
+  userId: uuid,
+  skill: z.string().trim().min(1).max(60),
+  level: z.number().int().min(1).max(5).default(1),
+  validUntil: isoDate.nullable().optional(),
+  note: z.string().trim().max(300).optional(),
+});
+export type OperatorSkillInput = z.infer<typeof operatorSkillSchema>;
+
+/** Yakın dönem plan koruması (öneri 66): şimdiden itibaren bu kadar saat içindeki işler yeni plan sürümüyle değişmez. */
+export const manufacturingPolicySchema = z.object({ freezeHours: z.number().int().min(0).max(720) });
+export const publishScheduleSchema = z.object({ overrideReason: z.string().trim().min(5).max(300).optional() });
+
+export interface FrozenViolation {
+  orderId: string;
+  operationKey: string;
+  change: 'moved' | 'removed' | 'added';
+  previousStart?: string;
+  start?: string;
+}
+
+/** Dondurma penceresinde yayımlanmış plandan sapan işler: taşınan, çıkarılan veya pencereye eklenen operasyonlar. */
+export function frozenWindowViolations(
+  previous: readonly ScheduledOperation[],
+  next: readonly ScheduledOperation[],
+  now: number,
+  freezeHours: number,
+): FrozenViolation[] {
+  if (freezeHours <= 0) return [];
+  const limit = now + freezeHours * 3600000;
+  const inWindow = (o: ScheduledOperation) => Date.parse(o.start) < limit && Date.parse(o.end) > now;
+  const key = (o: ScheduledOperation) => o.orderId + ':' + o.operationKey;
+  const nextByKey = new Map(next.map((o) => [key(o), o]));
+  const prevByKey = new Map(previous.map((o) => [key(o), o]));
+  const out: FrozenViolation[] = [];
+  for (const p of previous.filter(inWindow)) {
+    const n = nextByKey.get(key(p));
+    if (!n) out.push({ orderId: p.orderId, operationKey: p.operationKey, change: 'removed', previousStart: p.start });
+    else if (n.start !== p.start || n.end !== p.end || n.resourceId !== p.resourceId) out.push({ orderId: p.orderId, operationKey: p.operationKey, change: 'moved', previousStart: p.start, start: n.start });
+  }
+  for (const n of next.filter(inWindow)) {
+    if (!prevByKey.has(key(n))) out.push({ orderId: n.orderId, operationKey: n.operationKey, change: 'added', start: n.start });
+  }
+  return out;
 }

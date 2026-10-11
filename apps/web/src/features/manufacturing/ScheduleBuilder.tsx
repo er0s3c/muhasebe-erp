@@ -34,6 +34,9 @@ type Job = {
   predecessor?: string;
   durationSource: 'actual' | 'blended' | 'standard' | 'manual';
   estimate?: DurationEstimate;
+  /** Sıraya bağlı hazırlık ailesi (F7: öneri 63) ve kullanılacak kalıp/takım (öneri 64). */
+  setupFamily?: string;
+  toolId?: string;
 };
 type EstimateOperations = {
   operationKey: string;
@@ -46,7 +49,7 @@ export function ScheduleBuilder({
   disabled,
 }: {
   orders: PlanningOrder[];
-  resources: { id: string; name?: string }[];
+  resources: { id: string; name?: string; type?: string; status?: string }[];
   disabled?: boolean;
 }) {
   const { call } = useCompanyApi();
@@ -369,10 +372,10 @@ export function ScheduleBuilder({
                   body: {
                     anchor: new Date(anchorDate + 'T' + anchorTime).toISOString(),
                     direction,
-                    jobs: jobs.map(({ name, estimate, ...job }) => {
+                    jobs: jobs.map(({ name, estimate, toolId, setupFamily, ...job }) => {
                       void name;
                       void estimate;
-                      return job;
+                      return { ...job, ...(setupFamily?.trim() ? { setupFamily: setupFamily.trim() } : {}), ...(toolId ? { toolIds: [toolId] } : {}) };
                     }),
                   },
                 });
@@ -521,6 +524,32 @@ export function ScheduleBuilder({
                       Öncelik ve süre ayrıntıları
                     </summary>
                     <div className="mt-3 space-y-3">
+                      <Field label="Hazırlık ailesi" hint="Aynı ailedeki ardışık işlerde hazırlık süresi eklenmez (kaynak kurallarındaki geçiş süreleri).">
+                        {(id) => (
+                          <Input
+                            id={id}
+                            maxLength={60}
+                            value={job.setupFamily ?? ''}
+                            onChange={(event) => setJobs((old) => old.map((item, i) => (i === index ? { ...item, setupFamily: event.target.value } : item)))}
+                          />
+                        )}
+                      </Field>
+                      {resources.some((r) => r.type === 'tool' && r.status !== 'inactive') && (
+                        <Field label="Kalıp / takım" hint="Seçilen kalıp, iş boyunca başka işte kullanılamaz.">
+                          {(id) => (
+                            <Select id={id} value={job.toolId ?? ''} onChange={(event) => setJobs((old) => old.map((item, i) => (i === index ? { ...item, toolId: event.target.value || undefined } : item)))}>
+                              <option value="">Yok</option>
+                              {resources
+                                .filter((r) => r.type === 'tool' && r.status === 'active')
+                                .map((r) => (
+                                  <option key={r.id} value={r.id}>
+                                    {r.name ?? 'Kalıp'}
+                                  </option>
+                                ))}
+                            </Select>
+                          )}
+                        </Field>
+                      )}
                       <Field
                         label="Öncelik"
                         hint="0–100 arasında; büyük değer daha önce planlanır."

@@ -6523,3 +6523,41 @@ export const commercialDisputeEvents = pgTable(
     check('commercial_dispute_events_kind_ck', sql`${t.kind} in ('created','note','status','assign')`),
   ],
 );
+
+/** Operatör becerisi ve sertifikası (öneri 65): kaynağın gerektirdiği beceri geçerli değilse canlı iş başlamaz. */
+export const operatorSkills = pgTable(
+  'operator_skills',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    skill: text().notNull(),
+    level: integer().notNull().default(1),
+    validUntil: date({ mode: 'string' }),
+    note: text(),
+    updatedBy: uuid().references(() => users.id),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('operator_skills_uq').on(t.companyId, t.userId, t.skill),
+    check('operator_skills_level_ck', sql`${t.level} between 1 and 5`),
+  ],
+);
+
+/** Üretim planlama politikası (öneri 66): yakın dönem dondurma penceresi (saat). */
+export const manufacturingPolicies = pgTable(
+  'manufacturing_policies',
+  {
+    companyId: uuid()
+      .primaryKey()
+      .references(() => companies.id),
+    freezeHours: integer().notNull().default(0),
+    updatedBy: uuid().references(() => users.id),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('manufacturing_policies_freeze_ck', sql`${t.freezeHours} between 0 and 720`)],
+);

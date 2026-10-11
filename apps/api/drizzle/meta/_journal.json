@@ -974,6 +974,13 @@
       "when": 1791739299704,
       "tag": "0138_sales_commercial",
       "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1791753441476,
+      "tag": "0139_operator_skills",
+      "breakpoints": true
     }
   ]
 }
