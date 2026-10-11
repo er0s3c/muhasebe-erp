@@ -96,7 +96,7 @@ describe('satış ticari kararları (F6)', async () => {
     const o = (await c.post('/api/sales-docs', { kind: 'order', partyId: cust.id, docDate: TODAY_LOCAL, warehouseId: main.id, lines: [line(item.id, '5', '100')] })).json();
     expect(o.doc).toMatchObject({ salesRepId: rep.userId, salesRepName: 'sales Temsilci' });
     expect((await c.post(`/api/sales-docs/${o.doc.id}/confirm`, {})).statusCode).toBe(200);
-    const inv = await c.post(`/api/sales-docs/${o.doc.id}/invoice`, {});
+    const inv = await c.post(`/api/sales-docs/${o.doc.id}/invoice`, { includeUndelivered: true });
     expect(inv.statusCode, inv.body).toBe(201);
     const posted = await c.post(`/api/invoices/${inv.json().invoiceId}/post`);
     expect(posted.statusCode, posted.body).toBe(200);

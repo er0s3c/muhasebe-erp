@@ -92,7 +92,10 @@ describe('üretim planlama kuralları (F7)', async () => {
   it('beceri olmadan iş başlamaz; planlanan–gerçekleşen ve maliyet sapması', async () => {
     await ok(c.put(`/api/manufacturing/resources/${machine}/rules`, { requiredSkills: ['PRES'], hourlyCost: '60' }));
     await ok(c.post(`/api/manufacturing/production/orders/${o3}/release`, { date: TODAY_LOCAL, requestKey: randomUUID() }));
-    const anchor = new Date(Math.floor((Date.now() - 20 * 60000) / 60000) * 60000).toISOString();
+    // Şirket tarihi UTC tarihinden farklı olabilir: vardiya ve rapor aralığı gerçek "şimdi"ye göre kurulur
+    const now = Date.now();
+    await ok(c.post('/api/manufacturing/calendars', { resourceId: machine, start: new Date(now - 2 * 3600000).toISOString(), end: new Date(now + 2 * 3600000).toISOString(), available: true, reason: 'shift' }));
+    const anchor = new Date(Math.floor((now - 20 * 60000) / 60000) * 60000).toISOString();
     const plan = (await ok(c.post('/api/manufacturing/planning/schedules', { anchor, direction: 'forward', jobs: [{ orderId: o3, operationKey: 'press', resourceId: machine, minutes: 10 }] }))).record;
     await ok(c.post(`/api/manufacturing/planning/schedules/${plan.id}/publish`, {}));
 
@@ -107,7 +110,8 @@ describe('üretim planlama kuralları (F7)', async () => {
     await ok(c.post(`/api/manufacturing/production/orders/${o3}/work`, { ...start, ...key() }));
     await ok(c.post(`/api/manufacturing/production/orders/${o3}/work`, { ...key(), action: 'complete', operationKey: 'press', date: TODAY_LOCAL, quantity: '5', goodQty: '5' }));
 
-    const pa = await ok(c.get(`/api/manufacturing/reports/plan-actual?from=${TODAY_LOCAL}&to=${TODAY_LOCAL}`));
+    const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+    const pa = await ok(c.get(`/api/manufacturing/reports/plan-actual?from=${day(now - 86400000)}&to=${day(now + 86400000)}`));
     const row = pa.rows.find((r: { orderId: string }) => r.orderId === o3);
     expect(row).toMatchObject({ operationKey: 'press', plannedMinutes: 10, status: 'done', goodQty: 5 });
     expect(row.startDelayMinutes).toBeGreaterThanOrEqual(15);
