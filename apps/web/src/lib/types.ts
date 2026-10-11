@@ -122,6 +122,8 @@ export interface JournalLine {
   wbsId: string | null;
   wbsCode: string | null;
   wbsName: string | null;
+  costCenterId?: string | null;
+  costCenterCode?: string | null;
 }
 
 export interface JournalEntry extends Omit<JournalListItem, 'totalBase'> {
@@ -598,6 +600,8 @@ export interface InvoiceLineRow {
   wbsId: string | null;
   wbsCode: string | null;
   wbsName: string | null;
+  costCenterId?: string | null;
+  costCenterCode?: string | null;
 }
 
 export interface InvoiceDetail {

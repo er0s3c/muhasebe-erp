@@ -127,6 +127,7 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       salesOrderLineId: l.salesOrderLineId,
       projectId: l.projectId,
       wbsId: l.wbsId,
+      costCenterId: l.costCenterId,
     })),
     inv.vatIncluded,
     ctx.companyId,
@@ -387,6 +388,7 @@ export async function postInvoice(tx: Tx, ctx: InvoiceCtx, id: string) {
       costValue: costByLine.get(l.lineNo) ?? dec(0),
       projectId: l.projectId,
       wbsId: l.wbsId,
+      costCenterId: l.costCenterId,
     })),
   });
   built.lines.push(...accruedSettlement.journalLines);

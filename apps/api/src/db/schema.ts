@@ -2131,6 +2131,8 @@ export const journalLines = pgTable(
     wbsId: uuid(),
     /** Maliyet kodu (üçüncü boyut); yalnızca proje etiketli satırda. */
     costCodeId: uuid(),
+    /** Departman / maliyet merkezi (öneri 11); isteğe bağlı, geçmiş kayıtlarda boş ("bilinmiyor"), tahmin edilmez. */
+    costCenterId: uuid(),
   },
   (t) => [
     foreignKey({
@@ -2854,6 +2856,8 @@ export const invoiceLines = pgTable(
     /** Proje boyutu: yalnızca stoksuz alış/gider/alış iadesi satırında (net tarafa yazılır). */
     projectId: uuid(),
     wbsId: uuid(),
+    /** Departman / maliyet merkezi (öneri 11): gelir/gider tarafındaki yevmiye satırına taşınır. */
+    costCenterId: uuid(),
     /** Alış faturasında, faturalanan sipariş satırı (üçlü eşleştirme: sipariş – mal kabul – fatura). */
     poLineId: uuid(),
     /** Satış faturasında, faturalanan satış siparişi satırı (X2). */
@@ -6198,6 +6202,27 @@ export const periodCloseTasks = pgTable(
     unique('period_close_tasks_uq').on(t.companyId, t.periodId, t.taskKey),
     foreignKey({ name: 'period_close_tasks_period_fk', columns: [t.periodId, t.companyId], foreignColumns: [fiscalPeriods.id, fiscalPeriods.companyId] }),
     check('period_close_tasks_key_ck', sql`${t.taskKey} ~ '^[a-z][a-z0-9_]{1,40}$'`),
+  ],
+);
+
+/** Departman / maliyet merkezi (öneri 11): yevmiye ve fatura satırlarında isteğe bağlı boyut. Silinmez, pasifleştirilir. */
+export const costCenters = pgTable(
+  'cost_centers',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    code: text().notNull(),
+    name: text().notNull(),
+    isActive: boolean().notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('cost_centers_code_uq').on(t.companyId, t.code),
+    unique('cost_centers_id_company_uq').on(t.id, t.companyId),
+    check('cost_centers_code_ck', sql`${t.code} ~ '^[A-Za-z0-9._-]{1,20}$'`),
+    check('cost_centers_name_ck', sql`char_length(${t.name}) between 2 and 80`),
   ],
 );
 

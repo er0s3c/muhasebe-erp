@@ -59,6 +59,8 @@ interface LineState {
   /** Proje boyutu (inşaat): yalnızca alış/gider/alış iadesi faturasının stoksuz satırında */
   projectId: string;
   wbsId: string;
+  /** Departman / maliyet merkezi (öneri 11); isteğe bağlı */
+  costCenterId?: string;
   /** Alış faturasında bağlı sipariş satırı (üçlü eşleştirme) ve görünen sipariş kodu */
   orderLineId: string;
   orderCode: string;
@@ -145,6 +147,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const canLedger = can('ledger.read');
   // Temel görünüm boş/varsayılan ikincil alanları gizler; değer taşıyan alan her zaman görünür (öneri 24)
   const { detailed, mode: detailMode, setMode: setDetailMode } = useFormDetail('invoice');
+  const costCenters = useCQuery<{ costCenters: { id: string; code: string; name: string; isActive: boolean }[] }>(['cost-centers'], '/api/cost-centers').data?.costCenters ?? [];
   const accountOptions = useLineAccountOptions(meta.side, canLedger);
   const { data: mapData } = useCQuery<{ mappings: AccountMapping[] }>(['account-mappings'], '/api/account-mappings', { enabled: canLedger });
   const defaultAccount = mapData?.mappings.find((m) => m.key === (salesSide ? (meta.isReturn ? 'sales_return' : 'sales_revenue') : 'default_expense'))?.accountCode;
@@ -197,6 +200,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         deliveryRemaining: null,
         projectId: l.projectId ?? '',
         wbsId: l.wbsId ?? '',
+        costCenterId: l.costCenterId ?? '',
         orderLineId: l.poLineId ?? '',
         orderCode: l.orderCode ?? '',
         salesOrderLineId: l.salesOrderLineId ?? '',
@@ -482,6 +486,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       sourceLineId: l.sourceLineId || null,
       deliveryLineId: l.deliveryLineId || null,
       orderLineId: l.orderLineId || null,
+      costCenterId: l.costCenterId || null,
       ...(l.serials && l.serials.length > 0 && !l.deliveryLineId ? { serials: l.serials } : {}),
       ...(type === 'sales' && l.salesOrderLineId ? { salesOrderLineId: l.salesOrderLineId } : {}),
       // Proje yalnızca stoksuz (serbest/hizmet) satırda ve alış tarafında gönderilir
@@ -680,6 +685,15 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                       </button>
                     </div>
                     <QuantityHint id={`quantity-hint-inv-${l.key}`} quantity={l.quantity} unit={l.unit} />
+                    {costCenters.length > 0 && (detailed || l.costCenterId) && (salesSide || it?.kind !== 'goods') && (
+                      <label className="mt-1.5 flex items-center gap-2 pl-1 text-[13px] text-muted">
+                        Maliyet merkezi
+                        <Select className="w-56" value={l.costCenterId ?? ''} aria-label={`Maliyet merkezi ${i + 1}`} onChange={(e) => patch(l.key, { costCenterId: e.target.value })}>
+                          <option value="">Belirtilmedi</option>
+                          {costCenters.filter((cc) => cc.isActive || cc.id === l.costCenterId).map((cc) => <option key={cc.id} value={cc.id}>{cc.code} · {cc.name}</option>)}
+                        </Select>
+                      </label>
+                    )}
                     {((detailed && taxRules.length > 0) || l.taxRuleId) && <div className="mt-2 grid gap-2 rounded-lg bg-surface-2 p-3 sm:grid-cols-2">
                       <Field label={`İşlem vergisi kuralı ${i + 1}`} className="sm:col-span-2">{id => <Select id={id} value={l.taxRuleId ?? ''} disabled={!!l.sourceLineId} onChange={e => {
                         const rule = taxRules.find(candidate => candidate.id === e.target.value);

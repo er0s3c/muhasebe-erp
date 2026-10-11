@@ -65,6 +65,8 @@ export const journalLineSchema = z
     wbsId: uuid.optional(),
     /** Maliyet kodu (malzeme, işçilik, taşeron…); projesiz verilemez. */
     costCodeId: uuid.optional(),
+    /** Departman / maliyet merkezi (öneri 11); yalnızca gelir/gider/maliyet hesaplarında. */
+    costCenterId: uuid.optional(),
   })
   .refine(
     (l) => (Number(l.debit) > 0) !== (Number(l.credit) > 0),

@@ -1,3 +1,4 @@
+import { CostCentersSection } from './CostCentersSection';
 import { ListTree, Plus, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -208,6 +209,7 @@ export function AccountsPage() {
           </Field>
         </form>
       </Sheet>
+      <CostCentersSection />
     </>
   );
 }

@@ -238,6 +238,8 @@ export const invoiceLineSchema = z.object({
   projectId: uuid.nullable().optional(),
   /** Projenin yaprak iş kalemi; projesiz verilemez. */
   wbsId: uuid.nullable().optional(),
+  /** Departman / maliyet merkezi (öneri 11); gelir ya da gider satırına taşınır, stoklu alış satırında kullanılmaz. */
+  costCenterId: uuid.nullable().optional(),
   /** Alış faturasında, faturalanan sipariş satırı (üçlü eşleştirme: sipariş – mal kabul – fatura). */
   orderLineId: uuid.nullable().optional(),
   /** Satış faturasında, faturalanan satış siparişi satırı (X2). */

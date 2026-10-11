@@ -939,6 +939,13 @@
       "when": 1791724496793,
       "tag": "0133_period_close_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1791724713729,
+      "tag": "0134_cost_centers",
+      "breakpoints": true
     }
   ]
 }

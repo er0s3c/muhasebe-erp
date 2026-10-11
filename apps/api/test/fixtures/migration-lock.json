@@ -534,5 +534,9 @@
   "0133_period_close_tasks": {
     "sha256": "0eceb44df9d1a2cdb4133b9f2eca7b9371ed926909b0cd833e1cd9621f28ab05",
     "when": 1791724496793
+  },
+  "0134_cost_centers": {
+    "sha256": "d44f53b1874a27ae59b2837f3d8b74c35ebd93c88a95c94b5754549275ea97a2",
+    "when": 1791724713729
   }
 }
