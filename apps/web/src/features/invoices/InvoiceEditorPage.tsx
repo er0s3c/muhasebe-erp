@@ -3,7 +3,7 @@ import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { DELIVERY_NOTE_TYPE_META, INVOICE_TYPES, INVOICE_TYPE_META, INVOICE_PRINT_TEMPLATES, INVOICE_PRINT_TEMPLATE_LABELS, dec, todayIso, type InvoicePrintTemplate } from '@erp/shared';
+import { DELIVERY_NOTE_TYPE_META, explainLine, INVOICE_TYPES, INVOICE_TYPE_META, INVOICE_PRINT_TEMPLATES, INVOICE_PRINT_TEMPLATE_LABELS, dec, todayIso, type InvoicePrintTemplate } from '@erp/shared';
 import { BlockedHint, ErrorCallout } from '../../components/layout/Blocked';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
@@ -279,6 +279,17 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                     {showQtyReturned && l.returnedQty && dec(l.returnedQty).gt(0) && (
                       <span className="block text-xs text-muted">{t('invoices.view.returned', { qty: qtyText(l.returnedQty) })}</span>
                     )}
+                    {l.costCenterCode && <span className="block text-xs text-muted">Maliyet merkezi: {l.costCenterCode}</span>}
+                    {/* Tutar açıklaması (öneri 29): kaydedilen tutarla aynı hesaplama yolundan */}
+                    <details className="mt-1 text-xs print:hidden">
+                      <summary className="cursor-pointer text-muted">Tutar nasıl hesaplandı</summary>
+                      <ol className="mt-1 space-y-0.5">
+                        {explainLine({ quantity: l.quantity, unitPrice: l.unitPrice, discountPct: l.discountPct, vatRate: l.vatRate }, inv.vatIncluded).map((s) => (
+                          <li key={s.label}>{s.label}: <span className="num">{s.formula.replace(/(\d)\.(\d)/g, '$1,$2')} = {money(s.value)}</span></li>
+                        ))}
+                        {l.taxCalculation && <li className="text-muted">İşlem vergisi kuralı uygulandı; tevkifat ve damga ayrıntısı toplamlar bölümündedir.</li>}
+                      </ol>
+                    </details>
                   </Td>
                   <Td num>
                     {qtyText(l.quantity)} {l.unit ? unitLabel(l.unit) : ''}

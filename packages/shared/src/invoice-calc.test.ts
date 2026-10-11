@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calcInvoice, calcLine } from './invoice-calc';
+import { calcInvoice, calcLine, explainLine } from './invoice-calc';
 import { createInvoiceSchema, defaultMappingCodes, ACCOUNT_MAPPING_KEYS } from './schemas/invoices';
 import { roleHasDefault as hasPermission } from './permissions';
 
@@ -130,5 +130,18 @@ describe('fatura izinleri', () => {
     expect(hasPermission('viewer', 'invoices.read')).toBe(true);
     expect(hasPermission('viewer', 'invoices.manage')).toBe(false);
     expect(hasPermission('site_manager', 'invoices.read')).toBe(false);
+  });
+});
+
+describe('satır tutarı açıklaması (öneri 29)', () => {
+  it('açıklamanın sonuçları hesaplama motoruyla aynıdır; iskonto ve yuvarlama belirtilir', () => {
+    const line = { quantity: '3', unitPrice: '33.335', discountPct: '10', vatRate: '16' };
+    const steps = explainLine(line, false);
+    const c = calcLine(line, false);
+    expect(steps.map((s) => s.value)).toEqual([c.net.toFixed(2), c.vat.toFixed(2), c.gross.toFixed(2)]);
+    expect(steps[0]!.formula).toBe('3 × 33.335 × (1 − %10) (2 ondalığa yuvarlandı)');
+    const incl = explainLine({ quantity: '1', unitPrice: '116', vatRate: '16' }, true);
+    expect(incl.map((s) => s.value)).toEqual(['116.00', '100.00', '16.00']);
+    expect(incl[1]!.formula).toBe('116.00 ÷ (1 + %16)');
   });
 });
