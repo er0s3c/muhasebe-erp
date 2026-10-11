@@ -6152,6 +6152,30 @@ export const partyReconciliations = pgTable(
 );
 
 /**
+ * Çoktan bire banka eşleştirmesi (öneri 55): bir ekstre satırı (ör. toplu yatırılan tahsilatlar, tek havalede birden çok ödeme)
+ * birden çok defter satırıyla eşleşir. Satır `journal_line_id` boşken eşleşmiş olabilmesi için bu kayıtların tutar toplamı
+ * ekstre tutarına eşit olmalıdır (veritabanı denetler); bir defter satırı tek bir ekstre eşleşmesinde yer alır.
+ */
+export const bankStatementLineMatches = pgTable(
+  'bank_statement_line_matches',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    statementLineId: uuid().notNull(),
+    journalLineId: uuid().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('bank_statement_line_matches_gl_uq').on(t.companyId, t.journalLineId),
+    index('bank_statement_line_matches_line_idx').on(t.companyId, t.statementLineId),
+    foreignKey({ name: 'bank_statement_line_matches_line_fk', columns: [t.statementLineId, t.companyId], foreignColumns: [bankStatementLines.id, bankStatementLines.companyId] }),
+    foreignKey({ name: 'bank_statement_line_matches_gl_fk', columns: [t.journalLineId, t.companyId], foreignColumns: [journalLines.id, journalLines.companyId] }),
+  ],
+);
+
+/**
  * Kalıcı e-posta outbox'ı (öneri 7 ve 111): ileti iş kaydıyla aynı işlemde yazılır, gönderici kira alarak gönderir
  * (bkz. modules/outbox/contract). Sunucu yeniden başlasa da ileti kaybolmaz; deneme ve sonuç aynı kayıtta görünür.
  * `document`, gönderilen belgenin o anki sürümünü (içerik özeti) taşır. Hesap e-postaları (parola sıfırlama, doğrulama)

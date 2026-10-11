@@ -322,8 +322,10 @@ export async function cancelTreasuryTransaction(tx: Tx, ctx: LedgerCtx, id: stri
   if (txn.status === 'cancelled') throw unprocessable('Hareket zaten iptal edilmiş', 'TREASURY_ALREADY_CANCELLED');
   // Banka ekstresiyle eşleşmiş hareket iptal edilemez: önce eşleşme kaldırılır (mutabakat sessizce bozulmasın)
   const reconciled = await tx.execute(sql`
-    select 1 from bank_statement_lines b join journal_lines l on l.id = b.journal_line_id
-    where b.status = 'matched' and l.entry_id = ${txn.journalEntryId} limit 1`);
+    select 1 from journal_lines l where l.entry_id = ${txn.journalEntryId} and (
+      exists (select 1 from bank_statement_lines b where b.journal_line_id = l.id and b.status = 'matched')
+      or exists (select 1 from bank_statement_line_matches m join bank_statement_lines b on b.id = m.statement_line_id and b.company_id = m.company_id
+                  where m.journal_line_id = l.id and b.status = 'matched')) limit 1`);
   if (reconciled.rows.length > 0) {
     throw unprocessable('Bu hareketin banka satırı ekstreyle eşleşmiş; iptal etmeden önce Banka ekstresi sekmesinden eşleşmeyi kaldırın', 'TXN_RECONCILED', { accountId: txn.accountId });
   }

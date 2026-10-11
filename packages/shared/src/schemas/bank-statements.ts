@@ -22,6 +22,9 @@ export const reconciliationQuerySchema = z.object({
 export type ReconciliationQuery = z.infer<typeof reconciliationQuerySchema>;
 
 export const matchLineSchema = z.object({ journalLineId: uuid });
+/** Çoktan bire eşleştirme (öneri 55): ekstre satırı, toplamı tutarına eşit olan birden çok defter satırıyla eşleşir. */
+export const matchGroupSchema = z.object({ journalLineIds: z.array(uuid).min(2).max(50).refine((v) => new Set(v).size === v.length, 'Aynı defter satırı iki kez seçilemez') });
+export type MatchGroupInput = z.infer<typeof matchGroupSchema>;
 export type MatchLineInput = z.infer<typeof matchLineSchema>;
 
 export const ignoreLineSchema = z.object({ reason: z.string().trim().max(200).optional() });
@@ -80,6 +83,8 @@ export interface BankLine {
   transactionId: string | null;
   /** Eşleşmişse bağlı fiş/hareket bilgisi. */
   match: { entryId: string; entryNo: string; entryDate: string; txnNo: string | null; description: string } | null;
+  /** Çoktan bire eşleşmede bağlı defter satırları (öneri 55); birebir eşleşmede boş. */
+  group: { journalLineId: string; entryId: string; entryNo: string; entryDate: string; amount: string; txnNo: string | null; description: string }[];
   /** Açık satırlar için öneriler (en iyi ilk). */
   suggestions: MatchSuggestion[];
 }

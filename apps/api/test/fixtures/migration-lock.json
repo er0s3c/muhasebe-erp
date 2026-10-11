@@ -526,5 +526,9 @@
   "0131_party_reconciliations": {
     "sha256": "b88ea4ceb25b6ae12871e848f30ccf9bfee40a3c0fdbb61bb59c0f73bb6e96ca",
     "when": 1791723979176
+  },
+  "0132_bank_group_matches": {
+    "sha256": "9f7b63859eae8757a3bcebde6f94b45f7aa9476bcfe19e06a02e1b3156b5968f",
+    "when": 1791724200941
   }
 }

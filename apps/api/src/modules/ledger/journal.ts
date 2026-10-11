@@ -358,8 +358,10 @@ export async function reverseJournalEntry(
   }
   // Banka ekstresiyle eşleşmiş satırı olan fiş ters çevrilemez: önce eşleşme kaldırılır
   const reconciled = await tx.execute(sql`
-    select 1 from bank_statement_lines b join journal_lines l on l.id = b.journal_line_id
-    where b.status = 'matched' and l.entry_id = ${id} limit 1`);
+    select 1 from journal_lines l where l.entry_id = ${id} and (
+      exists (select 1 from bank_statement_lines b where b.journal_line_id = l.id and b.status = 'matched')
+      or exists (select 1 from bank_statement_line_matches m join bank_statement_lines b on b.id = m.statement_line_id and b.company_id = m.company_id
+                  where m.journal_line_id = l.id and b.status = 'matched')) limit 1`);
   if (reconciled.rows.length > 0) {
     throw unprocessable('Bu fişin banka satırı ekstreyle eşleşmiş; ters kayıttan önce Banka ekstresi sekmesinden eşleşmeyi kaldırın', 'ENTRY_RECONCILED');
   }
