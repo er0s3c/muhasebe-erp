@@ -14,7 +14,7 @@ import { ApiError } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
-import { useCMutation, useCQuery } from '../../lib/queries';
+import { useCMutation, useCQuery, useIdempotencyKey } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { Account, OpenItem, OpenItemsData, TreasuryTxnDetail, TreasuryTxnType } from '../../lib/types';
 import { usePartyOptions } from '../invoices/common';
@@ -240,6 +240,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
     setItems(next);
   };
 
+  const command = useIdempotencyKey();
   const save = useCMutation(
     async (_: void, call) => {
       const body={
@@ -267,7 +268,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
         return {approvalDraftId:draft.id};
       };
       if(editingDraft)return requestApproval();
-      try{return await call<TreasuryTxnDetail>(line ? `/api/bank-statement-lines/${line.id}/create-transaction` : '/api/treasury/transactions',{method:'POST',body});}
+      try{return await call<TreasuryTxnDetail>(line ? `/api/bank-statement-lines/${line.id}/create-transaction` : '/api/treasury/transactions',{method:'POST',body,idempotencyKey:command.key});}
       catch(e){if(!line&&(type==='payment'||type==='other_payment')&&e instanceof ApiError&&e.code==='APPROVAL_REQUIRED')return requestApproval();throw e;}
     },
     [...TREASURY_INVALIDATE, ...PROJECT_COST_INVALIDATE,...APPROVAL_INVALIDATE],
@@ -295,6 +296,7 @@ export function TransactionSheet({ open, onOpenChange, initialType = 'receipt', 
     setError(null);
     save.mutate(undefined, {
       onSuccess: (res) => {
+        command.renew();
         if('approvalDraftId'in res){toast.success('Ödeme taslağı onaya gönderildi; henüz mali kayıt oluşmadı');onOpenChange(false);return;}
         toast.success(t('treasury.sheet.saved', { no: res.transaction.txnNo }));
         onSaved(res);

@@ -498,5 +498,9 @@
   "0124_ui_preferences_fx_auto": {
     "sha256": "0df26253eb1ed19c5553a8ac68ab71310538ab4eed9f15410b0acf429a6a4776",
     "when": 1791637558451
+  },
+  "0125_command_receipts": {
+    "sha256": "1286badf45a7f67fa011346240e491724f8394a0f04297ccaeee61b222be376a",
+    "when": 1791706355130
   }
 }

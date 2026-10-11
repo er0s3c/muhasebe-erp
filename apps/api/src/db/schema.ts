@@ -5951,6 +5951,37 @@ export const userUiPreferences = pgTable(
 );
 
 /**
+ * Tekrar gönderilen komutun makbuzu (öneri 121). İstemci kayıt formu başına bir `Idempotency-Key` üretir; aynı anahtar
+ * aynı içerikle tekrar gelirse komut yeniden çalışmaz, ilk cevap döner. Komut başarısız olursa makbuz yazılmaz.
+ * Makbuz yalnız sahibine görünür ve değiştirilemez.
+ */
+export const commandReceipts = pgTable(
+  'command_receipts',
+  {
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    key: text().notNull(),
+    /** HTTP yöntemi ve rota kalıbı (ör. POST /api/invoices); aynı anahtar başka komutta kullanılamaz. */
+    route: text().notNull(),
+    /** İstek gövdesinin SHA-256 özeti; farklı içerikle aynı anahtar reddedilir. */
+    requestHash: text().notNull(),
+    statusCode: integer().notNull(),
+    response: jsonb().$type<unknown>().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.companyId, t.userId, t.key] }),
+    check('command_receipts_key_ck', sql`${t.key} ~ '^[A-Za-z0-9_-]{16,80}$'`),
+    check('command_receipts_status_ck', sql`${t.statusCode} between 200 and 299`),
+    index('command_receipts_created_idx').on(t.createdAt),
+  ],
+);
+
+/**
  * Günlük e-posta özeti kaydı (kullanıcı + şirket + gün): özet o gün için TALEP EDİLDİĞİNDE yazılır; aynı gün ikinci özet doğmaz
  * (gönderim "en çok bir kez": SMTP hatasında aynı gün yeniden denenmez).
  */

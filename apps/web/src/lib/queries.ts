@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import { api } from './api';
 import { useCompany } from './session';
 import { useActiveBranch } from './branch';
@@ -11,9 +12,19 @@ export function useCompanyApi() {
   const company = useCompany();
   return {
     company,
-    call: <T>(path: string, opts: { method?: Method; body?: unknown; branchId?: string } = {}) =>
+    call: <T>(path: string, opts: { method?: Method; body?: unknown; branchId?: string; idempotencyKey?: string } = {}) =>
       api<T>(path, { ...opts, companyId: company.id }),
   };
+}
+
+/**
+ * Kayıt formu başına işlem anahtarı (öneri 121). Form açıkken aynı anahtar kullanılır: cevap kaybolup kullanıcı tekrar
+ * kaydederse sunucu ilk sonucu döndürür, ikinci kayıt oluşmaz. Başarılı kayıttan sonra `renew()` yeni komut için yeni anahtar üretir.
+ */
+export function useIdempotencyKey() {
+  const [key, setKey] = useState(() => crypto.randomUUID());
+  const renew = useCallback(() => setKey(crypto.randomUUID()), []);
+  return { key, renew };
 }
 
 export function useCQuery<T>(

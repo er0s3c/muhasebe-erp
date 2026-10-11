@@ -89,7 +89,8 @@ export const treasuryRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/treasury/transactions',
-    tenantRoute(app, post, async (c) => {
+    // Cevabı kaybolup yeniden gönderilen tahsilat/ödeme ikinci kez kaydedilmez (Idempotency-Key)
+    tenantRoute(app, { ...post, idempotent: true }, async (c) => {
       const result = await postTreasuryTransaction(c.tx, ledgerCtx(c), createTreasuryTransactionSchema.parse(c.req.body));
       void c.reply.code(201);
       return result;

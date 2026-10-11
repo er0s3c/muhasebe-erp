@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteHandlerMethod } from 'fastify';
 import {
@@ -13,7 +14,7 @@ import {
 } from '@erp/shared';
 import type { Config } from '../config';
 import { setContext, withContext, type Db, type Tx } from '../db/client';
-import { appUpdates, companies, companyModules, memberships, users } from '../db/schema';
+import { appUpdates, commandReceipts, companies, companyModules, memberships, users } from '../db/schema';
 import { AppError, forbidden, unauthorized, badRequest } from './errors';
 import { denialFor, isModuleDenied, loadMemberAccess, moduleAccessDenied, requirePermission, requireResourceOperation, type MemberAccess } from '../modules/access/effective';
 import { inferResourceOperation } from './resource-operation';
@@ -189,6 +190,53 @@ export interface TenantRouteOptions {
   personalAgenda?: boolean;
   /** Kullanıcı başına oran sınırı (ağır uçlar: dışa/içe aktarma, kur indirme). Sınır aşılırsa 429. */
   limit?: { name: string; max: number; windowMs: number };
+  /**
+   * Kayıt oluşturan komut tekrar gönderime karşı korunur: `Idempotency-Key` başlığı varsa aynı anahtar ve içerikle gelen
+   * tekrar komutu yeniden çalıştırmaz, ilk cevabı döndürür (bkz. runIdempotent). Başlık yoksa davranış değişmez.
+   */
+  idempotent?: boolean;
+}
+
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,80}$/;
+
+/**
+ * Öneri 121: cevabı kaybolan ve kullanıcının yeniden gönderdiği komut ikinci kayıt oluşturmaz. Anahtar aynı işlemde
+ * kilitlenir (eşzamanlı iki kopya sıraya girer); makbuz komutla aynı işlemde yazıldığından komut başarısız olursa makbuz
+ * da yoktur ve tekrar deneme komutu yeniden çalıştırır. Aynı anahtar farklı içerik veya başka komutla kullanılamaz.
+ */
+async function runIdempotent<T>(c: TenantCtx, work: () => Promise<T>): Promise<T> {
+  const key = c.req.headers['idempotency-key'];
+  if (key === undefined) return work();
+  if (typeof key !== 'string' || !IDEMPOTENCY_KEY.test(key)) {
+    throw badRequest('Idempotency-Key 16–80 karakter olmalı (harf, rakam, - ve _)', 'IDEMPOTENCY_KEY_INVALID');
+  }
+  const route = `${c.req.method} ${c.req.routeOptions.url ?? ''}`;
+  const requestHash = createHash('sha256').update(route).update('\0').update(JSON.stringify(c.req.body ?? null)).digest('hex');
+  await c.tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`command:${c.company.id}:${c.user.id}:${key}`}, 0))`);
+  const [prior] = await c.tx
+    .select({ route: commandReceipts.route, requestHash: commandReceipts.requestHash, statusCode: commandReceipts.statusCode, response: commandReceipts.response })
+    .from(commandReceipts)
+    .where(and(eq(commandReceipts.companyId, c.company.id), eq(commandReceipts.userId, c.user.id), eq(commandReceipts.key, key)));
+  if (prior) {
+    if (prior.route !== route || prior.requestHash !== requestHash) {
+      throw new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'Bu işlem anahtarı farklı bir istekle kullanılmış. Formu yenileyip tekrar kaydedin.');
+    }
+    void c.reply.code(prior.statusCode).header('idempotent-replay', 'true');
+    return prior.response as T;
+  }
+  const result = await work();
+  const statusCode = c.reply.statusCode >= 200 && c.reply.statusCode < 300 ? c.reply.statusCode : 200;
+  await c.tx.insert(commandReceipts).values({
+    companyId: c.company.id,
+    userId: c.user.id,
+    key,
+    route,
+    requestHash,
+    statusCode,
+    // Tarih vb. alanlar JSON'daki biçimiyle saklanır; tekrar cevabı ilk cevapla aynı gövdeyi taşır
+    response: JSON.parse(JSON.stringify(result ?? {})) as unknown,
+  });
+  return result;
 }
 
 /** Şirket toplamı üzerinden karar veren işlemler dar şube verisiyle hesaplanamaz. */
@@ -343,7 +391,7 @@ export function tenantRoute<T>(
     const entry = await prepareTenant(app, req, reply, options);
     return withContext(app.db, { userId: entry.user.id, orgId: entry.user.orgId, ip: req.ip }, async (tx) => {
       const ctx = await enterTenant(app, tx, req, reply, entry, options, false);
-      return withCompanyTimeZone(ctx.company.timeZone, () => handler(ctx));
+      return withCompanyTimeZone(ctx.company.timeZone, () => (options.idempotent ? runIdempotent(ctx, () => handler(ctx)) : handler(ctx)));
     });
   };
   return Object.assign(route, {

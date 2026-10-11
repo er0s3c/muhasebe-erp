@@ -182,9 +182,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     await app.register(cors, {
       origin: config.CORS_ORIGIN,
       credentials: true,
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Id'],
-      // Dosya indirmede tarayıcı betiğinin dosya adını okuyabilmesi için
-      exposedHeaders: ['Content-Disposition'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Id', 'Idempotency-Key'],
+      // Dosya indirmede tarayıcı betiğinin dosya adını okuyabilmesi için; tekrar gönderimde ilk cevabın döndüğü bilgisi
+      exposedHeaders: ['Content-Disposition', 'Idempotent-Replay'],
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       maxAge: 600,
     });

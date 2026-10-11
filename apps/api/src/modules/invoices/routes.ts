@@ -79,7 +79,8 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/invoices',
-    tenantRoute(app, manage, async (c) => {
+    // Cevabı kaybolup yeniden gönderilen kayıt ikinci fatura oluşturmaz (Idempotency-Key)
+    tenantRoute(app, { ...manage, idempotent: true }, async (c) => {
       const input = createInvoiceSchema.parse(c.req.body);
       // Taslak hazırlama ile muhasebeleştirme ayrı yetkilerdir
       if (input.post) c.require('invoices.post');

@@ -16,7 +16,7 @@ import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { money, moneyIn } from '../../lib/format';
-import { useCan, useCMutation, useCompanyApi, useCQuery } from '../../lib/queries';
+import { useCan, useCMutation, useCompanyApi, useCQuery, useIdempotencyKey } from '../../lib/queries';
 import type { AccountMapping, PriceResolution, DeliveryNoteDetail, InvoiceableOrderLine, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
 import { useUnitLabel, useWarehouses } from '../inventory/common';
 import { SerialEntry } from '../inventory/SerialEntry';
@@ -484,11 +484,12 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     })),
   });
 
+  const command = useIdempotencyKey();
   const save = useCMutation(
     (post: boolean, c) =>
       initial
         ? c<InvoiceDetail>(`/api/invoices/${initial.invoice.id}`, { method: 'PUT', body: bodyOf(post) })
-        : c<InvoiceDetail>('/api/invoices', { method: 'POST', body: bodyOf(post) }),
+        : c<InvoiceDetail>('/api/invoices', { method: 'POST', body: bodyOf(post), idempotencyKey: command.key }),
     [...INVOICE_INVALIDATE, ...PROJECT_COST_INVALIDATE],
   );
   const remove = useCMutation((_: void, c) => c(`/api/invoices/${initial!.invoice.id}`, { method: 'DELETE' }), INVOICE_INVALIDATE);
@@ -504,6 +505,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     if (post && EXTERNAL_NO_REQUIRED.includes(type) && !externalNo.trim()) return setFieldError(t('invoices.form.externalRequired'));
     save.mutate(post, {
       onSuccess: (res) => {
+        command.renew();
         markFormSaved(document.querySelector('[data-form-guard-scope="invoice-editor"]'));
         toast.success(post ? t('invoices.form.postedMsg', { no: res.invoice.invoiceNo ?? '' }) : t('invoices.form.savedMsg'));
         navigate(`/invoices/${res.invoice.id}`, { replace: true, state: res.warnings?.creditLimit ? { creditLimit: res.warnings.creditLimit } : undefined });
