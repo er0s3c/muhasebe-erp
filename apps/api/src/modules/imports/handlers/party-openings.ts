@@ -3,7 +3,8 @@ import { parties } from '../../../db/schema';
 import { createJournalEntry, type AutoJournalLine } from '../../ledger/journal';
 import { loadMappings } from '../../ledger/mappings';
 import { foldKey, parseDate, parseDecimal } from '../values';
-import { RowState, cellOf, ledgerCtxOf, money, type ImportCtx, type ImportHandler, type PlanResult } from './common';
+import { sql } from 'drizzle-orm';
+import { RowState, cellOf, journalTotals, ledgerCtxOf, money, reconRow, type ImportCtx, type ImportHandler, type PlanResult } from './common';
 import { fxResolver, periodProblem, resolveOffsetAccount } from './openings-common';
 import { parseCurrency } from './parties';
 
@@ -200,6 +201,8 @@ export const partyOpeningsHandler: ImportHandler = {
           ledgerCtxOf(ctx),
           { entryDate: opts.openingDate, description: 'Açılış bakiyeleri (cari) — içe aktarma', lines, post: true },
         );
+        // Mutabakat: dosyadaki cari toplamları ↔ yazılan yevmiyenin cari satırları (karşı hesap satırı hariç)
+        const written = await journalTotals(tx, entry.id, sql`party_id is not null`);
         return {
           created: planned.length,
           skipped,
@@ -208,6 +211,11 @@ export const partyOpeningsHandler: ImportHandler = {
             { label: 'Cari satırı', value: String(planned.length) },
           ],
           entries: [{ type: 'journal', id: entry.id, no: entry.entryNo ?? '' }],
+          reconciliation: [
+            reconRow('Cari satırı', planned.length, written.lines),
+            reconRow(`Borç toplamı (${currencySymbol(base)})`, debitTotal, written.debit, (v) => formatTR(v)),
+            reconRow(`Alacak toplamı (${currencySymbol(base)})`, creditTotal, written.credit, (v) => formatTR(v)),
+          ],
         };
       },
     };

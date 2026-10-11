@@ -3,7 +3,8 @@ import { accounts } from '../../../db/schema';
 import { createJournalEntry, type AutoJournalLine } from '../../ledger/journal';
 import { loadMappings } from '../../ledger/mappings';
 import { parseDecimal } from '../values';
-import { RowState, cellOf, ledgerCtxOf, money, type ImportCtx, type ImportHandler, type PlanResult } from './common';
+import { sql } from 'drizzle-orm';
+import { RowState, cellOf, journalTotals, ledgerCtxOf, money, reconRow, type ImportCtx, type ImportHandler, type PlanResult } from './common';
 import { fxResolver, periodProblem, resolveOffsetAccount } from './openings-common';
 
 interface Planned {
@@ -141,6 +142,8 @@ export const ledgerOpeningsHandler: ImportHandler = {
           lines,
           post: true,
         });
+        // Mutabakat: dosya toplamları ↔ yazılan yevmiye (fark satırı varsa hariç)
+        const written = await journalTotals(tx, entry.id, diff.isZero() ? sql`true` : sql`line_no <= ${planned.length}`);
         return {
           created: planned.length,
           skipped,
@@ -149,6 +152,11 @@ export const ledgerOpeningsHandler: ImportHandler = {
             { label: 'Hesap satırı', value: String(planned.length) },
           ],
           entries: [{ type: 'journal', id: entry.id, no: entry.entryNo ?? '' }],
+          reconciliation: [
+            reconRow('Hesap satırı', planned.length, written.lines),
+            reconRow(`Borç toplamı (${currencySymbol(base)})`, debitTotal, written.debit, (v) => formatTR(v)),
+            reconRow(`Alacak toplamı (${currencySymbol(base)})`, creditTotal, written.credit, (v) => formatTR(v)),
+          ],
         };
       },
     };

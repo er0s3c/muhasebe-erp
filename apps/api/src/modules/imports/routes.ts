@@ -141,7 +141,7 @@ export const importRoutes: FastifyPluginAsync = async (app) => {
           });
         }
         const result = await plan.apply();
-        return { kind, created: result.created, skipped: result.skipped ?? preview.counts.skip, summary: result.summary, entries: result.entries };
+        return { kind, created: result.created, skipped: result.skipped ?? preview.counts.skip, summary: result.summary, entries: result.entries, ...(result.reconciliation ? { reconciliation: result.reconciliation } : {}) };
       }),
     );
 
