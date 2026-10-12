@@ -157,7 +157,7 @@ export const NAV_ITEM_HELP: Record<string, NavHelpEntry> = {
     example: 'Örnek: Teklifi onaylanan müşterinin siparişi işlenir; depodaki ilgili mallar rezerve edilerek başka müşteriye satılması önlenir.',
   },
   'my-employee': {
-    title: 'Personel Portalım',
+    title: 'Çalışan Portalım',
     description: 'Hesabınıza bağlı personel kaydının bordro pusulaları, son iki ayın puantajı ve puantaj düzeltme talepleri. Yalnız kendi kayıtlarınız görünür.',
     example: 'Örnek: Geçen salı mesaiye kaldığınız saatler puantajda yoksa tarihi ve saati seçip gerekçeyle düzeltme talebi açarsınız; İK onaylayınca puantaja işlenir.',
   },

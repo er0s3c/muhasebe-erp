@@ -50,7 +50,7 @@ export function EmployeePortalPage() {
   if (!d.employee)
     return (
       <>
-        <PageHeader title="Personel portalım" />
+        <PageHeader title="Çalışan portalım" />
         <Card>
           <EmptyState title="Hesabınız bir personel kaydına bağlı değil" description="İnsan kaynakları sorumlusundan personel kartınıza kullanıcı hesabınızı bağlamasını isteyin." />
         </Card>
@@ -59,7 +59,7 @@ export function EmployeePortalPage() {
   const hoursAllowed = ['worked', 'public_holiday', 'weekly_rest'].includes(form.dayType);
   return (
     <>
-      <PageHeader title="Personel portalım" description={`${d.employee.code} · ${d.employee.fullName}${d.employee.jobTitle ? ` · ${d.employee.jobTitle}` : ''}`} />
+      <PageHeader title="Çalışan portalım" description={`${d.employee.code} · ${d.employee.fullName}${d.employee.jobTitle ? ` · ${d.employee.jobTitle}` : ''}`} />
       <div className="space-y-5">
         <Card>
           <CardHeader title="Bordro pusulalarım" description="Onaylanmış ya da ödenmiş bordrolar." />
