@@ -24,6 +24,7 @@ export function HrSettingsHub() {
 const CASH_TABS: HubTab[] = [
   { key: 'forecast', label: 'Projeksiyon', module: 'core.treasury', permission: 'treasury.read', component: lazyPage(() => import('../treasury/CashForecastPage'), 'CashForecastPage') },
   { key: 'scenarios', label: 'Senaryolar', module: 'core.treasury', permission: 'treasury.read', component: lazyPage(() => import('../workspace/ScenariosPage'), 'ScenariosPage') },
+  { key: 'payments', label: 'Toplu ödeme', module: 'core.treasury', permission: 'treasury.read', component: lazyPage(() => import('../treasury/PaymentBatchesPage'), 'PaymentBatchesPage') },
   { key: 'obligations', label: 'Yükümlülükler', module: 'core.treasury', permission: 'treasury.read', component: lazyPage(() => import('../treasury/ObligationsPage'), 'ObligationsPage') },
 ];
 export function CashPlanningHub() {
@@ -32,7 +33,7 @@ export function CashPlanningHub() {
       idPrefix="cash-planning"
       title="Nakit planlama"
       helpKey="cash-planning"
-      description="Vadeli alacak, borç, çek ve taksitlerden üretilen nakit projeksiyonu, “ya şöyle olursa” senaryoları ve vergi, SGK, kira gibi düzenli yükümlülük takvimi."
+      description="Vadeli alacak, borç, çek ve taksitlerden üretilen nakit projeksiyonu, “ya şöyle olursa” senaryoları, onaylı toplu tedarikçi ödemesi ve vergi, SGK, kira gibi düzenli yükümlülük takvimi."
       tabs={CASH_TABS}
     />
   );

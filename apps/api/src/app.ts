@@ -31,6 +31,7 @@ import { invoiceRoutes } from './modules/invoices/routes';
 import { platformIntegrationRoutes } from './modules/platform-integrations/routes';
 import { secureWebhookTransport,type WebhookTransport } from './modules/platform-integrations/transport';
 import { treasuryRoutes } from './modules/treasury/routes';
+import { paymentBatchRoutes } from './modules/treasury/payment-batches';
 import { exportRoutes } from './modules/exports/routes';
 import { reportJobRoutes } from './modules/exports/report-jobs';
 import { observabilityRoutes, registerTracing } from './modules/system/observability';
@@ -329,6 +330,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(dashboardRoutes);
   await app.register(consolidationRoutes);
   await app.register(treasuryRoutes);
+  await app.register(paymentBatchRoutes);
   await app.register(exportRoutes);
   await app.register(reportJobRoutes);
   await app.register(observabilityRoutes);

@@ -81,6 +81,7 @@ export * from './campaigns';
 export * from './fixed-assets';
 export * from './expiry';
 export * from './obligations';
+export * from './payment-batches';
 export * from './company-budgets';
 export * from './leather';
 export * from './pos';
