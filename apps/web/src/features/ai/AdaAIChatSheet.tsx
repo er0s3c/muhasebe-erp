@@ -1,3 +1,4 @@
+import type { AiSource } from '@erp/shared';
 import {
   Bot,
   Send,
@@ -22,6 +23,8 @@ interface Message {
   text: string;
   time: string;
   isStreaming?: boolean;
+  /** Yanıtın dayandığı ERP verisi (öneri 18). */
+  sources?: AiSource[];
 }
 
 interface AdaAIChatSheetProps {
@@ -163,7 +166,7 @@ export function AdaAIChatSheet({ open, onOpenChange }: AdaAIChatSheetProps) {
           text: m.text.slice(0, 4000),
         }));
 
-      const res = await api<{ success: boolean; answer?: string; error?: string }>(
+      const res = await api<{ success: boolean; answer?: string; error?: string; sources?: AiSource[] }>(
         '/api/ai/chat',
         {
           method: 'POST',
@@ -190,6 +193,7 @@ export function AdaAIChatSheet({ open, onOpenChange }: AdaAIChatSheetProps) {
             text: '',
             time: aiTime,
             isStreaming: true,
+            sources: res.sources ?? [],
           },
         ]);
         setLoading(false);
@@ -304,6 +308,20 @@ export function AdaAIChatSheet({ open, onOpenChange }: AdaAIChatSheetProps) {
                     <div className="whitespace-pre-wrap">{m.text}</div>
                   ) : (
                     <MarkdownView content={m.text} isStreaming={m.isStreaming} />
+                  )}
+                  {!isUser && !m.isStreaming && (m.sources?.length ?? 0) > 0 && (
+                    <ul aria-label="Kaynaklar" className="mt-2 space-y-0.5 border-t border-border/60 pt-1.5 text-[12px] text-muted">
+                      {m.sources!.map((s) => (
+                        <li key={s.tool}>
+                          Kaynak:{' '}
+                          <a className="underline" href={s.path}>
+                            {s.label}
+                          </a>{' '}
+                          · {s.asOf} itibarıyla
+                          {s.shown !== undefined && s.total !== undefined && s.shown < s.total ? ` · ${s.total} kayıttan ilk ${s.shown}` : ''}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                   <div
                     className={`mt-1.5 text-right text-[12px] ${

@@ -13,6 +13,8 @@ describe('Asistan veri hesapları', () => {
     const execute = vi.fn(); const tx = { execute } as unknown as Tx;
     const result = await toolRegistry.execute('get_overdue_receivables', {}, ctx, tx);
     expect(result.result).toMatchObject({ toplamKayit: 1, vadesiGecmisKalemler: [{ kalanTutar: '40 TRY', cari: 'Müşteri' }] });
+    // Yanıtın kaynağı: ekran, tarih ve kayıt sayısı (öneri 18)
+    expect(result.source).toMatchObject({ tool: 'get_overdue_receivables', path: '/parties/aging', asOf: ctx.today, shown: 1, total: 1 });
     expect(allOpenItems).toHaveBeenNthCalledWith(1, tx, 'receivable', ctx.today);
     expect(allOpenItems).toHaveBeenNthCalledWith(2, tx, 'payable', ctx.today);
     expect(execute).not.toHaveBeenCalled();

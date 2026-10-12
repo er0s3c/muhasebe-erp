@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { processConstructionJobs, ocrSuggestions } from '../src/modules/construction-control/jobs';
+import { processConstructionJobs, ocrAmount, ocrSuggestions } from '../src/modules/construction-control/jobs';
 import { makeApp, registerUser, createCompany, client } from './helpers';
 const python = resolve('../../.runtime/construction/Scripts/python.exe'),
   lang = resolve('data/construction-runtime/tessdata');
@@ -17,6 +17,19 @@ describe('IFC/OCR kalıcı işlem kuyruğu', () => {
       externalNo: 'TEST2026000001',
       totalText: '999.99',
     });
+    // Alan kaynağı (öneri 103): her öneri bulunduğu satır ve metinle döner; tutar sayıya çevrilir
+    const s = ocrSuggestions('Fatura No: TEST2026000001\n06.10.2026\nTRY\nGenel Toplam: 1.234,56');
+    expect(s.total).toBe('1234.56');
+    expect(s.fields).toEqual([
+      { field: 'date', value: '2026-10-06', sourceText: '06.10.2026', line: 2 },
+      { field: 'currency', value: 'TRY', sourceText: 'TRY', line: 3 },
+      { field: 'total', value: '1234.56', sourceText: 'Genel Toplam: 1.234,56', line: 4 },
+      { field: 'externalNo', value: 'TEST2026000001', sourceText: 'Fatura No: TEST2026000001', line: 1 },
+    ]);
+    expect(ocrAmount('1,234.56')).toBe('1234.56');
+    expect(ocrAmount('1.250')).toBe('1250');
+    expect(ocrAmount('12,5')).toBe('12.5');
+    expect(ocrAmount('abc')).toBeNull();
     expect(ocrSuggestions('unclear document')).toMatchObject({
       date: null,
       currency: null,

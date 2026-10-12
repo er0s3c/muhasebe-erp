@@ -1,4 +1,4 @@
-import type { AiChatMessage, AiToolDefinition, AiToolCall, AiToolResult } from '@erp/shared';
+import type { AiChatMessage, AiSource, AiToolDefinition, AiToolCall, AiToolResult } from '@erp/shared';
 
 export interface AiSessionContext {
   user: {
@@ -38,6 +38,8 @@ export interface AiExecutionResult {
   answer?: string;
   error?: string;
   code?: string;
+  /** Yanıtta kullanılan ERP verilerinin kaynağı (öneri 18). */
+  sources?: AiSource[];
 }
 
 export type { AiChatMessage, AiToolDefinition, AiToolCall, AiToolResult };

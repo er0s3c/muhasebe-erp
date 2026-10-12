@@ -28,7 +28,7 @@ describe('Asistan sağlayıcı yürütmesi', () => {
     await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
     expect(provider.generate).toHaveBeenCalledTimes(1);
     release();
-    expect(await response).toEqual({ success: true, answer: 'Stok özeti' });
+    expect(await response).toEqual({ success: true, answer: 'Stok özeti', sources: [] });
     expect(execute).toHaveBeenCalledTimes(8);
     const followUp = provider.generate.mock.calls[1]![0];
     expect(followUp.config.tools).toBeUndefined();
@@ -43,6 +43,15 @@ describe('Asistan sağlayıcı yürütmesi', () => {
     expect(response.success).toBe(false);
     expect(JSON.stringify(response)).not.toMatch(/SECRET-KEY|raw-provider-detail|test-key/);
     expect(provider.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('yanıt kullanılan aracın kaynağını, tarihini ve sınırını taşır (öneri 18)', async () => {
+    const source = { tool: 'list_critical_stock', label: 'Stok durumu (kritik seviye)', path: '/reports/stock-status', asOf: '2026-10-09', scope: 'Firma · owner yetkisiyle görülen kayıtlar', shown: 50, total: 120 };
+    vi.spyOn(toolRegistry, 'execute').mockResolvedValue({ name: 'list_critical_stock', result: { urunler: [] }, source });
+    provider.generate
+      .mockResolvedValueOnce({ functionCalls: [{ name: 'list_critical_stock', args: {} }, { name: 'list_critical_stock', args: {} }], candidates: [{ content: { role: 'model', parts: [] } }] })
+      .mockResolvedValueOnce({ text: 'Kritik stok listesi' });
+    expect(await callGemini(request)).toEqual({ success: true, answer: 'Kritik stok listesi', sources: [source] });
   });
 
   it('araç cevabından sonra boş sağlayıcı yanıtı başarı olarak gösterilmez', async () => {

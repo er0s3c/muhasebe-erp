@@ -33,6 +33,18 @@ export function ChannelExecutionPanel({
     warehouseName: string;
     channelSku: string;
     connectionId: string;
+    status: string;
+    lastCheck?: { adaQuantity: number; channelQuantity: number; difference: number; at: string };
+    health?: { ok: boolean; issues: string[]; lastErrorKind: string | null };
+  };
+  const ISSUE: Record<string, string> = {
+    paused: 'Duraklatıldı',
+    retired: 'Emekli',
+    item_inactive: 'Ürün pasif',
+    warehouse_inactive: 'Depo pasif',
+    connection_not_configured: 'Bağlantı yapılandırılmamış',
+    last_send_failed: 'Son gönderim başarısız',
+    stock_difference: 'Stok farkı var',
   };
   const mappings = useCQuery<{ records: Mapping[]; items: Ref[]; warehouses: Ref[] }>(
     ['integrations', 'mappings'],
@@ -46,6 +58,7 @@ export function ChannelExecutionPanel({
       status: string;
       attempts: number;
       error?: string;
+      errorHint?: string;
       retryAfter?: string;
     })[];
   }>(['integrations', 'outbox'], '/api/integrations/inventory-outbox');
@@ -72,7 +85,50 @@ export function ChannelExecutionPanel({
           { label: 'Ada ürünü', render: (r) => r.itemName },
           { label: 'Depo', render: (r) => r.warehouseName },
           { label: 'Kanal ürün kodu', render: (r) => r.channelSku },
+          { label: 'Durum', render: (r) => <Status value={r.status} /> },
+          {
+            label: 'Sağlık',
+            render: (r) => (r.health?.ok ? 'Sorun yok' : (r.health?.issues ?? []).map((i) => ISSUE[i] ?? i).join(', ')),
+          },
+          {
+            label: 'Son kontrol (Ada / kanal)',
+            render: (r) => (r.lastCheck ? `${r.lastCheck.adaQuantity} / ${r.lastCheck.channelQuantity}${r.lastCheck.difference ? ` (fark ${r.lastCheck.difference})` : ''}` : '—'),
+          },
         ]}
+        action={
+          can('core.integrations.manage')
+            ? (r) =>
+                r.status !== 'retired' && (
+                  <div className="flex flex-wrap gap-1">
+                    {r.status === 'active' && (
+                      <OperationForm
+                        title="Kanal stok farkını kontrol et"
+                        description="Kanaldaki miktar okunur ve Ada'nın kullanılabilir miktarıyla karşılaştırılır. Seçerseniz Ada miktarı yayın kuyruğuna alınır."
+                        fields={[selectField('queue', 'Fark varsa', [{ value: 'no', label: 'Yalnız kontrol et' }, { value: 'yes', label: 'Ada miktarını kuyruğa al' }])]}
+                        submit={(v) => save(`/api/integrations/channel-mappings/${r.id}/check`, { requestKey: crypto.randomUUID(), queue: v.queue === 'yes' })}
+                      />
+                    )}
+                    <OperationForm
+                      title="Eşleme durumunu değiştir"
+                      description="Duraklatılan eşleme stok yayını yapmaz. Emekli eşleme yeniden açılamaz."
+                      fields={[
+                        selectField(
+                          'status',
+                          'Yeni durum',
+                          [
+                            { value: 'active', label: 'Etkin' },
+                            { value: 'paused', label: 'Duraklat' },
+                            { value: 'retired', label: 'Emekliye ayır' },
+                          ].filter((o) => o.value !== r.status),
+                        ),
+                        reason,
+                      ]}
+                      submit={(v) => save(`/api/integrations/channel-mappings/${r.id}/status`, { status: v.status, reason: v.reason })}
+                    />
+                  </div>
+                )
+            : undefined
+        }
       />
       {can('core.integrations.manage') && (
         <OperationForm
@@ -128,7 +184,7 @@ export function ChannelExecutionPanel({
           { label: 'Durum', render: (r) => <Status value={r.status} /> },
           { label: 'Deneme', numeric: true, render: (r) => r.attempts },
           { label: 'Sonraki deneme', render: (r) => displayDateTime(r.retryAfter) },
-          { label: 'Sonuç', render: (r) => r.error ?? '—' },
+          { label: 'Sonuç', render: (r) => (r.error ? `${r.error}${r.errorHint ? ` — ${r.errorHint}` : ''}` : '—') },
         ]}
         action={
           can('core.integrations.manage')

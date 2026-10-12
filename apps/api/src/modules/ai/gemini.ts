@@ -82,12 +82,14 @@ export async function callGemini(
 
       // Her aracı sırayla, kendi kısa işleminde çalıştır ve sonucunu topla
       const functionResponseParts = [];
+      const sources: NonNullable<AiExecutionResult['sources']> = [];
       for (const [index, call] of response.functionCalls.entries()) {
           const callName = call.name ?? '';
           const result = index >= 8 ? { result: null, error: 'Tek istekte en fazla 8 araç kullanılabilir.' } : await runTool(
             callName,
             (call.args as Record<string, unknown>) || {},
           );
+          if ('source' in result && result.source && !sources.some((s) => s.tool === result.source!.tool)) sources.push(result.source);
           functionResponseParts.push({
             functionResponse: {
               name: callName,
@@ -131,6 +133,7 @@ export async function callGemini(
       return {
         success: true,
         answer: finalAnswer,
+        sources,
       };
     }
 

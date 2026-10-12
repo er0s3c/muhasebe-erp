@@ -44,24 +44,86 @@ async function job(c: TenantCtx, id: string) {
     sql`select ${columns},j.result_hash as "resultHash" from construction_jobs j join construction_assets a on a.id=j.asset_id where j.id=${id}::uuid`,
   );
 }
+/** "1.234,56" / "1,234.56" / "1234,5" → "1234.56"; anlaşılmazsa null. */
+export function ocrAmount(raw: string | null): string | null {
+  if (!raw) return null;
+  const s = raw.replace(/\s/g, '');
+  const lastComma = s.lastIndexOf(','), lastDot = s.lastIndexOf('.');
+  const decimalSep = lastComma > lastDot ? ',' : lastDot > lastComma ? '.' : null;
+  let digits = s;
+  if (decimalSep) {
+    const [int, frac] = [s.slice(0, s.lastIndexOf(decimalSep)), s.slice(s.lastIndexOf(decimalSep) + 1)];
+    // Tek ayırıcı ve üç haneli kesir: binlik ayırıcıdır (1.250 → 1250)
+    digits = frac.length === 3 && !(lastComma >= 0 && lastDot >= 0) ? int.replace(/[.,]/g, '') + frac : int.replace(/[.,]/g, '') + '.' + frac;
+  }
+  return /^\d+(\.\d+)?$/.test(digits) ? digits : null;
+}
+
+/**
+ * OCR önerileri (öneri 103): her alan, metinde bulunduğu satır ve kaynak parçasıyla birlikte döner; kullanıcı öneriyi
+ * belgedeki yeriyle karşılaştırarak doğrular. Öneriler kesinleştirme yapmaz, yalnız taslağı doldurur.
+ */
 export function ocrSuggestions(text: string) {
+  const fields: { field: 'date' | 'currency' | 'total' | 'externalNo'; value: string; sourceText: string; line: number }[] = [];
+  const locate = (field: (typeof fields)[number]['field'], m: RegExpMatchArray | null, value: string | null) => {
+    if (!m || value === null || m.index === undefined) return;
+    const line = text.slice(0, m.index).split('\n').length;
+    const lineText = text.split('\n')[line - 1] ?? m[0];
+    fields.push({ field, value, sourceText: lineText.trim().slice(0, 200), line });
+  };
   const date = text.match(/\b(\d{2})[./-](\d{2})[./-](20\d{2})\b/);
-  const currency = text.match(/\b(TRY|EUR|USD|GBP)\b/)?.[1] ?? (/\bTL\b/.test(text) ? 'TRY' : null);
-  const total =
-    text.match(/(?:genel\s*toplam|grand\s*total|ödenecek|toplam)\s*[:=]?\s*([\d.,]+)/i)?.[1] ??
-    null;
-  const externalNo =
-    text.match(
-      /(?:fatura|invoice|irsaliye)\s*(?:no|numarası|number)\s*[:=]?\s*([A-Z0-9-]+)/i,
-    )?.[1] ?? null;
+  const dateValue = date ? `${date[3]}-${date[2]}-${date[1]}` : null;
+  locate('date', date, dateValue);
+  const cur = text.match(/\b(TRY|EUR|USD|GBP)\b/) ?? text.match(/\bTL\b/);
+  const currency = cur ? (cur[1] ?? 'TRY') : null;
+  locate('currency', cur, currency);
+  const totalMatch = text.match(/(?:genel\s*toplam|grand\s*total|ödenecek|toplam)\s*[:=]?\s*([\d.,]+)/i);
+  const total = totalMatch?.[1] ?? null;
+  locate('total', totalMatch, ocrAmount(total));
+  const extMatch = text.match(/(?:fatura|invoice|irsaliye)\s*(?:no|numarası|number)\s*[:=]?\s*([A-Z0-9-]+)/i);
+  const externalNo = extMatch?.[1] ?? null;
+  locate('externalNo', extMatch, externalNo);
   return {
-    date: date ? `${date[3]}-${date[2]}-${date[1]}` : null,
+    date: dateValue,
     currency,
     totalText: total,
+    total: ocrAmount(total),
     externalNo,
+    fields,
     warning:
       'OCR önerileri doğrulanmamıştır. Toplamı, tarihi, döviz kurunu ve satırları kaynak belgeyle kontrol edin.',
   };
+}
+
+/**
+ * İçerik üzerinden belge tekrar kontrolü (öneri 104): dosya özeti farklı olsa da aynı tedarikçi belge numarası ya da aynı
+ * tarih + toplamlı kaydedilmiş/taslak alış-gider faturası ve aynı metin sonucuna sahip başka OCR işi aranır.
+ */
+async function ocrDuplicates(c: TenantCtx, r: { id: string; assetId: string; resultHash: string | null }, storageDir: string) {
+  if (!r.resultHash) return { invoices: [], jobs: [], suggestions: null };
+  const result = JSON.parse((await readAsset(storageDir, c.company.id, r.resultHash)).toString()) as { text?: string };
+  const s = ocrSuggestions(result.text ?? '');
+  const invoices = s.externalNo || (s.date && s.total)
+    ? (
+        await c.tx.execute<{ id: string; invoiceNo: string | null; externalNo: string | null; invoiceDate: string; grossTotal: string; currencyCode: string; partyName: string | null; status: string; reason: string }>(
+          sql`select i.id, i.invoice_no as "invoiceNo", i.external_no as "externalNo", i.invoice_date::text as "invoiceDate", i.gross_total::text as "grossTotal",
+                     i.currency_code as "currencyCode", p.name as "partyName", i.status,
+                     case when ${s.externalNo}::text is not null and upper(i.external_no) = upper(${s.externalNo}::text) then 'external_no' else 'date_total' end as reason
+                from invoices i left join parties p on p.id = i.party_id
+               where i.status <> 'cancelled' and i.type in ('purchase','expense')
+                 and ((${s.externalNo}::text is not null and upper(i.external_no) = upper(${s.externalNo}::text))
+                   or (${s.date}::date is not null and ${s.total}::numeric is not null and i.invoice_date = ${s.date}::date and i.gross_total = ${s.total}::numeric))
+               order by i.invoice_date desc limit 10`,
+        )
+      ).rows
+    : [];
+  const jobs = (
+    await c.tx.execute<{ id: string; filename: string; reviewedRecordKind: string | null }>(
+      sql`select j.id, a.filename, j.reviewed_record_kind as "reviewedRecordKind" from construction_jobs j join construction_assets a on a.id = j.asset_id
+           where j.kind = 'ocr' and j.status = 'completed' and j.result_hash = ${r.resultHash} and j.id <> ${r.id}::uuid and j.asset_id <> ${r.assetId}::uuid limit 10`,
+    )
+  ).rows;
+  return { invoices, jobs, suggestions: s };
 }
 export const constructionJobRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -129,6 +191,14 @@ export const constructionJobRoutes: FastifyPluginAsync = async (app) => {
           await readAsset(app.config.CONSTRUCTION_STORAGE_DIR, c.company.id, r.resultHash)
         ).toString(),
       );
+    }),
+  );
+  app.get(
+    '/api/construction/jobs/:id/duplicates',
+    tenantRoute(app, read, async (c) => {
+      const r = await job(c, idParam.parse(c.req.params).id);
+      if (r.kind !== 'ocr' || r.status !== 'completed') throw badRequest('Tamamlanmış OCR sonucu seçin.');
+      return ocrDuplicates(c, r, app.config.CONSTRUCTION_STORAGE_DIR);
     }),
   );
   app.get(
@@ -224,6 +294,8 @@ export const constructionJobRoutes: FastifyPluginAsync = async (app) => {
           type: z.enum(['invoice', 'delivery', 'report']),
           input: z.unknown(),
           confirmation: z.literal(true),
+          /** Olası tekrar bulunduğunda kullanıcının bilerek devam ettiği (öneri 104). */
+          acceptDuplicate: z.boolean().optional(),
         })
         .parse(c.req.body);
       if (
@@ -248,6 +320,9 @@ export const constructionJobRoutes: FastifyPluginAsync = async (app) => {
       };
       let id: string, kind: string;
       if (b.type === 'invoice') {
+        const dup = await ocrDuplicates(c, r, app.config.CONSTRUCTION_STORAGE_DIR);
+        if ((dup.invoices.length || dup.jobs.length) && !b.acceptDuplicate)
+          throw conflict('Bu belge daha önce kaydedilmiş olabilir; olası tekrarları kontrol edin', 'OCR_POSSIBLE_DUPLICATE');
         c.require('invoices.manage');
         if (!c.enabledModules.has('core.invoices')) throw forbidden();
         const input = createInvoiceSchema.parse(b.input);
