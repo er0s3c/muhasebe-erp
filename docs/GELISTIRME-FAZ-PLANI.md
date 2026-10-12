@@ -458,10 +458,10 @@ Tamamlanma ölçütü: Ağ kesintisi sonrası taslak korunuyor; tekrar eşitleme
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 17 | Göreve göre mobil ve çevrimdışı deneyim | İlk kapsam | Genişletilecek | PWA, kamera barkodu, şifreli çevrimdışı taslak | Bekliyor |
-| 93 | Çalışan kişisel belge ve ücret portalı | İlk kapsam | Yeni | Yok; `workspace/portal.ts` müşteri portalı | Bekliyor |
-| 94 | Puantaj düzeltme talepleri | İlk kapsam | Genişletilecek | `hr/attendance.ts` | Bekliyor |
-| 97 | İşe giriş/ayrılış kontrol listeleri | İlk kapsam | Yeni | İşe giriş/ayrılış kontrol listesi yok | Bekliyor |
+| 17 | Göreve göre mobil ve çevrimdışı deneyim | İlk kapsam | Genişletilecek | PWA, kamera barkodu, şifreli çevrimdışı taslak | İlk kapsam tamam: çevrimdışı taslak ve saha kuyrukları bağlantı gelince kendiliğinden eşitlenir, bağlantı durumu görünür; istemci kimliğiyle tekrar eşitleme çift kayıt yapmaz |
+| 93 | Çalışan kişisel belge ve ücret portalı | İlk kapsam | Yeni | Yok; `workspace/portal.ts` müşteri portalı | İlk kapsam tamam: personel–kullanıcı bağı; portalda yalnız kendi bordro pusulası (onaylı/ödenmiş), son iki ay puantajı ve talepler; erişim kaydı tutulur |
+| 94 | Puantaj düzeltme talepleri | İlk kapsam | Genişletilecek | `hr/attendance.ts` | İlk kapsam tamam: portaldan ya da İK'dan talep; onayda puantaja yazılır; kapalı ayda açılmaz/onaylanmaz; karar verilmiş talep değişmez |
+| 97 | İşe giriş/ayrılış kontrol listeleri | İlk kapsam | Yeni | İşe giriş/ayrılış kontrol listesi yok | İlk kapsam tamam: şirket şablonundan işe giriş/ayrılış listesi; madde kim/ne zaman; tüm maddelerle kapanır ve değişmez |
 | 95 | İzin/vardiya talebinde ekip kapasitesi | Genişletme | Yeni | İzin talebi akışı yok; puantajda izin günleri var | Bekliyor |
 | 96 | Çalışan hedefi ve değerlendirme geçmişi | Genişletme | Yeni | Yok | Bekliyor |
 | 112 | PDKS/cihaz aktarım doğrulaması | Genişletme | Genişletilecek | PDKS dosya aktarımı (`/api/integrations/connections/:id/attendance-file`); ham olay–eşleme–inceleme yok, canlı cihaz bağlantısı dış erişim ister | Bekliyor |
@@ -541,6 +541,13 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 122 öneri, 14 faza (F0, F1, F2a, F2b, F3–F12) birer kez atanmıştır: F0 2, F1 9, F2a 4, F2b 10, F3 8, F4 14, F5 10, F6 11, F7 11, F8 11, F9 11, F10 7, F11 9, F12 5 = 122. Öneri numaraları önceki yanıtlardaki numaralarla aynıdır. Teknik ve mali ortak kabul koşulları, ana fazı farklı olan işlerde de uygulanır.
 
 ## Değişiklik kaydı
+
+**12 Ekim 2026 — F10 ilk teslimi**
+
+- F10 ilk kapsamı (17, 93, 94, 97) `claude/f2b-baslangic` dalında.
+- Çalışan portalı her üyeye açık bir menü öğesidir; yalnız oturumdaki kullanıcıya bağlı personel kaydını döndürür ve başka personele giden parametre almaz. İK modülü kapalı şirkette kapalıdır.
+- F9 ölçüm farkı raporu CI'da gerçek bir hata yakaladı: hakediş aktarım miktarı metin sütunudur; toplamada sayıya çevrilir.
+- Açık işler: F10 genişletmeleri (95, 96, 112); portalda kişisel belgeler; düzeltme talebinin çevrimdışı taslak türü olması.
 
 **12 Ekim 2026 — F8 ve F9 ilk teslimi**
 
