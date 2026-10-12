@@ -18,7 +18,7 @@ import { items, journalEntries, stockDocuments, stockMovements } from '../../db/
 import { notFound, unprocessable } from '../../http/errors';
 import { reverseJournalEntry } from '../ledger/journal';
 import { validateDimensions } from '../projects/dimension';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
 import { loadItemStates, loadWarehouseQty, lockItems, neg, uuidList } from './balances';
@@ -94,12 +94,12 @@ export async function insertDocument(tx: Tx, ctx: StockCtx, periodId: string, he
     }
   }
   const year = isoYear(header.docDate);
-  const seq = await nextNumber(tx, ctx.companyId, STOCK_NUMBER_KEY, year);
+  const docNo = await nextDocumentNumber(tx, ctx.companyId, STOCK_NUMBER_KEY, year, DOC_PREFIX);
   const [doc] = await tx
     .insert(stockDocuments)
     .values({
       companyId: ctx.companyId,
-      docNo: formatDocumentNumber(DOC_PREFIX, year, seq),
+      docNo,
       docDate: header.docDate,
       periodId,
       type: header.type,

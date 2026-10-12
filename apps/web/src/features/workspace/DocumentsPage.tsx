@@ -1,3 +1,4 @@
+import { ReportJobsPanel } from './ReportJobsPanel';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -164,6 +165,7 @@ function DocumentsContent() {
         }
       />
       {error && <Callout tone="danger">{error}</Callout>}
+      <ReportJobsPanel />
       <Card className="mb-5">
         <CardHeader
           title={source.data?.label ?? 'Arşiv kapsamı'}

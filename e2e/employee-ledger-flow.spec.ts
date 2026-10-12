@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
+import { setupKktcPayroll } from './country-payroll';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +11,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -46,7 +49,8 @@ test('personel cari ve avans: avans ver → bordrodan kesinti → onay → maaş
   await page.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByText('Puantaj kaydedildi').first()).toBeVisible();
 
-  await nav.getByRole('link', { name: 'Bordro ayarları' }).click();
+  await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
+  await page.getByRole('tab', { name: 'Bordro' }).click();
   const termForm = page.locator('form').filter({ has: page.getByLabel('Ücret tutarı') });
   const empSelect = termForm.getByLabel('Personel', { exact: true });
   await empSelect.selectOption((await empSelect.locator('option', { hasText: 'Mehmet Kaya' }).getAttribute('value'))!);
@@ -54,6 +58,8 @@ test('personel cari ve avans: avans ver → bordrodan kesinti → onay → maaş
   await termForm.getByLabel('Geçerlilik başlangıcı').fill(`${month}-01`);
   await termForm.getByRole('button', { name: 'Ekle' }).click();
   await expect(page.getByText('Ücret şartı eklendi')).toBeVisible();
+  // KKTC ülke kuralı: prim oranları 0 (test değeri) → net = brüt; bu senaryo avans/maaş carisini sınar
+  await setupKktcPayroll(page, { month, employees: ['Mehmet Kaya'], employeeInsurancePct: '0', employerInsurancePct: '0' });
 
   // Banka hesabı (TL)
   await nav.getByRole('link', { name: 'Hesaplar', exact: true }).click();

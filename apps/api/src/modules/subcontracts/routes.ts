@@ -28,6 +28,8 @@ import {
 import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { pageOf } from '../../http/paging';
+import { isGeneralApprovalType } from '../approvals/document-policy';
+import { notFound, unprocessable } from '../../http/errors';
 import {
   cancelRequest,
   createRule,
@@ -139,12 +141,17 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
   const approveAny = { permission: 'subcontracts.approve' } as const;
 
   // --- Onay kuralları ------------------------------------------------------------------
-  app.get('/api/approval-rules', tenantRoute(app, readAny, async ({ tx }) => ({ rules: await listRules(tx) })));
+  const legacyRules=async(tx:TenantCtx['tx'])=>(await listRules(tx)).filter(rule=>!isGeneralApprovalType(rule.docType));
+  const legacyRule=async(tx:TenantCtx['tx'],id:string)=>{if(!(await legacyRules(tx)).some(rule=>rule.id===id))throw notFound('Onay kuralı');};
+  const legacyRequest=async(tx:TenantCtx['tx'],id:string)=>{const request=await getRequest(tx,id);if(isGeneralApprovalType(request.docType))throw notFound('Onay talebi');return request;};
+  app.get('/api/approval-rules', tenantRoute(app, readAny, async ({ tx }) => ({ rules: await legacyRules(tx) })));
 
   app.post(
     '/api/approval-rules',
     tenantRoute(app, approveAny, async (c) => {
-      const rule = await createRule(c.tx, c.company.id, createApprovalRuleSchema.parse(c.req.body));
+      const input=createApprovalRuleSchema.parse(c.req.body);
+      if(isGeneralApprovalType(input.docType))throw unprocessable('Mali belge kuralları şirket onay ayarlarından yönetilir','APPROVAL_DOC_TYPE');
+      const rule = await createRule(c.tx, c.company.id, input);
       void c.reply.code(201);
       return { rule };
     }),
@@ -154,35 +161,37 @@ export const subcontractRoutes: FastifyPluginAsync = async (app) => {
     '/api/approval-rules/:id',
     tenantRoute(app, approveAny, async ({ tx, req }) => {
       const { isActive } = z.object({ isActive: z.boolean() }).parse(req.body);
+      await legacyRule(tx,idParam.parse(req.params).id);
       await setRuleActive(tx, idParam.parse(req.params).id, isActive);
-      return { rules: await listRules(tx) };
+      return { rules: await legacyRules(tx) };
     }),
   );
 
   app.delete(
     '/api/approval-rules/:id',
     tenantRoute(app, approveAny, async ({ tx, req, reply }) => {
+      await legacyRule(tx,idParam.parse(req.params).id);
       await deleteRule(tx, idParam.parse(req.params).id);
       void reply.code(204);
     }),
   );
 
   // --- Onay kutusu ve karar --------------------------------------------------------------
-  app.get('/api/approvals/inbox', tenantRoute(app, readAny, async (c) => ({ requests: await pendingForMe(c.tx, approvalCtx(c)) })));
+  app.get('/api/approvals/inbox', tenantRoute(app, readAny, async (c) => ({ requests: (await pendingForMe(c.tx, approvalCtx(c))).filter(request=>!isGeneralApprovalType(request.docType)) })));
 
-  app.get('/api/approvals/:id', tenantRoute(app, readAny, async ({ tx, req }) => ({ request: await getRequest(tx, idParam.parse(req.params).id) })));
+  app.get('/api/approvals/:id', tenantRoute(app, readAny, async ({ tx, req }) => ({ request: await legacyRequest(tx, idParam.parse(req.params).id) })));
 
   // Karar yetkisi adımdan gelir (rol/kullanıcı); uç yalnızca modülü ve okuma iznini ister
   app.post(
     '/api/approvals/:id/decide',
-    tenantRoute(app, readAny, async (c) => ({
+    tenantRoute(app, readAny, async (c) => {await legacyRequest(c.tx,idParam.parse(c.req.params).id);return {
       request: await decide(c.tx, approvalCtx(c), idParam.parse(c.req.params).id, decideApprovalSchema.parse(c.req.body)),
-    })),
+    };}),
   );
 
   app.post(
     '/api/approvals/:id/cancel',
-    tenantRoute(app, readAny, async (c) => ({ request: await cancelRequest(c.tx, approvalCtx(c), idParam.parse(c.req.params).id) })),
+    tenantRoute(app, readAny, async (c) => {await legacyRequest(c.tx,idParam.parse(c.req.params).id);return { request: await cancelRequest(c.tx, approvalCtx(c), idParam.parse(c.req.params).id) };}),
   );
 
   // --- Taşeron sözleşmeleri ---------------------------------------------------------------

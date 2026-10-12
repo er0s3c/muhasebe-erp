@@ -167,19 +167,19 @@ describe('sektör kilidi ve şirket sınırı', () => {
     const license = c.vendor.issue({ sectors: ['RETAIL_MARKET'], companyLimit: 2 });
     const { owner, company } = await licensedOwner(c, license, 'RETAIL_MARKET');
 
-    const wrong = await client(c.app, owner.token).post('/api/companies', { name: 'İnşaat A.Ş.', sector: 'CONSTRUCTION' });
+    const wrong = await client(c.app, owner.token).post('/api/companies', { name: 'İnşaat A.Ş.', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' });
     expect(wrong.statusCode).toBe(403);
     expect(wrong.json().error.code).toBe('LICENSE_SECTOR_MISMATCH');
 
-    await createCompany(c.app, owner.token, { sector: 'RETAIL_MARKET', name: 'İkinci Market' });
-    const over = await client(c.app, owner.token).post('/api/companies', { name: 'Üçüncü', sector: 'RETAIL_MARKET' });
+    await createCompany(c.app, owner.token, { sector: 'RETAIL_MARKET', jurisdiction: 'KKTC', name: 'İkinci Market' });
+    const over = await client(c.app, owner.token).post('/api/companies', { name: 'Üçüncü', sector: 'RETAIL_MARKET', jurisdiction: 'KKTC' });
     expect(over.statusCode).toBe(403);
     expect(over.json().error.code).toBe('LICENSE_COMPANY_LIMIT');
     expect((await licenseOwnerSql('select count(*)::int as n from companies')).rows[0].n).toBe(2);
 
     // başka kuruluşun şirketi de kurulum genelindeki sınıra sayılır (RLS'i aşan sayım)
     const other = await registerUser(c.app, 'Diger');
-    const res = await client(c.app, other.token).post('/api/companies', { name: 'Başka Market', sector: 'RETAIL_MARKET' });
+    const res = await client(c.app, other.token).post('/api/companies', { name: 'Başka Market', sector: 'RETAIL_MARKET', jurisdiction: 'KKTC' });
     expect(res.statusCode).toBe(403);
     expect(res.json().error.code).toBe('LICENSE_COMPANY_LIMIT');
     void company;
@@ -193,7 +193,7 @@ describe('sektör kilidi ve şirket sınırı', () => {
     license.companyLimit = 3;
     expect((await beat(c)).lease?.companyLimit).toBe(3);
     const results = await Promise.all(
-      [1, 2, 3].map((i) => client(c.app, other.token).post('/api/companies', { name: `Yarış ${i}`, sector: 'RETAIL_MARKET' })),
+      [1, 2, 3].map((i) => client(c.app, other.token).post('/api/companies', { name: `Yarış ${i}`, sector: 'RETAIL_MARKET', jurisdiction: 'KKTC' })),
     );
     expect(results.filter((r) => r.statusCode === 201)).toHaveLength(1);
     expect(results.filter((r) => r.statusCode === 403)).toHaveLength(2);
@@ -341,14 +341,14 @@ describe('kalp atışı', () => {
     const license = [...c.vendor.licenses.values()][0]!;
     const { owner } = await (async () => {
       const o = await registerUser(c.app, 'Iptal');
-      await createCompany(c.app, o.token, { sector: 'COMMERCE', name: 'Iptal Ltd.' });
+      await createCompany(c.app, o.token, { sector: 'COMMERCE', jurisdiction: 'KKTC', name: 'Iptal Ltd.' });
       await licenseOwnerSql(`update license_state set owner_org_id = (select organization_id from users where id = $1) where id = 1`, [o.userId]);
       return { owner: o };
     })();
     license.status = 'suspended';
     let snap = await beat(c);
     expect(snap).toMatchObject({ state: 'restricted', reason: 'suspended' });
-    expect((await client(c.app, owner.token).post('/api/companies', { name: 'X', sector: 'COMMERCE' })).statusCode).toBe(402);
+    expect((await client(c.app, owner.token).post('/api/companies', { name: 'X', sector: 'COMMERCE', jurisdiction: 'KKTC' })).statusCode).toBe(402);
     license.status = 'active';
     snap = await beat(c);
     expect(snap.state).toBe('active');
@@ -610,7 +610,7 @@ describe('çevrimdışı etkinleştirme', () => {
 
     // uzun süreli kira: kalp atışı olmadan aylarca çalışır
     const owner = await registerUser(c.app, 'Agsiz');
-    await createCompany(c.app, owner.token, { sector: 'COMMERCE', name: 'Ağsız Ltd.' });
+    await createCompany(c.app, owner.token, { sector: 'COMMERCE', jurisdiction: 'KKTC', name: 'Ağsız Ltd.' });
     c.clock.t += 300 * DAY;
     expect((await c.service.current()).state).toBe('active');
     // çevrimiçi yollar sunucu adresi olmadığı için kapalı

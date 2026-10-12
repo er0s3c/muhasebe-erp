@@ -35,7 +35,7 @@ import { conflict, notFound, unprocessable } from '../../http/errors';
 import { requireMappings } from '../ledger/mappings';
 import { createJournalEntry, reverseJournalEntry, type LedgerCtx } from '../ledger/journal';
 import { describeSettlements, entrySettlements } from '../parties/service';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
 import { postTreasuryTransaction } from '../treasury/posting';
@@ -350,8 +350,7 @@ export async function postProgress(tx: Tx, ctx: ProgressCtx, id: string) {
 
   const [party] = await tx.execute<{ name: string }>(sql`select name from parties where id = ${sc.partyId}`).then((r) => r.rows);
   const year = isoYear(p.periodEnd);
-  const seq = await nextNumber(tx, ctx.companyId, receivable ? 'PRG:in' : 'PRG', year);
-  const number = formatDocumentNumber(receivable ? 'AHK' : 'HKD', year, seq);
+  const number = await nextDocumentNumber(tx, ctx.companyId, receivable ? 'PRG:in' : 'PRG', year, receivable ? 'AHK' : 'HKD');
   const text = `${receivable ? 'İşveren hakedişi' : 'Taşeron hakedişi'} ${number} — ${party?.name ?? ''} (${sc.code}, hakediş ${p.paymentNo})`.slice(0, 300);
 
   // Dövizli sözleşmede avans mahsubu tarihsel defter tutarıyla kapanır; kur farkı kambiyo kâr/zararına (ACC-5)

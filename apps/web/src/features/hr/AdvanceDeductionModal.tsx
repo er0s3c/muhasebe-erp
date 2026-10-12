@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal } from '../../components/ui/Sheet';
 import { errorMessage } from '../../lib/errors';
@@ -17,8 +17,8 @@ import { LEDGER_INVALIDATE, LedgerUnverifiedBadge } from './employee-ledger-comm
  */
 export function AdvanceDeductionModal({ runId, employeeId, employeeName, onClose }: { runId: string; employeeId: string; employeeName: string; onClose: () => void }) {
   const { t } = useTranslation();
-  const { data, isPending } = useCQuery<{ advances: OutstandingAdvance[]; settings: LedgerSettings }>(['employee-ledger', 'outstanding', employeeId], `/api/employee-ledger/advances/outstanding?employeeId=${employeeId}`);
-  const { data: planned } = useCQuery<{ deductions: RunDeductionRow[] }>(['employee-ledger', 'run-deductions', runId], `/api/employee-ledger/runs/${runId}/deductions`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ advances: OutstandingAdvance[]; settings: LedgerSettings }>(['employee-ledger', 'outstanding', employeeId], `/api/employee-ledger/advances/outstanding?employeeId=${employeeId}`);
+  const { data: planned, error: plannedError, isPending: plannedPending, refetch: retryPlanned, isFetching: retryingPlanned } = useCQuery<{ deductions: RunDeductionRow[] }>(['employee-ledger', 'run-deductions', runId], `/api/employee-ledger/runs/${runId}/deductions`);
   const [amounts, setAmounts] = useState<Record<string, string> | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const initial = useMemo(() => {
@@ -48,7 +48,7 @@ export function AdvanceDeductionModal({ runId, employeeId, employeeName, onClose
       footer={
         <>
           <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <Button variant="primary" loading={save.isPending} disabled={over || isPending} onClick={() => save.mutate(chosen, { onSuccess: onClose, onError: setError })}>
+          <Button variant="primary" loading={save.isPending} disabled={over || isPending || plannedPending || !!queryError || !!plannedError} onClick={() => save.mutate(chosen, { onSuccess: onClose, onError: setError })}>
             {chosen.length === 0 ? t('employeeLedger.deduct.clear') : t('common.save')}
           </Button>
         </>
@@ -64,7 +64,7 @@ export function AdvanceDeductionModal({ runId, employeeId, employeeName, onClose
             </span>
           </Callout>
         )}
-        {isPending ? (
+        {plannedError ? <ErrorState description={errorMessage(plannedError)} onRetry={() => void retryPlanned()} retrying={retryingPlanned} /> : queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending || plannedPending ? (
           <PageLoading />
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted">{t('employeeLedger.deduct.none')}</p>
@@ -86,7 +86,7 @@ export function AdvanceDeductionModal({ runId, employeeId, employeeName, onClose
             ))}
           </ul>
         )}
-        <p className="text-sm text-muted">{t('employeeLedger.deduct.total', { amount: money(total.toFixed(2)) })}</p>
+        {!queryError && !plannedError && !isPending && !plannedPending && <p className="text-sm text-muted">{t('employeeLedger.deduct.total', { amount: money(total.toFixed(2)) })}</p>}
         {over && <Callout tone="danger">{t('employeeLedger.deduct.exceeds')}</Callout>}
       </div>
     </Modal>

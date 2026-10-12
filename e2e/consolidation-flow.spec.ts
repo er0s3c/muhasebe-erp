@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const PASSWORD = 'Sifre-12345-xyz';
 const year = new Date().getFullYear();
@@ -12,6 +13,7 @@ async function signUpWithCompany(page: Page, email: string) {
   await page.getByLabel('Şifre').fill(PASSWORD);
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -26,6 +28,7 @@ test('konsolidasyon: iki şirket → grup → konsolide mizan (kur, eliminasyon)
   await page.getByRole('menuitem', { name: 'Yeni şirket' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel UK Ltd.');
   await page.getByLabel('Defter para birimi').selectOption('GBP');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 
@@ -104,7 +107,7 @@ test('konsolidasyon: iki şirket → grup → konsolide mizan (kur, eliminasyon)
 
   // Dışa aktarma (xlsx)
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Dışa aktar' }).click();
+  await page.getByRole('button', { name: 'Dışa aktar', exact: true }).click();
   await page.getByRole('menuitem', { name: /Excel \(\.xlsx\)/ }).click();
   expect((await downloadPromise).suggestedFilename()).toMatch(/^konsolide-\d{4}-01-01_\d{4}-\d{2}-\d{2}\.xlsx$/);
 

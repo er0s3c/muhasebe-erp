@@ -1,4 +1,5 @@
 import type { FullConfig } from '@playwright/test';
+import { execSync } from 'node:child_process';
 
 /**
  * Üretim paketi modunda (E2E_TARGET=bundle) paket lisans denetimiyle derlenmiştir ve lisanssız açılır.
@@ -39,9 +40,19 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   const company = await fetch(`${base}/api/companies`, {
     method: 'POST',
     headers: { ...json, authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name: 'Kurulum Sahibi İnşaat', sector: 'CONSTRUCTION' }),
+    body: JSON.stringify({ name: 'Kurulum Sahibi İnşaat', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' }),
   });
   if (company.status !== 201) throw new Error(`Kurulum sahibinin şirketi açılamadı (${company.status}): ${await company.text()}`);
   process.env.E2E_OWNER_EMAIL = email;
   process.env.E2E_OWNER_PASSWORD = password;
+
+  // Demo hesabıyla çalışan senaryolar (üretim demosu, geri bildirim) için demo kuruluşu yüklenir. Kurulum sahibi
+  // yukarıda belirlendiği için demo kuruluşu sahipliği almaz. Yalnız bu deneme veritabanında çalışır.
+  for (const command of ['seed', 'seed-manufacturing']) {
+    execSync(`npx tsx --env-file-if-exists=../../.env src/db/demo-cli.ts ${command}`, {
+      cwd: 'apps/api',
+      stdio: 'inherit',
+      env: { ...process.env, ALLOW_DEMO: 'true' },
+    });
+  }
 }

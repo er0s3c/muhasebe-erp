@@ -2,10 +2,12 @@ import type { FastifyInstance,FastifyPluginAsync } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { uuidv7 } from 'uuidv7';
-import { recurringCreateSchema,recurrenceSchema,occurrenceDate,createInvoiceSchema,createAgendaSchema,idParam,todayIso,addDaysIso,resolveEnabledModules,type RecurringTemplate,type Role,type Sector,type CreateInvoiceInput } from '@erp/shared';
+import { recurringCreateSchema,recurrenceSchema,occurrenceDate,createInvoiceSchema,createAgendaSchema,idParam,todayIso,addDaysIso,resolveEnabledModules,type RecurringTemplate,type Role,type CreateInvoiceInput } from '@erp/shared';
 import { tenantRoute,type TenantCtx } from '../../http/context';
 import { badRequest,forbidden,notFound,conflict } from '../../http/errors';
 import { withContext,setContext } from '../../db/client';
+import { withCompanyTimeZone } from '../../http/company-time';
+import type { CompanyInfo } from '../../http/context';
 import { loadMemberAccess,requirePermission,isModuleDenied } from '../access/effective';
 import { getInvoice,createInvoiceDraft } from '../invoices/service';
 import { createAgendaItem,validateAgendaInput } from '../directory/agenda';
@@ -61,18 +63,20 @@ export async function processRecurringAll(app:FastifyInstance) {
   for(const t of targets) {
     try {
       await withContext(app.db,{companyId:t.company_id,orgId:t.organization_id},async tx=>{
-        const templates=(await tx.execute<{id:string;created_by:string}>(sql`select id,created_by from recurring_templates where status='active' and next_date<=${todayIso()}::date order by next_date limit 30 for update skip locked`)).rows;
+        const company=(await tx.execute<CompanyInfo & Record<string, unknown>>(sql`select id,name,sector,base_currency as "baseCurrency",reporting_currency as "reportingCurrency",allow_negative_stock as "allowNegativeStock",jurisdiction,profile_mode as "profileMode",profile_version_id as "profileVersionId",time_zone as "timeZone",fx_provider as "fxProvider",tax_setup_status as "taxSetupStatus" from companies where id=${t.company_id}::uuid`)).rows[0];
+        if (!company) return;
+        const asOf = todayIso(new Date(), company.timeZone);
+        const templates=(await tx.execute<{id:string;created_by:string}>(sql`select id,created_by from recurring_templates where status='active' and next_date<=${asOf}::date order by next_date limit 30 for update skip locked`)).rows;
         for(const template of templates) {
           try {
             await tx.transaction(async nested=>{
               const member=(await nested.execute<{role:Role}>(sql`select m.role from memberships m join users u on u.id=m.user_id where m.company_id=${t.company_id}::uuid and m.user_id=${template.created_by}::uuid and u.is_active`)).rows[0];
               if(!member)throw forbidden('Şablonu oluşturan kullanıcının üyeliği kaldırılmış.');
               await setContext(nested,{companyId:t.company_id,orgId:t.organization_id,userId:template.created_by});
-              const company=(await nested.execute<{id:string;name:string;sector:Sector;baseCurrency:string;reportingCurrency:string|null;allowNegativeStock:boolean}>(sql`select id,name,sector,base_currency as "baseCurrency",reporting_currency as "reportingCurrency",allow_negative_stock as "allowNegativeStock" from companies where id=${t.company_id}::uuid`)).rows[0]!;
               const modules=(await nested.execute<{module:string;enabled:boolean}>(sql`select module,enabled from company_modules`)).rows;
               const access=await loadMemberAccess(nested,t.company_id,template.created_by,member.role);
               if(!access.permissions.has('settings.manage'))throw forbidden('Şablon sahibinin işletim yetkisi kaldırılmış.');
-              await generateRecurring({tx:nested,company,user:{id:template.created_by,orgId:t.organization_id},access,enabledModules:resolveEnabledModules(company.sector,modules),can:p=>access.permissions.has(p),require:p=>requirePermission(access,p)},template.id);
+              await withCompanyTimeZone(company.timeZone, () => generateRecurring({tx:nested,company,user:{id:template.created_by,orgId:t.organization_id},access,enabledModules:resolveEnabledModules(company.sector,modules),can:p=>access.permissions.has(p),require:p=>requirePermission(access,p)},template.id,asOf));
             });
           }catch(error){await tx.execute(sql`update recurring_templates set status='paused',error=${error instanceof Error?error.message.slice(0,1000):'Tekrar işlemi başarısız.'},version=version+1,updated_at=now() where id=${template.id}::uuid`);}
         }

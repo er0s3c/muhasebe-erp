@@ -2,6 +2,7 @@ import { Plus, Tags } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
+import { useConfirmation } from '../../components/ui/useConfirmation';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
@@ -38,6 +39,7 @@ const empty: Form = { id: null, code: '', name: '', accountId: '', taxCode: '', 
 export function ExpenseCardsPage() {
   const { t } = useTranslation();
   const toast = useToast();
+  const { confirm, dialog } = useConfirmation();
   const canManage = useCan()('treasury.manage');
   const [showInactive, setShowInactive] = useState(false);
   const { data, isPending } = useExpenseCards(showInactive);
@@ -70,7 +72,7 @@ export function ExpenseCardsPage() {
     setForm({ id: c.id, code: c.code, name: c.name, accountId: c.accountId, taxCode: c.taxCode ?? '', withholdingRate: c.withholdingRate ?? '', projectId: c.projectId ?? '', wbsId: c.wbsId ?? '', notes: c.notes ?? '', isActive: c.isActive });
 
   const submit = () => {
-    if (!form) return;
+    if (!form || save.isPending) return;
     setError(null);
     save.mutate(form, {
       onSuccess: () => {
@@ -83,6 +85,7 @@ export function ExpenseCardsPage() {
 
   return (
     <>
+      {dialog}
       <PageHeader
         title={t('expenses.cards.title')}
         description={t('expenses.cards.subtitle')}
@@ -145,7 +148,7 @@ export function ExpenseCardsPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => window.confirm(t('expenses.cards.confirmDelete')) && remove.mutate(c.id, { onSuccess: () => toast.success(t('expenses.cards.deleted')), onError: (e) => toast.error(errorMessage(e)) })}
+                          onClick={() => confirm({ title: t('common.delete'), description: t('expenses.cards.confirmDelete'), confirmLabel: t('common.delete'), danger: true, onConfirm: async () => { await remove.mutateAsync(c.id); toast.success(t('expenses.cards.deleted')); } })}
                         >
                           {t('common.delete')}
                         </Button>

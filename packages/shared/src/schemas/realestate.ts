@@ -102,6 +102,17 @@ export const terminateContractSchema = z.object({
 });
 export type TerminateContractInput = z.infer<typeof terminateContractSchema>;
 
+/**
+ * Taksit planını yeniden yapılandırma (öneri 92): ödenmemiş kalan, yeni vadelere aynı toplamla dağıtılır. Eski taksitler ve
+ * tahsilatları korunur; kalanları kasasız kapatılır, yeni taksitler aynı defter tutarıyla açılır.
+ */
+export const restructureContractSchema = z.object({
+  date: isoDate.optional(),
+  reason: z.string().trim().min(3, 'Yeniden yapılandırma nedeni gerekli').max(300),
+  installments: z.array(z.object({ dueDate: isoDate, amount: price })).min(1).max(360),
+});
+export type RestructureContractInput = z.infer<typeof restructureContractSchema>;
+
 export const salesContractListQuerySchema = z.object({
   ...pageParams(),
   projectId: uuid.optional(),

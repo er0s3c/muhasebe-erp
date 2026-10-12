@@ -75,7 +75,7 @@ export function NotificationsPage() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <SegmentedTabs
+        <SegmentedTabs variant="filter"
           value={status}
           onChange={setStatus}
           items={[

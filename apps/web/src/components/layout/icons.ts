@@ -1,4 +1,6 @@
 import {
+  History,
+  Star,
   ArrowLeftRight,
   BadgeCheck,
   Bell,
@@ -151,6 +153,8 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   timer: Timer,
   'triangle-alert': TriangleAlert,
   'package-search': PackageSearch,
+  star: Star,
+  history: History,
 };
 
 export const navIcon = (name: string): LucideIcon => NAV_ICONS[name] ?? Circle;

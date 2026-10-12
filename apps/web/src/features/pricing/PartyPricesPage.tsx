@@ -7,7 +7,7 @@ import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal } from '../../components/ui/Sheet';
@@ -29,7 +29,7 @@ export function PartyPricesPage() {
   const { company } = useCompanyApi();
   const canManage = useCan()('invoices.manage');
   const [partyFilter, setPartyFilter] = useState('');
-  const { data, isPending } = useCQuery<{ prices: PartyPriceRow[]; total: number }>(['party-prices', partyFilter], `/api/party-prices?limit=500${partyFilter ? `&partyId=${partyFilter}` : ''}`);
+  const { data, isPending, error: PartyPricesPageQueryError, refetch: PartyPricesPageQueryRetry, isFetching: PartyPricesPageQueryFetching } = useCQuery<{ prices: PartyPriceRow[]; total: number }>(['party-prices', partyFilter], `/api/party-prices?limit=500${partyFilter ? `&partyId=${partyFilter}` : ''}`);
   const { data: partyData } = useCQuery<{ parties: PartyListRow[] }>(['parties', 'options', 'pricing'], '/api/parties?limit=500&active=true');
   const { options: itemOptions } = useAllItemOptions(canManage);
   const partyOptions = (partyData?.parties ?? []).map((p) => ({ value: p.id, label: p.name, keywords: `${p.code} ${p.taxNumber ?? ''}`, hint: p.code }));
@@ -67,6 +67,7 @@ export function PartyPricesPage() {
     });
   };
 
+  if (PartyPricesPageQueryError && !data) return <ErrorState error={PartyPricesPageQueryError} onRetry={() => void PartyPricesPageQueryRetry()} retrying={PartyPricesPageQueryFetching} />;
   return (
     <>
       <PageHeader

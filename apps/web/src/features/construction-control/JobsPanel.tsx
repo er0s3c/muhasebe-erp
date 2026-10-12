@@ -541,8 +541,16 @@ function OcrReview({
     [title, setTitle] = useState(job.filename),
     [text, setText] = useState((result.text ?? '').slice(0, 4000)),
     [confirmed, setConfirmed] = useState(false),
+    [acceptDuplicate, setAcceptDuplicate] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  // Olası tekrar (öneri 104): aynı tedarikçi belge no / tarih+toplam ya da aynı içerikli başka OCR işi
+  const duplicates = useCQuery<{
+    invoices: { id: string; invoiceNo: string | null; externalNo: string | null; invoiceDate: string; grossTotal: string; currencyCode: string; partyName: string | null; reason: string }[];
+    jobs: { id: string; filename: string }[];
+  }>(['construction', 'jobs', job.id, 'duplicates'], job.status === 'completed' && !job.reviewedRecordId ? `/api/construction/jobs/${job.id}/duplicates` : null);
+  const fields = (result.suggestions?.fields ?? []) as { field: string; value: string; sourceText: string; line: number }[];
+  const FIELD_LABEL: Record<string, string> = { date: 'Tarih', currency: 'Para birimi', total: 'Toplam', externalNo: 'Belge no' };
   const [lines, setLines] = useState([
     { itemId: '', description: '', quantity: '', unit: 'adet', unitPrice: '', vatCode: '' },
   ]);
@@ -588,7 +596,7 @@ function OcrReview({
               };
       await call(`/api/construction/jobs/${job.id}/review`, {
         method: 'POST',
-        body: { version: job.version, type, input, confirmation: confirmed },
+        body: { version: job.version, type, input, confirmation: confirmed, ...(acceptDuplicate ? { acceptDuplicate: true } : {}) },
       });
       onDone();
     } catch (e) {
@@ -629,7 +637,37 @@ function OcrReview({
           Belgede okunan toplam: {String(result.suggestions?.totalText ?? 'Bulunamadı')} · Kaynak
           metin soldadır.
         </p>
+        {fields.length > 0 && (
+          <ul aria-label="Alan kaynakları" className="mt-2 space-y-0.5 text-xs">
+            {fields.map((f) => (
+              <li key={f.field}>
+                {FIELD_LABEL[f.field] ?? f.field}: <span className="font-medium">{f.value}</span> — satır {f.line}: “{f.sourceText}”
+              </li>
+            ))}
+          </ul>
+        )}
       </Callout>
+      {duplicates.data && (duplicates.data.invoices.length > 0 || duplicates.data.jobs.length > 0) && (
+        <Callout tone="warning" title="Bu belge daha önce kaydedilmiş olabilir">
+          <ul className="space-y-0.5 text-sm">
+            {duplicates.data.invoices.map((d) => (
+              <li key={d.id}>
+                <Link className="underline" to={`/invoices/${d.id}`}>
+                  {d.invoiceNo ?? 'Taslak fatura'}
+                </Link>{' '}
+                · {d.partyName ?? ''} · {d.externalNo ?? ''} · {d.invoiceDate} · {d.grossTotal} {d.currencyCode} ({d.reason === 'external_no' ? 'aynı belge no' : 'aynı tarih ve toplam'})
+              </li>
+            ))}
+            {duplicates.data.jobs.map((j) => (
+              <li key={j.id}>Aynı içerikli başka belge: {j.filename}</li>
+            ))}
+          </ul>
+          <label className="mt-2 flex items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4" checked={acceptDuplicate} onChange={(e) => setAcceptDuplicate(e.target.checked)} />
+            Tekrar olmadığını kontrol ettim; fatura taslağı yine de oluşturulsun
+          </label>
+        </Callout>
+      )}
       <Field label="Taslak türü">
         {(id) => (
           <Select id={id} value={type} onChange={(e) => setType(e.target.value as typeof type)}>

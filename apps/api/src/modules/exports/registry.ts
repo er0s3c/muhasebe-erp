@@ -40,6 +40,8 @@ import {
   previewFiscalYearQuerySchema,
   salesReportQuerySchema,
   stockStatusQuerySchema,
+  stockAnalyticsQuerySchema,
+  supplierPerformanceQuerySchema,
   todayIso,
   trialBalanceQuerySchema,
   treasuryStatementQuerySchema,
@@ -113,11 +115,14 @@ import {
 import { fullDataTables } from './full-data';
 import { executiveBuild, fxPositionBuild } from '../consolidation/builders';
 import { yearEndClosingTable } from '../yearend/builders';
+import { stockAnalyticsTable, supplierPerformanceTable } from './analytics';
 
 /** Dışa aktarılabilir rapor: kendi modül ve izniyle korunur (ekran raporuyla aynı). */
 export interface ExportDef {
   key: string;
   module: string;
+  /** A report shared by a general module and its legacy sector-specific module. */
+  alternateModules?: readonly string[];
   permission: Permission;
   schema: z.ZodType<Record<string, unknown>>;
   build: (ctx: BuildCtx, q: never) => Promise<ReportTable[]>;
@@ -137,6 +142,7 @@ function def<S extends z.ZodType<Record<string, unknown>>>(
   return {
     key: d.key,
     module: d.module,
+    alternateModules: d.alternateModules,
     permission: d.permission,
     schema: d.schema,
     build: d.build as ExportDef['build'],
@@ -160,6 +166,8 @@ export const EXPORTS: readonly ExportDef[] = [
   def({ key: 'party-statement', module: 'core.parties', permission: 'parties.read', schema: partyStatementQuerySchema.extend({ partyId: uuid }), build: partyStatementTable, file: range('cari-ekstre') }),
   def({ key: 'party-open-items', module: 'core.parties', permission: 'parties.read', schema: openItemsQuerySchema.extend({ partyId: uuid }), build: partyOpenItemsTable, file: asOf('acik-kalemler') }),
   def({ key: 'stock-status', module: 'core.inventory', permission: 'inventory.read', schema: stockStatusQuerySchema, build: stockStatusTable, file: asOf('stok-durumu') }),
+  def({ key: 'stock-analytics', module: 'core.inventory', permission: 'inventory.read', schema: stockAnalyticsQuerySchema, build: stockAnalyticsTable, file: range('stok-analizi') }),
+  def({ key: 'supplier-performance', module: 'core.procurement', alternateModules: ['construction.procurement'], permission: 'procurement.read', schema: supplierPerformanceQuerySchema, build: supplierPerformanceTable, file: range('tedarikci-performansi') }),
   def({ key: 'item-card', module: 'core.inventory', permission: 'inventory.read', schema: itemMovementsQuerySchema.extend({ itemId: uuid }), build: itemCardTable, file: range('stok-karti') }),
   def({ key: 'vat-summary', ...invoices, schema: vatSummaryQuerySchema, build: vatSummaryTable, file: range('kdv-ozeti') }),
   def({ key: 'treasury-statement', module: 'core.treasury', permission: 'treasury.read', schema: treasuryStatementQuerySchema.extend({ accountId: uuid }), build: treasuryStatementTable, file: range('hesap-ekstresi') }),

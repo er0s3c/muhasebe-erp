@@ -12,6 +12,7 @@ import {
   type LeatherCompletionInput,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
+import { notFound } from '../../http/errors';
 import { loadItemStates, loadWarehouseQty, lockItems } from '../inventory/balances';
 import { insertDocument, loadStockableItems } from '../inventory/documents';
 import { StockPlanner, type DraftRow } from '../inventory/planner';
@@ -51,6 +52,41 @@ export async function getProduction(tx: Tx, id: string): Promise<Row> {
     tx,
     sql`select r.id,r.item_id as "itemId",i.name as "itemName",r.piece_id as "pieceId",r.quantity,r.consumed_qty as "consumedQty",r.status from leather_reservations r join items i on i.id=r.item_id where r.order_id=${id}::uuid order by r.created_at`,
   );
+  return productionShape(o, reservations);
+}
+
+export async function getProductions(tx: Tx, ids: string[]): Promise<Row[]> {
+  if (!ids.length) return [];
+  const orders = new Map<string, Row>();
+  const reservations = new Map<string, Row[]>();
+  const uniqueIds = [...new Set(ids)];
+  // Bound each query and use the transaction's single connection sequentially.
+  for (let start = 0; start < uniqueIds.length; start += 300) {
+    const idList = sql.join(uniqueIds.slice(start, start + 300).map(id => sql`${id}::uuid`), sql`, `);
+    const orderRows = await all(
+      tx,
+      sql`select o.*,i.name as "itemName",r.revision from leather_production_orders o join items i on i.id=o.item_id join leather_revisions r on r.id=o.revision_id where o.id in (${idList})`,
+    );
+    for (const order of orderRows) orders.set(order.id, order);
+    const reservationRows = await all(
+      tx,
+      sql`select r.order_id as "orderId",r.id,r.item_id as "itemId",i.name as "itemName",r.piece_id as "pieceId",r.quantity,r.consumed_qty as "consumedQty",r.status from leather_reservations r join items i on i.id=r.item_id where r.order_id in (${idList}) order by r.created_at`,
+    );
+    for (const { orderId, ...reservation } of reservationRows) {
+      const rows = reservations.get(orderId) ?? [];
+      rows.push(reservation);
+      reservations.set(orderId, rows);
+    }
+  }
+  // SQL IN does not preserve the route's newest-first ordering.
+  return ids.map(id => {
+    const order = orders.get(id);
+    if (!order) throw notFound('Üretim emri');
+    return productionShape(order, reservations.get(id) ?? []);
+  });
+}
+
+function productionShape(o: Row, reservations: Row[]): Row {
   return {
     id: o.id,
     code: o.code,

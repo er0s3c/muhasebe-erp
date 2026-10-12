@@ -9,7 +9,7 @@ import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { Modal, Sheet } from '../../components/ui/Sheet';
@@ -50,7 +50,7 @@ export function GuaranteesPage() {
   const params = { direction, status, withinDays: within, q };
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v.trim())).toString();
   const lim = useListLimit(qs);
-  const { data, isPending } = useCQuery<BankGuaranteeList & { truncated?: boolean }>(['guarantees', 'list', qs, lim.limit], `/api/bank-guarantees?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
+  const { data, isPending, error: GuaranteesPageQueryError, refetch: GuaranteesPageQueryRetry, isFetching: GuaranteesPageQueryFetching } = useCQuery<BankGuaranteeList & { truncated?: boolean }>(['guarantees', 'list', qs, lim.limit], `/api/bank-guarantees?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const report = useCQuery<BankGuaranteeReport>(['guarantees', 'report'], '/api/bank-guarantees/report');
   const [editing, setEditing] = useState<BankGuaranteeRow | 'new' | null>(null);
   const [resolving, setResolving] = useState<BankGuaranteeRow | null>(null);
@@ -62,6 +62,7 @@ export function GuaranteesPage() {
   const saveSettings = useCMutation((v: number | null, call) => call('/api/bank-guarantees/settings', { method: 'PUT', body: { guaranteeWarningDays: v } }), GUARANTEE_INVALIDATE);
   const remove = useCMutation((id: string, call) => call(`/api/bank-guarantees/${id}`, { method: 'DELETE' }), GUARANTEE_INVALIDATE);
 
+  if (GuaranteesPageQueryError && !data) return <ErrorState error={GuaranteesPageQueryError} onRetry={() => void GuaranteesPageQueryRetry()} retrying={GuaranteesPageQueryFetching} />;
   return (
     <>
       <PageHeader

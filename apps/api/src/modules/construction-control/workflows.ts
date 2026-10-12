@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import {
   WORKFLOW_KINDS,
   WORKFLOW_PAYLOADS,
+  HANDOVER_STAGES,
   workflowSchema,
   analyzeUnitRate,
   analyzeFeasibility,
@@ -41,7 +42,7 @@ export const workflowAccess: Record<
   { module: string; read: Permission; write: Permission; approve: Permission }
 > = Object.fromEntries(
   WORKFLOW_KINDS.map((kind) => {
-    const real = ['feasibility', 'lead', 'buyer_option', 'warranty', 'passport'].includes(kind),
+    const real = ['feasibility', 'lead', 'buyer_option', 'warranty', 'passport', 'handover_check'].includes(kind),
       proc = ['rate_analysis', 'tender', 'material_need', 'submittal'].includes(kind),
       sub = ['production', 'change_event', 'delay_claim'].includes(kind);
     return [
@@ -706,6 +707,8 @@ export const constructionWorkflowRoutes: FastifyPluginAsync = async (app) => {
           ]),
           note: z.string().trim().min(3).max(4000),
           contractId: z.uuid().optional(),
+          /** Üretim onayında ölçümle kabul edilen miktar (öneri 88); boşsa beyan edilen miktar. */
+          acceptedQuantity: z.coerce.number().positive().max(1e12).optional(),
         })
         .parse(c.req.body);
       access(
@@ -821,16 +824,38 @@ export const constructionWorkflowRoutes: FastifyPluginAsync = async (app) => {
           await c.tx.execute(
             sql`select pg_advisory_xact_lock(hashtextextended(${c.company.id + ':production:' + p.subcontractId + ':' + p.lineKey},0))`,
           );
+          // Ölçüm ve kabul farkı (öneri 88): hakedişe kabul edilen miktar girer; fark ve gerekçe saklanır
+          const accepted = b.acceptedQuantity ?? p.quantity;
+          if (accepted > p.quantity) throw badRequest('Kabul edilen miktar beyan edilen üretimi aşamaz.');
+          computed = {
+            ...computed,
+            claimedQuantity: p.quantity,
+            acceptedQuantity: accepted,
+            measurementDiff: dec(p.quantity).minus(accepted).toFixed(4),
+            ...(accepted < p.quantity ? { acceptanceNote: b.note } : {}),
+          };
           const total = await first<{ quantity: string }>(
             c,
-            sql`select coalesce(sum((payload->>'quantity')::numeric),0)::text as quantity from construction_workflows where kind='production' and status in ('approved','closed') and payload->>'subcontractId'=${p.subcontractId} and payload->>'lineKey'=${p.lineKey}`,
+            sql`select coalesce(sum(coalesce((computed->>'acceptedQuantity')::numeric,(payload->>'quantity')::numeric)),0)::text as quantity from construction_workflows where kind='production' and status in ('approved','closed') and payload->>'subcontractId'=${p.subcontractId} and payload->>'lineKey'=${p.lineKey}`,
           );
           const limit = await first<{ quantity: string }>(
             c,
             sql`select l.quantity::text from subcontract_boq_lines l join subcontract_revisions rev on rev.id=l.revision_id where l.subcontract_id=${p.subcontractId}::uuid and l.line_key=${p.lineKey}::uuid and rev.status='approved' order by rev.revision_no desc limit 1`,
           );
-          if (dec(total.quantity).plus(p.quantity).gt(limit.quantity))
+          if (dec(total.quantity).plus(accepted).gt(limit.quantity))
             throw badRequest('Onaylı üretim toplamı sözleşme miktarını aşamaz.');
+        }
+        if (r.kind === 'handover_check') {
+          // Teslim öncesi aşamalı kontrol (öneri 91): tüm maddeler tamam ve önceki aşama onaylı olmalı
+          const p = WORKFLOW_PAYLOADS.handover_check.parse(r.payload);
+          if (p.items.some((x) => !x.ok)) throw badRequest('Aşama onayı için tüm kontrol maddeleri tamamlanmalı; açık maddeleri eksik giderme aşamasına taşıyın.');
+          const stage = HANDOVER_STAGES.indexOf(p.stage);
+          if (stage > 0) {
+            const prior = await c.tx.execute(
+              sql`select id from construction_workflows where kind='handover_check' and status in ('approved','closed') and payload->>'unitId'=${p.unitId} and payload->>'stage'=${HANDOVER_STAGES[stage - 1]!}`,
+            );
+            if (!prior.rows.length) throw badRequest('Önceki teslim kontrol aşaması onaylanmadan bu aşama onaylanamaz.');
+          }
         }
         if (r.kind === 'concrete') await ensureConcreteAction(c, r);
       }
@@ -929,10 +954,12 @@ export const constructionWorkflowRoutes: FastifyPluginAsync = async (app) => {
           c,
           sql`select coalesce(sum(a.quantity::numeric),0)::text as quantity from construction_production_allocations a join progress_payments pp on pp.id=a.payment_id where a.production_id=${r.id}::uuid and pp.status<>'cancelled'`,
         );
-        const q = b.quantity ? dec(b.quantity) : dec(p.quantity).minus(used.quantity);
+        // Hakedişe yalnız ölçümle kabul edilen miktar girer (öneri 88)
+        const acceptedQty = dec(String(r.computed.acceptedQuantity ?? p.quantity));
+        const q = b.quantity ? dec(b.quantity) : acceptedQty.minus(used.quantity);
         if (q.lte(0)) throw conflict('Üretimin tamamı hakedişe aktarılmış.');
-        if (q.gt(dec(p.quantity).minus(used.quantity)))
-          throw conflict('Bu üretim miktarı daha önce hakedişe aktarıldı.');
+        if (q.gt(acceptedQty.minus(used.quantity)))
+          throw conflict('Bu üretim miktarı daha önce hakedişe aktarıldı ya da kabul edilen miktarı aşıyor.');
         const pending = await c.tx.execute(
           sql`select id from progress_payments where subcontract_id=${p.subcontractId}::uuid and status in ('draft','submitted','approved')`,
         );

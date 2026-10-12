@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readXlsx } from '../src/files/xlsx-read';
-import { addMember, asDb, asOwner, client, createCompany, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear, TODAY_LOCAL } from './helpers';
+import { addMember, asDb, asOwner, client, execAsOwner, expectDbError, makeApp, orgOf, registerUser, thisYear, TODAY_LOCAL } from './helpers';
+import { createLegacyCompany } from './legacy-company';
 
 /**
  * Sosyal güvenlik çıktıları (Faz D4). Bu dosyadaki oranlar/değerler/kodlar YALNIZCA TEST DEĞERİDİR; kodda ve veritabanında
@@ -23,7 +24,7 @@ describe('sosyal güvenlik çıktıları (Faz D4)', async () => {
 
   async function world(name: string) {
     const s = await registerUser(app, name);
-    const company = await createCompany(app, s.token, { sector: 'CONSTRUCTION' });
+    const company = await createLegacyCompany(app, s.token, { sector: 'CONSTRUCTION' });
     const c = client(app, s.token, company.id);
     const orgId = await orgOf(app, s.token);
     const mkEmp = async (body: Record<string, unknown> = {}) => (await ok(c.post('/api/employees', { fullName: 'Ali Veli', hireDate: FROM, ...body }), 201)).employee as { id: string; code: string };

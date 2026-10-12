@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CustomValuesPanel } from '../manufacturing/SupportPanels';
 import { useTranslation } from 'react-i18next';
 import { INVENTORY_ROLES, ITEM_KINDS, ITEM_UNITS, type InventoryRole } from '@erp/shared';
+import { FormSection } from '../../components/ui/FormSection';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
@@ -28,8 +29,10 @@ interface FormState {
   salePrice: string;
   saleCurrency: string;
   minLevel: string;
+  targetLevel: string;
   notes: string;
   tracksSerial: boolean;
+  shelfLifeDays: string;
 }
 
 /** "12.500000" -> "12.5" */
@@ -49,8 +52,10 @@ const fromItem = (i: Item): FormState => ({
   salePrice: trim(i.salePrice),
   saleCurrency: i.saleCurrency,
   minLevel: trim(i.minLevel),
+  targetLevel: trim(i.targetLevel ?? null),
   notes: i.notes ?? '',
   tracksSerial: i.tracksSerial,
+  shelfLifeDays: i.shelfLifeDays ? String(i.shelfLifeDays) : '',
 });
 
 interface Props {
@@ -69,7 +74,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
   const editing = !!item;
   const empty: FormState = {
     name: '', code: '', kind: 'goods', inventoryRole: 'merchandise', unit: 'adet', categoryId: '', barcode: '', vatCode: '',
-    purchasePrice: '', purchaseCurrency: company.baseCurrency, salePrice: '', saleCurrency: company.baseCurrency, minLevel: '', notes: '', tracksSerial: false,
+    purchasePrice: '', purchaseCurrency: company.baseCurrency, salePrice: '', saleCurrency: company.baseCurrency, minLevel: '', targetLevel: '', notes: '', tracksSerial: false, shelfLifeDays: '',
   };
   const [f, setF] = useState<FormState>(empty);
   const [error, setError] = useState<string | null>(null);
@@ -110,8 +115,10 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
             salePrice: f.salePrice || null,
             saleCurrency: f.saleCurrency,
             minLevel: goods && f.minLevel ? f.minLevel : null,
+            targetLevel: goods && f.targetLevel ? f.targetLevel : null,
             notes: f.notes,
             tracksSerial: goods && f.tracksSerial,
+            shelfLifeDays: goods && f.shelfLifeDays ? Number(f.shelfLifeDays) : null,
           },
         });
         return res.item;
@@ -132,7 +139,9 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           ...(f.salePrice ? { salePrice: f.salePrice } : {}),
           saleCurrency: f.saleCurrency,
           ...(goods && f.minLevel ? { minLevel: f.minLevel } : {}),
+          ...(goods && f.targetLevel ? { targetLevel: f.targetLevel } : {}),
           ...(goods && f.tracksSerial ? { tracksSerial: true } : {}),
+          ...(goods && f.shelfLifeDays ? { shelfLifeDays: Number(f.shelfLifeDays) } : {}),
           notes: f.notes,
         },
       });
@@ -142,6 +151,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
   );
 
   const submit = () => {
+    if (save.isPending) return;
     setError(null);
     setErrors({});
     save.mutate(undefined, {
@@ -186,6 +196,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
         noValidate
       >
         {error && <Callout tone="danger">{error}</Callout>}
+        <FormSection title="Temel bilgiler">
         <Field label={t('inventory.form.name')} error={errors.name} required>
           {(id) => <Input id={id} value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus />}
         </Field>
@@ -253,6 +264,8 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           </Field>
         </div>
 
+        </FormSection>
+        <FormSection title="Fiyatlar" description="Alış ve satış fiyatları kendi para birimlerinde saklanır.">
         <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-x-3 gap-y-5">
           <Field label={t('inventory.form.purchasePrice')} error={errors.purchasePrice}>
             {(id) => <MoneyInput id={id} value={f.purchasePrice} onChange={(v) => set('purchasePrice', v)} maxDecimals={6} />}
@@ -265,11 +278,19 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           <p className="col-span-full -mt-2 text-xs text-muted">{t('inventory.form.pricesHint')}</p>
         </div>
 
-        {goods && (
+        </FormSection>
+        <FormSection title="Stok ve gelişmiş bilgiler">
+        {goods && (<>
           <Field label={t('inventory.form.minLevel')} hint={t('inventory.form.minLevelHint')} error={errors.minLevel}>
             {(id) => <MoneyInput id={id} value={f.minLevel} onChange={(v) => set('minLevel', v)} decimals={0} maxDecimals={4} />}
           </Field>
-        )}
+          <Field label="Hedef stok miktarı" hint="Minimuma düşünce satın alma önerisi bu hedefe tamamlar. Boş bırakılırsa hedef tahmin edilmez." error={errors.targetLevel}>
+            {id => <MoneyInput id={id} value={f.targetLevel} onChange={value => set('targetLevel', value)} decimals={0} maxDecimals={4} />}
+          </Field>
+          <Field label="Raf ömrü (gün)" hint="Doluysa mal kabul ve üretim partilerine son kullanma tarihi belge tarihi + bu süre olarak önerilir." error={errors.shelfLifeDays}>
+            {id => <Input id={id} type="number" min={1} max={3650} value={f.shelfLifeDays} onChange={e => set('shelfLifeDays', e.target.value.replace(/[^0-9]/g, ''))} />}
+          </Field>
+        </>)}
         {goods && (
           <label className="flex cursor-pointer items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5 size-4" checked={f.tracksSerial} onChange={(e) => set('tracksSerial', e.target.checked)} />
@@ -282,6 +303,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
         <Field label={t('inventory.form.notes')} error={errors.notes}>
           {(id) => <Textarea id={id} value={f.notes} onChange={(e) => set('notes', e.target.value)} maxLength={1000} />}
         </Field>
+        </FormSection>
       </form>
       {open&&item&&['MANUFACTURING_WHOLESALE','LEATHER_FASHION'].includes(company.sector)&&<CustomValuesPanel entity="item" id={item.id}/>}
     </Sheet>

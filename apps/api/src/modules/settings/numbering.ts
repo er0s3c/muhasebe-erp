@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { Tx } from '../../db/client';
+import { documentNumberPreview, documentSeriesOption, operationsSettingsSchema } from '@erp/shared';
 
 /**
  * Boşluksuz numara: satır kilidi işlem bitene kadar tutulur; işlem geri alınırsa
@@ -24,4 +25,12 @@ export async function nextNumber(
 
 export function formatDocumentNumber(prefix: string, year: number, value: number): string {
   return `${prefix}-${year}-${String(value).padStart(6, '0')}`;
+}
+
+/** Aynı sayaç satırı/kilidi kullanılır; yeni önek geçmiş belge ve sayaç değerlerini değiştirmez. */
+export async function nextDocumentNumber(tx: Tx, companyId: string, key: string, year: number, fallbackPrefix: string): Promise<string> {
+  const row = (await tx.execute<{ settings: unknown }>(sql`select settings from company_operations_settings where company_id=${companyId}`)).rows[0];
+  const settings = operationsSettingsSchema.parse(row?.settings ?? {});
+  const option = documentSeriesOption(settings.documentSeries, key, fallbackPrefix);
+  return documentNumberPreview(option, year, await nextNumber(tx, companyId, key, year));
 }

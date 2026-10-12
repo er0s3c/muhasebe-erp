@@ -16,6 +16,7 @@ import { currencySymbol, isZero, money } from '../../lib/format';
 import { useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { StockStatusReport } from '../../lib/types';
 import { qtyText, useCategories, useUnitLabel, useWarehouses } from './common';
+import { ExpiryRiskPanel } from './ExpiryRiskPanel';
 
 /** İrsaliye modülü (fatura modülüyle birlikte) kapalıysa bağlantı yerine düz metin. */
 function PendingLink({ enabled, to, children }: { enabled: boolean; to: string; children: ReactNode }) {
@@ -82,6 +83,7 @@ export function StockStatusPage() {
         }
       />
       <PrintHeader subtitle={`${asOf.split('-').reverse().join('.')}`} />
+      <ExpiryRiskPanel warehouseId={warehouseId || undefined} />
 
       <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <Field label={t('inventory.status.asOf')}>{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-44" />}</Field>

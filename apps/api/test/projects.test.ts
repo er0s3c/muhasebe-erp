@@ -71,7 +71,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
     return id;
   };
   const taggedSum = (x: Ctx, projectId: string) =>
-    asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) =>
+    asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) =>
       Number((await q(`select coalesce(sum(debit_base - credit_base), 0) as n from journal_lines where project_id = $1`, [projectId])).rows[0].n),
     );
 
@@ -356,7 +356,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
     const w2 = await mkWbs(x.c, p.id, '2');
     const b1 = await newBudget(x.c, p.id, [{ wbsId: w.id, amount: '100' }]);
 
-    await asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) => {
+    await asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) => {
       let e = await expectDbError(q, `update project_budget_lines set amount = 1 where budget_id = $1`, [b1]);
       expect(e.code).toBe('ERP09');
       e = await expectDbError(q, `delete from project_budget_lines where budget_id = $1`, [b1]);
@@ -410,7 +410,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
     const cross = await x.c.post(`/api/projects/${p.id}/progress`, { asOfDate: day(6, 1), items: [{ wbsId: ow.id, percent: '10' }] });
     expect(cross.json().error.code).toBe('WBS_NOT_FOUND');
 
-    await asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) => {
+    await asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) => {
       // erp_app'in yetkisi yalnızca SELECT/INSERT; tetikleyici ikinci savunma olarak sahip rolle sınanır
       const e = await expectDbError(q, `update project_progress set percent = 1 where project_id = $1`, [p.id]);
       expect(e.message).toMatch(/permission denied|değiştirilemez/);
@@ -497,7 +497,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
     const posted = await x.c.post(`/api/journal-entries/${id}/post`);
     expect(posted.statusCode).toBe(200);
 
-    await asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) => {
+    await asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) => {
       const e = await expectDbError(q, `update journal_lines set wbs_id = $2 where entry_id = $1 and project_id is not null`, [id, w.id]);
       expect(e.code).toBe('ERP01'); // kaydedilmiş satır değiştirilemez (mevcut koruma)
       const e2 = await expectDbError(q, `update journal_lines set project_id = null, wbs_id = null where entry_id = $1 and project_id is not null`, [id]);
@@ -547,7 +547,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
         [randomUUID(), x.company.id, entryId, lineNo, x.ids[account], projectId, wbsId],
       ];
 
-    await asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) => {
+    await asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) => {
       // geçerli: yaprak + gider hesabı
       await q(...insertLine('770', p.id, leaf.id, 50));
       // üst düğüm
@@ -566,7 +566,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
     await x.c.post(`/api/projects/${p.id}/status`, { status: 'active' });
     const real = await entry(x.c, x.ids, day(3, 11), '770', '40', { projectId: p.id, wbsId: leaf.id });
     await x.c.post(`/api/projects/${p.id}/status`, { status: 'completed' });
-    await asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) => {
+    await asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) => {
       expect((await expectDbError(q, ...insertLine('770', p.id, leaf.id, 60))).code).toBe('ERP09');
     });
     const rev = await x.c.post(`/api/journal-entries/${real.json().entry.id}/reverse`, { entryDate: day(3, 12) });
@@ -579,7 +579,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
     const supplier = await mkParty(x.c, 'Tedarikçi', 'supplier');
     const own = await mkProject(x.c);
     const contract = await mkProject(x.c, { name: 'Sözleşmeli', kind: 'contract', clientPartyId: customer.id });
-    await asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) => {
+    await asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) => {
       expect((await expectDbError(q, `update projects set kind = 'contract', client_party_id = $2 where id = $1`, [own.id, customer.id])).code).toBe('ERP09');
       expect((await expectDbError(q, `update projects set code = 'XYZ' where id = $1`, [own.id])).code).toBe('ERP09');
       expect((await expectDbError(q, `update projects set status = 'completed' where id = $1`, [own.id])).code).toBe('ERP09'); // planned → completed
@@ -605,7 +605,7 @@ describe('şantiye projeleri (B1a): proje, iş kırılımı, bütçe, ilerleme, 
     expect(cross.json().error.code).toBe('PROJECT_NOT_FOUND');
     // B bağlamında A'nın projesine ham SQL ile satır bağlama: RLS görünürlüğü + FK
     const draft = await entry(b.c, b.ids, day(3, 10), '770', '10', {}, false);
-    await asDb(handle, { companyId: b.company.id, orgId: b.orgId }, async (q) => {
+    await asDb(handle, { companyId: b.company.id, orgId: b.orgId, userId: b.s.userId }, async (q) => {
       const seen = await q(`select count(*)::int as n from projects where id = $1`, [pa.id]);
       expect(seen.rows[0].n).toBe(0);
       const e = await expectDbError(

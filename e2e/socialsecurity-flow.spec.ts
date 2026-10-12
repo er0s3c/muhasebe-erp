@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
+import { setupKktcPayroll } from './country-payroll';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +11,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -17,7 +20,7 @@ async function signUpWithCompany(page: Page, tag: string) {
 const thisMonth = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Nicosia', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7);
 
 /**
- * Sosyal güvenlik çıktıları: personel + puantaj + ücret + (TEST) oranlar → bordro onayı → sosyal güvenlik profili (numara maskeli) ve
+ * Sosyal güvenlik çıktıları: personel + puantaj + ücret + KKTC ülke kuralı (TEST oranları) → bordro onayı → sosyal güvenlik profili (numara maskeli) ve
  * destek kuralı (varsayılan kapalı → açık) + uygunluk → bildirim üret (GENEL düzen, resmî değil notu) → kesinleştir → bordro iptali ve
  * puantaj ayı açma engellenir → bildirimi yeniden aç → prim özeti.
  */
@@ -40,17 +43,9 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await page.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByText('Puantaj kaydedildi').first()).toBeVisible();
 
-  // Bordro ayarları: iki test oranı (açık) ve ücret şartı
-  await nav.getByRole('link', { name: 'Bordro ayarları' }).click();
-  const paramForm = page.locator('form').filter({ has: page.getByLabel('Kaynak notu') });
-  for (const [key, value] of [['employee_social_pct', '10'], ['employer_social_pct', '12']] as const) {
-    await paramForm.getByLabel('Parametre', { exact: true }).selectOption(key);
-    await paramForm.getByLabel(/^Değer/).fill(value);
-    await paramForm.getByLabel('Yeni parametre açık').click();
-    await paramForm.getByRole('button', { name: 'Ekle' }).click();
-    await expect(page.getByText('Parametre eklendi')).toBeVisible();
-    await expect(page.getByText('Parametre eklendi')).toBeHidden();
-  }
+  // Bordro ayarları: ücret şartı ve KKTC ülke kuralı (sigorta işçi %10, işveren %12; test değeri)
+  await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
+  await page.getByRole('tab', { name: 'Bordro' }).click();
   const termForm = page.locator('form').filter({ has: page.getByLabel('Ücret tutarı') });
   const empSelect = termForm.getByLabel('Personel', { exact: true });
   await empSelect.selectOption((await empSelect.locator('option', { hasText: 'Ali Demir' }).getAttribute('value'))!);
@@ -58,6 +53,7 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await termForm.getByLabel('Geçerlilik başlangıcı').fill(`${month}-01`);
   await termForm.getByRole('button', { name: 'Ekle' }).click();
   await expect(page.getByText('Ücret şartı eklendi')).toBeVisible();
+  await setupKktcPayroll(page, { month, employees: ['Ali Demir'], employeeInsurancePct: '10', employerInsurancePct: '12' });
 
   // Puantajı kapat, bordroyu aç ve onayla
   await nav.getByRole('link', { name: 'Puantaj' }).click();
@@ -73,8 +69,9 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await expect(page.getByText('Onaylı', { exact: true })).toBeVisible();
 
   // Sosyal güvenlik ayarları: profil (numara maskeli), destek kuralı (varsayılan kapalı), uygunluk
-  await nav.getByRole('link', { name: 'Sosyal güvenlik ayarları' }).click();
-  await expect(page.getByRole('heading', { name: 'Sosyal güvenlik ayarları', level: 1 })).toBeVisible();
+  await nav.getByRole('link', { name: 'İK ve bordro ayarları' }).click();
+  await page.getByRole('tab', { name: 'SGK' }).click();
+  await expect(page.getByRole('heading', { name: 'Sosyal güvenlik ayarları', level: 2 })).toBeVisible();
   await expect(page.getByText('Henüz profil yok')).toBeVisible();
   await expect(page.getByText('Henüz kural yok: prim desteği uygulanmaz')).toBeVisible();
   const profileForm = page.locator('form').filter({ has: page.getByLabel('Bordro tipi kodu') });
@@ -117,8 +114,8 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await expect(page.getByText('Beyan eklendi')).toBeVisible();
 
   // Bildirim: GENEL düzen notu, numara maskeli, prim bordrodan, destek yalnızca kural açık + uygunluk beyanı varken
-  await nav.getByRole('link', { name: 'Sosyal güvenlik', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Sosyal güvenlik çıktıları', level: 1 })).toBeVisible();
+  await nav.getByRole('link', { name: 'SGK bildirgeleri', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'SGK bildirgeleri', level: 1 })).toBeVisible();
   await expect(page.getByText(/resmî bildirim formatı değildir, doğrulanmadı/).first()).toBeVisible();
   await page.getByRole('button', { name: 'Yeni bildirim' }).first().click();
   await dialog.getByRole('button', { name: 'Bildirim üret' }).click();
@@ -148,15 +145,19 @@ test('sosyal güvenlik: profil → destek kuralı → bildirim → kesinleştir 
   await dialog.getByRole('button', { name: 'Bordroyu iptal et' }).click();
   await expect(dialog.getByText(/sosyal güvenlik bildirimi/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Vazgeç' }).click();
+  // Gerekçe yazılmış pencere vazgeçilince taslak koruması onay ister
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
   await nav.getByRole('link', { name: 'Puantaj' }).click();
   await page.getByRole('button', { name: 'Ayı yeniden aç' }).click();
   await dialog.getByLabel('Gerekçe').fill('Eksik mesai girişi');
   await dialog.getByRole('button', { name: 'Ayı yeniden aç' }).click();
   await expect(dialog.getByText(/sosyal güvenlik bildirimi/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Vazgeç' }).click();
+  // Gerekçe yazılmış pencere vazgeçilince taslak koruması onay ister
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
 
   // Prim özeti (kesinleşmiş): aya ve projeye göre
-  await nav.getByRole('link', { name: 'Sosyal güvenlik', exact: true }).click();
+  await nav.getByRole('link', { name: 'SGK bildirgeleri', exact: true }).click();
   await page.getByRole('tab', { name: 'Prim özeti' }).click();
   await expect(page.getByRole('heading', { name: 'Aya göre' })).toBeVisible();
   await expect(page.getByRole('row', { name: /SGB-/ })).toContainText('Kesinleşmiş');

@@ -1,0 +1,13 @@
+{
+  "id": "/",
+  "name": "Ada ERP",
+  "short_name": "Ada ERP",
+  "lang": "tr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#171716",
+  "theme_color": "#171716",
+  "description": "Şirketinizin muhasebe, stok ve operasyonlarını yönetin.",
+  "icons": [{ "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

@@ -166,12 +166,12 @@ export function PieceGeometryPanel({
 export function LeatherCutPlanningPanel({
   pieces,
 }: {
-  pieces: (Ref & { status: string; remainingArea: string })[];
+  pieces: (Ref & { status: string; remainingArea: string; tone?: string })[];
 }) {
   const { call } = useCompanyApi(),
     can = useCan(),
     queries = useQueryClient();
-  type Pattern = Ref & { modelId: string; area: string; direction: string };
+  type Pattern = Ref & { modelId: string; area: string; direction: string; status?: string };
   const data = useCQuery<{
     models: Ref[];
     orders: Ref[];
@@ -180,6 +180,8 @@ export function LeatherCutPlanningPanel({
       status: string;
       sets: number;
       plannedYield: string;
+      toneGroup?: string | null;
+      toneOverrideReason?: string | null;
       requiredArea: string;
       results?: { setsProduced: number }[];
     })[];
@@ -197,13 +199,14 @@ export function LeatherCutPlanningPanel({
       <h2 className="text-subheading">Kalıplar ve elle kesim planı</h2>
       <Records
         rows={data.data?.plans ?? []}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           { label: 'Plan', render: (r) => r.code },
           { label: 'Hedef set', numeric: true, render: (r) => r.sets },
           { label: 'Gerekli alan (m²)', numeric: true, render: (r) => r.requiredArea },
           { label: 'Planlanan verim (%)', numeric: true, render: (r) => r.plannedYield },
+          { label: 'Ton grubu', render: (r) => r.toneGroup ?? (r.toneOverrideReason ? 'Karışık (gerekçeli)' : '—') },
           {
             label: 'Gerçek set',
             numeric: true,
@@ -247,6 +250,12 @@ export function LeatherCutPlanningPanel({
               { value: 'any', label: 'Yön serbest' },
               { value: 'grain', label: 'Damar yönünde' },
             ]),
+            selectField('visibility', 'Parça konumu', [
+              { value: 'visible', label: 'Görünür (dış) — kusursuz alan ister' },
+              { value: 'hidden', label: 'Gizli (iç/astar) — çizik/ton kusuru kabul' },
+            ]),
+            { ...numberField('widthMm', 'Dış ölçü eni (mm, ölçek denetimi için)'), required: false },
+            { ...numberField('heightMm', 'Dış ölçü boyu (mm)'), required: false },
             reason,
           ]}
           submit={(v) =>
@@ -257,6 +266,8 @@ export function LeatherCutPlanningPanel({
               name: v.name,
               area: v.area,
               direction: v.direction,
+              visibility: v.visibility || 'visible',
+              ...(v.widthMm && v.heightMm ? { widthMm: Number(v.widthMm), heightMm: Number(v.heightMm) } : {}),
             })
           }
         />
@@ -272,6 +283,7 @@ export function LeatherCutPlanningPanel({
             ),
             numberField('sets', 'Hedef ürün seti'),
             reason,
+            textField('toneOverrideReason', 'Farklı ton gruplarını karıştırma gerekçesi (gerekirse)', false),
           ]}
           submit={(v) =>
             save('/api/leather/materials/cutting/plans', {
@@ -280,6 +292,7 @@ export function LeatherCutPlanningPanel({
               sets: Number(v.sets),
               pieces: selected,
               patterns: parts,
+              ...(v.toneOverrideReason ? { toneOverrideReason: v.toneOverrideReason } : {}),
             })
           }
         >
@@ -298,7 +311,7 @@ export function LeatherCutPlanningPanel({
                       )
                     }
                   />
-                  {p.code} · {displayQuantity(p.remainingArea)} m²
+                  {p.code} · {displayQuantity(p.remainingArea)} m²{p.tone ? ` · ton ${p.tone}` : ''}
                 </label>
               ))}
           </fieldset>
@@ -317,11 +330,13 @@ export function LeatherCutPlanningPanel({
                     }
                   >
                     <option value="">Kalıp seçin</option>
-                    {data.data?.patterns.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.code} · {r.name}
-                      </option>
-                    ))}
+                    {data.data?.patterns
+                      .filter((r) => r.status === 'active' || r.id === p.patternId)
+                      .map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.code} · {r.name}
+                        </option>
+                      ))}
                   </Select>
                 )}
               </Field>
@@ -372,7 +387,7 @@ export function ServiceTimePanel({ serviceId, members }: { serviceId: string; me
       <h3 className="text-subheading">Teknisyen ve gerçek çalışma süresi</h3>
       <Records
         rows={(data.data?.records ?? []).filter((r) => r.serviceId === serviceId)}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           {

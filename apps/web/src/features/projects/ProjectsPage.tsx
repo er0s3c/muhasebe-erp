@@ -1,3 +1,4 @@
+import { errorMessage } from '../../lib/errors';
 import { HardHat, Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -6,7 +7,7 @@ import { todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Input, Select } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -44,7 +45,7 @@ export function ProjectsPage() {
     if (query.trim()) q.set('q', query.trim());
     return q.toString();
   }, [status, kind, query]);
-  const { data, isPending } = useCQuery<{ projects: ProjectListRow[]; total: number }>(['projects', 'list', qs], `/api/projects?${qs}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ projects: ProjectListRow[]; total: number }>(['projects', 'list', qs], `/api/projects?${qs}`);
   const { data: summary } = useCQuery<ProjectsSummary>(['projects', 'summary', asOf], `/api/projects/summary?asOf=${asOf}`);
   const byId = useMemo(() => new Map((summary?.projects ?? []).map((p) => [p.id, p])), [summary]);
 
@@ -70,7 +71,7 @@ export function ProjectsPage() {
         }
       />
 
-      {isPending ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : projects.length === 0 && !filtered ? (
         <Card>

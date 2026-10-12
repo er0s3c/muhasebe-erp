@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +10,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -84,7 +86,9 @@ test('değişiklik emri: yürürlükteki taşeron sözleşmesi → DE (ek kalem 
   await dialog.getByLabel('Gerekçe').selectOption('client_request');
   await dialog.getByLabel('Süre uzatımı (gün)').fill('15');
   await dialog.getByRole('button', { name: 'Oluştur' }).click();
-  await expect(page.getByRole('heading', { name: /DE-0001/, level: 1 })).toBeVisible();
+  // V3 başlığı: belge numarası başlığın üstünde, başlık belge türüdür
+  await expect(page.getByRole('heading', { name: 'Değişiklik emri', level: 1 })).toBeVisible();
+  await expect(page.getByText('DE-0001', { exact: true }).first()).toBeVisible();
 
   // BOQ: pano 10 → 12 (+1.000), yeni kalem 20 adet × 250 (+5.000)
   await page.getByLabel('Miktar 2').fill('12');

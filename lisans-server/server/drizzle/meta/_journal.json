@@ -78,6 +78,13 @@
       "when": 1791270000005,
       "tag": "0010_manufacturing_sector",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791479017071,
+      "tag": "0011_feedback",
+      "breakpoints": true
     }
   ]
 }

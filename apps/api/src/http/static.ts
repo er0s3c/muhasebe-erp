@@ -15,9 +15,12 @@ export async function registerWebApp(app: FastifyInstance, webDir: string): Prom
     root: resolve(webDir),
     prefix: '/',
     index: 'index.html',
+    // Derlemede üretilen .br/.gz kopyaları (apps/web/scripts/precompress.mjs) tarayıcı kabul ediyorsa doğrudan sunulur
+    preCompressed: true,
     cacheControl: false,
     setHeaders(reply, filePath) {
-      const normalized = filePath.replaceAll('\\', '/');
+      // preCompressed açıkken sunulan dosya `index.html.br` / `.gz` olabilir; kural sıkıştırılmamış ada göre seçilir
+      const normalized = filePath.replaceAll('\\', '/').replace(/\.(br|gz)$/, '');
       if (normalized.includes('/assets/')) void reply.header('cache-control', 'public, max-age=31536000, immutable');
       else if (normalized.endsWith('/index.html')) void reply.header('cache-control', 'no-cache');
       else void reply.header('cache-control', 'public, max-age=300');

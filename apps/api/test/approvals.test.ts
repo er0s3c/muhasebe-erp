@@ -111,7 +111,8 @@ describe('inşaat parametreleri ve onay motoru (B2a)', async () => {
     const cancelled = await x.run(x.me, (tx) => cancelRequest(tx, x.ctxFor(x.me, 'owner'), again.id));
     expect(cancelled.status).toBe('cancelled');
 
-    await asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) => {
+    await asDb(handle, { userId: x.me, companyId: x.company.id, orgId: x.orgId }, async (q) => {
+      expect((await q('select id from approval_steps where request_id=$1', [req.id])).rows).toHaveLength(1);
       let e = await expectDbError(q, `update approval_steps set status = 'approved', decided_by = $2, decided_at = now() where request_id = $1`, [req.id, x.me]);
       expect(e.code).toBe('ERP10');
       e = await expectDbError(q, `update approval_requests set status = 'approved' where id = $1`, [req.id]);

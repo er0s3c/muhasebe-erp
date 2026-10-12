@@ -3,10 +3,15 @@ import { SECTORS } from '../module-registry';
 import { ROLES } from '../permissions';
 import { passwordSchema } from './auth';
 import { currencyCode } from './common';
+import { JURISDICTIONS, LEGAL_ENTITY_TYPES } from '../jurisdiction';
 
 export const createCompanySchema = z.object({
   name: z.string().trim().min(2).max(160),
   sector: z.enum(SECTORS),
+  jurisdiction: z.enum(JURISDICTIONS),
+  legalEntityType: z.enum(LEGAL_ENTITY_TYPES).default('company'),
+  vatRegistered: z.boolean().default(true),
+  activityCode: z.string().trim().max(40).optional(),
   baseCurrency: currencyCode.default('TRY'),
   /** Yönetim raporlama para birimi; boş bırakılırsa raporlama tutarı tutulmaz. */
   reportingCurrency: currencyCode.nullable().default('GBP'),

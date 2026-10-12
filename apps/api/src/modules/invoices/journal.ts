@@ -11,9 +11,12 @@ import {
 import type { AutoJournalLine } from '../ledger/journal';
 
 /** Yevmiye kurucusunun ihtiyaç duyduğu eşlemeler: hangi anahtarların gerektiği türe göre değişir. */
-export function requiredMappingKeys(type: InvoiceType, opts: { hasStock: boolean; hasStockAdjust: boolean }): AccountMappingKey[] {
+export function requiredMappingKeys(type: InvoiceType, opts: { hasStock: boolean; hasStockAdjust: boolean; hasVatWithholding?: boolean; hasIncomeWithholding?: boolean; hasStamp?: boolean }): AccountMappingKey[] {
   const meta = INVOICE_TYPE_META[type];
   const keys = new Set<AccountMappingKey>([meta.control, meta.side === 'sales' ? 'vat_output' : 'vat_input']);
+  if (opts.hasVatWithholding) keys.add(meta.side === 'sales' ? 'vat_withholding_receivable' : 'vat_withholding_payable');
+  if (opts.hasIncomeWithholding) keys.add(meta.side === 'sales' ? 'withholding_receivable' : 'withholding_payable');
+  if (opts.hasStamp) keys.add('default_expense').add('withholding_payable');
   if (meta.side === 'sales') {
     keys.add(meta.isReturn ? 'sales_return' : 'sales_revenue');
     if (opts.hasStock) keys.add('stock').add('cogs');
@@ -34,6 +37,12 @@ export interface JournalInvoiceLine {
   vatBase: MoneyValue;
   /** KDV oranı (yüzde, gruplama için). */
   vatRate: string;
+  vatWithheld?: MoneyValue;
+  vatWithheldBase?: MoneyValue;
+  incomeWithheld?: MoneyValue;
+  incomeWithheldBase?: MoneyValue;
+  stampCompany?: MoneyValue;
+  stampCompanyBase?: MoneyValue;
   /** Serbest satır / satış hesabı ezmesi; boşsa eşleme. */
   accountId: string | null;
   isStock: boolean;
@@ -46,6 +55,8 @@ export interface JournalInvoiceLine {
   /** Proje boyutu (yalnızca stoksuz alış/gider/alış iadesi satırı): gider satırına yazılır, KDV ve cari satırına yazılmaz. */
   projectId?: string | null;
   wbsId?: string | null;
+  /** Departman / maliyet merkezi (öneri 11): gelir ya da gider satırına yazılır. */
+  costCenterId?: string | null;
 }
 
 export interface BuildJournalInput {
@@ -120,32 +131,44 @@ export function buildInvoiceJournal(i: BuildJournalInput): BuiltJournal {
   }
 
   // 1) Cari satır
-  line(partyDebit ? 'debit' : 'credit', acc(meta.control), totalDoc, totalBase, { partyId: i.partyId, dueDate: i.dueDate });
+  const withheldDoc = i.lines.reduce((total, l) => total.plus(l.vatWithheld ?? 0).plus(l.incomeWithheld ?? 0), dec(0));
+  const withheldBase = i.lines.reduce((total, l) => total.plus(l.vatWithheldBase ?? 0).plus(l.incomeWithheldBase ?? 0), dec(0));
+  line(partyDebit ? 'debit' : 'credit', acc(meta.control), totalDoc.minus(withheldDoc), totalBase.minus(withheldBase), { partyId: i.partyId, dueDate: i.dueDate });
+  const taxSide = partyDebit ? 'debit' : 'credit';
+  for (const l of i.lines) {
+    if (l.vatWithheld?.gt(0)) line(taxSide, acc(salesSide ? 'vat_withholding_receivable' : 'vat_withholding_payable'), l.vatWithheld, l.vatWithheldBase!, { description: 'KDV tevkifatı' });
+    if (l.incomeWithheld?.gt(0)) line(taxSide, acc(salesSide ? 'withholding_receivable' : 'withholding_payable'), l.incomeWithheld, l.incomeWithheldBase!, { description: 'Stopaj' });
+    if (l.stampCompany?.gt(0)) {
+      line(meta.isReturn ? 'credit' : 'debit', acc('default_expense'), l.stampCompany, l.stampCompanyBase!, { description: 'Damga / pul gideri' });
+      line(meta.isReturn ? 'debit' : 'credit', acc('withholding_payable'), l.stampCompany, l.stampCompanyBase!, { description: 'Damga / pul yükümlülüğü' });
+    }
+  }
 
   // 2) Gövde: satış tarafında gelir/iade; alış tarafında stok ve gider
   // Gövde satırları hesap + proje + iş kalemi bazında toplanır: projesiz satırlar eskisi gibi hesap başına tek satır olur
-  const groups = new Map<string, { accountId: string; projectId: string | null; wbsId: string | null; net: MoneyValue; base: MoneyValue }>();
-  const addGroup = (accountId: string, net: MoneyValue, base: MoneyValue, projectId: string | null = null, wbsId: string | null = null) => {
-    const key = `${accountId}|${projectId ?? ''}|${wbsId ?? ''}`;
-    const g = groups.get(key) ?? { accountId, projectId, wbsId, net: dec(0), base: dec(0) };
+  const groups = new Map<string, { accountId: string; projectId: string | null; wbsId: string | null; costCenterId: string | null; net: MoneyValue; base: MoneyValue }>();
+  const addGroup = (accountId: string, net: MoneyValue, base: MoneyValue, projectId: string | null = null, wbsId: string | null = null, costCenterId: string | null = null) => {
+    const key = `${accountId}|${projectId ?? ''}|${wbsId ?? ''}|${costCenterId ?? ''}`;
+    const g = groups.get(key) ?? { accountId, projectId, wbsId, costCenterId, net: dec(0), base: dec(0) };
     g.net = g.net.plus(net);
     g.base = g.base.plus(base);
     groups.set(key, g);
   };
   for (const l of i.lines) {
     if (salesSide) {
-      addGroup(l.accountId ?? acc(meta.isReturn ? 'sales_return' : 'sales_revenue'), l.net, l.netBase);
+      addGroup(l.accountId ?? acc(meta.isReturn ? 'sales_return' : 'sales_revenue'), l.net, l.netBase, null, null, l.costCenterId ?? null);
     } else if (l.isStock) {
       // Alış iadesinde stok satırı, stok defterindeki çıkış değeriyle aşağıda ayrıca yazılır
       if (!meta.isReturn && !l.accruedPurchase) addGroup(l.stockAccountId ?? acc('stock'), l.net, l.netBase);
     } else {
-      addGroup(l.accountId ?? acc('default_expense'), l.net, l.netBase, l.projectId ?? null, l.wbsId ?? null);
+      addGroup(l.accountId ?? acc('default_expense'), l.net, l.netBase, l.projectId ?? null, l.wbsId ?? null, l.costCenterId ?? null);
     }
   }
   for (const g of groups.values()) {
     line(bodySide, g.accountId, g.net, g.base, {
       ...(g.projectId ? { projectId: g.projectId } : {}),
       ...(g.wbsId ? { wbsId: g.wbsId } : {}),
+      ...(g.costCenterId ? { costCenterId: g.costCenterId } : {}),
     });
   }
 

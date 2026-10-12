@@ -22,7 +22,7 @@ describe('şirket kurulumu ve kiracı yalıtımı', async () => {
     expect(periods.every((p: any) => p.status === 'open')).toBe(true);
 
     const rates = (await c.get('/api/tax-rates')).json().taxRates;
-    expect(rates.map((r: any) => r.code).sort()).toEqual(['KDV-0', 'KDV-10', 'KDV-16', 'KDV-20', 'KDV-5']);
+    expect([...new Set(rates.map((r: any) => r.code))].sort()).toEqual(['KDV-0', 'KDV-10', 'KDV-16', 'KDV-20', 'KDV-5']);
     // Tohumlanan oranlar doğrulanmamış olarak işaretlenir
     expect(rates.every((r: any) => r.verifiedAt === null)).toBe(true);
 

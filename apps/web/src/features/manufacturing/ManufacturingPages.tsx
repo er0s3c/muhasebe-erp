@@ -1,3 +1,6 @@
+import { LotTraceForward } from '../leather/LeatherInsights';
+import { WmsGuidance } from './WmsGuidance';
+import { errorMessage } from '../../lib/errors';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -5,9 +8,9 @@ import { todayIso } from '@erp/shared';
 import { useCQuery, useCan, useCompanyApi } from '../../lib/queries';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Stat } from '../../components/ui/Stat';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState } from '../../components/ui/Feedback';
 import { Status } from '../leather/common';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import {
   displayDateTime,
   displayQuantity,
@@ -22,9 +25,8 @@ import {
   selectField,
   options,
 } from '../leather/common';
-import { CustomValuesPanel } from './SupportPanels';
-import { ScheduleBuilder } from './ScheduleBuilder';
-import { PlanningExecutionPanel, ChannelExecutionPanel } from './ExecutionPanels';
+import { ChannelExecutionPanel } from './ExecutionPanels';
+import { PlanningPage } from './PlanningPage';
 export {
   LeatherModelsPage as ManufacturingCatalogPage,
   LeatherProductionPage as ManufacturingProductionPage,
@@ -61,6 +63,8 @@ function Records({
   actions,
   loading,
   error,
+  onRetry,
+  retrying,
 }: {
   title: string;
   rows: Row[];
@@ -68,6 +72,8 @@ function Records({
   actions?: (r: Row) => ReactNode;
   loading?: boolean;
   error?: Error | null;
+  onRetry?: () => void;
+  retrying?: boolean;
 }) {
   return (
     <>
@@ -76,6 +82,8 @@ function Records({
         rows={rows}
         loading={loading}
         error={error}
+        onRetry={onRetry}
+        retrying={retrying}
         columns={columns.map((c) => ({
           label: c.label,
           formatted: true,
@@ -273,9 +281,10 @@ export function ManufacturingMrpPage() {
 }
 
 export function ManufacturingOperationsPage() {
-  const path = useLocation().pathname,
-    maintenance = path.endsWith('/maintenance');
-  const area = maintenance ? 'manufacturing.maintenance' : 'manufacturing.planning';
+  return useLocation().pathname.endsWith('/maintenance') ? <MaintenanceOperationsPage /> : <PlanningPage />;
+}
+
+function MaintenanceOperationsPage() {
   const can = useCan(),
     { call } = useCompanyApi(),
     queries = useQueryClient();
@@ -285,40 +294,20 @@ export function ManufacturingOperationsPage() {
   };
   const resources = useCQuery<{ records: Row[] }>(
     ['manufacturing', 'resources'],
-    maintenance ? '/api/manufacturing/maintenance/resources' : '/api/manufacturing/resources',
+    '/api/manufacturing/maintenance/resources',
   );
   const records = useCQuery<{ records: Row[] }>(
-    ['manufacturing', maintenance ? 'maintenance' : 'schedules'],
-    maintenance ? '/api/manufacturing/maintenance' : '/api/manufacturing/planning/schedules',
-  );
-  const orders = useCQuery<{ orders: (Row & { operations: { key: string; name: string }[] })[] }>(
-    ['manufacturing', 'orders'],
-    '/api/manufacturing/production/orders',
-    { enabled: can('manufacturing.production.read') },
+    ['manufacturing', 'maintenance'],
+    '/api/manufacturing/maintenance',
   );
   const resourceOptions = options(resources.data?.records ?? [], (r) => String(r.name));
-  const support = useCQuery<{ employees: Row[] }>(
-    ['manufacturing', 'planning-lookups'],
-    '/api/manufacturing/planning/lookups',
-    { enabled: !maintenance },
-  );
-  const departments = useCQuery<{ records: Row[] }>(
-    ['manufacturing', 'departments'],
-    '/api/manufacturing/departments',
-    { enabled: !maintenance },
-  );
   const lookups = useCQuery<{ items: Row[]; warehouses: Row[] }>(
-    ['manufacturing', 'lookups', maintenance],
-    maintenance ? '/api/manufacturing/maintenance/lookups' : '/api/manufacturing/lookups',
-    {
-      enabled:
-        maintenance || can('manufacturing.production.read') || can('manufacturing.catalog.read'),
-    },
+    ['manufacturing', 'lookups', true],
+    '/api/manufacturing/maintenance/lookups',
   );
   const metrics = useCQuery<{ metrics: Row[] }>(
     ['manufacturing', 'metrics', todayIso()],
     `/api/manufacturing/maintenance/metrics?from=${todayIso().slice(0, 7)}-01&to=${todayIso()}`,
-    { enabled: maintenance },
   );
   const report = useCQuery<{ history: Row[] }>(
     ['manufacturing', 'reports'],
@@ -328,19 +317,16 @@ export function ManufacturingOperationsPage() {
   return (
     <>
       <PageHeader
-        title={maintenance ? 'Makine bakım ve arıza' : 'Kapasite ve termin planlama'}
+        title="Makine bakım ve arıza"
         description="Vardiya, bakım ve devamsızlık takvimleri kaynak kapasitesine birlikte uygulanır."
       />
-      {!maintenance && <PlanningExecutionPanel />}
       <Records
-        title={maintenance ? 'Bakım kayıtları' : 'Plan senaryoları'}
-        loading={records.isPending}
+        title="Bakım kayıtları"
+        loading={records.isPending} onRetry={() => void records.refetch()} retrying={records.isFetching}
         error={records.error}
         rows={(records.data?.records ?? []).map((r) => ({
           ...r,
-          name: maintenance
-            ? `${resources.data?.records.find((p) => p.id === r.resourceId)?.name ?? 'Kaynak'} · ${r.description ?? 'Bakım'}`
-            : r.code,
+          name: `${resources.data?.records.find((p) => p.id === r.resourceId)?.name ?? 'Kaynak'} · ${r.description ?? 'Bakım'}`,
           start:
             r.start ??
             r.operations?.reduce((first, o) => (!first || o.start < first ? o.start : first), ''),
@@ -348,143 +334,60 @@ export function ManufacturingOperationsPage() {
         }))}
         columns={[
           { key: 'code', label: 'Kayıt' },
-          ...(maintenance ? [{ key: 'name', label: 'Kaynak ve açıklama' }] : []),
+          { key: 'name', label: 'Kaynak ve açıklama' },
           { key: 'status', label: 'Durum' },
           { key: 'start', label: 'Başlangıç' },
-          { key: 'end', label: maintenance ? 'Gerçekleşen bitiş' : 'Bitiş' },
+          { key: 'end', label: 'Gerçekleşen bitiş' },
         ]}
-        actions={(r) => (
-          <>
-            {can(
-              maintenance ? 'manufacturing.maintenance.manage' : 'manufacturing.planning.approve',
-            ) && (maintenance ? r.status === 'open' : r.status === 'draft') ? (
-              <OperationForm
-                title={maintenance ? 'Kaydı tamamla' : 'Planı yayımla'}
-                description={
-                  maintenance
-                    ? 'Makine yeniden çalışabilir olduğunda gerçekleşen bitişi girin. Kaydı tamamlamak bakım nedeniyle kapalı kapasiteyi bu saatten itibaren açar.'
-                    : undefined
-                }
-                fields={
-                  maintenance
-                    ? [
-                        ...timeFields('end', 'Gerçekleşen bitiş', new Date()),
-                        ...(Array.isArray(r.spareParts) && r.spareParts.length
-                          ? [
-                              {
-                                name: 'date',
-                                label: 'Yedek parça sarf tarihi',
-                                type: 'date' as const,
-                                value: todayIso(),
-                                required: true,
-                              },
-                            ]
-                          : []),
-                      ]
-                    : []
-                }
-                submit={(v) =>
-                  save(
-                    maintenance
-                      ? `/api/manufacturing/maintenance/${r.id}/complete`
-                      : `/api/manufacturing/planning/schedules/${r.id}/publish`,
-                    {
-                      action: maintenance ? 'complete' : 'publish',
-                      date: v.date ?? todayIso(),
-                      ...(maintenance ? { end: time(v, 'end') } : {}),
-                      requestKey: v._requestKey,
-                    },
-                  )
-                }
-                action={maintenance ? 'Kaydı tamamla' : 'Planı yayımla'}
-              />
-            ) : null}
-            {!maintenance && r.status === 'draft' && can('manufacturing.planning.manage') && (
-              <OperationForm
-                title="Tarihi değiştir ve hesapla"
-                description={r.code}
-                fields={[
-                  ...timeFields('anchor', 'Yeni referans'),
-                  selectField(
-                    'direction',
-                    'Yön',
-                    [
-                      { value: 'forward', label: 'İleri' },
-                      { value: 'backward', label: 'Geri' },
-                    ],
-                    true,
-                    String(r.direction ?? 'forward'),
-                  ),
-                  textField('reason', 'Plan değişiklik nedeni', true),
-                ]}
-                submit={async (v) => {
-                  await call(`/api/manufacturing/planning/schedules/${r.id}`, {
-                    method: 'PUT',
-                    body: {
-                      anchor: time(v, 'anchor'),
-                      direction: v.direction,
-                      jobs: r.jobs,
-                      requestKey: v._requestKey,
-                      reason: v.reason,
-                    },
-                  });
-                  await queries.invalidateQueries();
-                }}
-              />
-            )}
-            {!maintenance && r.status === 'published' && can('manufacturing.planning.approve') && (
-              <OperationForm
-                title="Planı iptal et"
-                description={r.code}
-                fields={[]}
-                action="Kapasiteyi serbest bırak"
-                submit={() => save(`/api/manufacturing/planning/schedules/${r.id}/cancel`, {})}
-              />
-            )}
-          </>
-        )}
+        actions={(r) =>
+          can('manufacturing.maintenance.manage') && r.status === 'open' ? (
+            <OperationForm
+              title="Kaydı tamamla"
+              description="Makine yeniden çalışabilir olduğunda gerçekleşen bitişi girin. Kaydı tamamlamak bakım nedeniyle kapalı kapasiteyi bu saatten itibaren açar."
+              fields={[
+                ...timeFields('end', 'Gerçekleşen bitiş', new Date()),
+                ...(Array.isArray(r.spareParts) && r.spareParts.length
+                  ? [
+                      {
+                        name: 'date',
+                        label: 'Yedek parça sarf tarihi',
+                        type: 'date' as const,
+                        value: todayIso(),
+                        required: true,
+                      },
+                    ]
+                  : []),
+              ]}
+              submit={(v) =>
+                save(`/api/manufacturing/maintenance/${r.id}/complete`, {
+                  action: 'complete',
+                  date: v.date ?? todayIso(),
+                  end: time(v, 'end'),
+                  requestKey: v._requestKey,
+                })
+              }
+              action="Kaydı tamamla"
+            />
+          ) : null
+        }
       />
-      {!maintenance && (
-        <>
-          <Records
-            title="Senaryo karşılaştırması"
-            rows={(records.data?.records ?? []).flatMap((r) =>
-              (r.operations ?? []).map((o, i) => ({
-                ...o,
-                id: r.id + ':' + i,
-                scenario: r.code,
-                status: r.status,
-                operationKey:
-                  orders.data?.orders
-                    .find((p) => p.id === o.orderId)
-                    ?.operations.find((p) => p.key === o.operationKey)?.name ?? o.operationKey,
-              })),
-            )}
-            columns={[
-              { key: 'scenario', label: 'Senaryo' },
-              { key: 'operationKey', label: 'Operasyon' },
-              { key: 'start', label: 'Başlangıç' },
-              { key: 'end', label: 'Bitiş' },
-              { key: 'status', label: 'Durum' },
-            ]}
-          />
-        </>
-      )}
-      {maintenance && (
-        <Records
-          title="Bakım ve verimlilik göstergeleri"
-          rows={metrics.data?.metrics.map((r) => ({ ...r, id: String(r.resourceId) })) ?? []}
-          columns={[
-            { key: 'name', label: 'Kaynak' },
-            { key: 'plannedMinutes', label: 'Vardiya (dk)' },
-            { key: 'downtimeMinutes', label: 'Arıza (dk)' },
-            { key: 'mttrMinutes', label: 'MTTR (dk)' },
-            { key: 'mtbfMinutes', label: 'MTBF (dk)' },
-            { key: 'oee', label: 'OEE' },
-            { key: 'source', label: 'Veri kaynağı' },
-          ]}
-        />
-      )}
+      <Records
+        title="Bakım ve verimlilik göstergeleri"
+        loading={metrics.isPending}
+        error={metrics.error}
+        onRetry={() => void metrics.refetch()}
+        retrying={metrics.isFetching}
+        rows={metrics.data?.metrics.map((r) => ({ ...r, id: String(r.resourceId) })) ?? []}
+        columns={[
+          { key: 'name', label: 'Kaynak' },
+          { key: 'plannedMinutes', label: 'Vardiya (dk)' },
+          { key: 'downtimeMinutes', label: 'Arıza (dk)' },
+          { key: 'mttrMinutes', label: 'MTTR (dk)' },
+          { key: 'mtbfMinutes', label: 'MTBF (dk)' },
+          { key: 'oee', label: 'OEE' },
+          { key: 'source', label: 'Veri kaynağı' },
+        ]}
+      />
       {report.data && (
         <Records
           title="Gerçek ve standart operasyon süreleri"
@@ -498,178 +401,51 @@ export function ManufacturingOperationsPage() {
           ]}
         />
       )}
-      {can(area + '.manage') && (
-        <>
-          {!maintenance && (
-            <>
-              <Records
-                title="Kaynaklar"
-                rows={resources.data?.records ?? []}
-                columns={[
-                  { key: 'code', label: 'Kod' },
-                  { key: 'name', label: 'Kaynak' },
-                  { key: 'type', label: 'Tür' },
-                  { key: 'capacity', label: 'Eşzamanlı kapasite' },
-                ]}
-                actions={(r) => <CustomValuesPanel entity="resource" id={r.id} />}
-              />
-              <OperationForm
-                title="İş merkezi veya kaynak ekle"
-                fields={[
-                  textField('code', 'Kod'),
-                  textField('name', 'Ad'),
-                  selectField('type', 'Tür', [
-                    { value: 'machine', label: 'Makine' },
-                    { value: 'person', label: 'Personel' },
-                    { value: 'center', label: 'İş merkezi' },
-                  ]),
-                  numberField('capacity', 'Eşzamanlı kapasite', '1'),
-                  {
-                    ...selectField(
-                      'employeeId',
-                      'Personel',
-                      options(support.data?.employees ?? [], (r) => String(r.name)),
-                    ),
-                    required: false,
-                  },
-                  {
-                    ...selectField(
-                      'department',
-                      'Departman',
-                      (departments.data?.records ?? []).map((r) => ({
-                        value: String(r.name),
-                        label: String(r.name),
-                      })),
-                    ),
-                    required: false,
-                  },
-                ]}
-                submit={(v) =>
-                  save('/api/manufacturing/resources', {
-                    ...v,
-                    employeeId: v.employeeId || undefined,
-                    capacity: Number(v.capacity),
-                  })
-                }
-              />
-              <OperationForm
-                title="Şube ve departman ekle"
-                fields={[
-                  textField('code', 'Kod'),
-                  textField('name', 'Departman'),
-                  textField('branch', 'Şube'),
-                ]}
-                submit={(v) => save('/api/manufacturing/departments', v)}
-              />
-              <OperationForm
-                title="Özel alan tanımla"
-                fields={[
-                  textField('code', 'Alan kodu'),
-                  textField('name', 'Görünen ad'),
-                  selectField('entity', 'Kayıt türü', [
-                    { value: 'resource', label: 'Kaynak' },
-                    { value: 'production', label: 'Üretim emri' },
-                    { value: 'model', label: 'Model' },
-                    { value: 'item', label: 'Stok' },
-                  ]),
-                  selectField('type', 'Veri türü', [
-                    { value: 'text', label: 'Metin' },
-                    { value: 'number', label: 'Sayı' },
-                    { value: 'date', label: 'Tarih' },
-                    { value: 'choice', label: 'Seçim' },
-                  ]),
-                  selectField('required', 'Zorunlu', [
-                    { value: 'no', label: 'Hayır' },
-                    { value: 'yes', label: 'Evet' },
-                  ]),
-                  { ...textField('choices', 'Seçenekler (virgülle)'), required: false },
-                ]}
-                submit={(v) =>
-                  save('/api/manufacturing/custom-fields', {
-                    ...v,
-                    required: v.required === 'yes',
-                    choices: v.choices
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  })
-                }
-              />
-              <OperationForm
-                title="Çalışma takvimi"
-                fields={[
-                  selectField('resourceId', 'Kaynak', resourceOptions),
-                  ...timeFields('start', 'Başlangıç'),
-                  ...timeFields('end', 'Bitiş'),
-                  selectField('reason', 'Takvim türü', [
-                    { value: 'shift', label: 'Vardiya' },
-                    { value: 'absence', label: 'Devamsızlık' },
-                    { value: 'overtime', label: 'Fazla mesai' },
-                  ]),
-                ]}
-                submit={(v) =>
-                  save('/api/manufacturing/calendars', {
-                    resourceId: v.resourceId,
-                    start: time(v, 'start'),
-                    end: time(v, 'end'),
-                    reason: v.reason,
-                    available: v.reason !== 'absence',
-                  })
-                }
-              />
-              <ScheduleBuilder
-                orders={orders.data?.orders ?? []}
-                resources={(resources.data?.records ?? []).filter((r) => r.status === 'active')}
-              />
-            </>
-          )}
-          {maintenance && (
-            <OperationForm
-              title="Bakım veya arıza kaydı"
-              description="Başlangıcı kaydedin; bitiş saati gerekmez. Makine, kaydı gerçekleşen bitişiyle tamamlayana kadar üretim planlamasında kapalı kalır. Yedek parçalar tamamlandığında sarf edilir."
-              fields={[
-                selectField('resourceId', 'Makine', resourceOptions),
-                selectField('kind', 'Tür', [
-                  { value: 'planned', label: 'Planlı bakım' },
-                  { value: 'breakdown', label: 'Arıza' },
-                ]),
-                textField('description', 'Açıklama'),
-                ...timeFields('start', 'Başlangıç', new Date()),
-                {
-                  ...selectField(
-                    'warehouseId',
-                    'Yedek parça deposu',
-                    options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
-                  ),
-                  required: false,
-                },
-                {
-                  ...selectField(
-                    'spareItemId',
-                    'Yedek parça',
-                    options(lookups.data?.items ?? [], (r) => String(r.name)),
-                  ),
-                  required: false,
-                },
-                { ...numberField('spareQty', 'Parça miktarı', '1'), required: false },
-              ]}
-              submit={(v) =>
-                save('/api/manufacturing/maintenance', {
-                  resourceId: v.resourceId,
-                  kind: v.kind,
-                  description: v.description,
-                  start: time(v, 'start'),
-                  warehouseId: v.warehouseId || undefined,
-                  spareParts: v.spareItemId
-                    ? [{ itemId: v.spareItemId, quantity: v.spareQty }]
-                    : [],
-                })
-              }
-            />
-          )}
-        </>
+      {can('manufacturing.maintenance.manage') && (
+        <OperationForm
+          title="Bakım veya arıza kaydı"
+          description="Başlangıcı kaydedin; bitiş saati gerekmez. Makine, kaydı gerçekleşen bitişiyle tamamlayana kadar üretim planlamasında kapalı kalır. Yedek parçalar tamamlandığında sarf edilir."
+          fields={[
+            selectField('resourceId', 'Makine', resourceOptions),
+            selectField('kind', 'Tür', [
+              { value: 'planned', label: 'Planlı bakım' },
+              { value: 'breakdown', label: 'Arıza' },
+            ]),
+            textField('description', 'Açıklama'),
+            ...timeFields('start', 'Başlangıç', new Date()),
+            {
+              ...selectField(
+                'warehouseId',
+                'Yedek parça deposu',
+                options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
+              ),
+              required: false,
+            },
+            {
+              ...selectField(
+                'spareItemId',
+                'Yedek parça',
+                options(lookups.data?.items ?? [], (r) => String(r.name)),
+              ),
+              required: false,
+            },
+            { ...numberField('spareQty', 'Parça miktarı', '1'), required: false },
+          ]}
+          submit={(v) =>
+            save('/api/manufacturing/maintenance', {
+              resourceId: v.resourceId,
+              kind: v.kind,
+              description: v.description,
+              start: time(v, 'start'),
+              warehouseId: v.warehouseId || undefined,
+              spareParts: v.spareItemId
+                ? [{ itemId: v.spareItemId, quantity: v.spareQty }]
+                : [],
+            })
+          }
+        />
       )}
-      {records.error && <Callout tone="danger">{records.error.message}</Callout>}
+      {records.error && <ErrorState description={errorMessage(records.error)} onRetry={() => void records.refetch()} retrying={records.isFetching} />}
     </>
   );
 }
@@ -701,7 +477,7 @@ export function ManufacturingWarehousePage() {
         <Stat label="Raf">{bins.data?.records.length ?? '—'}</Stat>
         <Stat label="Yerleştirme">{placements.data?.records.length ?? '—'}</Stat>
       </div>
-      <SegmentedTabs
+      <SegmentedTabs id="warehouse-tabs" panelId={() => "warehouse-panel"}
         className="mb-4"
         items={[
           { key: 'lots', label: 'Partiler' },
@@ -711,11 +487,12 @@ export function ManufacturingWarehousePage() {
         value={selection}
         onChange={setSelection}
       />
+      <TabPanel id="warehouse-panel" labelledBy={`warehouse-tabs-${selection}`}>
       <Records
         title="Depo kayıtları"
         loading={
           (selection === 'bins' ? bins : selection === 'placements' ? placements : lots).isPending
-        }
+        } onRetry={() => void (selection === 'bins' ? bins : selection === 'placements' ? placements : lots).refetch()} retrying={(selection === 'bins' ? bins : selection === 'placements' ? placements : lots).isFetching}
         error={(selection === 'bins' ? bins : selection === 'placements' ? placements : lots).error}
         rows={(
           (selection === 'bins' ? bins : selection === 'placements' ? placements : lots).data
@@ -747,13 +524,19 @@ export function ManufacturingWarehousePage() {
                   ? 'Yerleştirilen miktar'
                   : 'Başlangıç miktarı',
           },
-          ...(selection === 'lots' ? [{ key: 'remainingQty', label: 'Kalan miktar' }] : []),
+          ...(selection === 'lots'
+            ? [
+                { key: 'remainingQty', label: 'Kalan miktar' },
+                { key: 'expiryDate', label: 'Son kullanma' },
+              ]
+            : []),
           { key: 'status', label: 'Durum' },
         ]}
         actions={(r) =>
           selection === 'lots' &&
           can('manufacturing.quality.approve') &&
           can('inventory.wms.manage') ? (
+            <>
             <OperationForm
               title="Kalite kararı"
               fields={[
@@ -770,6 +553,17 @@ export function ManufacturingWarehousePage() {
                 })
               }
             />
+            <OperationForm
+              title="Son kullanma tarihi"
+              fields={[
+                { name: 'expiryDate', label: 'Son kullanma tarihi (boş: tarihsiz)', type: 'date', value: String(r.expiryDate ?? '') },
+                textField('reason', 'Düzeltme nedeni', true),
+              ]}
+              submit={(v) =>
+                save(`/api/wms/lots/${r.id}/expiry`, { expiryDate: v.expiryDate || null, reason: v.reason })
+              }
+            />
+            </>
           ) : null
         }
       />
@@ -787,8 +581,10 @@ export function ManufacturingWarehousePage() {
                   options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
                 ),
                 numberField('capacity', 'Kapasite', '0'),
+                numberField('pickSequence', 'Toplama sırası', '0'),
+                selectField('allowedItemId', 'Yalnız bu karta ayrılmış (isteğe bağlı)', options(lookups.data?.items ?? [], (r) => String(r.name)), false),
               ]}
-              submit={(v) => save('/api/wms/bins', v)}
+              submit={({ allowedItemId, ...v }) => save('/api/wms/bins', { ...v, allowedItemIds: allowedItemId ? [allowedItemId] : [] })}
             />
           )}
           {selection === 'lots' && (
@@ -812,8 +608,14 @@ export function ManufacturingWarehousePage() {
                   options(lookups.data?.documents ?? [], (r) => String(r.code)),
                 ),
                 numberField('quantity', 'Miktar'),
+                {
+                  name: 'expiryDate',
+                  label: 'Son kullanma tarihi',
+                  type: 'date',
+                  hint: 'Boş bırakılırsa stok kartındaki raf ömründen önerilir.',
+                },
               ]}
-              submit={(v) => save('/api/wms/lots', v)}
+              submit={(v) => save('/api/wms/lots', { ...v, expiryDate: v.expiryDate || null })}
             />
           )}
           {selection === 'placements' && (
@@ -835,8 +637,11 @@ export function ManufacturingWarehousePage() {
               submit={(v) => save('/api/wms/placements', { ...v, requestKey: v._requestKey })}
             />
           )}
+          {selection === 'placements' && <WmsGuidance lots={lots.data?.records ?? []} onPlaced={() => void queries.invalidateQueries()} />}
+          {selection === 'lots' && <LotTraceForward lots={lots.data?.records ?? []} />}
         </>
       )}
+      </TabPanel>
     </>
   );
 }
@@ -861,7 +666,7 @@ export function ManufacturingLogisticsPage() {
       <PageHeader title="Paketleme ve sevkiyat" />
       <Records
         title="Sevkiyatlar"
-        loading={records.isPending}
+        loading={records.isPending} onRetry={() => void records.refetch()} retrying={records.isFetching}
         error={records.error}
         rows={records.data?.records ?? []}
         columns={[
@@ -976,13 +781,13 @@ export function ManufacturingIntegrationsPage() {
   return (
     <>
       <PageHeader
-        title="Entegrasyonlar"
+        title="Kanal bağlantıları"
         description="Bağlantı bilgileri girilene kadar kanallar bağlı değil görünür. Demo şirketi dış sistemlere veri göndermez."
       />
       <ChannelExecutionPanel connections={records.data?.records ?? []} />
       <Records
         title="Bağlantılar"
-        loading={records.isPending}
+        loading={records.isPending} onRetry={() => void records.refetch()} retrying={records.isFetching}
         error={records.error}
         rows={records.data?.records ?? []}
         columns={[

@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "sideEffects": [
+    "./src/schemas/common.ts",
+    "./src/zod-tr.ts"
+  ],
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {

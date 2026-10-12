@@ -81,6 +81,8 @@ export interface FixedAsset {
   draftAmount: string;
   bookValue: string;
   historyCount: number;
+  /** Etkin elden çıkarmanın tarihi; yoksa null. */
+  disposedOn: string | null;
   createdAt: string;
 }
 export interface DepreciationEntry {
@@ -94,5 +96,63 @@ export interface DepreciationEntry {
   entryNo: string | null;
   entryDate: string;
   reversalEntryId: string | null;
+  createdAt: string;
+}
+
+/** Demirbaş elden çıkarma (öneri 60): satış ya da hurdaya ayırma; kart kapanır, kâr/zarar ayrı hesaba yazılır. */
+export const ASSET_DISPOSAL_METHODS = ['sale', 'scrap'] as const;
+export type AssetDisposalMethod = (typeof ASSET_DISPOSAL_METHODS)[number];
+export const assetDisposalSchema = z
+  .object({
+    date: isoDate,
+    method: z.enum(ASSET_DISPOSAL_METHODS),
+    proceeds: moneyString.default('0').refine(decCheck((v) => v.gte(0) && v.decimalPlaces() <= 2), 'Satış bedeli sıfır ya da pozitif olmalı'),
+    assetAccountId: uuid,
+    proceedsAccountId: uuid.nullable().default(null),
+    gainAccountId: uuid.nullable().default(null),
+    lossAccountId: uuid.nullable().default(null),
+    note: z.string().trim().max(500).default(''),
+    version: z.number().int().positive(),
+  })
+  .refine((v) => v.method === 'sale' || dec(v.proceeds).eq(0), { message: 'Hurdaya ayırmada satış bedeli olmaz', path: ['proceeds'] })
+  .refine((v) => dec(v.proceeds).eq(0) || !!v.proceedsAccountId, { message: 'Satış bedelinin karşı hesabını seçin', path: ['proceedsAccountId'] });
+export type AssetDisposalInput = z.infer<typeof assetDisposalSchema>;
+
+/** Defter değeri = maliyet − kayıtlı birikmiş amortisman; kâr/zarar = satış bedeli − defter değeri. */
+export function disposalResult(cost: string, accumulated: string, proceeds: string) {
+  const bookValue = dec(cost).minus(accumulated);
+  return { bookValue: bookValue.toFixed(2), gainLoss: dec(proceeds).minus(bookValue).toFixed(2) };
+}
+
+/** Elden çıkarma ayından önceki, kullanım süresi içindeki ve kayıtlı amortismanı olmayan aylar. */
+export function missingDepreciationMonths(asset: Pick<FixedAssetInput, 'startMonth' | 'usefulMonths'>, disposalMonth: string, postedMonths: ReadonlySet<string>) {
+  const out: string[] = [];
+  let [y, m] = asset.startMonth.split('-').map(Number) as [number, number];
+  for (let i = 0; i < asset.usefulMonths; i++) {
+    const month = `${y}-${String(m).padStart(2, '0')}`;
+    if (month >= disposalMonth) break;
+    if (!postedMonths.has(month)) out.push(month);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
+export interface AssetDisposal {
+  id: string;
+  disposalDate: string;
+  method: AssetDisposalMethod;
+  proceeds: string;
+  cost: string;
+  accumulated: string;
+  bookValue: string;
+  gainLoss: string;
+  note: string;
+  journalEntryId: string;
+  reversalEntryId: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
   createdAt: string;
 }

@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@ui/Button';
+import { Brand } from '@ui/Brand';
 import { Callout } from '@ui/Feedback';
 import { Field, Input } from '@ui/Field';
 import { api, errorText } from '../api';
@@ -21,9 +22,13 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const pending = useRef(false);
+  const submitting = busy || passkeyBusy;
   const setup = useQuery({ queryKey: ['setup'], queryFn: () => api<{ needed: boolean }>('/admin/api/setup'), retry: false });
 
   const passkey = async () => {
+    if (pending.current) return;
+    pending.current = true;
     setPasskeyBusy(true);
     setError(null);
     try {
@@ -33,6 +38,7 @@ export function LoginPage() {
     } catch (e) {
       setError(passkeyErrorText(e));
     } finally {
+      pending.current = false;
       setPasskeyBusy(false);
     }
   };
@@ -40,6 +46,8 @@ export function LoginPage() {
   if (setup.data?.needed) return <Navigate to="/setup" replace />;
 
   const submit = async () => {
+    if (pending.current || !email || !password || totp.length !== 6) return;
+    pending.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -49,6 +57,7 @@ export function LoginPage() {
     } catch (e) {
       setError(errorText(e));
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -56,6 +65,7 @@ export function LoginPage() {
   return (
     <div className="flex min-h-full items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 sm:p-8">
+        <Brand className="mb-6 h-9" />
         <h1 className="text-heading">Lisans yönetimi</h1>
         <p className="mt-1.5 text-sm text-muted">Yönetici girişi: e-posta, parola ve kimlik doğrulama uygulamasındaki 6 haneli kod.</p>
         <form
@@ -81,7 +91,7 @@ export function LoginPage() {
               />
             )}
           </Field>
-          <Button type="submit" variant="primary" loading={busy} disabled={!email || !password || totp.length !== 6}>
+          <Button type="submit" variant="primary" loading={busy} disabled={submitting || !email || !password || totp.length !== 6}>
             Giriş yap
           </Button>
         </form>
@@ -92,7 +102,7 @@ export function LoginPage() {
               ya da
               <span className="h-px flex-1 bg-border" />
             </div>
-            <Button className="w-full" loading={passkeyBusy} onClick={() => void passkey()}>
+            <Button className="w-full" loading={passkeyBusy} disabled={submitting} onClick={() => void passkey()}>
               <KeyRound className="size-4" aria-hidden /> Giriş anahtarıyla giriş
             </Button>
           </>

@@ -1,14 +1,17 @@
-import { ChevronRight, Contact, Plus, Search, Upload } from 'lucide-react';
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { SearchInput } from '../../components/ui/SearchInput';
+import { ListToolbar, ResultFooter } from '../../components/ui/ListTools';
+import { ChevronRight, Contact, Plus, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
-import { Input, Select } from '../../components/ui/Field';
+import { EmptyState, ErrorState, ListSkeleton } from '../../components/ui/Feedback';
+import { Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { useCan, useCQuery } from '../../lib/queries';
+import { useCan, useCanOperation, useCQuery } from '../../lib/queries';
 import type { PartyKind, PartyListRow } from '../../lib/types';
 import { ImportWizard } from '../imports/ImportWizard';
 import { BalanceText } from './BalanceText';
@@ -19,7 +22,9 @@ const PAGE = 100;
 export function PartiesPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const canManage = useCan()('parties.manage');
+  const can = useCan();
+  const canOperation = useCanOperation();
+  const canManage = can('parties.manage') && canOperation('core.parties', 'create');
   const [text, setText] = useState('');
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<PartyKind | ''>('');
@@ -42,7 +47,7 @@ export function PartiesPage() {
   if (onlyBalance) params.set('hasBalance', 'true');
   if (!showInactive) params.set('active', 'true');
 
-  const { data, isPending } = useCQuery<{ parties: PartyListRow[]; total: number }>(
+  const { data, isPending, error, refetch, isFetching } = useCQuery<{ parties: PartyListRow[]; total: number }>(
     ['parties', 'list', params.toString()],
     `/api/parties?${params}`,
   );
@@ -68,11 +73,9 @@ export function PartiesPage() {
         }
       />
 
-      <div className="mb-5 flex flex-wrap items-center gap-4">
-        <div className="relative w-full max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted" aria-hidden />
-          <Input className="pl-9" placeholder={t('parties.searchPlaceholder')} value={text} onChange={(e) => setText(e.target.value)} aria-label={t('common.search')} />
-        </div>
+      <ListToolbar onReset={() => { setText(''); setKind(''); setOnlyBalance(false); setShowInactive(false); setLimit(PAGE); }}>
+        <CompanySavedViews page={`parties`} filters={{ kind, onlyBalance, showInactive }} onApply={(v) => { setText(''); setKind(v.kind as PartyKind | ''); setOnlyBalance(Boolean(v.onlyBalance)); setShowInactive(Boolean(v.showInactive)); setLimit(PAGE); }} />
+        <SearchInput placeholder={t('parties.searchPlaceholder')} value={text} onChange={setText} aria-label={t('common.search')} />
         <Select className="w-52" value={kind} onChange={(e) => setKind(e.target.value as PartyKind | '')} aria-label={t('parties.kind')}>
           <option value="">{t('parties.allKinds')}</option>
           <option value="customer">{t('parties.kinds.customer')}</option>
@@ -86,10 +89,12 @@ export function PartiesPage() {
           <input type="checkbox" className="size-4" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
           {t('parties.showInactive')}
         </label>
-      </div>
+      </ListToolbar>
 
       {isPending ? (
-        <PageLoading />
+        <ListSkeleton />
+      ) : error ? (
+        <ErrorState error={error} onRetry={() => void refetch()} retrying={isFetching} />
       ) : !data?.parties.length ? (
         <Card>
           <EmptyState
@@ -155,15 +160,7 @@ export function PartiesPage() {
               </tbody>
             </Table>
           </TableWrap>
-          <div className="mt-3 flex items-center justify-between text-sm text-muted">
-            <span>{t('parties.total', { count: data.total })}</span>
-            <span>{t('parties.balanceLegend')}</span>
-          </div>
-          {data.parties.length < data.total && (
-            <div className="mt-3 text-center">
-              <Button onClick={() => setLimit((l) => l + PAGE)}>{t('common.loadMore')}</Button>
-            </div>
-          )}
+          <ResultFooter shown={data.parties.length} total={data.total} loading={isFetching} onMore={() => setLimit((l) => l + PAGE)}><span>{t('parties.balanceLegend')}</span></ResultFooter>
         </>
       )}
 

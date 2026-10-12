@@ -4,10 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { CUSTOM_CODE_SCOPES } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Input } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
@@ -20,7 +20,7 @@ export function CustomCodesPage() {
   const toast = useToast();
   const canManage = useCan()('settings.manage');
   const [scope, setScope] = useState<Scope>('account');
-  const { data, isPending } = useCQuery<{ customCodes: CustomCode[] }>(['custom-codes', scope], `/api/custom-codes?scope=${scope}`);
+  const { data, isPending, error: CustomCodesPageQueryError, refetch: CustomCodesPageQueryRetry, isFetching: CustomCodesPageQueryFetching } = useCQuery<{ customCodes: CustomCode[] }>(['custom-codes', scope], `/api/custom-codes?scope=${scope}`);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
 
@@ -40,18 +40,20 @@ export function CustomCodesPage() {
       },
     );
 
+  if (CustomCodesPageQueryError && !data) return <ErrorState error={CustomCodesPageQueryError} onRetry={() => void CustomCodesPageQueryRetry()} retrying={CustomCodesPageQueryFetching} />;
   return (
     <>
       <PageHeader title={t('settings.customCodes.title')} description={t('settings.customCodes.subtitle')} />
 
-      <SegmentedTabs
+      <SegmentedTabs id="settings-CustomCodesPage-0" panelId={() => 'settings-CustomCodesPage-0-panel'}
         className="mb-5"
         value={scope}
         onChange={setScope}
         items={CUSTOM_CODE_SCOPES.map((s) => ({ key: s, label: t(`settings.customCodes.scopes.${s}`) }))}
       />
 
-      {canManage && (
+      <TabPanel id="settings-CustomCodesPage-0-panel" labelledBy={"settings-CustomCodesPage-0-" + (scope)}>
+{canManage && (
         <Card className="mb-5 p-4">
           <form
             className="flex flex-wrap items-end gap-3"
@@ -122,6 +124,7 @@ export function CustomCodesPage() {
           </Table>
         </TableWrap>
       )}
+</TabPanel>
     </>
   );
 }

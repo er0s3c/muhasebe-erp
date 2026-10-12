@@ -14,6 +14,7 @@ const DENY_TEXT: Record<DenyReason, string> = {
   ROLE_INSUFFICIENT: 'Bu şirkette konsolidasyon izniniz (reports.consolidation) yok',
   MODULE_DISABLED: 'Bu şirkette konsolidasyon modülü kapalı',
   LICENSE_SECTOR_MISMATCH: 'Lisansınız bu şirketin sektörünü kapsamıyor',
+  BRANCH_SCOPE_INSUFFICIENT: 'Şirket genelinde konsolidasyon için tüm şubelere erişim gerekir',
 };
 
 const userCtx = (ctx: AuthCtx) => ({ userId: ctx.user.id, orgId: ctx.user.orgId, ip: ctx.req.ip });

@@ -1,11 +1,12 @@
-import { ArrowLeft, Save, Trash2 } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { dec } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { MoneyInput } from '../../components/ui/MoneyInput';
@@ -38,7 +39,8 @@ export function CountEditorPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const unitLabel = useUnitLabel();
-  const canMove = useCan()('inventory.move');
+  const can = useCan();
+  const canMove = can('inventory.move');
   const { data, isPending, error } = useCQuery<StockCountDetail>(['stock-count', id], id ? `/api/stock-counts/${id}` : null);
   const [rows, setRows] = useState<Row[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -69,7 +71,9 @@ export function CountEditorPage() {
 
   const stored = new Map((data?.lines ?? []).map((l) => [l.itemId, l.systemQty]));
   /** Taslakta sistem miktarı canlıdır (sunucu), sonradan eklenen kart için depo miktarı kart listesinden gelir. */
-  const systemFor = (itemId: string): string | null => stored.get(itemId) ?? (draft ? (byId.get(itemId)?.onHand ?? '0') : null);
+  // Kör sayımda (öneri 45) sistem miktarı stok yöneticisi dışındakilere gösterilmez; kart listesinden de tamamlanmaz
+  const blindHidden = !!data?.count.blind && !can('inventory.manage');
+  const systemFor = (itemId: string): string | null => (blindHidden ? null : stored.get(itemId) ?? (draft ? (byId.get(itemId)?.onHand ?? '0') : null));
 
   const save = useCMutation(
     (_: void, call) =>
@@ -101,12 +105,14 @@ export function CountEditorPage() {
     save.mutate(undefined, {
       onSuccess: () => {
         setDirty(false);
+        markFormSaved(document.querySelector('[data-form-guard-scope="CountEditorPage"]'));
         toast.success(t('inventory.count.saved'));
       },
       onError: (e) => toast.error(errorMessage(e)),
     });
 
   const postNow = async () => {
+    if (save.isPending || post.isPending || remove.isPending) return;
     try {
       if (dirty) {
         await save.mutateAsync();
@@ -114,6 +120,7 @@ export function CountEditorPage() {
       }
       const res = await post.mutateAsync();
       setConfirmPost(false);
+      markFormSaved(document.querySelector('[data-form-guard-scope="CountEditorPage"]'));
       toast.success(t('inventory.count.posted', { no: res.count.countNo }));
       if (res.warnings?.zeroCostItems.length) setZeroCost(res.warnings.zeroCostItems);
     } catch (e) {
@@ -134,32 +141,24 @@ export function CountEditorPage() {
   };
 
   const diffOf = (r: Row): { text: string; tone: 'muted' | 'success' | 'danger' } => {
-    if (r.counted === '') return { text: '', tone: 'muted' };
+    if (r.counted === '' || blindHidden) return { text: '', tone: 'muted' };
     const diff = dec(r.counted).minus(systemFor(r.itemId) ?? 0);
     if (diff.isZero()) return { text: '0', tone: 'muted' };
     return { text: `${diff.gt(0) ? '+' : '−'}${qtyText(diff.abs().toFixed(4))}`, tone: diff.gt(0) ? 'success' : 'danger' };
   };
 
-  return (
+  return (<FormGuard captureAll scopeKey="CountEditorPage" pending={save.isPending || post.isPending || remove.isPending}>{(
     <>
-      <Link to="/inventory/counts" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t('inventory.count.back')}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{count.countNo ?? t('inventory.count.draftTitle')}</h1>
-            <Badge tone={draft ? 'warning' : 'success'}>{t(draft ? 'inventory.counts.draft' : 'inventory.counts.posted')}</Badge>
-          </div>
-          <p className="mt-1 text-sm text-muted">
-            {count.warehouseName} · {formatDateTR(count.countDate)}
-            {count.description && ` · ${count.description}`}
-          </p>
-        </div>
-        {editable && (
-          <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title={count.countNo ?? t('inventory.count.draftTitle')}
+        helpKey="count-editor"
+        back={{ to: '/inventory/counts', label: t('inventory.count.back') }}
+        recent={{ kind: 'Sayım' }}
+        sticky={editable}
+        meta={<Badge tone={draft ? 'warning' : 'success'}>{t(draft ? 'inventory.counts.draft' : 'inventory.counts.posted')}</Badge>}
+        description={`${count.warehouseName} · ${formatDateTR(count.countDate)}${count.description ? ` · ${count.description}` : ''}`}
+        actions={editable && (
+          <>
             <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="size-4 text-danger" aria-hidden />
               {t('inventory.count.delete')}
@@ -171,9 +170,9 @@ export function CountEditorPage() {
             <Button variant="primary" disabled={rows.every((r) => r.counted === '')} onClick={() => setConfirmPost(true)}>
               {t('inventory.count.post')}
             </Button>
-          </div>
+          </>
         )}
-      </div>
+      />
 
       {zeroCost.length > 0 && (
         <div className="mb-4">
@@ -307,6 +306,39 @@ export function CountEditorPage() {
       >
         {null}
       </Modal>
+      {draft && <RecountSection countId={count.id} lines={data.lines} />}
     </>
+  )}</FormGuard>);
+}
+
+/**
+ * Bağımsız yeniden sayım (öneri 45): tolerans dışı farkı olan satırlar, ilk sayımı girenden farklı biri tarafından yeniden
+ * sayılır; işlemede yeniden sayım esas alınır. Yalnız farkı görebilen (stok yöneticisi) kullanıcıya listelenir.
+ */
+function RecountSection({ countId, lines }: { countId: string; lines: StockCountDetail['lines'] }) {
+  const toast = useToast();
+  const due = lines.filter((l) => l.recountRequired || l.recountQty);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const save = useCMutation((_: void, call) => call<StockCountDetail>(`/api/stock-counts/${countId}/recount`, {
+    method: 'PUT', body: { lines: Object.entries(values).filter(([, v]) => v !== '').map(([itemId, recountQty]) => ({ itemId, recountQty })) },
+  }), STOCK_INVALIDATE);
+  if (due.length === 0) return null;
+  return (
+    <section aria-label="Yeniden sayım" className="mt-6 rounded-xl border border-border p-4" data-form-guard="off">
+      <h2 className="text-base font-semibold">Bağımsız yeniden sayım</h2>
+      <p className="mb-3 text-xs text-muted">Tolerans dışı farkı olan kartları ilk sayımı girenden farklı biri yeniden saymalı; işlemede yeniden sayım esas alınır.</p>
+      <ul className="flex flex-col gap-2">
+        {due.map((l) => (
+          <li key={l.itemId} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <span>{l.itemName} <span className="text-xs text-muted">· ilk sayım {l.countedQty} · sistem {l.systemQty ?? '—'}{l.recountQty ? ` · yeniden sayım ${l.recountQty}` : ''}</span></span>
+            <MoneyInput className="w-32 text-right" decimals={0} maxDecimals={4} aria-label={`Yeniden sayım: ${l.itemName}`} value={values[l.itemId] ?? ''} onChange={(v) => setValues((cur) => ({ ...cur, [l.itemId]: v }))} />
+          </li>
+        ))}
+      </ul>
+      <Button className="mt-3" size="sm" loading={save.isPending} disabled={!Object.values(values).some((v) => v !== '')} onClick={() => save.mutate(undefined, {
+        onSuccess: () => { setValues({}); toast.success('Yeniden sayım kaydedildi'); },
+        onError: (e) => toast.error(errorMessage(e)),
+      })}>Yeniden sayımı kaydet</Button>
+    </section>
   );
 }

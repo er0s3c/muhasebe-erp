@@ -40,12 +40,14 @@ export async function requireOpenPeriod(tx: Tx, date: string) {
     throw unprocessable(
       `${date} tarihi için dönem tanımlı değil. Ayarlar > Dönemler'den ${isoYear(date)} yılını oluşturun.`,
       'PERIOD_MISSING',
+      { date, year: isoYear(date) },
     );
   }
   if (period.status !== 'open') {
     throw unprocessable(
       `${period.year}-${String(period.month).padStart(2, '0')} dönemi kapalı`,
       'PERIOD_CLOSED',
+      { date, year: period.year, month: period.month },
     );
   }
   return period;

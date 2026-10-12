@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const directory = '.cache/ui-audit/details';
 const results: {
@@ -127,7 +128,7 @@ test('deri uzmanlaşması ve mağaza alt ekranları tasarım dilini korur', asyn
   const headers = { authorization: 'Bearer ' + (await registered.json()).accessToken };
   const created = await request.post('/api/companies', {
     headers,
-    data: { name: 'Deri arayüz test şirketi', sector: 'LEATHER_FASHION' },
+    data: { name: 'Deri arayüz test şirketi', sector: 'LEATHER_FASHION', jurisdiction: 'KKTC' },
   });
   expect(created.status(), await created.text()).toBe(201);
   await page.goto('/login');

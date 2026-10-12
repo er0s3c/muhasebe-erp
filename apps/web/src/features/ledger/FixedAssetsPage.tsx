@@ -9,6 +9,7 @@ import {
   type FixedAssetInput,
   type FixedAsset,
   type DepreciationEntry,
+  type AssetDisposal,
 } from '@erp/shared';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -26,6 +27,7 @@ import { errorMessage } from '../../lib/errors';
 import { useToast } from '../../components/ui/Toast';
 import type { Account } from '../../lib/types';
 import { useProjectOptions } from '../projects/common';
+import { AssetDisposalPanel } from './AssetDisposalPanel';
 
 const invalidate = [
   ['fixed-assets'],
@@ -176,8 +178,12 @@ function AssetContent() {
                 title={a.config.name}
                 description={`${a.config.code} · ${categories[a.config.category]}`}
                 action={
-                  <Badge tone={a.active ? 'success' : 'neutral'}>
-                    {a.active ? 'Aktif' : 'Pasif'}
+                  <Badge tone={a.disposedOn ? 'warning' : a.active ? 'success' : 'neutral'}>
+                    {a.disposedOn
+                      ? `Elden çıkarıldı · ${formatDateTR(a.disposedOn)}`
+                      : a.active
+                        ? 'Aktif'
+                        : 'Pasif'}
                   </Badge>
                 }
               />
@@ -241,17 +247,19 @@ function AssetContent() {
                           Düzenle
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        loading={active.isPending}
-                        onClick={() =>
-                          active.mutate(a, { onError: (e) => toast.error(errorMessage(e)) })
-                        }
-                      >
-                        <Archive className="size-4" />
-                        {a.active ? 'Pasifleştir' : 'Etkinleştir'}
-                      </Button>
+                      {!a.disposedOn && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          loading={active.isPending}
+                          onClick={() =>
+                            active.mutate(a, { onError: (e) => toast.error(errorMessage(e)) })
+                          }
+                        >
+                          <Archive className="size-4" />
+                          {a.active ? 'Pasifleştir' : 'Etkinleştir'}
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
@@ -482,11 +490,11 @@ function AssetForm({
   );
 }
 function AssetHistory({ id, onClose }: { id: string; onClose: () => void }) {
-  const query = useCQuery<{ asset: FixedAsset; history: DepreciationEntry[] }>(
-    ['fixed-assets', id],
-    `/api/fixed-assets/${id}`,
-    { refetchOnWindowFocus: true },
-  );
+  const query = useCQuery<{
+    asset: FixedAsset;
+    history: DepreciationEntry[];
+    disposals: AssetDisposal[];
+  }>(['fixed-assets', id], `/api/fixed-assets/${id}`, { refetchOnWindowFocus: true });
   const [month, setMonth] = useState(todayIso().slice(0, 7)),
     [cancel, setCancel] = useState<DepreciationEntry | null>(null),
     [reason, setReason] = useState(''),
@@ -579,6 +587,11 @@ function AssetHistory({ id, onClose }: { id: string; onClose: () => void }) {
                 </Button>
               )}
             </div>
+            <AssetDisposalPanel
+              asset={data.asset}
+              history={data.history}
+              disposals={data.disposals}
+            />
             <p className="text-xs text-muted">
               Plan tutarı tüm ayların hesaplanan toplamıdır. Defter değeri yalnızca kaydedilmiş ve
               iptal edilmemiş yevmiyelerden gelir. İptal edilen taslak muhasebeleştirilemez.

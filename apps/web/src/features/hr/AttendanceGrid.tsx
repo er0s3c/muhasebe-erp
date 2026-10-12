@@ -180,7 +180,7 @@ export function AttendanceGrid({ sheet, canEdit }: { sheet: AttendanceSheetData;
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
         {ATTENDANCE_DAY_TYPES.map((d) => (
           <span key={d} className="inline-flex items-center gap-1.5">
-            <span className={cn('inline-flex h-5 min-w-6 items-center justify-center rounded px-1 text-[11px]', DAY_TONE[d])}>{d === 'worked' ? '8' : t(`attendance.short.${d}`)}</span>
+            <span className={cn('inline-flex h-5 min-w-6 items-center justify-center rounded px-1 text-[12px]', DAY_TONE[d])}>{d === 'worked' ? '8' : t(`attendance.short.${d}`)}</span>
             {t(`attendance.dayTypes.${d}`)}
           </span>
         ))}
@@ -190,12 +190,12 @@ export function AttendanceGrid({ sheet, canEdit }: { sheet: AttendanceSheetData;
         <table className="border-collapse text-sm" aria-label={t('attendance.tabs.grid')}>
           <thead>
             <tr>
-              <th className="sticky left-0 z-20 min-w-48 border-b border-border bg-surface-2 px-3 py-2 text-left text-[11px] font-normal uppercase tracking-[0.05em] text-muted">{t('attendance.grid.employee')}</th>
+              <th className="sticky left-0 z-20 min-w-48 border-b border-border bg-surface-2 px-3 py-2 text-left text-[12px] font-normal uppercase tracking-[0.05em] text-muted">{t('attendance.grid.employee')}</th>
               {days.map((date) => {
                 const n = Number(date.slice(8));
                 const head = (
                   <>
-                    <span className="block text-[10px] leading-3 text-muted">{weekdays[weekday(date)]}</span>
+                    <span className="block text-[12px] leading-3 text-muted">{weekdays[weekday(date)]}</span>
                     <span className="block">{n}</span>
                   </>
                 );
@@ -218,7 +218,7 @@ export function AttendanceGrid({ sheet, canEdit }: { sheet: AttendanceSheetData;
                   </th>
                 );
               })}
-              <th className="min-w-16 border-b border-border bg-surface-2 px-2 py-2 text-right text-[11px] font-normal uppercase tracking-[0.05em] text-muted">{t('attendance.grid.total')}</th>
+              <th className="min-w-16 border-b border-border bg-surface-2 px-2 py-2 text-right text-[12px] font-normal uppercase tracking-[0.05em] text-muted">{t('attendance.grid.total')}</th>
             </tr>
           </thead>
           <tbody>
@@ -239,7 +239,7 @@ export function AttendanceGrid({ sheet, canEdit }: { sheet: AttendanceSheetData;
                       title={cellLabel(emp, date, v)}
                       onClick={() => apply([{ emp, date }])}
                       className={cn(
-                        'h-8 w-9 rounded text-[11px] leading-none transition-colors',
+                        'h-8 w-9 rounded text-[12px] leading-none transition-colors',
                         v ? DAY_TONE[v.dayType] : inEmploymentRange(emp, date) ? 'bg-transparent text-muted hover:bg-surface-2' : 'bg-surface-2/60 text-muted/40',
                         dirty && 'outline outline-2 outline-text',
                         (!editable || !brushOk) && 'cursor-default',
@@ -256,7 +256,7 @@ export function AttendanceGrid({ sheet, canEdit }: { sheet: AttendanceSheetData;
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="truncate">{emp.fullName}</div>
-                        <div className="font-mono text-[11px] text-muted">{emp.code}</div>
+                        <div className="font-mono text-[12px] text-muted">{emp.code}</div>
                       </div>
                       {canEdit && (
                         <button

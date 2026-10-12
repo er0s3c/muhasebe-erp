@@ -1,10 +1,10 @@
 import { and, eq, sql } from 'drizzle-orm';
-import { computeSupport, dec, isoYear, monthBounds, periodOverlaps, sumDeclaration, toDbAmount, type SupportRuleInput } from '@erp/shared';
+import { computeSupport, dec, isoYear, monthBounds, periodOverlaps, sumDeclaration, toDbAmount, type SupportRuleInput, type CountryPayrollSnapshot } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { payrollRuns, socialDeclarationLines, socialDeclarations } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { getMonthLock } from '../hr/attendance';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { logSocialAccess, profilesAtMonthEnd, type SocialCtx } from './config';
 import { paged, type PageQuery } from '../../http/paging';
 
@@ -37,6 +37,10 @@ export interface DeclarationLineView {
   premiumBase: string;
   employeePremium: string;
   employerPremium: string;
+  employeeProvident: string;
+  employerProvident: string;
+  employerLocalEmployment: string;
+  legalCalculationSnapshot: CountryPayrollSnapshot | null;
   supportEmployee: string;
   supportEmployer: string;
   employeeDue: string;
@@ -87,7 +91,7 @@ export async function buildDeclaration(tx: Tx, ctx: SocialCtx, month: string) {
   let [decl] = await tx.select().from(socialDeclarations).where(eq(socialDeclarations.month, month)).for('update');
   if (decl && decl.status !== 'draft') throw conflict(`${month} bildirimi kesinleşmiş (${decl.number}); önce yeniden açın`, 'SOCIAL_FINALIZED');
   if (!decl) {
-    const number = formatDocumentNumber('SGB', isoYear(`${month}-01`), await nextNumber(tx, ctx.companyId, 'SOCIAL_DECLARATION', isoYear(`${month}-01`)));
+    const number = await nextDocumentNumber(tx, ctx.companyId, 'SOCIAL_DECLARATION', isoYear(`${month}-01`), 'SGB');
     [decl] = await tx
       .insert(socialDeclarations)
       .values({ companyId: ctx.companyId, number, month, payrollRunId: run.id, payrollRunNumber: run.number, createdBy: ctx.userId })
@@ -99,7 +103,7 @@ export async function buildDeclaration(tx: Tx, ctx: SocialCtx, month: string) {
   const lines = await tx.execute<Record<string, unknown>>(sql`
     select id, employee_id as "employeeId", hour_days as "daysWorked", annual_leave_days as "annual", sick_leave_days as "sick",
            unpaid_leave_days as "unpaid", absent_days as "absent", social_base::text as base, employee_social::text as "employeeSocial",
-           employer_social::text as "employerSocial"
+           employer_social::text as "employerSocial", legal_calculation_snapshot as legal
       from payroll_lines where run_id = ${run.id} order by id`);
   const profiles = await profilesAtMonthEnd(tx, end);
   const rules = await ruleVersionsAt(tx, end);
@@ -112,6 +116,9 @@ export async function buildDeclaration(tx: Tx, ctx: SocialCtx, month: string) {
   const snapshot = new Map<string, { code: string; ruleId: string; name: string; target: string; mode: string; value: string; verified: boolean }>();
   const built: (typeof socialDeclarationLines.$inferInsert)[] = [];
   for (const l of lines.rows) {
+    const legal = l.legal as CountryPayrollSnapshot | null;
+    const employeePremium = legal ? dec(legal.employeeInsurance).plus(legal.employeeUnemployment).toFixed(2) : l.employeeSocial as string;
+    const employerPremium = legal ? dec(legal.employerInsurance).plus(legal.employerUnemployment).plus(legal.employerFloorTopUp).toFixed(2) : l.employerSocial as string;
     const empId = l.employeeId as string;
     const profile = profiles.get(empId);
     const warnings: DeclarationWarning[] = [];
@@ -121,7 +128,7 @@ export async function buildDeclaration(tx: Tx, ctx: SocialCtx, month: string) {
       if (!profile.payroll_type_code) warnings.push('no_payroll_type');
       if ((profile.insurance_start && profile.insurance_start > end) || (profile.insurance_end && profile.insurance_end < start)) warnings.push('insurance_outside_month');
     }
-    const days = Number(l.daysWorked);
+    const days = legal?.socialDays ?? Number(l.daysWorked);
     if (days === 0) warnings.push('no_days');
     if (Number(l.base) === 0) warnings.push('zero_base');
 
@@ -134,7 +141,7 @@ export async function buildDeclaration(tx: Tx, ctx: SocialCtx, month: string) {
       }
       applicable.push({ code: r.code, target: r.target as 'employer' | 'employee', mode: r.mode as 'percent_of_premium' | 'fixed_amount', value: r.value });
     }
-    const sup = computeSupport({ employee: l.employeeSocial as string, employer: l.employerSocial as string }, applicable);
+    const sup = computeSupport({ employee: employeePremium, employer: employerPremium }, applicable);
     for (const a of sup.applied) {
       const r = rules.get(a.code)!;
       snapshot.set(a.code, { code: r.code, ruleId: r.id, name: r.name, target: r.target, mode: r.mode, value: r.value, verified: r.verified });
@@ -154,8 +161,12 @@ export async function buildDeclaration(tx: Tx, ctx: SocialCtx, month: string) {
       unpaidLeaveDays: Number(l.unpaid),
       absentDays: Number(l.absent),
       premiumBase: toDbAmount(l.base as string),
-      employeePremium: toDbAmount(l.employeeSocial as string),
-      employerPremium: toDbAmount(l.employerSocial as string),
+      employeePremium: toDbAmount(employeePremium),
+      employerPremium: toDbAmount(employerPremium),
+      employeeProvident: toDbAmount(legal?.employeeProvident ?? '0'),
+      employerProvident: toDbAmount(legal?.employerProvident ?? '0'),
+      employerLocalEmployment: toDbAmount(legal?.employerLocalEmployment ?? '0'),
+      legalCalculationSnapshot: legal ? { ...legal } : null,
       supportEmployee: toDbAmount(sup.employee),
       supportEmployer: toDbAmount(sup.employer),
       supportCodes: sup.applied.length ? sup.applied.map((a) => a.code).join(',') : null,
@@ -171,6 +182,9 @@ export async function buildDeclaration(tx: Tx, ctx: SocialCtx, month: string) {
     .set({
       payrollRunId: run.id,
       payrollRunNumber: run.number,
+      jurisdiction: run.jurisdiction,
+      legalProfileSnapshot: run.legalProfileSnapshot,
+      countryConfigSnapshot: run.countryConfigSnapshot,
       employeeCount: totals.count,
       premiumBaseTotal: toDbAmount(totals.premiumBase),
       employeePremiumTotal: toDbAmount(totals.employeePremium),
@@ -207,6 +221,8 @@ export async function getDeclaration(tx: Tx, id: string, opts: { log?: boolean }
            l.days_worked as "daysWorked", l.annual_leave_days as "annualLeaveDays", l.sick_leave_days as "sickLeaveDays",
            l.unpaid_leave_days as "unpaidLeaveDays", l.absent_days as "absentDays", l.premium_base::text as "premiumBase",
            l.employee_premium::text as "employeePremium", l.employer_premium::text as "employerPremium",
+           l.employee_provident::text as "employeeProvident", l.employer_provident::text as "employerProvident",
+           l.employer_local_employment::text as "employerLocalEmployment", l.legal_calculation_snapshot as "legalCalculationSnapshot",
            l.support_employee::text as "supportEmployee", l.support_employer::text as "supportEmployer",
            l.support_codes as "supportCodes", l.warnings
       from social_declaration_lines l join employees e on e.id = l.employee_id

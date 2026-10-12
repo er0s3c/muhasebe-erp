@@ -9,12 +9,14 @@ import {
   wmsPlacementSchema,
   logisticsShipmentSchema,
   manufacturingRecordActionSchema,
+  lotExpiryUpdateSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { all, one, fail, lockLeatherCosts } from '../leather/common';
 import { manufacturingCtx } from './routes';
 import { createRecord, getRecord, listRecords, recordShape, updateRecord } from './service';
 import { queueInventoryChanges } from './channels';
+import { lotExpiryFor } from '../inventory/expiry';
 
 const id = (c: TenantCtx) => z.object({ id: uuid }).parse(c.req.params).id;
 export const manufacturingWarehouseRoutes: FastifyPluginAsync = async (app) => {
@@ -117,6 +119,7 @@ export const manufacturingWarehouseRoutes: FastifyPluginAsync = async (app) => {
         throw fail('Parti adedi kaynak kabul miktarını aşamaz');
       if (input.serials.length && !dec(input.quantity).eq(input.serials.length))
         throw fail('Seri sayısı miktarla eşleşmeli');
+      input.expiryDate ??= await lotExpiryFor(c.tx, input.itemId, doc.id, null);
       const record = await createRecord(c.tx, manufacturingCtx(c), 'lot', input, input.status);
       await queueInventoryChanges(c.tx, manufacturingCtx(c), 'lot-create:' + record.id, [
         input.itemId,
@@ -161,6 +164,22 @@ export const manufacturingWarehouseRoutes: FastifyPluginAsync = async (app) => {
       };
     }),
   );
+  // Son kullanma tarihi düzeltmesi (öneri 47): kalite onay yetkisiyle, gerekçesi partide izlenir
+  app.post(
+    '/api/wms/lots/:id/expiry',
+    tenantRoute(app, gate('inventory.wms', true), async (c) => {
+      c.require('manufacturing.quality.approve');
+      const input = lotExpiryUpdateSchema.parse(c.req.body);
+      const lot = await getRecord(c.tx, id(c), 'lot', true);
+      if (['consumed', 'partitioned', 'leather_traced'].includes(lot.status)) throw fail('Bu partinin son kullanma tarihi değiştirilemez');
+      const history = [
+        ...((lot.config.expiryHistory as unknown[] | undefined) ?? []),
+        { from: lot.config.expiryDate ?? null, to: input.expiryDate, reason: input.reason, by: c.user.id, at: new Date().toISOString() },
+      ].slice(-20);
+      const record = await updateRecord(c.tx, lot.id, lot.status, { ...lot.config, expiryDate: input.expiryDate, expiryHistory: history });
+      return { record };
+    }),
+  );
   app.post(
     '/api/wms/placements',
     tenantRoute(app, gate('inventory.wms', true), async (c) => {
@@ -182,6 +201,9 @@ export const manufacturingWarehouseRoutes: FastifyPluginAsync = async (app) => {
       const lot = await getRecord(c.tx, input.lotId, 'lot', true),
         bin = await getRecord(c.tx, input.binId, 'bin', true);
       if (lot.warehouse_id !== bin.warehouse_id) throw fail('Raf aynı depoda olmalı');
+      // Raf uyumluluğu (öneri 43): tanımlı ürün listesi olan raf başka kartı kabul etmez
+      if (Array.isArray(bin.config.allowedItemIds) && bin.config.allowedItemIds.length && !bin.config.allowedItemIds.includes(lot.item_id))
+        throw fail('Bu raf bu stok kartını kabul etmiyor');
       const placed = await one(
         c.tx,
         sql`select coalesce(sum(coalesce(config->>'remainingQty',config->>'quantity')::numeric),0)::text as qty from manufacturing_records where kind='placement' and config->>'lotId'=${lot.id}`,

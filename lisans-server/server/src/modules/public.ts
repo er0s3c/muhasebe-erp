@@ -11,6 +11,9 @@ import {
   peekEnvelope,
   signToken,
   verifyEnvelope,
+  feedbackEnvelopeSchema,
+  feedbackRequestSchema,
+  FEEDBACK_ENVELOPE_BODY_LIMIT,
   type EnvelopeKind,
 } from '@erp/license-core';
 import { audit } from '../audit';
@@ -18,6 +21,7 @@ import { activations, customers, licenses } from '../db/schema';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors';
 import { buildLease, countActiveActivations, getLicenseForUpdate, requireSupportedSectors, type ActivationRow } from './licenses';
 import { updateOfferFor } from './releases';
+import { receiveFeedback } from './feedback';
 
 /** İstemci ile satıcı saati arasında kabul edilen en büyük fark (yeniden oynatma penceresi de budur). */
 export const MAX_SKEW_MS = 10 * 60 * 1000;
@@ -157,7 +161,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     kind: EnvelopeKind,
     parse: (raw: unknown) => T & { installationId: string; ts: number; protocolVersion?: 2; timeNonce?: string },
   ): Promise<{ payload: T & { installationId: string; ts: number }; activation: ActivationRow }> {
-    const env = envelopeBodySchema.pick({ p: true, s: true }).parse(req.body);
+    const env = (kind === 'feedback' ? feedbackEnvelopeSchema : envelopeBodySchema.pick({ p: true, s: true })).parse(req.body);
     const claimed = parse(checked(() => peekEnvelope(env)));
     const [activation] = await app.db.select().from(activations).where(eq(activations.installationId, claimed.installationId));
     if (!activation) throw notFound('Bu kurulum tanınmıyor; yeniden etkinleştirin', 'UNKNOWN_INSTALLATION');
@@ -166,6 +170,16 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     verifyTime(payload);
     return { payload, activation };
   }
+
+  app.post('/v1/feedback', { bodyLimit: FEEDBACK_ENVELOPE_BODY_LIMIT }, async (req, reply) => {
+    rate(`feedback:${req.ip}`, 30, 10 * 60_000);
+    const { payload, activation } = await authenticateInstallation(req, 'feedback', raw => feedbackRequestSchema.parse(raw));
+    if (payload.fingerprint !== activation.fingerprint) throw conflict('Sunucu parmak izi değişti; kurulumu yeniden doğrulayın', 'FINGERPRINT_CHANGED');
+    rate(`feedback-installation:${activation.id}`, 30, 10 * 60_000);
+    const report = await app.db.transaction(tx => receiveFeedback(tx, activation, payload, app.now(), req.ip));
+    void reply.code(201);
+    return { feedback: report };
+  });
 
   app.post('/v1/heartbeat', { bodyLimit: 16 * 1024 }, async (req) => {
     rate(`heartbeat:${req.ip}`, 120, 10 * 60_000);

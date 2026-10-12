@@ -51,7 +51,7 @@ describe('şantiye projeleri (B1b): kaynaklar (fatura, stok, kasa), maliyet rapo
   };
   const rowOf = (r: Awaited<ReturnType<typeof report>>, code: string) => r.rows.find((x) => x.code === code)!;
   const taggedLines = (x: Ctx, sourceId: string) =>
-    asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) =>
+    asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) =>
       (
         await q(
           `select a.code as account, pw.code as wbs, p.code as project, jl.debit_base::float as d, jl.credit_base::float as c
@@ -63,7 +63,7 @@ describe('şantiye projeleri (B1b): kaynaklar (fatura, stok, kasa), maliyet rapo
       ).rows as { account: string; wbs: string | null; project: string | null; d: number; c: number }[],
     );
   const projectNet = (x: Ctx, projectId: string) =>
-    asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) => Number((await q(`select coalesce(sum(debit_base - credit_base), 0) as n from journal_lines where project_id = $1`, [projectId])).rows[0].n));
+    asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) => Number((await q(`select coalesce(sum(debit_base - credit_base), 0) as n from journal_lines where project_id = $1`, [projectId])).rows[0].n));
 
   // ------------------------------------------------------------------ maliyet raporu
 
@@ -335,7 +335,7 @@ describe('şantiye projeleri (B1b): kaynaklar (fatura, stok, kasa), maliyet rapo
     const rev = await x.c.post(`/api/stock-documents/${doc.document.id}/reverse`, { docDate: day(3, 6) });
     expect(rev.statusCode).toBe(200);
     expect(await projectNet(x, p.id)).toBe(0);
-    const moves = await asDb(handle, { companyId: x.company.id, orgId: x.orgId }, async (q) =>
+    const moves = await asDb(handle, { companyId: x.company.id, orgId: x.orgId, userId: x.s.userId }, async (q) =>
       Number((await q(`select coalesce(sum(value), 0) as n from stock_movements where project_id = $1`, [p.id])).rows[0].n),
     );
     expect(moves).toBe(0);

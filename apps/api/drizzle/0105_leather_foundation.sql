@@ -201,8 +201,8 @@ ALTER TABLE items ADD COLUMN inventory_role text NOT NULL DEFAULT 'merchandise';
 ALTER TABLE items ADD CONSTRAINT items_inventory_role_ck CHECK (inventory_role IN ('raw_material','semi_finished','finished_goods','merchandise'));
 ALTER TABLE account_mappings DROP CONSTRAINT account_mappings_key_ck;
 ALTER TABLE account_mappings ADD CONSTRAINT account_mappings_key_ck CHECK (key in ('receivable','payable','sales_revenue','sales_return','cogs','stock','vat_output','vat_input','default_expense','stock_gain','stock_loss','consumption','opening_offset','fx_gain','fx_loss','subcontract_cost','retention_payable','withholding_payable','subcontract_advance','claim_revenue','retention_receivable','advance_received','withholding_receivable','deferred_revenue','property_revenue','termination_income','fee_payable','vat_withholding_payable','vat_withholding_receivable','payroll_labor_cost','payroll_employer_cost','payroll_payable','payroll_social_payable','payroll_tax_payable','payroll_other_payable','cheque_portfolio','note_portfolio','docs_in_collection','cheque_issued','note_payable','import_cost_clearing','employee_advance','year_end_profit','year_end_loss','year_end_retained_profit','year_end_retained_loss','raw_material_stock','semi_finished_stock','finished_goods_stock','production_wip','produced_cogs','goods_receipt_accrual'));
-INSERT INTO account_mappings(company_id,key,account_id)
-SELECT a.company_id, k.key, a.id FROM accounts a JOIN (VALUES
+INSERT INTO account_mappings(id,company_id,key,account_id)
+SELECT gen_random_uuid(), a.company_id, k.key, a.id FROM accounts a JOIN (VALUES
  ('raw_material_stock','150'),('semi_finished_stock','151'),('finished_goods_stock','152'),
  ('production_wip','151'),('produced_cogs','620'),('goods_receipt_accrual','381')
 ) AS k(key,code) ON a.code=k.code

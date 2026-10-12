@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
+import { PageTitle } from '../../components/ui/Card';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Modal } from '../../components/ui/Sheet';
 import { Stat } from '../../components/ui/Stat';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
@@ -65,11 +66,12 @@ export function SubcontractDetailPage() {
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="flex flex-wrap items-center gap-3 text-2xl">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-[15px] text-muted">{sc.code}</span>
-              {sc.title}
-              <SubcontractStatusBadge status={sc.status} />
-            </h1>
+              <PageTitle title={sc.title} helpKey="subcontract-detail" recent={{ kind: 'Taşeron sözleşmesi', title: `${sc.code} ${sc.title}` }}>
+                <SubcontractStatusBadge status={sc.status} />
+              </PageTitle>
+            </div>
             <p className="mt-1 text-sm text-muted">
               {sc.partyName} · <Link className="underline" to={`/projects/${sc.projectId}`}>{sc.projectCode} {sc.projectName}</Link>
               {sc.startDate ? ` · ${formatDateTR(sc.startDate)}` : ''}
@@ -111,7 +113,7 @@ export function SubcontractDetailPage() {
         <Stat label={t('subcontracts.kpi.terms')} sub={t('subcontracts.kpi.termsSub', { withholding: Number(sc.withholdingPct) })}>{t('subcontracts.kpi.days', { days: sc.paymentDays })}</Stat>
       </div>
 
-      <SegmentedTabs
+      <SegmentedTabs id="subcontracts-SubcontractDetailPage-0" panelId={() => 'subcontracts-SubcontractDetailPage-0-panel'}
         value={tab}
         onChange={setTab}
         items={[
@@ -121,7 +123,8 @@ export function SubcontractDetailPage() {
           { key: 'balances', label: t('subcontracts.tabs.balances') },
         ]}
       />
-      {tab === 'boq' && <BoqTab detail={data} />}
+      <TabPanel id="subcontracts-SubcontractDetailPage-0-panel" labelledBy={"subcontracts-SubcontractDetailPage-0-" + (tab)}>
+{tab === 'boq' && <BoqTab detail={data} />}
       {tab === 'variations' && <VariationsTab detail={data} />}
       {tab === 'progress' && <ProgressList subcontractId={sc.id} canCreate={sc.status === 'active'} />}
       {tab === 'balances' && <BalancesTab detail={data} />}
@@ -153,6 +156,7 @@ export function SubcontractDetailPage() {
       >
         <span />
       </Modal>
+</TabPanel>
     </div>
   );
 }

@@ -192,6 +192,8 @@ Geçersiz/eksik değerde uygulama başlamaz ve nedenini yazar. Boş değer "tan�
 | `NOTIFY_INTERVAL_MINUTES` | `30` | Tarama aralığı (1–1440 dk). Bildirimler ve hatırlatmalar en çok bu kadar gecikir |
 | `NOTIFY_RETENTION_DAYS` | `90` | Okunmuş/kapatılmış/çözülmüş bildirimlerin saklama süresi (7–3650 gün); açık bildirim silinmez |
 | `NOTIFY_DIGEST_HOUR` | `8` | E-posta özetinin gönderileceği ilk yerel saat (Europe/Nicosia, 0–23); yalnızca SMTP açıkken ve kullanıcı istediyse |
+| `OUTBOX_ENABLED` | `true` | Kalıcı e-posta outbox göndericisi. Fatura gönderimleri ve bildirim özetleri işlemle aynı anda `outbox_messages` tablosuna yazılır; gönderici kira alarak gönderir, hatada 30 sn → 6 sa aralıklarla en çok 6 kez dener. Sunucu yeniden başlasa da ileti kaybolmaz. Parola sıfırlama/doğrulama iletileri jeton içerdiği için saklanmaz, doğrudan gönderilir |
+| `OUTBOX_INTERVAL_SECONDS` | `30` | Outbox tur aralığı (5–3600 sn) |
 | `WEB_DIST_DIR` | imajda `/app/web` | Derlenmiş arayüz klasörü |
 | `APP_VERSION` | `dev` | İmaj derlemesinde verilir; `/api/public-config` döndürür |
 | `LICENSE_SERVER_URL` | imaja gömülü | Lisans sunucusu adresi (yalnızca `https`); verilirse derlemede gömülü varsayılanın yerine geçer. Normalde boş bırakılır: satıcı imajı derlerken belirler |

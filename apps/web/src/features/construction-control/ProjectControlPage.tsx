@@ -27,7 +27,8 @@ const PanoramaViewer = lazy(() =>
   import('./ModelViewer').then((m) => ({ default: m.PanoramaViewer })),
 );
 import { DrawingCanvas } from './DrawingCanvas';
-import { fileBase64, prepareOfflineShell, prepareFieldPackage } from './offline';
+import { fileBase64, prepareFieldPackage } from './offline';
+import { prepareOfflineShell } from './offline-shell';
 
 const tabs = [
   { key: 'overview', label: 'Özet' },
@@ -388,7 +389,7 @@ export function ProjectControlPage() {
                       ? Number(cockpit.data.metrics.actual).toLocaleString('tr-TR')
                       : '—'}
                   </Stat>
-                  <Stat label="Tahmini toplam maliyet" sub="Mevcut ERP EAC hesabı">
+                  <Stat label="Tahmini toplam maliyet" sub="Tamamlanma maliyeti tahmini">
                     {cockpit.data?.metrics
                       ? Number(cockpit.data.metrics.eac).toLocaleString('tr-TR')
                       : '—'}

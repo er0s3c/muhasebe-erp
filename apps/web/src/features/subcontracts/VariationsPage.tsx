@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Select } from '../../components/ui/Field';
 import { useCQuery } from '../../lib/queries';
 import type { VariationRow } from '../../lib/types';
@@ -24,10 +24,11 @@ export function VariationsPage() {
     for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
     return q.toString();
   }, [params]);
-  const { data, isPending } = useCQuery<{ variations: VariationRow[] }>(['variations', 'list', qs], `/api/variation-orders?${qs}`);
+  const { data, isPending, error: VariationsPageQueryError, refetch: VariationsPageQueryRetry, isFetching: VariationsPageQueryFetching } = useCQuery<{ variations: VariationRow[] }>(['variations', 'list', qs], `/api/variation-orders?${qs}`);
   const rows = data?.variations ?? [];
   const filtered = !!(projectId || direction || status);
 
+  if (VariationsPageQueryError && !data) return <ErrorState error={VariationsPageQueryError} onRetry={() => void VariationsPageQueryRetry()} retrying={VariationsPageQueryFetching} />;
   return (
     <>
       <PageHeader

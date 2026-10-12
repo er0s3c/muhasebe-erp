@@ -79,7 +79,7 @@ const token = login.json().accessToken as string;
 const me = (await call('GET', '/api/me', token, null)).json();
 let company = (me.companies as { id: string; name: string }[]).find((c) => c.name === 'Yük İnşaat Ltd.');
 if (!company) {
-  const res = await call('POST', '/api/companies', token, null, { name: 'Yük İnşaat Ltd.', sector: 'CONSTRUCTION' });
+  const res = await call('POST', '/api/companies', token, null, { name: 'Yük İnşaat Ltd.', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' });
   if (res.statusCode !== 201) throw new Error(`şirket başarısız: ${res.body}`);
   company = res.json().company;
 }

@@ -1,10 +1,12 @@
-import { ArrowLeft, ClipboardList, Plus, Trash2, Truck, X, Paperclip } from 'lucide-react';
+import { ClipboardList, Plus, Trash2, Truck, X, Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, ITEM_UNITS, calcInvoice, dec, formatTR, todayIso } from '@erp/shared';
+import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, ITEM_UNITS, calcInvoice, calculateDocumentTaxes, calculateDocumentStamp, applyRate, dec, formatTR, todayIso, type DocumentTaxRuleSnapshot, type DocumentTaxCalculation, type MoneyValue } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { ErrorCallout } from '../../components/layout/Blocked';
+import { FormDetailToggle } from '../../components/layout/FormDetailToggle';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
@@ -14,15 +16,20 @@ import { useToast } from '../../components/ui/Toast';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { money, moneyIn } from '../../lib/format';
-import { useCan, useCMutation, useCompanyApi, useCQuery } from '../../lib/queries';
+import { useFormDetail } from '../../lib/personal';
+import { useCan, useCMutation, useCompanyApi, useCQuery, useIdempotencyKey } from '../../lib/queries';
 import type { AccountMapping, PriceResolution, DeliveryNoteDetail, InvoiceableOrderLine, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
-import { useUnitLabel, useWarehouses } from '../inventory/common';
+import { QuantityHint, quantityHintId, useUnitLabel, useWarehouses } from '../inventory/common';
 import { SerialEntry } from '../inventory/SerialEntry';
 import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../projects/common';
 import { INVOICE_INVALIDATE, useLineAccountOptions, usePartyOptions, useTaxRates, vatRateFor } from './common';
 import { DeliveryPicker } from './DeliveryPicker';
+import { InvoiceTemplates } from './InvoiceTemplates';
 import { OrderLinePicker } from './OrderLinePicker';
+import type { DocumentTaxRuleView } from '../settings/DocumentTaxRulesSection';
+import { FX_RATE_TYPES, FX_RATE_TYPE_LABELS, type FxRateLookup, type FxRateType } from '@erp/shared';
 
 interface LineState {
   key: number;
@@ -33,6 +40,13 @@ interface LineState {
   unitPrice: string;
   discountPct: string;
   vatCode: string;
+  taxRuleId?: string;
+  taxRuleSnapshot?: DocumentTaxRuleSnapshot | null;
+  productClass?: string;
+  transactionType?: string;
+  vatRateSnapshot?: string;
+  sourceTaxCalculation?: DocumentTaxCalculation | null;
+  sourceQuantity?: string;
   accountId: string;
   sourceLineId: string;
   /** İade satırında iade edilebilir kalan miktar (üst sınır) */
@@ -46,6 +60,8 @@ interface LineState {
   /** Proje boyutu (inşaat): yalnızca alış/gider/alış iadesi faturasının stoksuz satırında */
   projectId: string;
   wbsId: string;
+  /** Departman / maliyet merkezi (öneri 11); isteğe bağlı */
+  costCenterId?: string;
   /** Alış faturasında bağlı sipariş satırı (üçlü eşleştirme) ve görünen sipariş kodu */
   orderLineId: string;
   orderCode: string;
@@ -130,6 +146,9 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   // Hesap seçici ve eşlemeler muhasebe okuma izni ister (satış rolünde yok): izin yoksa hiç sorgulanmaz, seçici yerine
   // "varsayılan eşlemeden atanır" notu gösterilir; sunucu boş hesabı şirketin varsayılan eşlemesiyle doldurur (UI-8).
   const canLedger = can('ledger.read');
+  // Temel görünüm boş/varsayılan ikincil alanları gizler; değer taşıyan alan her zaman görünür (öneri 24)
+  const { detailed, mode: detailMode, setMode: setDetailMode } = useFormDetail('invoice');
+  const costCenters = useCQuery<{ costCenters: { id: string; code: string; name: string; isActive: boolean }[] }>(['cost-centers'], '/api/cost-centers').data?.costCenters ?? [];
   const accountOptions = useLineAccountOptions(meta.side, canLedger);
   const { data: mapData } = useCQuery<{ mappings: AccountMapping[] }>(['account-mappings'], '/api/account-mappings', { enabled: canLedger });
   const defaultAccount = mapData?.mappings.find((m) => m.key === (salesSide ? (meta.isReturn ? 'sales_return' : 'sales_revenue') : 'default_expense'))?.accountCode;
@@ -142,10 +161,16 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const seed = initial ?? original;
   const [partyId, setPartyId] = useState(seed?.invoice.partyId ?? fromDelivery?.note.partyId ?? '');
   const [invoiceDate, setInvoiceDate] = useState(initial?.invoice.invoiceDate ?? todayIso());
+  const taxRuleParams = new URLSearchParams({ date: invoiceDate, invoiceType: meta.returnOf ?? type });
+  if (partyId) taxRuleParams.set('partyId', partyId);
+  const { data: taxRuleData } = useCQuery<{ rules: DocumentTaxRuleView[] }>(['document-tax-rules', 'invoice', taxRuleParams.toString()], `/api/document-tax-rules?${taxRuleParams}`, { enabled: !!partyId });
+  const taxRules = useMemo(() => taxRuleData?.rules.filter(rule => rule.enabled && rule.verifiedAt) ?? [], [taxRuleData]);
   const [dueDate, setDueDate] = useState(initial?.invoice.dueDate ?? '');
   const [externalNo, setExternalNo] = useState(initial?.invoice.externalNo ?? '');
   const [currency, setCurrency] = useState(seed?.invoice.currencyCode ?? base);
   const [fxRate, setFxRate] = useState(initial?.invoice.fxRate && initial.invoice.currencyCode !== base ? initial.invoice.fxRate.replace(/0+$/, '').replace(/\.$/, '') : '');
+  const [fxRateType, setFxRateType] = useState<FxRateType>(initial?.invoice.fxRateType ?? 'forex_buy');
+  const [fxReason, setFxReason] = useState(initial?.invoice.fxReason ?? '');
   const [vatIncluded, setVatIncluded] = useState(seed?.invoice.vatIncluded ?? false);
   const [warehouseId, setWarehouseId] = useState(seed?.invoice.warehouseId ?? '');
   const [description, setDescription] = useState(initial?.invoice.description ?? '');
@@ -162,6 +187,10 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         unitPrice: trim(l.unitPrice),
         discountPct: dec(l.discountPct).isZero() ? '' : trim(l.discountPct),
         vatCode: l.vatCode ?? '',
+        taxRuleId: l.taxRuleId ?? '', taxRuleSnapshot: l.taxRuleSnapshot,
+        productClass: l.productClass ?? '', transactionType: l.transactionType ?? '',
+        ...(l.sourceLineId ? { vatRateSnapshot: l.vatRate } : {}),
+        sourceTaxCalculation: l.taxCalculation, sourceQuantity: l.quantity,
         accountId: l.accountId ?? '',
         sourceLineId: l.sourceLineId ?? '',
         returnable: null,
@@ -172,6 +201,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         deliveryRemaining: null,
         projectId: l.projectId ?? '',
         wbsId: l.wbsId ?? '',
+        costCenterId: l.costCenterId ?? '',
         orderLineId: l.poLineId ?? '',
         orderCode: l.orderCode ?? '',
         salesOrderLineId: l.salesOrderLineId ?? '',
@@ -191,6 +221,9 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           unitPrice: trim(l.unitPrice),
           discountPct: dec(l.discountPct).isZero() ? '' : trim(l.discountPct),
           vatCode: l.vatCode ?? '',
+          taxRuleId: l.taxRuleId ?? '', taxRuleSnapshot: l.taxRuleSnapshot,
+          productClass: l.productClass ?? '', transactionType: l.transactionType ?? '', vatRateSnapshot: l.vatRate,
+          sourceTaxCalculation: l.taxCalculation, sourceQuantity: l.quantity,
           accountId: '',
           sourceLineId: l.id,
           returnable: trim(l.returnableQty!),
@@ -211,6 +244,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   const [error, setError] = useState<Error | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState(initial?.invoice.matchOverrideReason ?? '');
   const [orderPickerOpen, setOrderPickerOpen] = useState(false);
 
@@ -225,11 +259,12 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
 
   // Dövizli fatura: tarihindeki kayıtlı kuru önizleme amacıyla sorgula
   const foreign = currency !== base;
-  const rateQuery = useCQuery<{ rate: string | null }>(
-    ['rate-lookup', currency, base, invoiceDate],
-    foreign && /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) ? `/api/exchange-rates/lookup?from=${currency}&to=${base}&date=${invoiceDate}` : null,
+  const returnFx = original?.invoice.fxSnapshot ?? (initial?.invoice.returnOfId ? initial.invoice.fxSnapshot : null);
+  const rateQuery = useCQuery<FxRateLookup>(
+    ['rate-lookup', currency, base, invoiceDate, fxRateType],
+    foreign && /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) ? `/api/exchange-rates/lookup?from=${currency}&to=${base}&date=${invoiceDate}&rateType=${fxRateType}` : null,
   );
-  const lookedUp = rateQuery.data?.rate ?? null;
+  const lookedUp = returnFx?.rate ?? rateQuery.data?.rate ?? null;
   const fxMissing = foreign && !fxRate && !lookedUp && rateQuery.isSuccess;
 
   const totals = useMemo(
@@ -239,7 +274,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           quantity: l.quantity || '0',
           unitPrice: l.unitPrice || '0',
           discountPct: l.discountPct || '0',
-          vatRate: vatRateFor(taxRates, l.vatCode || null, invoiceDate),
+          vatRate: l.sourceLineId && l.vatRateSnapshot ? l.vatRateSnapshot : vatRateFor(taxRates, l.vatCode || null, invoiceDate),
         })),
         vatIncluded,
       ),
@@ -247,6 +282,28 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   );
   const usedCodes = new Set(lines.map((l) => l.vatCode).filter(Boolean));
   const unverified = taxRates.some((r) => usedCodes.has(r.code) && !r.verifiedAt);
+  const taxPreview = lines.reduce((summary, line, i) => {
+    const rule = line.sourceLineId ? line.taxRuleSnapshot : taxRules.find(candidate => candidate.id === line.taxRuleId);
+    if (!rule) return summary;
+    try {
+      const calculation = calculateDocumentTaxes({ jurisdiction: rule.jurisdiction, rulePackVersion: rule.version, sourceRefs: rule.sourceRefs, netAmount: totals.lines[i]!.net.toFixed(2), vatAmount: totals.lines[i]!.vat.toFixed(2), vatRatePct: line.sourceLineId && line.vatRateSnapshot ? line.vatRateSnapshot : vatRateFor(taxRates, line.vatCode || null, invoiceDate), vatWithholding: rule.config.vatWithholding, incomeWithholding: rule.config.incomeWithholding, stamp: rule.config.stamp });
+      if (line.sourceLineId && line.sourceTaxCalculation && line.sourceQuantity) {
+        const fraction = dec(line.quantity || 0).div(line.sourceQuantity);
+        calculation.vatWithheld = applyRate(line.sourceTaxCalculation.vatWithheld, fraction).toFixed(2);
+        calculation.incomeWithheld = applyRate(line.sourceTaxCalculation.incomeWithheld, fraction).toFixed(2);
+        calculation.stamp = applyRate(line.sourceTaxCalculation.stamp, fraction).toFixed(2);
+      }
+      const documentStamp = !line.sourceLineId && rule.config.stamp && rule.config.stampScope !== 'line';
+      if (documentStamp) {
+        const key = JSON.stringify([rule.jurisdiction, rule.version, rule.sourceRefs, rule.config.stamp, rule.config.stampLiability]);
+        const group = summary.stampGroups.get(key) ?? { rule, net: dec(0), gross: dec(0) };
+        group.net = group.net.plus(totals.lines[i]!.net); group.gross = group.gross.plus(totals.lines[i]!.gross);
+        summary.stampGroups.set(key, group);
+      }
+      return { ...summary, used: true, vat: summary.vat.plus(calculation.vatWithheld), income: summary.income.plus(calculation.incomeWithheld), stamp: summary.stamp.plus(documentStamp ? 0 : calculation.stamp) };
+    } catch (error) { return { ...summary, error: errorMessage(error) }; }
+  }, { used: false, vat: dec(0), income: dec(0), stamp: dec(0), error: null as string | null, stampGroups: new Map<string, { rule: DocumentTaxRuleSnapshot | DocumentTaxRuleView; net: MoneyValue; gross: MoneyValue }>() });
+  for (const group of taxPreview.stampGroups.values()) taxPreview.stamp = taxPreview.stamp.plus(calculateDocumentStamp(group.net.toFixed(2), group.gross.toFixed(2), group.rule.config.stamp));
 
   const patch = (key: number, p: Partial<LineState>) => setLines((cur) => cur.map((l) => (l.key === key ? { ...l, ...p } : l)));
 
@@ -408,7 +465,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     dueDate: dueDate || null,
     externalNo: externalNo.trim() || undefined,
     currency,
-    ...(foreign && fxRate ? { fxRate } : {}),
+    ...(foreign && fxRate && !returnFx ? { fxRate } : {}),
+    ...(foreign && !returnFx ? { fxRateType, fxReason: fxRate ? fxReason || null : null } : {}),
     vatIncluded,
     warehouseId: hasStock ? warehouseId || null : null,
     returnOfId,
@@ -423,10 +481,13 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       unitPrice: l.unitPrice,
       discountPct: l.discountPct || '0',
       vatCode: l.vatCode || null,
+      taxRuleId: l.taxRuleId || null, productClass: l.productClass || null,
+      transactionType: l.transactionType || null,
       accountId: l.itemId && itemById.get(l.itemId)?.kind === 'goods' && !salesSide ? null : l.accountId || null,
       sourceLineId: l.sourceLineId || null,
       deliveryLineId: l.deliveryLineId || null,
       orderLineId: l.orderLineId || null,
+      costCenterId: l.costCenterId || null,
       ...(l.serials && l.serials.length > 0 && !l.deliveryLineId ? { serials: l.serials } : {}),
       ...(type === 'sales' && l.salesOrderLineId ? { salesOrderLineId: l.salesOrderLineId } : {}),
       // Proje yalnızca stoksuz (serbest/hizmet) satırda ve alış tarafında gönderilir
@@ -434,16 +495,18 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     })),
   });
 
+  const command = useIdempotencyKey();
   const save = useCMutation(
     (post: boolean, c) =>
       initial
         ? c<InvoiceDetail>(`/api/invoices/${initial.invoice.id}`, { method: 'PUT', body: bodyOf(post) })
-        : c<InvoiceDetail>('/api/invoices', { method: 'POST', body: bodyOf(post) }),
+        : c<InvoiceDetail>('/api/invoices', { method: 'POST', body: bodyOf(post), idempotencyKey: command.key }),
     [...INVOICE_INVALIDATE, ...PROJECT_COST_INVALIDATE],
   );
   const remove = useCMutation((_: void, c) => c(`/api/invoices/${initial!.invoice.id}`, { method: 'DELETE' }), INVOICE_INVALIDATE);
 
   const submit = (post: boolean) => {
+    if (save.isPending || remove.isPending) return;
     setError(null);
     setFieldError(null);
     if (!partyId) return setFieldError(t('invoices.form.partyRequired'));
@@ -453,6 +516,8 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     if (post && EXTERNAL_NO_REQUIRED.includes(type) && !externalNo.trim()) return setFieldError(t('invoices.form.externalRequired'));
     save.mutate(post, {
       onSuccess: (res) => {
+        command.renew();
+        markFormSaved(document.querySelector('[data-form-guard-scope="invoice-editor"]'));
         toast.success(post ? t('invoices.form.postedMsg', { no: res.invoice.invoiceNo ?? '' }) : t('invoices.form.savedMsg'));
         navigate(`/invoices/${res.invoice.id}`, { replace: true, state: res.warnings?.creditLimit ? { creditLimit: res.warnings.creditLimit } : undefined });
       },
@@ -465,36 +530,49 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   if (loading) return <PageLoading />;
 
   const gridCols = 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_84px_minmax(0,1fr)_68px_140px_minmax(0,1fr)_32px]';
-  const fxNeedsLink = error && (error as { code?: string }).code === 'FX_RATE_MISSING';
 
   return (
-    <>
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t(`invoices.${meta.side}.title`)}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-heading">{initial ? t('invoices.form.editTitle', { type: t(`invoices.types.${type}`) }) : t('invoices.form.newTitle', { type: t(`invoices.types.${type}`) })}</h1>
-        {initial&&<Link to={`/workspace/documents?kind=invoice&id=${initial.invoice.id}`} className="link inline-flex items-center gap-2 text-sm"><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>}
-        {initial&&type==='sales'&&<Link to="/sales/campaigns" className="link text-sm">Kampanya uygula</Link>}
-      </div>
+    <FormGuard captureAll scopeKey="invoice-editor" pending={save.isPending || remove.isPending}>
+      <PageHeader
+        title={initial ? t('invoices.form.editTitle', { type: t(`invoices.types.${type}`) }) : t('invoices.form.newTitle', { type: t(`invoices.types.${type}`) })}
+        helpKey="invoice-editor"
+        back={{ to: listPath, label: t(`invoices.${meta.side}.title`) }}
+        favorite={false}
+        recent={initial?.invoice.invoiceNo ? { kind: 'Fatura taslağı', title: `${initial.invoice.invoiceNo} ${initial.invoice.partyName ?? ''}`.trim() } : false}
+        actions={
+          <>
+            <FormDetailToggle mode={detailMode} onChange={setDetailMode} />
+            {!initial && !returnOfId && !fromDelivery && (
+              <InvoiceTemplates
+                type={type}
+                current={() => ({
+                  partyId: partyId || null,
+                  vatIncluded,
+                  lines: lines.filter((l) => l.itemId || l.description.trim()).map((l) => ({
+                    itemId: l.itemId || null, description: l.description.trim(), quantity: l.quantity || '1', unitPrice: l.unitPrice,
+                    discountPct: l.discountPct, vatCode: l.vatCode || null, accountId: l.accountId || null,
+                  })),
+                })}
+                onApply={(tpl) => {
+                  setPartyId(tpl.partyId ?? '');
+                  setVatIncluded(tpl.vatIncluded);
+                  setLines(tpl.lines.map((l) => ({
+                    ...emptyLine(l.vatCode ?? ''), itemId: l.itemId ?? '', description: l.description, quantity: l.quantity,
+                    unit: (l.itemId && itemById.get(l.itemId)?.unit) || '', unitPrice: l.unitPrice, discountPct: l.discountPct, accountId: l.accountId ?? '',
+                  })));
+                }}
+              />
+            )}
+            {initial && <>
+              <Link to={`/workspace/documents?kind=invoice&id=${initial.invoice.id}`} className="link inline-flex items-center gap-2 text-sm"><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>
+              {type === 'sales' && <Link to="/sales/campaigns" className="link text-sm">Kampanya uygula</Link>}
+            </>}
+          </>
+        }
+      />
 
       <div className="flex flex-col gap-5">
-        {(error || fieldError) && (
-          <Callout
-            tone="danger"
-            action={
-              fxNeedsLink ? (
-                <Link to="/settings/currencies" className="shrink-0 text-sm link">
-                  {t('ledger.journal.enterFx')}
-                </Link>
-              ) : undefined
-            }
-          >
-            {error ? errorMessage(error) : fieldError}
-          </Callout>
-        )}
+        {error ? <ErrorCallout error={error} /> : fieldError && <Callout tone="danger">{fieldError}</Callout>}
         {returnOfId && (
           <Callout>
             {t('invoices.form.returnOf')}{' '}
@@ -514,15 +592,15 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
             <Field label={t('invoices.form.invoiceDate')} required>
               {(id) => <Input id={id} type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />}
             </Field>
-            <Field label={t('invoices.form.dueDate')} hint={!dueDate ? t('invoices.form.dueAuto') : undefined}>
+            {(detailed || dueDate) && <Field label={t('invoices.form.dueDate')} hint={!dueDate ? t('invoices.form.dueAuto') : undefined}>
               {(id) => <Input id={id} type="date" value={dueDate} min={invoiceDate} onChange={(e) => setDueDate(e.target.value)} />}
-            </Field>
+            </Field>}
             {EXTERNAL_NO_REQUIRED.includes(type) && (
               <Field label={t('invoices.form.externalNo')} required>
                 {(id) => <Input id={id} value={externalNo} maxLength={40} onChange={(e) => setExternalNo(e.target.value)} />}
               </Field>
             )}
-            <Field label={t('invoices.form.currency')}>
+            {(detailed || foreign) && <><Field label={t('invoices.form.currency')}>
               {(id) => (
                 <Select id={id} value={currency} onChange={(e) => { setCurrency(e.target.value); setFxRate(''); }}>
                   <CurrencyOptions wide />
@@ -536,13 +614,18 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                   value={fxRate}
                   decimals={4}
                   maxDecimals={8}
-                  disabled={!foreign}
+                  disabled={!foreign || !!returnFx}
                   placeholder={!foreign ? '—' : lookedUp ? formatTR(lookedUp, 4) : '?'}
                   onChange={setFxRate}
                 />
               )}
-            </Field>
-            {hasStock && (
+            </Field></>}
+            {foreign && <>
+              <Field label="Kur türü">{id => <Select id={id} disabled={!!returnFx} value={returnFx?.rateType ?? fxRateType} onChange={event => setFxRateType(event.target.value as FxRateType)}>{FX_RATE_TYPES.map(type => <option key={type} value={type}>{FX_RATE_TYPE_LABELS[type]}</option>)}</Select>}</Field>
+              {fxRate && !returnFx && <Field label="Manuel kur gerekçesi" required>{id => <Input id={id} value={fxReason} maxLength={500} onChange={event => setFxReason(event.target.value)} />}</Field>}
+              <p className="text-xs text-muted sm:col-span-2">{returnFx ? `Özgün faturanın kuru kullanılacak · kur tarihi: ${returnFx.rateDate} · ${returnFx.provider ?? 'Kayıtlı kur'}` : fxRate ? 'Manuel işlem kuru kullanılacak.' : rateQuery.data?.rateDate ? `Kullanılacak kur tarihi: ${rateQuery.data.rateDate}${rateQuery.data.rateDate !== invoiceDate ? ' · önceki yayımlanan tarih' : ''} · ${rateQuery.data.provider ?? 'Kayıtlı kur'}` : 'Seçilen türde kur bekleniyor.'}</p>
+            </>}
+            {hasStock && (detailed || warehouseId || warehouses.length > 1) && (
               <Field label={t('invoices.form.warehouse')}>
                 {(id) => (
                   <Select id={id} value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
@@ -562,9 +645,9 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                 {t('invoices.form.vatIncluded')}
               </label>
             </div>
-            <Field label={t('common.description')} className="sm:col-span-2 lg:col-span-4">
+            {(detailed || description) && <Field label={t('common.description')} className="sm:col-span-2 lg:col-span-4">
               {(id) => <Input id={id} value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} />}
-            </Field>
+            </Field>}
           </div>
           {fxMissing && <p className="mt-3 text-sm text-warning">{t('invoices.form.fxMissing')}</p>}
         </Card>
@@ -582,6 +665,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
               <span />
             </div>
             <div className="flex flex-col gap-3">
+              {taxPreview.error && <Callout tone="danger" title="Vergi önizlemesi hesaplanamadı">{taxPreview.error}</Callout>}
               {lines.map((l, i) => {
                 const it = itemById.get(l.itemId);
                 const calc = totals.lines[i]!;
@@ -599,10 +683,10 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         onChange={(v) => pickItem(l.key, v)}
                       />
                       <Input className="col-span-2 lg:col-span-1" value={l.description} maxLength={300} aria-label={`${t('common.description')} ${i + 1}`} placeholder={t('common.description')} onChange={(e) => patch(l.key, { description: e.target.value })} />
-                      <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.quantity')} ${i + 1}`} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
+                      <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.quantity')} ${i + 1}`} aria-describedby={quantityHintId(`inv-${l.key}`, l.quantity, l.unit)} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
                       <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('invoices.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => { bumpSuggest(l.key); patch(l.key, { unitPrice: v, priceNote: '' }); }} />
                       <MoneyInput value={l.discountPct} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.discount')} ${i + 1}`} placeholder="%" className="text-right" onChange={(v) => patch(l.key, { discountPct: v })} />
-                      <Select className="px-2 pr-6" value={l.vatCode} aria-label={`${t('invoices.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
+                      <Select disabled={!!l.taxRuleId || !!l.sourceLineId} className="px-2 pr-6" value={l.vatCode} aria-label={`${t('invoices.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
                         <option value="">{t('invoices.form.noVat')}</option>
                         {[...new Set(taxRates.map((r) => r.code))].map((code) => (
                           <option key={code} value={code}>
@@ -622,7 +706,24 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         <X className="size-4" />
                       </button>
                     </div>
-                    {free && projectAllowed && (
+                    <QuantityHint id={`quantity-hint-inv-${l.key}`} quantity={l.quantity} unit={l.unit} />
+                    {costCenters.length > 0 && (detailed || l.costCenterId) && (salesSide || it?.kind !== 'goods') && (
+                      <label className="mt-1.5 flex items-center gap-2 pl-1 text-[13px] text-muted">
+                        Maliyet merkezi
+                        <Select className="w-56" value={l.costCenterId ?? ''} aria-label={`Maliyet merkezi ${i + 1}`} onChange={(e) => patch(l.key, { costCenterId: e.target.value })}>
+                          <option value="">Belirtilmedi</option>
+                          {costCenters.filter((cc) => cc.isActive || cc.id === l.costCenterId).map((cc) => <option key={cc.id} value={cc.id}>{cc.code} · {cc.name}</option>)}
+                        </Select>
+                      </label>
+                    )}
+                    {((detailed && taxRules.length > 0) || l.taxRuleId) && <div className="mt-2 grid gap-2 rounded-lg bg-surface-2 p-3 sm:grid-cols-2">
+                      <Field label={`İşlem vergisi kuralı ${i + 1}`} className="sm:col-span-2">{id => <Select id={id} value={l.taxRuleId ?? ''} disabled={!!l.sourceLineId} onChange={e => {
+                        const rule = taxRules.find(candidate => candidate.id === e.target.value);
+                        patch(l.key, { taxRuleId: rule?.id ?? '', taxRuleSnapshot: null, productClass: rule?.productClass ?? '', transactionType: rule?.transactionType ?? '', vatCode: rule?.config.vatCode ?? '' });
+                      }}><option value="">Standart KDV oranı</option>{l.taxRuleId && !taxRules.some(rule => rule.id === l.taxRuleId) && <option value={l.taxRuleId}>{l.taxRuleSnapshot?.name ?? 'Önceki seçim'}{l.sourceLineId ? ' · özgün belge kuralı' : ' · bu koşullarda geçersiz'}</option>}{taxRules.map(rule => <option key={rule.id} value={rule.id}>{rule.name} · {rule.version}</option>)}</Select>}</Field>
+                      {l.taxRuleId && <><Field label={`Ürün / hizmet sınıfı ${i + 1}`}>{id => <Input id={id} value={l.productClass ?? ''} disabled={!!l.sourceLineId} onChange={e => patch(l.key, { productClass: e.target.value })} />}</Field><Field label={`İşlem türü ${i + 1}`}>{id => <Select id={id} value={l.transactionType ?? ''} disabled={!!l.sourceLineId} onChange={e => patch(l.key, { transactionType: e.target.value })}><option value="">Seçin</option><option value="domestic">Yurt içi</option><option value="export">İhracat</option><option value="import">İthalat</option><option value="other">Diğer</option></Select>}</Field></>}
+                    </div>}
+                    {free && projectAllowed && (detailed || l.projectId) && (
                       <ProjectLineRow
                         className="mt-1.5"
                         label={String(i + 1)}
@@ -633,12 +734,12 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                     )}
                     {free || l.returnable || l.deliveryLineId || l.orderLineId || l.priceNote || (it?.tracksSerial && !l.deliveryLineId) ? (
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 pl-1 text-[13px] text-muted">
-                        {free && !canLedger && (
+                        {free && detailed && !canLedger && (
                           <span title={t('invoices.form.accountByDefaultHint')} data-testid="account-by-default">
                             {t('invoices.form.accountByDefault')}
                           </span>
                         )}
-                        {free && canLedger && (
+                        {free && canLedger && (detailed || l.accountId) && (
                           <span className="flex items-center gap-2">
                             {t('invoices.form.account')}
                             <Combobox
@@ -719,6 +820,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                 <dt>{t('invoices.grossTotal')}</dt>
                 <dd className="num" data-testid="gross-total">{moneyIn(totals.gross.toFixed(2), currency)}</dd>
               </div>
+              {taxPreview.used && <><div className="flex justify-between py-1 text-sm"><dt>KDV tevkifatı</dt><dd className="num">{moneyIn(taxPreview.vat.toFixed(2), currency)}</dd></div><div className="flex justify-between py-1 text-sm"><dt>Stopaj</dt><dd className="num">{moneyIn(taxPreview.income.toFixed(2), currency)}</dd></div><div className="flex justify-between py-1 text-sm"><dt>Damga / pul</dt><dd className="num">{moneyIn(taxPreview.stamp.toFixed(2), currency)}</dd></div><div className="flex justify-between border-t border-border pt-2"><dt>Satıcıya ödenecek</dt><dd className="num">{moneyIn(totals.gross.minus(taxPreview.vat).minus(taxPreview.income).toFixed(2), currency)}</dd></div></>}
             </dl>
           </div>
           {canOverride && lines.some((l) => l.orderLineId) && (
@@ -739,19 +841,19 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             {initial && (
-              <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+              <Button variant="danger" disabled={save.isPending || remove.isPending} onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="size-4" aria-hidden />
                 {t('invoices.form.deleteDraft')}
               </Button>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={() => navigate(listPath)}>{t('common.cancel')}</Button>
-            <Button loading={save.isPending && !save.variables} onClick={() => submit(false)}>
+            <Button disabled={save.isPending || remove.isPending} onClick={() => navigate(listPath)}>{t('common.cancel')}</Button>
+            <Button disabled={save.isPending || remove.isPending} loading={save.isPending && !save.variables} onClick={() => submit(false)}>
               {t('invoices.form.saveDraft')}
             </Button>
             {canPost && (
-              <Button variant="primary" loading={save.isPending && !!save.variables} onClick={() => submit(true)}>
+              <Button variant="primary" disabled={save.isPending || remove.isPending} loading={save.isPending && !!save.variables} onClick={() => submit(true)}>
                 {t('invoices.form.savePost')}
               </Button>
             )}
@@ -779,12 +881,12 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
               onClick={() =>
                 remove.mutate(undefined, {
                   onSuccess: () => {
+                    markFormSaved(document.querySelector('[data-form-guard-scope="invoice-editor"]'));
                     toast.success(t('invoices.form.deleted'));
                     navigate(listPath, { replace: true });
                   },
                   onError: (e) => {
-                    setConfirmDelete(false);
-                    toast.error(errorMessage(e));
+                    setDeleteError(errorMessage(e));
                   },
                 })
               }
@@ -794,9 +896,9 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
           </>
         }
       >
-        {null}
+        {deleteError && <Callout tone="danger">{deleteError}</Callout>}
       </Modal>
-    </>
+    </FormGuard>
   );
 }
 

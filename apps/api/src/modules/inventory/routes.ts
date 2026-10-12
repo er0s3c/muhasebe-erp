@@ -12,10 +12,12 @@ import {
   listStockDocumentsQuerySchema,
   reverseStockDocumentSchema,
   stockStatusQuerySchema,
+  stockAnalyticsQuerySchema,
   todayIso,
   updateItemCategorySchema,
   updateItemSchema,
   updateStockCountSchema,
+  recountStockCountSchema,
   updateWarehouseSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
@@ -27,6 +29,7 @@ import {
   listStockCounts,
   postStockCount,
   updateStockCount,
+  recountStockCount,
 } from './counts';
 import {
   getStockDocument,
@@ -37,6 +40,7 @@ import {
 } from './documents';
 import { createItem, deleteItem, getItem, itemStatement, listItems, updateItem } from './items';
 import { inventorySummary, stockStatus } from './reports';
+import { stockAnalytics } from './analytics';
 import { createWarehouse, deleteWarehouse, listWarehouses, updateWarehouse } from './warehouses';
 
 const stockCtx = ({ company, user }: TenantCtx): StockCtx => ({
@@ -168,7 +172,14 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
       return result;
     }),
   );
-  app.get('/api/stock-counts/:id', tenantRoute(app, read, async ({ tx, req }) => getStockCount(tx, idParam.parse(req.params).id)));
+  // Kör sayımda sistem miktarı ve fark yalnız stok yönetim yetkilisine görünür (öneri 45)
+  app.get('/api/stock-counts/:id', tenantRoute(app, read, async (c) => getStockCount(c.tx, idParam.parse(c.req.params).id, { reveal: c.can('inventory.manage') })));
+  app.put(
+    '/api/stock-counts/:id/recount',
+    tenantRoute(app, move, async (c) =>
+      recountStockCount(c.tx, stockCtx(c), idParam.parse(c.req.params).id, recountStockCountSchema.parse(c.req.body)),
+    ),
+  );
   app.put(
     '/api/stock-counts/:id',
     tenantRoute(app, move, async (c) =>
@@ -188,6 +199,9 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // --- Raporlar ---
+  app.get('/api/reports/stock-analytics', tenantRoute(app, read, async ({ tx, req, company }) =>
+    stockAnalytics(tx, company.baseCurrency, stockAnalyticsQuerySchema.parse(req.query)),
+  ));
   app.get(
     '/api/reports/stock-status',
     tenantRoute(app, read, async ({ tx, req, company }) =>

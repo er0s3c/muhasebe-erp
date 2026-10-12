@@ -6,7 +6,7 @@ import { dec } from '@erp/shared';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageTitle } from '../../components/ui/Card';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
@@ -18,6 +18,8 @@ import { useCan, useCMutation } from '../../lib/queries';
 import type { SalesDocDetail } from '../../lib/types';
 import { qtyText, useUnitLabel } from '../inventory/common';
 import { FulfilmentBadges, SALES_INVALIDATE, SalesStatusBadge } from './common';
+import { CommercialPanel } from './CommercialPanel';
+import { ApiError } from '../../lib/api';
 import { fmtDate } from '../../lib/license';
 
 type Action = 'send' | 'accept' | 'reject' | 'reopen' | 'cancel' | 'confirm' | 'close';
@@ -26,7 +28,7 @@ type Action = 'send' | 'accept' | 'reject' | 'reopen' | 'cancel' | 'confirm' | '
  * Teklif/sipariş görünümü: durum eylemleri, dönüşümler (teklif → sipariş, sipariş → irsaliye/fatura), karşılanma (teslim/fatura) miktarları,
  * durum geçmişi ve yazdırma (şirket antetli, imza bloklu). Teklif/sipariş yevmiye ve stok hareketi yazmaz.
  */
-export function SalesDocView({ data }: { data: SalesDocDetail }) {
+export function SalesDocView({ data,approvalPending=false }: { data: SalesDocDetail;approvalPending?:boolean }) {
   const { t } = useTranslation();
   const toast = useToast();
   const navigate = useNavigate();
@@ -35,30 +37,43 @@ export function SalesDocView({ data }: { data: SalesDocDetail }) {
   const { doc, lines, events, notes, invoices } = data;
   const cur = doc.currencyCode;
   const isOrder = doc.kind === 'order';
-  const canManage = can('invoices.manage');
+  const canManage = can('invoices.manage')&&!approvalPending;
   const listPath = isOrder ? '/sales/orders' : '/sales/quotes';
 
   const [reasonFor, setReasonFor] = useState<Action | null>(null);
   const [reason, setReason] = useState('');
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  // Ticari kontrol engeli (F6): onay yetkilisi gerekçeyle geçer
+  const [override, setOverride] = useState<{ action: Action; message: string } | null>(null);
+  const [overrideReason, setOverrideReason] = useState('');
   const [includeUndelivered, setIncludeUndelivered] = useState(false);
 
-  const act = useCMutation((v: { action: Action; reason?: string }, c) => c<SalesDocDetail>(`/api/sales-docs/${doc.id}/${v.action}`, { method: 'POST', body: v.reason ? { reason: v.reason } : {} }), SALES_INVALIDATE);
+  const act = useCMutation(
+    (v: { action: Action; reason?: string; overrideReason?: string }, c) =>
+      c<SalesDocDetail>(`/api/sales-docs/${doc.id}/${v.action}`, { method: 'POST', body: { ...(v.reason ? { reason: v.reason } : {}), ...(v.overrideReason ? { overrideReason: v.overrideReason } : {}) } }),
+    [...SALES_INVALIDATE, ['sales-doc', doc.id, 'commercial'], ['sales-doc', doc.id, 'negotiation']],
+  );
   const convert = useCMutation((_: void, c) => c<{ orderId: string }>(`/api/sales-docs/${doc.id}/convert`, { method: 'POST', body: {} }), SALES_INVALIDATE);
   const toDelivery = useCMutation((_: void, c) => c<{ noteId: string }>(`/api/sales-docs/${doc.id}/delivery-note`, { method: 'POST', body: {} }), SALES_INVALIDATE);
   const toInvoice = useCMutation((v: { includeUndelivered: boolean }, c) => c<{ invoiceId: string }>(`/api/sales-docs/${doc.id}/invoice`, { method: 'POST', body: v }), SALES_INVALIDATE);
 
-  const run = (action: Action, text?: string) =>
+  const run = (action: Action, text?: string, overrideText?: string) =>
     act.mutate(
-      { action, reason: text },
+      { action, reason: text, overrideReason: overrideText },
       {
         onSuccess: () => {
           toast.success(t(`sales.actions.done.${action}` as never));
           setReasonFor(null);
           setReason('');
+          setOverride(null);
+          setOverrideReason('');
         },
         onError: (e) => {
           setReasonFor(null);
+          if (e instanceof ApiError && e.code === 'SO_COMMERCIAL_BLOCK') {
+            setOverride({ action, message: e.message });
+            return;
+          }
           toast.error(errorMessage(e));
         },
       },
@@ -148,7 +163,7 @@ export function SalesDocView({ data }: { data: SalesDocDetail }) {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{doc.docNo ?? t(`sales.kind.${doc.kind}`)}</h1>
+            <PageTitle title={doc.docNo ?? t(`sales.kind.${doc.kind}`)} helpKey="sales-doc" recent={{ kind: t(`sales.kind.${doc.kind}`), title: `${doc.docNo ?? ''} ${doc.partyName}`.trim() }} />
             <Badge>{t(`sales.kind.${doc.kind}`)}</Badge>
             <SalesStatusBadge status={doc.status} kind={doc.kind} expired={doc.expired} />
             {isOrder && ['confirmed', 'closed'].includes(doc.status) && <FulfilmentBadges f={doc.fulfilment} />}
@@ -189,6 +204,7 @@ export function SalesDocView({ data }: { data: SalesDocDetail }) {
             <Item label={t('sales.form.currency')}>{cur}</Item>
             <Item label={t('sales.view.priceMode')}>{doc.vatIncluded ? t('invoices.view.vatIncluded') : t('invoices.view.vatExcluded')}</Item>
             {doc.warehouseName && <Item label={t('sales.form.warehouse')}>{doc.warehouseName}</Item>}
+            {doc.salesRepName && <Item label="Satış sorumlusu">{doc.salesRepName}</Item>}
             {doc.quoteId && (
               <Item label={t('sales.view.fromQuote')}>
                 <Link to={`/sales/docs/${doc.quoteId}`} className="link">
@@ -303,6 +319,8 @@ export function SalesDocView({ data }: { data: SalesDocDetail }) {
           </Card>
         )}
 
+        {can('invoices.read') && <CommercialPanel docId={doc.id} kind={doc.kind} />}
+
         {events.length > 0 && (
           <Card className="p-5 print:hidden">
             <h2 className="mb-3 text-sm font-medium">{t('sales.view.history')}</h2>
@@ -346,6 +364,34 @@ export function SalesDocView({ data }: { data: SalesDocDetail }) {
         <Field label={t('sales.actions.reason')} required={reasonFor !== 'close'}>
           {(fid) => <Input id={fid} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />}
         </Field>
+      </Modal>
+
+      <Modal
+        open={override !== null}
+        onOpenChange={(o) => !o && setOverride(null)}
+        title="Ticari kontrol"
+        description={override?.message ?? ''}
+        footer={
+          <>
+            <Button onClick={() => setOverride(null)}>{t('common.cancel')}</Button>
+            <Button
+              variant="primary"
+              loading={act.isPending}
+              disabled={overrideReason.trim().length < 5 || !can('invoices.post')}
+              onClick={() => override && run(override.action, undefined, overrideReason.trim())}
+            >
+              Gerekçeyle devam et
+            </Button>
+          </>
+        }
+      >
+        {can('invoices.post') ? (
+          <Field label="Onay gerekçesi" required hint="Gerekçe ticari görüntüyle birlikte saklanır.">
+            {(fid) => <Input id={fid} value={overrideReason} maxLength={300} onChange={(e) => setOverrideReason(e.target.value)} />}
+          </Field>
+        ) : (
+          <Callout tone="warning">Bu sınırı yalnız onay yetkilisi (fatura kaydetme yetkisi olan kullanıcı) gerekçeyle geçebilir.</Callout>
+        )}
       </Modal>
 
       <Modal

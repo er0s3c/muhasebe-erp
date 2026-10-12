@@ -26,11 +26,15 @@ import { items, parties, salesOrderEvents, salesOrderLines, salesOrders } from '
 import { notFound, unprocessable } from '../../http/errors';
 import { requireActiveWarehouse } from '../inventory/warehouses';
 import { resolveVat } from '../invoices/service';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { resolvePrice } from './pricing';
 import { releaseOrderAllocations } from '../manufacturing/allocations';
 import { lockLeatherCosts, one } from '../leather/common';
 import { orderLineUsage, zeroUsage } from './usage';
+import { assertDocumentApproved, assertDocumentNotPending } from '../approvals/document-gate';
+import { captureQuote } from '../approvals/source-snapshot';
+import { recordCommercialSnapshot, type CommercialGate } from './commercial';
+import { assertSalesRep } from './reps';
 
 export interface SalesCtx {
   companyId: string;
@@ -158,6 +162,9 @@ async function writeDoc(
   }
   if (input.warehouseId) await requireActiveWarehouse(tx, input.warehouseId, 'Depo');
   const { lines, totals } = await prepareLines(tx, input, currency);
+  // Satış sorumlusu verilmezse carinin sorumlusu (öneri 13)
+  const salesRepId = input.salesRepId !== undefined ? input.salesRepId : party.salesRepId;
+  if (salesRepId) await assertSalesRep(tx, ctx.companyId, salesRepId);
 
   const header = {
     partyId: party.id,
@@ -168,6 +175,7 @@ async function writeDoc(
     vatIncluded: input.vatIncluded,
     warehouseId: input.warehouseId ?? null,
     notes: input.notes ?? null,
+    salesRepId: salesRepId ?? null,
     netTotal: toDbAmount(totals.net),
     vatTotal: toDbAmount(totals.vat),
     grossTotal: toDbAmount(totals.gross),
@@ -228,6 +236,7 @@ export async function updateSalesDoc(
   input: UpdateSalesDocInput,
 ) {
   const row = await lockDoc(tx, id);
+  if (row.kind === 'quote') await assertDocumentNotPending(tx, 'sales_quote', id);
   if (row.status !== 'draft') throw unprocessable('Yalnızca taslak düzenlenebilir', 'SO_NOT_DRAFT');
   await writeDoc(tx, ctx, row.kind as SalesDocKind, input, id);
   return id;
@@ -235,6 +244,7 @@ export async function updateSalesDoc(
 
 export async function deleteSalesDoc(tx: Tx, id: string) {
   const row = await lockDoc(tx, id);
+  if (row.kind === 'quote') await assertDocumentNotPending(tx, 'sales_quote', id);
   if (row.status !== 'draft' || row.docNo)
     throw unprocessable(
       'Yalnızca numarasız taslak silinebilir; diğerleri iptal edilir',
@@ -258,6 +268,7 @@ export async function transitionSalesDoc(
   id: string,
   to: SalesDocStatus,
   reason?: string,
+  gate: CommercialGate = { canOverride: false },
 ) {
   if (to === 'cancelled') {
     const company = await one(
@@ -269,6 +280,13 @@ export async function transitionSalesDoc(
   }
   const doc = await lockDoc(tx, id);
   const kind = doc.kind as SalesDocKind;
+  if (kind === 'quote') {
+    await assertDocumentNotPending(tx, 'sales_quote', id);
+    if (doc.status === 'draft' && to === 'sent') {
+      const proof = await captureQuote(tx, ctx, id);
+      await assertDocumentApproved(tx, 'sales_quote', id, proof.amount, proof.hash);
+    }
+  }
   if (!canTransition(kind, doc.status as SalesDocStatus, to)) {
     throw unprocessable(
       `${KIND_LABEL[kind]} "${doc.status}" durumundan "${to}" durumuna geçirilemez`,
@@ -298,14 +316,14 @@ export async function transitionSalesDoc(
       );
     }
   }
+  // Ticari kontrol ve görüntü (F6): teklif gönderimi ve sipariş onayı
+  if (doc.status === 'draft' && ((kind === 'quote' && to === 'sent') || (kind === 'order' && to === 'confirmed'))) {
+    await recordCommercialSnapshot(tx, ctx, id, to, gate);
+  }
   let docNo = doc.docNo;
   if (doc.status === 'draft' && to !== 'cancelled' && !docNo) {
     const year = isoYear(doc.docDate);
-    docNo = formatDocumentNumber(
-      SALES_DOC_PREFIX[kind],
-      year,
-      await nextNumber(tx, ctx.companyId, `SALES:${kind}`, year),
-    );
+    docNo = await nextDocumentNumber(tx, ctx.companyId, `SALES:${kind}`, year, SALES_DOC_PREFIX[kind]);
   }
   await tx.insert(salesOrderEvents).values({
     companyId: ctx.companyId,
@@ -348,6 +366,7 @@ export async function convertQuote(tx: Tx, ctx: SalesCtx, quoteId: string) {
       vatIncluded: quote.vatIncluded,
       warehouseId: quote.warehouseId,
       notes: quote.notes ?? undefined,
+      salesRepId: quote.salesRepId,
       lines: qLines.map((l) => ({
         itemId: l.itemId,
         description: l.description,
@@ -419,6 +438,7 @@ export async function getSalesDoc(tx: Tx, id: string) {
            o.doc_date::text as "docDate", o.valid_until::text as "validUntil", o.delivery_date::text as "deliveryDate",
            o.currency_code as "currencyCode", o.vat_included as "vatIncluded", o.warehouse_id as "warehouseId", w.name as "warehouseName",
            o.notes, o.quote_id as "quoteId", q.doc_no as "quoteNo",
+           o.sales_rep_id as "salesRepId", rep.full_name as "salesRepName",
            o.net_total as "netTotal", o.vat_total as "vatTotal", o.gross_total as "grossTotal", o.created_at as "createdAt",
            (select so.id from sales_orders so where so.quote_id = o.id limit 1) as "orderId",
            (select so.doc_no from sales_orders so where so.quote_id = o.id limit 1) as "orderNo"
@@ -426,6 +446,7 @@ export async function getSalesDoc(tx: Tx, id: string) {
     join parties p on p.id = o.party_id
     left join warehouses w on w.id = o.warehouse_id
     left join sales_orders q on q.id = o.quote_id
+    left join users rep on rep.id = o.sales_rep_id
     where o.id = ${id}`);
   const doc = head.rows[0];
   if (!doc) throw notFound('Teklif/sipariş');

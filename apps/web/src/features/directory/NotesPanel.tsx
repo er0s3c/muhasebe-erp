@@ -6,7 +6,7 @@ import { NOTE_KINDS, todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
-import { Callout, EmptyState } from '../../components/ui/Feedback';
+import { Callout, EmptyState, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { Modal, Sheet } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
@@ -28,12 +28,14 @@ export function NotesPanel({ contactId, organizationId, frozen }: { contactId?: 
   const qs = new URLSearchParams();
   if (contactId) qs.set('contactId', contactId);
   if (organizationId) qs.set('organizationId', organizationId);
-  const { data } = useCQuery<{ notes: DirNote[] }>(['directory', 'notes', qs.toString()], `/api/directory/notes?${qs}`);
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ notes: DirNote[] }>(['directory', 'notes', qs.toString()], `/api/directory/notes?${qs}`);
   const [editing, setEditing] = useState<DirNote | null>(null);
   const [adding, setAdding] = useState(false);
   const [followUp, setFollowUp] = useState<DirNote | null>(null);
   const notes = data?.notes ?? [];
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader

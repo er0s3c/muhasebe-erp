@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +10,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Aydın İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Kemal' })).toBeVisible();
 }
@@ -55,6 +57,8 @@ test('stok: kart aç → giriş → çıkış → kritik seviye → stok durumu 
   await expect(dialog.getByText('Depoda yetersiz')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Hareketi kaydet' })).toBeDisabled();
   await page.keyboard.press('Escape');
+  // Kaydedilemeyen giriş taslak sayılır; kapatırken onay istenir
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
 
   // 5) Stok durumu: kritik rozeti, toplam değer ve muhasebe mutabakat uyarısı
   await nav.getByRole('link', { name: 'Stok durumu' }).click();

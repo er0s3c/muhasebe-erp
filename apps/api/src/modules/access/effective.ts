@@ -9,13 +9,17 @@ import {
   permissionOfOverride,
   permissionOverrideKey,
   roleHasDefault,
+  resourceOperationOf,
+  resourceOperationAllowed,
+  customRoleAccessSchema,
   type AccessLevel,
   type AccessOverrides,
   type Permission,
   type Role,
+  type ResourceOperation,
 } from '@erp/shared';
 import type { Queryable, Tx } from '../../db/client';
-import { memberModuleAccess } from '../../db/schema';
+import { memberModuleAccess, memberships, companyRoles } from '../../db/schema';
 import { AppError, forbidden } from '../../http/errors';
 
 /**
@@ -41,14 +45,35 @@ export async function loadOverrides(db: Queryable, companyId: string, userId: st
   return out;
 }
 
-export function buildAccess(role: Role, overrides: AccessOverrides): MemberAccess {
+export function buildAccess(role: Role, overrides: AccessOverrides, roleOverrides: AccessOverrides = {}): MemberAccess {
   // Sahipte istisna uygulanmaz (veritabanı da sahip için satır yazdırmaz); yine de savunma olarak boşaltılır
-  const valid = role === 'owner' ? {} : (Object.fromEntries(Object.entries(overrides).filter(([k, v]) => validOverride(k, v))) as Record<string, AccessLevel>);
+  const valid = role === 'owner' ? {} : (Object.fromEntries(Object.entries({ ...roleOverrides, ...overrides }).filter(([k, v]) => validOverride(k, v))) as Record<string, AccessLevel>);
   return { role, overrides: valid, permissions: effectivePermissions(role, valid) };
 }
 
 export async function loadMemberAccess(tx: Tx, companyId: string, userId: string, role: Role): Promise<MemberAccess> {
-  return buildAccess(role, role === 'owner' ? {} : await loadOverrides(tx, companyId, userId));
+  return buildAccess(role, role === 'owner' ? {} : await loadOverrides(tx, companyId, userId), role === 'owner' ? {} : await loadRoleOverrides(tx, companyId, userId));
+}
+
+export function accessChoicesToOverrides(access: ReturnType<typeof customRoleAccessSchema.parse>): Record<string, AccessLevel> {
+  const out: Record<string, AccessLevel> = {};
+  for (const [key, level] of Object.entries(access.levels)) if (isAccessArea(key) && level !== 'default') out[key] = level;
+  for (const [key, choice] of Object.entries(access.permissions)) if (permissionOfOverride(`permission.${key}`) && choice !== 'default') out[`permission.${key}`] = choice === 'allow' ? 'write' : 'none';
+  for (const [key, choice] of Object.entries(access.operations)) if (resourceOperationOf(key) && choice !== 'default') out[key] = choice === 'allow' ? 'write' : 'none';
+  return out;
+}
+
+export async function loadRoleOverrides(tx: Tx, companyId: string, userId: string): Promise<Record<string, AccessLevel>> {
+  const [row] = await tx.select({ access: companyRoles.access, active: companyRoles.isActive }).from(memberships).innerJoin(companyRoles, and(eq(companyRoles.id, memberships.customRoleId), eq(companyRoles.companyId, memberships.companyId))).where(and(eq(memberships.companyId, companyId), eq(memberships.userId, userId)));
+  if (!row) return {};
+  // Pasif bir role bağlı üyelik yanlışlıkla hazır rolün geniş haklarına dönmez.
+  if (!row.active) return Object.fromEntries(Object.keys(ACCESS_AREAS).map((key) => [key, 'none' as const]));
+  return accessChoicesToOverrides(customRoleAccessSchema.parse(row.access));
+}
+
+export function requireResourceOperation(access: MemberAccess, module: string, operation: ResourceOperation) {
+  const area = areaOfModule(module);
+  if (area && !resourceOperationAllowed(access.permissions, access.overrides, area, operation)) throw new AppError(403, 'RESOURCE_OPERATION_DENIED', 'Bu kayıt işlemi için yetkiniz yok', { area, operation });
 }
 
 /** Bu modül, üyenin "Erişim yok" yaptığı bir alana mı bağlı? */
@@ -84,7 +109,7 @@ export function denialFor(a: MemberAccess, permission: Permission): AppError {
 }
 
 function validOverride(key: string, level: unknown): boolean {
-  return (isAccessArea(key) && isAccessLevel(level)) || (permissionOfOverride(key) !== null && (level === 'none' || level === 'write'));
+  return (isAccessArea(key) && isAccessLevel(level)) || ((permissionOfOverride(key) !== null || resourceOperationOf(key) !== null) && (level === 'none' || level === 'write'));
 }
 
 /** Handler içinde ek izin denetimi (ör. kayıt sırasında "muhasebeleştir" bayrağı): eksikse nedene uygun hata atar. */

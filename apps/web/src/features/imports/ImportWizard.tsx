@@ -586,7 +586,7 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
             <UnmatchedPanel kind={kind} unmatched={preview.unmatched} busy={busy} onPick={resolve} />
           )}
 
-          <SegmentedTabs
+          <SegmentedTabs variant="filter"
             value={filter}
             onChange={setFilter}
             items={[
@@ -658,6 +658,24 @@ export function ImportWizard({ kind, open, onOpenChange, fixedOptions, previousM
                 </div>
               ))}
             </dl>
+          )}
+          {result.reconciliation && result.reconciliation.length > 0 && (
+            <section aria-label="Aktarım mutabakatı" className="rounded-xl border border-border px-4 py-3 text-sm">
+              <h4 className="mb-1.5 font-medium">Dosya ↔ kayıt mutabakatı</h4>
+              <table className="w-full">
+                <thead><tr className="text-left text-xs text-muted"><th className="font-normal">Kalem</th><th className="text-right font-normal">Dosya</th><th className="text-right font-normal">Kaydedilen</th><th /></tr></thead>
+                <tbody>
+                  {result.reconciliation.map((r) => (
+                    <tr key={r.label}>
+                      <td>{r.label}</td>
+                      <td className="text-right tabular-nums">{r.source}</td>
+                      <td className="text-right tabular-nums">{r.result}</td>
+                      <td className="pl-2 text-right">{r.ok ? <span className="text-success">Uyumlu</span> : <span className="text-danger">Fark var</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
           )}
           {result.entries.length > 0 && (
             <ul className="flex flex-col gap-1 text-sm">

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isoDate, uuid } from './schemas/common';
+import { documentSeriesSchema, INVOICE_PRINT_TEMPLATES } from './document-series';
 
 export const operationsSettingsSchema = z.object({
   documentLimitMb: z.number().int().min(1).max(100).default(5),
@@ -10,6 +11,8 @@ export const operationsSettingsSchema = z.object({
   automaticBackup: z.boolean().default(false),
   backupHour: z.number().int().min(0).max(23).default(2),
   backupKeepCount: z.number().int().min(1).max(365).default(30),
+  documentSeries: documentSeriesSchema,
+  invoicePrintTemplate: z.enum(INVOICE_PRINT_TEMPLATES).default('detailed'),
 });
 export type OperationsSettings = z.infer<typeof operationsSettingsSchema>;
 export const administrationQuerySchema = z.object({

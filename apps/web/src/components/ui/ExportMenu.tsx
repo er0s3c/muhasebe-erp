@@ -3,14 +3,15 @@ import { ChevronDown, Download, FileSpreadsheet, FileText, Printer } from 'lucid
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ExportFormat } from '@erp/shared';
-import { apiBlob } from '../../lib/api';
+import { api, apiBlob } from '../../lib/api';
 import { saveBlob } from '../../lib/download';
 import { errorMessage } from '../../lib/errors';
 import { useCompany } from '../../lib/session';
+import { useCQuery } from '../../lib/queries';
 import { Button } from './Button';
 import { useToast } from './Toast';
 
-const menuContent = 'z-50 min-w-60 rounded-xl border border-border bg-surface p-1.5 [animation:pop-in_0.12s_ease-out] print:hidden';
+const menuContent = 'z-50 min-w-60 rounded-xl border border-border bg-surface p-1.5 shadow-pop [animation:pop-in_0.12s_ease-out] print:hidden';
 const menuItem = 'flex cursor-pointer select-none items-center gap-2.5 rounded-md px-3 py-2 text-sm outline-none data-[highlighted]:bg-surface-2 data-[disabled]:opacity-50';
 
 interface Props {
@@ -34,7 +35,9 @@ export function ExportMenu({ exportKey, path, params = {}, formats = ['xlsx', 'c
   const { t } = useTranslation();
   const toast = useToast();
   const company = useCompany();
+  const access = useCQuery<{ reports: Record<string, boolean> }>(['export-access'], '/api/exports/access', { enabled: !!exportKey && !path, refetchOnWindowFocus: true });
   const [busy, setBusy] = useState(false);
+  const denied = !path && !!exportKey && access.data?.reports[exportKey] !== true;
 
   const download = async (format: ExportFormat) => {
     const qs = new URLSearchParams({ format });
@@ -50,10 +53,22 @@ export function ExportMenu({ exportKey, path, params = {}, formats = ['xlsx', 'c
     }
   };
 
+  // Büyük rapor (öneri 20): sunucuda arka planda hazırlanır, Belge arşivi > Hazırlanan raporlarım'dan indirilir
+  const queue = async () => {
+    const query: Record<string, string> = {};
+    for (const [k, v] of Object.entries(params)) if (v) query[k] = v;
+    try {
+      await api('/api/report-jobs', { method: 'POST', companyId: company.id, body: { reportKey: exportKey, format: 'xlsx', query } });
+      toast.success('Rapor arka planda hazırlanıyor; Belge arşivi > Hazırlanan raporlarım bölümünden indirebilirsiniz');
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
   return (
     <Dropdown.Root>
-      <Dropdown.Trigger asChild disabled={disabled || busy}>
-        <Button className="print:hidden" loading={busy} disabled={disabled}>
+      <Dropdown.Trigger asChild disabled={disabled || busy || denied}>
+        <Button className="print:hidden" loading={busy} disabled={disabled || denied} title={denied ? 'Dışa aktarma yetkiniz yok' : undefined}>
           <Download className="size-4" aria-hidden />
           {t('reports.export.button')}
           <ChevronDown className="size-3.5 text-muted" aria-hidden />
@@ -71,6 +86,12 @@ export function ExportMenu({ exportKey, path, params = {}, formats = ['xlsx', 'c
             <Dropdown.Item className={menuItem} onSelect={() => void download('csv')}>
               <FileText className="size-4 text-muted" aria-hidden />
               {t('reports.export.csv')}
+            </Dropdown.Item>
+          )}
+          {exportKey && !path && formats.includes('xlsx') && (
+            <Dropdown.Item className={menuItem} onSelect={() => void queue()}>
+              <FileSpreadsheet className="size-4 text-muted" aria-hidden />
+              Arka planda hazırla (büyük rapor)
             </Dropdown.Item>
           )}
           {print && (

@@ -18,7 +18,8 @@ const reuse = process.env.E2E_ISOLATED !== '1';
 
 export default defineConfig({
   testDir: '.',
-  testIgnore: ['**/.claude/**', '**/.codex/**', '**/node_modules/**'],
+  // panel-v2 sahte API ile kendi sunucusunda çalışır (playwright.panel-v2.config.ts); paket hedefinde ERP girişine düşer
+  testIgnore: ['**/.claude/**', '**/.codex/**', '**/node_modules/**', '**/lisans-server/e2e/panel-v2.spec.ts'],
   testMatch: ['e2e/**/*.spec.ts', 'lisans-server/e2e/**/*.spec.ts'],
   globalSetup: './e2e/global-setup.ts',
   outputDir: 'test-results',

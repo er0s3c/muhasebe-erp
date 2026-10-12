@@ -42,7 +42,7 @@ import { StockPlanner } from '../inventory/planner';
 import { createJournalEntry, reverseJournalEntry, type AutoJournalLine, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
 import { applyAcquisitionDelta, lockLeatherCosts, reverseAcquisitionDelta } from '../leather/costs';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { requireRate } from '../settings/rates';
 
@@ -200,12 +200,12 @@ export async function saveImportFile(tx: Tx, ctx: ImportCtx, id: string | null, 
     await tx.delete(importFileLines).where(eq(importFileLines.importFileId, id));
   } else {
     const year = isoYear(input.fileDate);
-    const seq = await nextNumber(tx, ctx.companyId, IMPORT_NUMBER_KEY, year);
+    const code = await nextDocumentNumber(tx, ctx.companyId, IMPORT_NUMBER_KEY, year, IMPORT_PREFIX);
     const [row] = await tx
       .insert(importFiles)
       .values({
         companyId: ctx.companyId,
-        code: formatDocumentNumber(IMPORT_PREFIX, year, seq),
+        code,
         name: input.name,
         reference: input.reference ?? null,
         description: input.description ?? null,

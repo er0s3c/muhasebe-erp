@@ -284,10 +284,10 @@ export async function lookupSerial(tx: Tx, q: SerialLookupQuery) {
     where s.serial_no = ${no} and s.status <> 'pending' ${q.itemId ? sql`and s.item_id = ${q.itemId}` : sql``}
     order by s.created_at desc`);
   if (regs.rows.length === 0) throw notFound('Seri no');
-  const out = [];
-  for (const reg of regs.rows) {
-    const history = await tx.execute<Record<string, unknown>>(sql`
-      select e.id, e.seq, e.event, e.from_status as "fromStatus", e.to_status as "toStatus", e.line_no as "lineNo",
+  // Tüm sicil kayıtlarının geçmişi tek sorguda (kayıt başına ayrı sorgu yok); sonra kayda göre gruplanır
+  const ids = regs.rows.map((r) => r.id as string);
+  const allHistory = await tx.execute<Record<string, unknown>>(sql`
+      select e.serial_id as "serialId", e.id, e.seq, e.event, e.from_status as "fromStatus", e.to_status as "toStatus", e.line_no as "lineNo",
              e.created_at as "createdAt", d.id as "stockDocumentId", d.doc_no as "stockDocumentNo", d.doc_date::text as "docDate",
              fw.name as "fromWarehouse", tw.name as "toWarehouse", p.id as "partyId", p.code as "partyCode", p.name as "partyName",
              d.source_type as "sourceType", d.source_id as "sourceId",
@@ -299,9 +299,18 @@ export async function lookupSerial(tx: Tx, q: SerialLookupQuery) {
       left join parties p on p.id = e.party_id
       left join invoices inv on d.source_type = 'invoice' and inv.id = d.source_id
       left join delivery_notes dn on d.source_type = 'delivery_note' and dn.id = d.source_id
-      where e.serial_id = ${reg.id}
-      order by e.seq`);
-    const rowsH = history.rows as { event: string; partyName: string | null; reversalOfId: string | null; id: string }[];
+      where e.serial_id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
+      order by e.serial_id, e.seq`);
+  const bySerial = new Map<string, Record<string, unknown>[]>();
+  for (const { serialId, ...row } of allHistory.rows) {
+    const list = bySerial.get(serialId as string) ?? [];
+    list.push(row);
+    bySerial.set(serialId as string, list);
+  }
+  const out = [];
+  for (const reg of regs.rows) {
+    const history = { rows: bySerial.get(reg.id as string) ?? [] };
+    const rowsH = history.rows as unknown as { event: string; partyName: string | null; reversalOfId: string | null; id: string }[];
     const reversed = new Set(rowsH.filter((h) => h.reversalOfId).map((h) => h.reversalOfId));
     const live = rowsH.filter((h) => h.event !== 'reversal' && !reversed.has(h.id));
     const supplier = [...live].reverse().find((h) => h.event === 'receive')?.partyName ?? null;

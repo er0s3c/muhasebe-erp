@@ -32,6 +32,7 @@ import {
 import { users, memberships, memberModuleAccess, warehouses, posTills } from './schema';
 import { setContext, type Db, type Tx } from './client';
 import { createCompany } from '../modules/tenancy/service';
+import { seedDemoTaxHistory } from './demo-tax';
 import { createItem } from '../modules/inventory/items';
 import { postStockDocument } from '../modules/inventory/documents';
 import {
@@ -114,10 +115,14 @@ export async function seedManufacturingDemo(
     const company = await createCompany(tx, { id: owner.id, orgId: owner.organizationId }, {
       name: MANUFACTURING_DEMO_NAME,
       sector: 'MANUFACTURING_WHOLESALE',
+      jurisdiction: 'KKTC',
+      legalEntityType: 'company',
+      vatRegistered: true,
       baseCurrency: 'TRY',
       reportingCurrency: null,
       taxNumber: 'DEMO-MFG-V1',
-    } as never);
+    });
+    await seedDemoTaxHistory(tx, company.id);
     const ctx: LeatherCtx = {
       companyId: company.id,
       userId: owner.id,

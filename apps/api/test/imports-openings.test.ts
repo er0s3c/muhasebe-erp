@@ -78,6 +78,8 @@ describe('içe aktarma: açılış bakiyeleri', async () => {
 
     const done = await ok(run(c, 'party_openings', 'commit', list));
     expect(done).toMatchObject({ kind: 'party_openings', created: 6, skipped: 1 });
+    // Öneri 8: dosya toplamı ↔ yazılan kayıt mutabakatı
+    expect(done.reconciliation.map((r: { label: string; ok: boolean }) => [r.label.split(' (')[0], r.ok])).toEqual([['Cari satırı', true], ['Borç toplamı', true], ['Alacak toplamı', true]]);
     expect(done.entries).toHaveLength(1);
     expect(done.entries[0].no).toMatch(/^YV-\d{4}-000001$/);
 
@@ -245,6 +247,7 @@ describe('içe aktarma: açılış bakiyeleri', async () => {
     expect(summaryOf(preview, 'Stok değeri')).toBe('2.090,00');
 
     const done = await ok(run(c, 'stock_openings', 'commit', list));
+    expect(done.reconciliation.every((r: { ok: boolean }) => r.ok), JSON.stringify(done.reconciliation)).toBe(true);
     expect(done).toMatchObject({ created: 3, skipped: 1 });
     expect(done.entries).toHaveLength(2);
     expect(done.entries.every((e: any) => e.type === 'stock' && /^SH-\d{4}-\d{6}$/.test(e.no))).toBe(true);
@@ -352,6 +355,7 @@ describe('içe aktarma: açılış bakiyeleri', async () => {
     expect(summaryOf(preview, 'Fark')).toContain('dengeli');
 
     const done = await ok(run(c, 'ledger_openings', 'commit', balanced, { plugDifference: false }));
+    expect(done.reconciliation.every((r: { ok: boolean }) => r.ok), JSON.stringify(done.reconciliation)).toBe(true);
     expect(done).toMatchObject({ created: 4, skipped: 0 });
     expect(done.entries[0].no).toMatch(/^YV-\d{4}-000001$/);
     const { tb, by } = await trialBalance(c);

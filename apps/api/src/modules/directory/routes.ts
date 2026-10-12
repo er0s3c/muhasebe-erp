@@ -54,6 +54,7 @@ const vcfQuery = contactListQuerySchema.extend({ archived: z.enum(['active', 'ar
 export const directoryRoutes: FastifyPluginAsync = async (app) => {
   const MODULE = 'core.directory';
   const read = { module: MODULE, permission: 'directory.read' } as const;
+  const personalAgenda = { ...read, personalAgenda: true } as const;
   const manage = { module: MODULE, permission: 'directory.manage' } as const;
   const dctx = ({ company, user }: TenantCtx) => ({ companyId: company.id, userId: user.id });
   const actx = (c: TenantCtx): AgendaCtx => ({ companyId: c.company.id, userId: c.user.id, canManage: c.can('directory.manage') });
@@ -148,7 +149,7 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/api/directory/notes/:id', tenantRoute(app, manage, async (c) => updateNote(c.tx, dctx(c), idParam.parse(c.req.params).id, updateNoteSchema.parse(c.req.body))));
   app.post(
     '/api/directory/notes/:id/follow-up',
-    tenantRoute(app, read, async (c) => {
+    tenantRoute(app, personalAgenda, async (c) => {
       const out = await createFollowUp(c.tx, actx(c), idParam.parse(c.req.params).id, followUpSchema.parse(c.req.body));
       void c.reply.code(201);
       return out;
@@ -156,21 +157,21 @@ export const directoryRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // --- Ajanda -----------------------------------------------------------------------------------------
-  app.get('/api/agenda', tenantRoute(app, read, async (c) => listAgenda(c.tx, actx(c), agendaListQuerySchema.parse(c.req.query))));
-  app.get('/api/agenda/summary', tenantRoute(app, read, async (c) => agendaSummary(c.tx, actx(c), agendaSummaryQuerySchema.parse(c.req.query))));
+  app.get('/api/agenda', tenantRoute(app, personalAgenda, async (c) => listAgenda(c.tx, actx(c), agendaListQuerySchema.parse(c.req.query))));
+  app.get('/api/agenda/summary', tenantRoute(app, personalAgenda, async (c) => agendaSummary(c.tx, actx(c), agendaSummaryQuerySchema.parse(c.req.query))));
   // Kendi ajanda kalemini her okuyucu açar/düzenler; başkası ya da şirket adına açmak yönetim izni ister (servis denetler)
   app.post(
     '/api/agenda',
-    tenantRoute(app, read, async (c) => {
+    tenantRoute(app, personalAgenda, async (c) => {
       const out = await createAgendaItem(c.tx, actx(c), createAgendaSchema.parse(c.req.body));
       void c.reply.code(201);
       return out;
     }),
   );
-  app.get('/api/agenda/:id', tenantRoute(app, read, async (c) => getAgendaItem(c.tx, idParam.parse(c.req.params).id, actx(c))));
-  app.patch('/api/agenda/:id', tenantRoute(app, read, async (c) => updateAgendaItem(c.tx, actx(c), idParam.parse(c.req.params).id, updateAgendaSchema.parse(c.req.body))));
+  app.get('/api/agenda/:id', tenantRoute(app, personalAgenda, async (c) => getAgendaItem(c.tx, idParam.parse(c.req.params).id, actx(c))));
+  app.patch('/api/agenda/:id', tenantRoute(app, personalAgenda, async (c) => updateAgendaItem(c.tx, actx(c), idParam.parse(c.req.params).id, updateAgendaSchema.parse(c.req.body))));
   for (const [path, status] of [['complete', 'done'], ['cancel', 'cancelled'], ['reopen', 'open']] as const) {
-    app.post(`/api/agenda/:id/${path}`, tenantRoute(app, read, async (c) => setAgendaStatus(c.tx, actx(c), idParam.parse(c.req.params).id, status)));
+    app.post(`/api/agenda/:id/${path}`, tenantRoute(app, personalAgenda, async (c) => setAgendaStatus(c.tx, actx(c), idParam.parse(c.req.params).id, status)));
   }
 };
 

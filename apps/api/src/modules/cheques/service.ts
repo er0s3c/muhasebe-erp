@@ -26,7 +26,7 @@ import { uuidList } from '../inventory/balances';
 import { createJournalEntry, type AutoJournalLine, type LedgerCtx } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
 import { assertAllocatable, openItemsFor } from '../parties/service';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { lockTreasuryAccounts, type TreasuryAccountRow } from '../treasury/accounts';
 import { buildExchangeJournal,buildSettlementJournal, planSettlement, type SettleItemInput } from '../treasury/journal';
@@ -399,8 +399,7 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
   const acct = (c: ChequeRow) => map[docKey(direction, c.docType)]!;
 
   const batchId = uuidv7();
-  const seq = await nextNumber(tx, ctx.companyId, 'CHQB', year);
-  const batchNo = formatDocumentNumber(BATCH_PREFIX, year, seq);
+  const batchNo = await nextDocumentNumber(tx, ctx.companyId, 'CHQB', year, BATCH_PREFIX);
   const heading = `${ACTION_LABEL[input.action]} ${batchNo}${rows.length === 1 ? ` — ${DOC_LABEL[rows[0]!.docType as 'cheque' | 'note']} ${rows[0]!.docNo}` : ` — ${rows.length} belge`}`.slice(0, 300);
   const desc = input.note ? `${heading} — ${input.note}`.slice(0, 300) : heading;
 
@@ -481,12 +480,12 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
     createdBy: ctx.userId,
   });
 
-  let firstEventId = '';
-  for (const c of rows) {
-    const eventId = uuidv7();
-    if (!firstEventId) firstEventId = eventId;
-    await tx.insert(chequeEvents).values({
-      id: eventId,
+  // Toplu işlem: olaylar tek çok satırlı insert, belge durumu tek update (değerler tüm belgeler için aynı).
+  // Belge başına sıra korunur: önce olay, sonra durum.
+  const eventIds = rows.map(() => uuidv7());
+  await tx.insert(chequeEvents).values(
+    rows.map((c, i) => ({
+      id: eventIds[i]!,
       companyId: ctx.companyId,
       chequeId: c.id,
       fromStatus: tr.from,
@@ -498,20 +497,20 @@ export async function runChequeAction(tx: Tx, ctx: LedgerCtx, input: ChequeActio
       bankAccountId: bank?.id ?? null,
       note: input.note?.trim() || null,
       createdBy: ctx.userId,
-    });
-    await tx
-      .update(cheques)
-      .set({
-        status: tr.to,
-        holderPartyId: input.action === 'endorse' ? endorsee!.id : null,
-        ...(input.action === 'deposit' || input.action === 'pay' ? { bankAccountId: bank!.id } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(cheques.id, c.id));
-    // Ciro: eşleştirme ilk belgenin olayına bağlanır (kalemler toplamı kapatır; belge başına bölünmez)
-    if (input.action === 'endorse' && c === rows[0]) {
-      await insertAllocations(tx, ctx, { chequeId: c.id, eventId, partyId: endorsee!.id, control: 'payable', entryId: entry.id, items: settleItems, plan: plan!, itemLineIndex });
-    }
+    })),
+  );
+  await tx
+    .update(cheques)
+    .set({
+      status: tr.to,
+      holderPartyId: input.action === 'endorse' ? endorsee!.id : null,
+      ...(input.action === 'deposit' || input.action === 'pay' ? { bankAccountId: bank!.id } : {}),
+      updatedAt: new Date(),
+    })
+    .where(inArray(cheques.id, rows.map((c) => c.id)));
+  // Ciro: eşleştirme ilk belgenin olayına bağlanır (kalemler toplamı kapatır; belge başına bölünmez)
+  if (input.action === 'endorse' && rows[0]) {
+    await insertAllocations(tx, ctx, { chequeId: rows[0].id, eventId: eventIds[0]!, partyId: endorsee!.id, control: 'payable', entryId: entry.id, items: settleItems, plan: plan!, itemLineIndex });
   }
 
   const detail = await tx.execute<ChequeView>(sql`select ${COLS} ${FROM} where c.id in (${uuidList(ids)}) order by c.due_date, c.doc_no`);

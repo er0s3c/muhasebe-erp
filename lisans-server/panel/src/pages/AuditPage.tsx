@@ -1,26 +1,28 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Button } from '@ui/Button';
 import { PageHeader } from '@ui/Card';
-import { EmptyState, PageLoading } from '@ui/Feedback';
+import { EmptyState, ErrorState, PageLoading } from '@ui/Feedback';
 import { Table, TableWrap, Td, Th, Tr } from '@ui/Table';
-import { api, type AuditEntry } from '../api';
+import { api, errorText, type AuditEntry } from '../api';
 import { AUDIT_LABELS, fmtDateTime } from '../format';
 
 const PAGE = 50;
 
 export function AuditPage() {
-  const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+  const { data, isPending, error, refetch, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ['audit'],
     initialPageParam: undefined as number | undefined,
     queryFn: ({ pageParam }) => api<{ entries: AuditEntry[] }>(`/admin/api/audit?limit=${PAGE}${pageParam ? `&before=${pageParam}` : ''}`),
     getNextPageParam: (last) => (last.entries.length === PAGE ? last.entries.at(-1)?.id : undefined),
   });
+  if (error && !data) return <><PageHeader title="Denetim kaydı" /><ErrorState description={errorText(error)} onRetry={() => void refetch()} retrying={isFetching} /></>;
   if (isPending || !data) return <PageLoading />;
   const entries = data.pages.flatMap((p) => p.entries);
 
   return (
     <>
       <PageHeader title="Denetim kaydı" description="Yönetici ve komut satırı işlemleri ile kurulumların etkinleştirme olayları. Kayıtlar yalnızca eklenir, değiştirilemez." />
+      {error && <ErrorState description={errorText(error)} onRetry={() => void refetch()} retrying={isFetching} />}
       {entries.length === 0 ? (
         <TableWrap>
           <EmptyState title="Kayıt yok" />

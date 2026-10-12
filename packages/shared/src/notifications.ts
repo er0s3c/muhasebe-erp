@@ -1,4 +1,4 @@
-import { addDaysIso, COMPANY_TIME_ZONE, todayIso } from './dates';
+import { addDaysIso, getCompanyTimeZone, todayIso } from './dates';
 import { hasPermission, type Permission, type PermissionSet } from './permissions';
 
 /**
@@ -138,11 +138,11 @@ export function monthRange(month: string): { from: string; to: string } {
   return { from, to: addDaysIso(next, -1) };
 }
 
-/** Şirket saat diliminde (Europe/Nicosia) tarih ve saat: tarih YYYY-AA-GG, saat SS:DD. Yaz saati geçişleri duvar saatiyle doğrudur. */
-export function nowLocal(now: Date = new Date()): { date: string; time: string } {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: COMPANY_TIME_ZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+/** Şirket saat diliminde tarih ve saat; yaz saati geçişleri duvar saatiyle doğrudur. */
+export function nowLocal(now: Date = new Date(), timeZone: string = getCompanyTimeZone()): { date: string; time: string } {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
-  return { date: todayIso(now), time: `${get('hour')}:${get('minute')}` };
+  return { date: todayIso(now, timeZone), time: `${get('hour')}:${get('minute')}` };
 }
 
 const wallMinutes = (date: string, time: string) =>

@@ -17,6 +17,7 @@ import { createDoc, createType, renewDoc } from '../modules/foreignworkers/docs'
 import { createGuarantee } from '../modules/foreignworkers/guarantees';
 import { createParam as createForeignParam } from '../modules/foreignworkers/params';
 import type { LedgerCtx } from '../modules/ledger/journal';
+import { resolveLegalProfileSnapshot } from '../modules/tenancy/profiles';
 
 const addDays = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -36,6 +37,7 @@ export async function seedHr(tx: Tx, ctx: LedgerCtx, opts: { secret: string; cas
   const pctx = { companyId: ctx.companyId, userId: ctx.userId, baseCurrency: ctx.baseCurrency, reportingCurrency: ctx.reportingCurrency };
   const sctx = { companyId: ctx.companyId, userId: ctx.userId, secret: opts.secret };
   const note = 'Demo değeri; yasal oran/tutar değildir, doğrulanmamıştır';
+  const countryPayroll = !!(await resolveLegalProfileSnapshot(tx, ctx.companyId, end));
 
   // ---- Bordro: ücret şartları, parametreler (doğrulanmamış demo değerleri), ek ödeme kalemi, aylık bordro ----
   for (const [e, basis, amount] of [
@@ -54,9 +56,10 @@ export async function seedHr(tx: Tx, ctx: LedgerCtx, opts: { secret: string; cas
     ['employer_social_pct', '12'],
     ['income_tax_pct', '15'],
   ] as const) {
+    if (countryPayroll && ['employee_social_pct', 'employer_social_pct', 'income_tax_pct'].includes(key)) continue;
     await createParam(tx, pctx, { key, value, effectiveFrom: from, enabled: true, sourceNote: note });
   }
-  const meal = await createItem(tx, pctx, { code: 'YMK', name: 'Yemek yardımı', kind: 'earning', affectsSocialBase: false, affectsTaxBase: false, liability: 'other' });
+  const meal = await createItem(tx, pctx, { code: 'YMK', name: 'Yemek yardımı', kind: 'earning', affectsSocialBase: false, affectsTaxBase: false, affectsStampBase: null, liability: 'other' });
 
   // ---- Personel cari: avanslar (biri bordrodan kesilir, biri kısmen iade edilir) ----
   const advDate = addDays(start, 3);
@@ -64,6 +67,8 @@ export async function seedHr(tx: Tx, ctx: LedgerCtx, opts: { secret: string; cas
   const adv2 = await giveAdvance(tx, ctx, { employeeId: murat.id, date: addDays(start, 8), amount: '4000', purpose: 'Aile sağlık gideri avansı', treasuryAccountId: opts.cashId });
   await repayAdvance(tx, ctx, (adv2.advance as { id: string }).id, { amount: '1000', date: addDays(start, 20), treasuryAccountId: opts.cashId, note: 'Elden iade' });
 
+  // Ülke şirketinde örnek yüzdelerle kesinleşmiş yasal kesinti üretilmez.
+  if (!countryPayroll) {
   const run = await createRun(tx, pctx, { month, description: 'Demo bordro' });
   const runId = (run as { run: { id: string } }).run.id;
   // ek ödeme: yemek yardımı (iki personele)
@@ -77,6 +82,7 @@ export async function seedHr(tx: Tx, ctx: LedgerCtx, opts: { secret: string; cas
   for (const l of approved.lines.filter((x) => [hasan.id, zeynep.id].includes(x.employeeId as string))) {
     await paySalary(tx, ctx, { employeeId: l.employeeId as string, date: end, amount: String(l.net).replace(/0+$/, '').replace(/\.$/, ''), treasuryAccountId: opts.bankTlId, payrollRunId: runId, note: 'Demo: bordro net ödemesi' });
   }
+  }
   await updateLedgerSettings(tx, ctx, { deductionCapPct: '50', sourceNote: 'Demo değeri; yasal sınır değildir, doğrulanmamıştır' });
 
   // ---- Sosyal güvenlik: profiller, destek kuralı (demo), uygunluk, aylık bildirim ----
@@ -88,6 +94,7 @@ export async function seedHr(tx: Tx, ctx: LedgerCtx, opts: { secret: string; cas
   ] as const) {
     await createProfile(tx, sctx, { employeeId: e.id, effectiveFrom: from, payrollTypeCode: 'A', insuranceStart: e.hireDate ?? from, socialSecurityNo: no });
   }
+  if (!countryPayroll) {
   await createRule(tx, sctx, {
     code: 'DST-DEMO',
     name: 'Demo işveren primi desteği',
@@ -101,6 +108,7 @@ export async function seedHr(tx: Tx, ctx: LedgerCtx, opts: { secret: string; cas
   await createEligibility(tx, sctx, { employeeId: zeynep.id, ruleCode: 'DST-DEMO', validFrom: from, note: 'Demo: teknik personel' });
   const decl = await buildDeclaration(tx, sctx, month);
   await finalizeDeclaration(tx, sctx, decl.declaration.id, 'Demo: bildirim kesinleştirildi');
+  }
 
   // ---- Yabancı işçi belgeleri ----
   await tx.update(employees).set({ nationality: 'Pakistan' }).where(eq(employees.id, emre.id));
@@ -116,5 +124,5 @@ export async function seedHr(tx: Tx, ctx: LedgerCtx, opts: { secret: string; cas
   await createDoc(tx, sctx, { employeeId: murat.id, typeId: (res as { id: string }).id, documentNo: 'IK-2025-0150', issuingAuthority: 'Göç İdaresi', issueDate: addDays(today, -380), expiryDate: addDays(today, -15), referenceNote: 'Demo: süresi dolmuş' });
   await createGuarantee(tx, sctx, { employeeId: emre.id, docId: (docNo as { id: string }).id, depositedDate: addDays(today, -120), depositReference: 'Dekont 118' });
 
-  return `İK: bordro ${month} (onaylı, 2 net ödeme), 2 avans, sosyal güvenlik bildirimi, yabancı işçi belgeleri`;
+  return countryPayroll ? 'İK: ücret şartları, 2 avans ve yabancı işçi belgeleri. Ülke bordrosu için gerçek prim rejimi ve doğrulanmış tarihli paket gerekir; örnek bordro/bildirim üretilmedi.' : `İK: bordro ${month} (onaylı, 2 net ödeme), 2 avans, sosyal güvenlik bildirimi, yabancı işçi belgeleri`;
 }

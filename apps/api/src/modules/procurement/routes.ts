@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import { sql } from 'drizzle-orm';
 import {
   awardRfqSchema,
   cancelOrderSchema,
@@ -16,12 +17,13 @@ import {
   upsertOfferSchema,
   pageQuerySchema,
   decideApprovalSchema,
+  supplierPerformanceQuerySchema,
   type Permission,
 } from '@erp/shared';
 import { z } from 'zod';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { pageOf } from '../../http/paging';
-import { forbidden, notFound } from '../../http/errors';
+import { conflict, forbidden, notFound } from '../../http/errors';
 import { isModuleDenied, moduleAccessDenied } from '../access/effective';
 import { decide, getRequest as getApprovalRequest, pendingForMe, type ApprovalCtx } from '../approvals/service';
 import { cancelOrder, closeOrder, createOrder, deleteOrder, getOrder, issueOrder, listOrders, updateOrder } from './orders';
@@ -39,6 +41,8 @@ import {
   type ProcurementCtx,
 } from './requests';
 import { awardRfq, cancelRfq, createRfq, deleteOffer, getRfq, listRfqs, upsertOffer } from './rfq';
+import { supplierPerformance } from './performance';
+import { replenishmentSuggestions, requireCompanyStockScope } from './replenishment';
 
 const pctx = ({ company, user }: TenantCtx): ProcurementCtx => ({ companyId: company.id, userId: user.id, baseCurrency: company.baseCurrency, sector: company.sector });
 const actx = ({ company, user, role, access }: TenantCtx): ApprovalCtx => ({ companyId: company.id, userId: user.id, role, permissions: access.permissions });
@@ -46,7 +50,7 @@ const actx = ({ company, user, role, access }: TenantCtx): ApprovalCtx => ({ com
 /** Aynı satın alma API'si şantiyede legacy, deri sektöründe genel tedarik modülüne bağlıdır. */
 function procurementRoute<T>(app: FastifyInstance, options: { permission: Permission }, handler: (ctx: TenantCtx) => Promise<T>) {
   return tenantRoute(app, options, async (c) => {
-    const module = ['LEATHER_FASHION', 'MANUFACTURING_WHOLESALE'].includes(c.company.sector) ? 'core.procurement' : 'construction.procurement';
+    const module = c.company.sector === 'CONSTRUCTION' ? 'construction.procurement' : 'core.procurement';
     if (!c.enabledModules.has(module)) throw forbidden('Satın alma modülü şirketinizde etkin değil', 'MODULE_DISABLED');
     if (isModuleDenied(c.access, module)) throw moduleAccessDenied();
     return handler(c);
@@ -57,6 +61,40 @@ export const procurementRoutes: FastifyPluginAsync = async (app) => {
   const read = { permission: 'procurement.read' } as const;
   const manage = { permission: 'procurement.manage' } as const;
   const approve = { permission: 'procurement.approve' } as const;
+
+  const stockScope = (c: TenantCtx) => {
+    requireCompanyStockScope(c.branch);
+    c.require('inventory.read');
+    if (!c.enabledModules.has('core.inventory') || isModuleDenied(c.access, 'core.inventory')) throw moduleAccessDenied();
+  };
+  app.get('/api/procurement/replenishment', procurementRoute(app, read, async c => {
+    stockScope(c);
+    return replenishmentSuggestions(c.tx, c.company.baseCurrency);
+  }));
+  app.post('/api/procurement/replenishment/draft', procurementRoute(app, manage, async c => {
+    stockScope(c);
+    const input = z.object({ projectId: z.uuid().nullable().optional(), needDate: z.iso.date().nullable().optional(),
+      items: z.array(z.object({ itemId: z.uuid(), quantity: z.string().regex(/^\d{1,15}(\.\d{1,4})?$/) })).min(1).max(300)
+    }).parse(c.req.body);
+    await c.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${c.company.id}),hashtext('stock-replenishment'))`);
+    const suggestions = await replenishmentSuggestions(c.tx, c.company.baseCurrency);
+    const ids = new Set<string>();
+    const lines = input.items.map(item => {
+      const row = suggestions.rows.find(row => row.itemId === item.itemId);
+      if (ids.has(item.itemId) || !row?.suggested || Number(row.suggested) <= 0 || row.suggested !== item.quantity)
+        throw conflict('Stok veya açık satın alma miktarı değişti. Öneriyi yenileyip tekrar seçin.', 'REPLENISHMENT_CHANGED');
+      ids.add(item.itemId);
+      return { itemId: row.itemId, description: row.name, unit: row.unit, quantity: row.suggested, estUnitPrice: row.estimateUnitPrice };
+    });
+    const output = await createRequest(c.tx, pctx(c), createPurchaseRequestSchema.parse({ projectId: input.projectId, needDate: input.needDate,
+      title: 'Minimum ve hedef stok tamamlama', note: 'Öneri kaydedilirken güncel stok, açık siparişler ve talepler tekrar kontrol edildi. Tahmini fiyatları ve ihtiyacı onaya göndermeden önce inceleyin.', lines }));
+    void c.reply.code(201);
+    return output;
+  }));
+
+  app.get('/api/reports/supplier-performance', procurementRoute(app, read, async ({tx,req,company}) =>
+    supplierPerformance(tx,company.timeZone,supplierPerformanceQuerySchema.parse(req.query)),
+  ));
 
   app.get('/api/procurement/approvals/inbox', procurementRoute(app, read, async (c) => ({ requests: (await pendingForMe(c.tx, actx(c))).filter((r) => r.docType === 'purchase_request') })));
   app.post('/api/procurement/approvals/:id/decide', procurementRoute(app, approve, async (c) => {

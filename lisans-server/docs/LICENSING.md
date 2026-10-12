@@ -14,7 +14,7 @@ Kod ve komutlar depodaki gerçek uygulamayı anlatır; "doğrulanmadı" denen hu
   Hedef; sahte lisans üretmeyi, veritabanındaki lisansı düzenlemeyi, lisansı başka sunucuya kopyalamayı, saati geri almayı, ağı kesmeyi ve
   cihaz kotasını atlatmayı **imkânsız ya da belirgin ve geçici** yapmak, kodu yamalamayı ise **pahalılaştırmaktır** (bkz. §10). Gerçekten kırılamaz
   tek model yazılımı **sizin** sunucunuzda barındırmaktır (aynı lisans sunucusu ileride kiracı başına lisansla bu modele uyarlanabilir).
-- Kriptografi standarttır: Ed25519 (Node `crypto`), yeni bağımlılık yoktur. Muhasebe verisi lisans sunucusuna **gönderilmez** (§3).
+- Kriptografi standarttır: Ed25519 (Node `crypto`), yeni bağımlılık yoktur. Otomatik lisans iletişiminde muhasebe verisi **gönderilmez**; kullanıcının isteyerek gönderdiği destek açıklaması ve ekran görüntüsü ayrı bir akıştır (§3).
 
 ## 2. Kavramlar
 
@@ -35,6 +35,16 @@ Uygulama yalnızca **açık anahtarınızı** bilir (imaja gömülür); özel an
 Yalnızca: kurulum kimliği, kurulum açık anahtarı, sunucu parmak izi (özet), uygulama sürümü, etkinleştirme kodu (etkinleştirmede), ve kalp atışında
 **kayıtlı etkin cihaz sayısı ile şirket sayısı**, kurulum sihirbazıyla kurulmuşsa **kit hedefi** (`linux-x64`/`win-x64`; uzaktan güncelleme arşivini seçer). Kullanıcı, müşteri, fatura, stok, tutar gibi hiçbir muhasebe verisi gönderilmez. Sunucu IP adresini
 TCP bağlantısı gereği görür (klon şüphesi tespitinde kullanılır; `docs/LEGAL-NOTES.md` §11). Bu açıklama uygulamada da (Lisans sayfası) vardır.
+
+### 3.1 Müşterinin gönderdiği geri bildirim
+
+Kullanıcı **Sorun bildir** formunu gönderdiğinde, yazdığı açıklama, yaptığı işlem ve beklediği sonuç; seçtiği PNG/JPEG ekran görüntüsü (isteğe bağlı, en çok 5 MB); bulunduğu sayfanın sorgu/hash içermeyen yolu ve başlığı satıcının yönetici panelindeki **Geri bildirimler** kutusuna iletilir. Açıklama veya görüntüden en az biri gerekir. Oturumdaki gerçek kullanıcı adı/e-postası, şirket adı/sektörü ve uygulama sürümü sunucu tarafından eklenir. Otomatik ekran yakalama veya muhasebe kaydı aktarımı yapılmaz; kullanıcı görüntüye eklediği bilgileri kendisi seçer.
+
+ERP rotası `POST /api/companies/:companyId/feedback` şirket üyeliğini ve oturumu doğrular. Satıcıya giden `POST /v1/feedback` aynı kurulumun etkinleştirmede sabitlenen Ed25519 anahtarıyla, ayrı `feedback` imza türünde imzalanır. Aktif kurulum, parmak izi, zaman kanıtı veya 10 dakika saat penceresi ve nonce denetlenir. Aynı bildirim kimliği ve içerikle yeniden deneme tek kayıt döndürür; farklı içerik aynı kimlikle kabul edilmez. Görseller gerçek dosya biçimi ve boyut bakımından iki sunucuda da kontrol edilir.
+
+Satıcı listesi/detayı/durum değişimi ve görsel görüntüleme `adminRoute` oturum korumasından geçer; değişiklikler CSRF denetimli ve denetim günlüğündedir. Görseller lisans veritabanında `bytea` tutulur ve mevcut veritabanı yedeğine dahildir. JSON liste/detay yanıtları görsel verisini içermez. Durumlar **Yeni**, **İnceleniyor**, **Çözüldü**; iç destek notu yalnız satıcı paneline aittir.
+
+Kurulumun doğrulanmış lisans bağlantısı yoksa gönderim kullanılamaz ve arayüz kurulum açıklaması gösterir. Ağ veya alıcı hatası başarı gibi gösterilmez. Doğrulanmış ancak salt okunur lisanslarda destek bildirimi yapılabilir; bu istisna muhasebe yazma yetkisi vermez. Geri bildirim başarısızlığı lisansın hata durumunu değiştirmez.
 
 ## 4. Satıcı kurulumu (lisans sunucusu, VPS)
 

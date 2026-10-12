@@ -49,6 +49,8 @@ export interface PayrollItemInput {
   amount: string;
   affectsSocialBase: boolean;
   affectsTaxBase: boolean;
+  /** Ülke bordrosunda damga/pul esasına dahil olma durumu; eski kayıtlarda bilinmiyor. */
+  affectsStampBase?: boolean | null;
   liability: PayrollLiability;
 }
 
@@ -82,7 +84,7 @@ export interface PayrollWarning {
 /** Hesabın slipte/kayıtta görünen kalemi (parametreden gelen kesinti/işveren yükü ve elle girilenler). */
 export interface PayrollComponent {
   kind: 'earning' | 'deduction' | 'employer';
-  source: 'param' | 'manual';
+  source: 'param' | 'manual' | 'country';
   /** Parametre kalemlerinde parametre anahtarı; elle kalemde kalem kodu. */
   code: string;
   label: string;

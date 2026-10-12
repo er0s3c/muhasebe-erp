@@ -26,6 +26,9 @@ import { addMember, createElimination, createGroup, listEligibleCompanies, listE
 import { intercompanyHints } from './hints';
 import { consolidatedReport } from './report';
 import { consolidatedTables, executiveTables, groupFxPositionTables } from './tables';
+import { forEachScope, resolveGroupAccess } from './access';
+import { loadMemberAccess, requireResourceOperation } from '../access/effective';
+import { exportEvents } from '../../db/schema';
 
 const idParam = z.object({ id: uuid });
 const memberParam = z.object({ id: uuid, companyId: uuid });
@@ -143,6 +146,11 @@ export const consolidationRoutes: FastifyPluginAsync = async (app) => {
       await limit(ctx, 'consolidation-export');
       const { id, key } = exportParam.parse(ctx.req.params);
       const { format } = formatSchema.parse(ctx.req.query);
+      const groupAccess = await resolveGroupAccess(app, ctx, id);
+      await forEachScope(ctx.tx, groupAccess, async scope => {
+        requireResourceOperation(await loadMemberAccess(ctx.tx, scope.companyId, ctx.user.id, scope.role), 'core.ledger', 'export');
+        if (key === 'fx-position') requireResourceOperation(await loadMemberAccess(ctx.tx, scope.companyId, ctx.user.id, scope.role), 'core.treasury', 'export');
+      });
       if (!app.exportGate.tryAcquire()) {
         void ctx.reply.header('retry-after', '5');
         throw new AppError(429, 'EXPORT_BUSY', 'Şu anda başka dışa aktarmalar çalışıyor; birkaç saniye sonra tekrar deneyin');
@@ -164,12 +172,21 @@ export const consolidationRoutes: FastifyPluginAsync = async (app) => {
           name = `grup-yonetici-ozeti-${q.from}_${q.to}`;
         }
         void ctx.reply.header('cache-control', 'no-store').header('content-disposition', `attachment; filename="${name}.${format}"`);
+        const recordExport = async () => {
+          await forEachScope(ctx.tx, groupAccess, async scope => {
+            await ctx.tx.insert(exportEvents).values({ companyId: scope.companyId, userId: ctx.user.id, reportKey: `consolidation.${key}`, format, rowCount: (format === 'csv' ? [tables[0]!] : tables).reduce((n, table) => n + table.rows.length, 0), requestId: ctx.req.id, ip: ctx.req.ip });
+          });
+        };
         if (format === 'csv') {
           void ctx.reply.header('content-type', 'text/csv; charset=utf-8');
-          return renderCsv(tables[0]!);
+          const csv = renderCsv(tables[0]!);
+          await recordExport();
+          return csv;
         }
         void ctx.reply.header('content-type', XLSX_CONTENT_TYPE);
-        return Buffer.from(writeXlsx(tables));
+        const workbook = Buffer.from(writeXlsx(tables));
+        await recordExport();
+        return workbook;
       } finally {
         app.exportGate.release();
       }

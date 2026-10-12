@@ -38,10 +38,12 @@ import {
 } from '../ledger/journal';
 import { requireMappings } from '../ledger/mappings';
 import { validateDimensions } from '../projects/dimension';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { assertCashOk, lockTreasuryAccounts } from '../treasury/accounts';
 import { pageSql, paged, type PageQuery } from '../../http/paging';
+import { assertFinancialApproved } from '../approvals/document-gate';
+import { expenseSnapshot } from '../approvals/financial-snapshot';
 
 const EXPENSE_NUMBER_KEY = 'EXP';
 const EXPENSE_PREFIX = 'GDF';
@@ -199,10 +201,12 @@ export function computeExpenseAmounts(
 }
 
 export async function createExpenseEntry(tx: Tx, ctx: LedgerCtx, input: CreateExpenseEntryInput) {
-  const [card] = await tx.select().from(expenseCards).where(eq(expenseCards.id, input.cardId));
+  const [card] = await tx.select().from(expenseCards).where(eq(expenseCards.id, input.cardId)).for('update');
   if (!card) throw notFound('Gider kartı');
   if (!card.isActive)
     throw unprocessable(`${card.code} gider kartı pasif`, 'EXPENSE_CARD_INACTIVE');
+  const approvalProof = await expenseSnapshot(tx, ctx, input);
+  await assertFinancialApproved(tx, 'expense', ctx.approvalRequestId, approvalProof.amount, approvalProof.hash, approvalProof.projectId);
   const date = input.entryDate;
   if (input.paymentKind === 'employee' && date > todayIso())
     throw unprocessable('Personel masraf tarihi gelecekte olamaz', 'EMPLOYEE_EXPENSE_FUTURE');
@@ -318,8 +322,7 @@ export async function createExpenseEntry(tx: Tx, ctx: LedgerCtx, input: CreateEx
 
   const id = uuidv7();
   const year = isoYear(date);
-  const seq = await nextNumber(tx, ctx.companyId, EXPENSE_NUMBER_KEY, year);
-  const entryNo = formatDocumentNumber(EXPENSE_PREFIX, year, seq);
+  const entryNo = await nextDocumentNumber(tx, ctx.companyId, EXPENSE_NUMBER_KEY, year, EXPENSE_PREFIX);
   const text = `Gider ${entryNo} — ${card.name}: ${input.description}`.slice(0, 300);
   const line = (
     accountId: string,

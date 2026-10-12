@@ -13,13 +13,18 @@ import {
   CUSTOM_CODE_SCOPES,
   dec,
   toDbRate,
+  fxProviderSchema,
+  fxPurposeSchema,
+  fxRateTypeSchema,
 } from '@erp/shared';
-import { currencies, customCodes, exchangeRates, taxRates } from '../../db/schema';
+import { companies, currencies, customCodes, exchangeRates, taxRates, users } from '../../db/schema';
 import { tenantRoute } from '../../http/context';
+import type { Tx } from '../../db/client';
 import { badRequest, notFound } from '../../http/errors';
 import { closePeriod, generatePeriods, listPeriods, reopenPeriod } from './periods';
-import { importKktcmbRates, parseKktcmbXml } from './kktcmb';
-import { findRate } from './rates';
+import { lookupRate } from './rates';
+import { companyFxProvider, requireCompanyFxProvider, FX_PROVIDER_REGISTRY } from './fx-providers';
+import { importPublishedRates } from './fx-import';
 
 const idParam = z.object({ id: uuid });
 
@@ -39,7 +44,7 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
   // ---- Döviz kurları ----------------------------------------------------
   app.get(
     '/api/exchange-rates',
-    tenantRoute(app, settings('settings.read'), async ({ tx, req }) => {
+    tenantRoute(app, settings('settings.read'), async ({ tx, req, company }) => {
       const q = z
         .object({
           currency: currencyCode.optional(),
@@ -60,7 +65,15 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
         )
         .orderBy(desc(exchangeRates.rateDate), asc(exchangeRates.currencyCode))
         .limit(q.limit);
-      return { rates: rows };
+      const provider = companyFxProvider(company);
+      return {
+        rates: rows,
+        provider,
+        providerLabel: provider ? FX_PROVIDER_REGISTRY[provider].label : null,
+        sourceUrl: provider ? FX_PROVIDER_REGISTRY[provider].url() : null,
+        jurisdiction: company.jurisdiction,
+        timeZone: company.timeZone,
+      };
     }),
   );
 
@@ -71,11 +84,17 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
       if (input.currencyCode === input.quoteCode) {
         throw badRequest('Kur için iki farklı para birimi seçin', 'RATE_SAME_CURRENCY');
       }
-      if (dec(input.buy).lte(0) || (input.sell && dec(input.sell).lte(0))) {
+      if (
+        [input.buy, input.sell, input.effectiveBuy, input.effectiveSell].some(
+          (v) => v && dec(v).lte(0),
+        )
+      ) {
         throw badRequest('Kur sıfırdan büyük olmalı', 'RATE_NOT_POSITIVE');
       }
       const buy = toDbRate(input.buy);
       const sell = toDbRate(input.sell ?? input.buy);
+      const effectiveBuy = input.effectiveBuy ? toDbRate(input.effectiveBuy) : null;
+      const effectiveSell = input.effectiveSell ? toDbRate(input.effectiveSell) : null;
       const [row] = await tx
         .insert(exchangeRates)
         .values({
@@ -86,6 +105,11 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
           buy,
           sell,
           source: input.source,
+          provider: 'manual',
+          effectiveBuy,
+          effectiveSell,
+          sourceUrl: null,
+          fetchedAt: null,
           createdBy: user.id,
         })
         .onConflictDoUpdate({
@@ -95,7 +119,17 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
             exchangeRates.currencyCode,
             exchangeRates.quoteCode,
           ],
-          set: { buy, sell, source: input.source, createdBy: user.id },
+          set: {
+            buy,
+            sell,
+            effectiveBuy,
+            effectiveSell,
+            provider: 'manual',
+            sourceUrl: null,
+            fetchedAt: null,
+            source: input.source,
+            createdBy: user.id,
+          },
         })
         .returning();
       return { rate: row };
@@ -106,7 +140,10 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
     '/api/exchange-rates/:id',
     tenantRoute(app, settings('rates.manage'), async ({ tx, req }) => {
       const { id } = idParam.parse(req.params);
-      const deleted = await tx.delete(exchangeRates).where(eq(exchangeRates.id, id)).returning({ id: exchangeRates.id });
+      const deleted = await tx
+        .delete(exchangeRates)
+        .where(eq(exchangeRates.id, id))
+        .returning({ id: exchangeRates.id });
       if (deleted.length === 0) throw notFound('Kur');
       return { ok: true };
     }),
@@ -117,10 +154,18 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
     '/api/exchange-rates/lookup',
     tenantRoute(app, settings('settings.read'), async ({ tx, req, company }) => {
       const q = z
-        .object({ from: currencyCode, to: currencyCode, date: isoDate.default(todayIso()) })
+        .object({
+          from: currencyCode,
+          to: currencyCode,
+          date: isoDate.default(todayIso()),
+          purpose: fxPurposeSchema.optional(),
+          rateType: fxRateTypeSchema.optional(),
+        })
         .parse(req.query);
-      const rate = await findRate(tx, q.from, q.to, q.date, company.baseCurrency);
-      return { from: q.from, to: q.to, date: q.date, rate: rate ? toDbRate(rate) : null };
+      return lookupRate(tx, q.from, q.to, q.date, company.baseCurrency, {
+        ...q,
+        legacyInverse: !q.purpose && !q.rateType,
+      });
     }),
   );
 
@@ -130,15 +175,96 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
    */
   app.post(
     '/api/exchange-rates/import',
-    tenantRoute(app, { ...settings('rates.manage'), limit: { name: 'rate-import', max: 10, windowMs: 60_000 } }, async ({ tx, req, user, company }) => {
-      const body = z
-        .discriminatedUnion('source', [
-          z.object({ source: z.literal('kktcmb'), date: isoDate.optional() }),
-          z.object({ source: z.literal('xml'), xml: z.string().min(50).max(500_000) }),
-        ])
-        .parse(req.body);
-      const xml = body.source === 'xml' ? body.xml : await app.rateFetcher(body.date);
-      return importKktcmbRates(tx, { companyId: company.id, userId: user.id }, parseKktcmbXml(xml));
+    tenantRoute(
+      app,
+      { ...settings('rates.manage'), limit: { name: 'rate-import', max: 10, windowMs: 60_000 } },
+      async ({ tx, req, user, company }) => {
+        const body = z
+          .discriminatedUnion('source', [
+            z.object({ source: z.literal('kktcmb'), date: isoDate.optional() }),
+            z.object({ source: z.literal('tcmb'), date: isoDate.optional() }),
+            z.object({ source: z.literal('company'), date: isoDate.optional() }),
+            z.object({
+              source: z.literal('xml'),
+              provider: fxProviderSchema.optional(),
+              xml: z.string().min(50).max(500_000),
+            }),
+          ])
+          .parse(req.body);
+        const selected = companyFxProvider(company);
+        const provider =
+          body.source === 'company'
+            ? requireCompanyFxProvider(company)
+            : body.source === 'xml'
+              ? (body.provider ??
+                selected ??
+                (body.xml.includes('<Tarih_Date') ? 'tcmb' : 'kktcmb'))
+              : body.source;
+        if (selected && selected !== provider)
+          throw badRequest(
+            'Kur kaynağı şirketin çalışma ülkesiyle uyuşmuyor.',
+            'FX_PROVIDER_MISMATCH',
+          );
+        const definition = FX_PROVIDER_REGISTRY[provider];
+        const xml = body.source === 'xml' ? body.xml : await app.fxRateFetcher(provider, body.date);
+        const day = definition.parse(xml);
+        if (body.source !== 'xml' && body.date && day.date !== body.date)
+          throw badRequest(
+            'İndirilen XML tarihi istenen kur tarihiyle uyuşmuyor.',
+            'FX_RATE_DATE_MISMATCH',
+          );
+        return importPublishedRates(tx, { companyId: company.id, userId: user.id }, day, {
+          provider,
+          uploaded: body.source === 'xml',
+          sourceUrl: definition.url(day.date),
+        });
+      },
+    ),
+  );
+
+  /** Otomatik resmî kur çekimi: durum (herkes okur) ve aç/kapat (kur yöneticisi; zamanlayıcı açan kullanıcının bağlamında yazar). */
+  const autoStatus = async (tx: Tx, company: { id: string; jurisdiction?: 'TR' | 'KKTC' | null; fxProvider?: 'tcmb' | 'kktcmb' | null }) => {
+    const [row] = await tx
+      .select({ enabled: companies.fxAutoImport, lastAttemptAt: companies.fxAutoLastAttemptAt, lastError: companies.fxAutoLastError, enabledBy: companies.fxAutoEnabledBy })
+      .from(companies)
+      .where(eq(companies.id, company.id));
+    const [enabledBy] = row?.enabledBy
+      ? await tx.select({ fullName: users.fullName }).from(users).where(eq(users.id, row.enabledBy))
+      : [];
+    const provider = companyFxProvider(company);
+    const [last] = provider
+      ? await tx
+          .select({ date: exchangeRates.rateDate, fetchedAt: exchangeRates.fetchedAt, source: exchangeRates.source })
+          .from(exchangeRates)
+          .where(and(eq(exchangeRates.provider, provider), sql`${exchangeRates.fetchedAt} is not null`))
+          .orderBy(desc(exchangeRates.fetchedAt))
+          .limit(1)
+      : [];
+    return {
+      enabled: row?.enabled ?? false,
+      provider,
+      providerLabel: provider ? FX_PROVIDER_REGISTRY[provider].label : null,
+      enabledByName: row?.enabled ? (enabledBy?.fullName ?? null) : null,
+      lastAttemptAt: row?.lastAttemptAt ?? null,
+      lastError: row?.lastError ?? null,
+      lastImport: last ?? null,
+      publishAfter: provider ? (provider === 'tcmb' ? app.config.FX_AUTO_TCMB_AFTER : app.config.FX_AUTO_KKTCMB_AFTER) : null,
+    };
+  };
+  app.get(
+    '/api/exchange-rates/auto',
+    tenantRoute(app, settings('settings.read'), async ({ tx, company }) => autoStatus(tx, company)),
+  );
+  app.put(
+    '/api/exchange-rates/auto',
+    tenantRoute(app, settings('rates.manage'), async ({ tx, req, user, company }) => {
+      const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+      if (enabled) requireCompanyFxProvider(company);
+      await tx
+        .update(companies)
+        .set(enabled ? { fxAutoImport: true, fxAutoEnabledBy: user.id, fxAutoLastError: null } : { fxAutoImport: false, fxAutoEnabledBy: null, fxAutoLastError: null })
+        .where(eq(companies.id, company.id));
+      return autoStatus(tx, company);
     }),
   );
 
@@ -164,10 +290,15 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
           companyId: company.id,
           code: input.code,
           name: input.name,
+          jurisdiction: company.jurisdiction,
           rate: input.rate,
           validFrom: input.validFrom,
           validTo: input.validTo ?? null,
           sourceNote: input.sourceNote ?? null,
+          sourceUrl: input.sourceUrl ?? null,
+          rulePackVersion: input.rulePackVersion ?? null,
+          verifiedBy: null,
+          verifiedAt: null,
         })
         .returning();
       void reply.code(201);
@@ -198,7 +329,10 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
     '/api/tax-rates/:id',
     tenantRoute(app, settings('settings.manage'), async ({ tx, req }) => {
       const { id } = idParam.parse(req.params);
-      const deleted = await tx.delete(taxRates).where(eq(taxRates.id, id)).returning({ id: taxRates.id });
+      const deleted = await tx
+        .delete(taxRates)
+        .where(eq(taxRates.id, id))
+        .returning({ id: taxRates.id });
       if (deleted.length === 0) throw notFound('Vergi oranı');
       return { ok: true };
     }),
@@ -287,7 +421,10 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
     '/api/custom-codes/:id',
     tenantRoute(app, settings('settings.manage'), async ({ tx, req }) => {
       const { id } = idParam.parse(req.params);
-      const deleted = await tx.delete(customCodes).where(eq(customCodes.id, id)).returning({ id: customCodes.id });
+      const deleted = await tx
+        .delete(customCodes)
+        .where(eq(customCodes.id, id))
+        .returning({ id: customCodes.id });
       if (deleted.length === 0) throw notFound('Özel kod');
       return { ok: true };
     }),

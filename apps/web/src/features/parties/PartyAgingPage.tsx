@@ -45,7 +45,7 @@ export function PartyAgingPage() {
       <PrintHeader subtitle={`${t('partyAging.asOf')}: ${asOf.split('-').reverse().join('.')}`} />
 
       <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
-        <SegmentedTabs
+        <SegmentedTabs variant="filter"
           value={type}
           onChange={setType}
           items={(['receivable', 'payable'] as const).map((k) => ({ key: k, label: t(`partyAging.${k}`) }))}

@@ -188,7 +188,7 @@ describe('yöneticinin belirlediği ilk parola geçicidir', async () => {
 
     expect((await member.get('/api/accounts')).json().error.code).toBe('PASSWORD_CHANGE_REQUIRED');
     expect((await member.get('/api/navigation')).statusCode).toBe(403);
-    expect((await client(app, token).post('/api/companies', { name: 'Yeni Şirket Ltd.', sector: 'COMMERCE' })).statusCode).toBe(403);
+    expect((await client(app, token).post('/api/companies', { name: 'Yeni Şirket Ltd.', sector: 'COMMERCE', jurisdiction: 'KKTC' })).statusCode).toBe(403);
     // Oturum bilgisi ve şifre değiştirme açık kalır
     expect((await client(app, token).get('/api/me')).json().user.mustChangePassword).toBe(true);
 

@@ -1,14 +1,20 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { brotliCompressSync, brotliDecompressSync } from 'node:zlib';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { makeApp } from './helpers';
 
 const dist = mkdtempSync(join(tmpdir(), 'erp-web-'));
 mkdirSync(join(dist, 'assets'));
-writeFileSync(join(dist, 'index.html'), '<!doctype html><html><head><script src="/theme-init.js"></script></head><body><div id="root">ERP-INDEX</div></body></html>');
+const indexHtml = '<!doctype html><html><head><script src="/theme-init.js"></script></head><body><div id="root">ERP-INDEX</div></body></html>';
+writeFileSync(join(dist, 'index.html'), indexHtml);
+writeFileSync(join(dist, 'index.html.br'), brotliCompressSync(indexHtml));
 writeFileSync(join(dist, 'assets', 'app-abc123.js'), 'console.log("app");');
 writeFileSync(join(dist, 'theme-init.js'), 'document.documentElement.dataset.t = "1";');
+const bundle = 'console.log("vendor");'.repeat(200);
+writeFileSync(join(dist, 'assets', 'vendor-def456.js'), bundle);
+writeFileSync(join(dist, 'assets', 'vendor-def456.js.br'), brotliCompressSync(bundle));
 
 describe('derlenmiş web arayüzü sunumu (WEB_DIST_DIR)', async () => {
   const { app } = await makeApp({ configOverrides: { WEB_DIST_DIR: dist } });
@@ -22,6 +28,14 @@ describe('derlenmiş web arayüzü sunumu (WEB_DIST_DIR)', async () => {
       expect(res.headers['cache-control']).toBe('no-cache');
       expect(String(res.headers['content-type'])).toContain('text/html');
     }
+  });
+
+  it('sıkıştırılmış index.html kopyası sunulduğunda da no-cache kalır', async () => {
+    const res = await app.inject({ method: 'GET', url: '/', headers: { ...html, 'accept-encoding': 'br, gzip' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-encoding']).toBe('br');
+    expect(brotliDecompressSync(res.rawPayload).toString()).toContain('ERP-INDEX');
+    expect(res.headers['cache-control']).toBe('no-cache');
   });
 
   it('/api altındaki olmayan uç, HTML isteyen tarayıcıya bile JSON 404 verir', async () => {
@@ -40,6 +54,17 @@ describe('derlenmiş web arayüzü sunumu (WEB_DIST_DIR)', async () => {
     expect(post.statusCode).toBe(404);
     // HTML istemeyen (ör. fetch/betik) uzantısız istek de SPA yedeği almaz
     expect((await app.inject({ method: 'GET', url: '/invoices/sales', headers: { accept: 'application/json' } })).statusCode).toBe(404);
+  });
+
+  it('derlemede üretilen brotli kopyası, kabul eden tarayıcıya sunulur; etmeyene düz dosya gider', async () => {
+    const br = await app.inject({ method: 'GET', url: '/assets/vendor-def456.js', headers: { 'accept-encoding': 'br, gzip' } });
+    expect(br.statusCode).toBe(200);
+    expect(br.headers['content-encoding']).toBe('br');
+    expect(brotliDecompressSync(br.rawPayload).toString()).toBe(bundle);
+    expect(br.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    const plain = await app.inject({ method: 'GET', url: '/assets/vendor-def456.js', headers: { 'accept-encoding': 'identity' } });
+    expect(plain.headers['content-encoding']).toBeUndefined();
+    expect(plain.body).toBe(bundle);
   });
 
   it('içerik özetli varlıklar 1 yıl değişmez; diğer dosyalar kısa süre önbelleğe alınır', async () => {

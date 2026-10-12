@@ -1,4 +1,7 @@
-import { ChevronRight, Package, Plus, Search, Tags, Upload } from 'lucide-react';
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { SearchInput } from '../../components/ui/SearchInput';
+import { ListToolbar, ResultFooter } from '../../components/ui/ListTools';
+import { ChevronRight, Package, Plus, Tags, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -6,12 +9,12 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Stat } from '../../components/ui/Stat';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
-import { Input, Select } from '../../components/ui/Field';
+import { EmptyState, ErrorState, ListSkeleton } from '../../components/ui/Feedback';
+import { Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { cn } from '../../lib/cn';
 import { currencySymbol, money, moneyIn } from '../../lib/format';
-import { useCan, useCQuery } from '../../lib/queries';
+import { useCan, useCanOperation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { InventorySummary, ItemKind, ItemListRow } from '../../lib/types';
 import { ImportWizard } from '../imports/ImportWizard';
@@ -27,7 +30,8 @@ export function ItemsPage() {
   const company = useCompany();
   const unitLabel = useUnitLabel();
   const can = useCan();
-  const canManage = can('inventory.manage');
+  const canOperation = useCanOperation();
+  const canManage = can('inventory.manage') && canOperation('core.inventory', 'create');
   const [params, setParams] = useSearchParams();
   const [text, setText] = useState('');
   const [query, setQuery] = useState('');
@@ -53,7 +57,7 @@ export function ItemsPage() {
   if (onlyLow) qs.set('lowStock', 'true');
   if (!showInactive) qs.set('active', 'true');
 
-  const { data, isPending } = useCQuery<{ items: ItemListRow[]; total: number }>(['items', 'list', qs.toString()], `/api/items?${qs}`);
+  const { data, isPending, error, refetch, isFetching } = useCQuery<{ items: ItemListRow[]; total: number }>(['items', 'list', qs.toString()], `/api/items?${qs}`);
   const { data: summary } = useCQuery<InventorySummary>(['inventory-summary'], '/api/inventory/summary');
   const { data: cats } = useCategories();
   const filtered = !!(query || categoryId || kind || onlyLow);
@@ -100,11 +104,9 @@ export function ItemsPage() {
         </button>
       </div>
 
-      <div className="mb-5 flex flex-wrap items-center gap-4">
-        <div className="relative w-full max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted" aria-hidden />
-          <Input className="pl-9" placeholder={t('inventory.items.searchPlaceholder')} value={text} onChange={(e) => setText(e.target.value)} aria-label={t('common.search')} />
-        </div>
+      <ListToolbar onReset={() => { setText(''); setCategoryId(''); setKind(''); setLow(false); setShowInactive(false); setLimit(PAGE); }}>
+        <CompanySavedViews page={`items`} filters={{ categoryId, kind, onlyLow, showInactive }} onApply={(v) => { setText(''); setCategoryId(String(v.categoryId)); setKind(v.kind as ItemKind | ''); setLow(Boolean(v.onlyLow)); setShowInactive(Boolean(v.showInactive)); setLimit(PAGE); }} />
+        <SearchInput placeholder={t('inventory.items.searchPlaceholder')} value={text} onChange={setText} aria-label={t('common.search')} />
         <Select className="w-48" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label={t('inventory.items.category')}>
           <option value="">{t('inventory.items.allCategories')}</option>
           {cats?.categories.map((c) => (
@@ -126,10 +128,12 @@ export function ItemsPage() {
           <input type="checkbox" className="size-4" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
           {t('inventory.items.showInactive')}
         </label>
-      </div>
+      </ListToolbar>
 
       {isPending ? (
-        <PageLoading />
+        <ListSkeleton />
+      ) : error ? (
+        <ErrorState error={error} onRetry={() => void refetch()} retrying={isFetching} />
       ) : !data?.items.length ? (
         <Card>
           <EmptyState
@@ -203,12 +207,7 @@ export function ItemsPage() {
               </tbody>
             </Table>
           </TableWrap>
-          <div className="mt-3 text-sm text-muted">{t('inventory.items.total', { count: data.total })}</div>
-          {data.items.length < data.total && (
-            <div className="mt-3 text-center">
-              <Button onClick={() => setLimit((l) => l + PAGE)}>{t('common.loadMore')}</Button>
-            </div>
-          )}
+          <ResultFooter shown={data.items.length} total={data.total} loading={isFetching} onMore={() => setLimit((l) => l + PAGE)} />
         </>
       )}
 

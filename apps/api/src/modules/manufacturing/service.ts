@@ -4,7 +4,10 @@ import {
   dec,
   explodeManufacturingNeed,
   finiteManufacturingSchedule,
+  frozenWindowViolations,
+  setupRuleFromConfig,
   type MrpRecipe,
+  type SchedulingRules,
   type ScheduledOperation,
   type SchedulingJob,
 } from '@erp/shared';
@@ -95,7 +98,7 @@ export async function listRecords(tx: Tx, kind: string) {
         left join leather_production_orders o on o.id=r.order_id and o.company_id=r.company_id
         left join parties p on p.id=nullif(r.config->>'partyId','')::uuid and p.company_id=r.company_id
         ${kind === 'calendar' ? sql`left join manufacturing_records maintenance on maintenance.id::text=r.config->>'maintenanceId' and maintenance.company_id=r.company_id and maintenance.kind='maintenance'` : sql``}
-        where r.kind=${kind} order by r.created_at desc,r.id desc`,
+        where r.kind=${kind} order by r.created_at desc,r.code,r.id desc`,
     )
   ).map(recordShape);
 }
@@ -220,16 +223,31 @@ export async function createMrpOrders(tx: Tx, ctx: LeatherCtx, input: Row) {
   }
   return result;
 }
+/** Kaynak kayıtlarındaki hazırlık matrisleri (öneri 63). */
+export function schedulingRules(resources: readonly Row[]): SchedulingRules {
+  return {
+    setup: Object.fromEntries(
+      resources
+        .filter((r) => (r.setupMatrix?.length ?? 0) > 0 || Number(r.defaultSetupMinutes ?? 0) > 0)
+        .map((r) => [r.id, setupRuleFromConfig(r)]),
+    ),
+  };
+}
 export async function schedule(
   tx: Tx,
   input: { jobs: SchedulingJob[]; anchor: string; direction: 'forward' | 'backward' },
-  excludeId?: string,
+  excludeId?: string | readonly string[],
 ) {
   const resources = await listRecords(tx, 'resource');
   const capacities = Object.fromEntries(resources.map((r) => [r.id, r.capacity]));
+  const excluded = new Set(excludeId === undefined ? [] : typeof excludeId === 'string' ? [excludeId] : excludeId);
   for (const j of input.jobs) {
-    if (!resources.some((r) => r.id === j.resourceId && r.status === 'active'))
+    if (!resources.some((r) => r.id === j.resourceId && r.status === 'active' && r.type !== 'tool'))
       throw fail('Aktif kaynak gerekli');
+    // Takım/aparat (öneri 64): yalnız etkin `tool` kaynakları operasyona bağlanır
+    for (const tool of j.toolIds ?? [])
+      if (!resources.some((r) => r.id === tool && r.status === 'active' && r.type === 'tool'))
+        throw fail('Etkin kalıp/takım/aparat kaynağı gerekli', 'MANUFACTURING_TOOL_INVALID');
     const o = await one(
       tx,
       sql`select config,status from leather_production_orders where id=${j.orderId}::uuid`,
@@ -248,7 +266,7 @@ export async function schedule(
   }
   const calendars = (await listRecords(tx, 'calendar')).filter((c) => c.status === 'active');
   const published = (await listRecords(tx, 'schedule')).filter(
-    (r) => r.status === 'published' && r.id !== excludeId,
+    (r) => r.status === 'published' && !excluded.has(r.id),
   );
   const occupied = published.flatMap((r) => r.operations ?? []) as ScheduledOperation[];
   try {
@@ -259,6 +277,7 @@ export async function schedule(
       input.direction,
       capacities,
       occupied,
+      schedulingRules(resources),
     );
   } catch (cause) {
     if (cause instanceof Error && cause.message === 'Uygun kapasite bulunamadı')
@@ -269,13 +288,28 @@ export async function schedule(
     throw cause;
   }
 }
-export async function publishSchedule(tx: Tx, ctx: LeatherCtx, id: string) {
+export async function publishSchedule(tx: Tx, ctx: LeatherCtx, id: string, options: { overrideReason?: string } = {}) {
   await lockLeatherCosts(tx, ctx.companyId);
   const r = await getRecord(tx, id, 'schedule', true);
   if (r.status === 'published') return recordShape(r);
   if (r.status !== 'draft') throw fail('Yalnız taslak plan yayımlanır');
   if (r.config.previewOnly)
     throw fail('Simülasyon varsayımları gerçek takvimde onaylanmadan plan yayımlanamaz');
+  // Yayımlanmış planın senaryosu onun yerine geçer (öneri 66): eski plan kapasiteden düşülür, dondurma penceresi korunur
+  const parent = r.config.parentId
+    ? (await all(tx, sql`select * from manufacturing_records where id=${r.config.parentId}::uuid and kind='schedule' for update`))[0]
+    : undefined;
+  const replaces = parent?.status === 'published' ? parent : undefined;
+  let frozen: ReturnType<typeof frozenWindowViolations> = [];
+  if (replaces) {
+    const policy = await all(tx, sql`select freeze_hours from manufacturing_policies`);
+    frozen = frozenWindowViolations(replaces.config.operations ?? [], r.config.operations ?? [], Date.now(), Number(policy[0]?.freeze_hours ?? 0));
+    if (frozen.length && !options.overrideReason)
+      throw fail(
+        `Dondurma penceresindeki ${frozen.length} operasyon değişiyor; gerekçeyle yayımlayın ya da senaryoyu pencere dışına taşıyın`,
+        'MANUFACTURING_FROZEN_WINDOW',
+      );
+  }
   const canonical = (value: unknown): string =>
     JSON.stringify(value, (_k, v) =>
       v && typeof v === 'object' && !Array.isArray(v)
@@ -286,9 +320,17 @@ export async function publishSchedule(tx: Tx, ctx: LeatherCtx, id: string) {
           )
         : v,
     );
-  const current = await schedule(tx, r.config, id);
+  const current = await schedule(tx, r.config, replaces ? [id, replaces.id] : id);
   if (canonical(current) !== canonical(r.config.operations))
     throw fail('Kapasite değişti; senaryoyu yeniden hesaplayın', 'MANUFACTURING_CAPACITY_CHANGED');
+  if (replaces) {
+    await updateRecord(tx, replaces.id, 'superseded', { ...replaces.config, replacedBy: id, supersededAt: new Date().toISOString() });
+    return updateRecord(tx, id, 'published', {
+      ...r.config,
+      replaces: replaces.id,
+      ...(frozen.length ? { frozenOverride: { reason: options.overrideReason, by: ctx.userId, at: new Date().toISOString(), violations: frozen } } : {}),
+    });
+  }
   return updateRecord(tx, id, 'published', r.config);
 }
 export async function transferAction(tx: Tx, ctx: LeatherCtx, id: string, input: Row) {

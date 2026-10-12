@@ -74,7 +74,7 @@ describe('uzaktan güncelleme: teklif → sahip onayı → güncelleyici', () =>
     expect((await updater(c, 'POST', '/api/system/updater/report', { id: pending.id, status: 'downloading' })).statusCode).toBe(200);
     expect((await updater(c, 'POST', '/api/system/updater/report', { id: pending.id, status: 'applying' })).statusCode).toBe(200);
     expect((await oc.get('/api/me')).statusCode).toBe(200);
-    expect((await oc.post('/api/companies', { name: 'Bakım sırasında açılamaz', sector: 'CONSTRUCTION', baseCurrency: 'TRY' })).json().error.code).toBe('UPDATE_MAINTENANCE');
+    expect((await oc.post('/api/companies', { name: 'Bakım sırasında açılamaz', sector: 'CONSTRUCTION', jurisdiction: 'KKTC', baseCurrency: 'TRY' })).json().error.code).toBe('UPDATE_MAINTENANCE');
     expect((await updater(c, 'POST', '/api/system/updater/report', { id: pending.id, status: 'done' })).json().error.code).toBe('UPDATE_VERSION_MISMATCH');
     expect((await oc.post(`/api/system/update/${ov.offer.id}/cancel`)).json().error.code).toBe('UPDATE_MAINTENANCE');
 

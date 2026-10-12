@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Switch } from '../../components/ui/Switch';
@@ -17,15 +17,20 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { EmployeeRow, SocialProfileRow, SupportEligibilityRow, SupportRuleRow } from '../../lib/types';
 import { SOCIAL_INVALIDATE, SocialUnverifiedBadge } from './social-common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
+import { Link } from 'react-router-dom';
+import { useCompany } from '../../lib/session';
 
 /** Sosyal güvenlik ayarları: tarihli personel profilleri, prim desteği kuralları (varsayılan kapalı, doğrulanmamış) ve uygunluk beyanları. */
 export function SocialSettingsPage() {
   const { t } = useTranslation();
+  const company = useCompany();
   return (
     <>
       <PageHeader title={t('social.settings.title')} description={t('social.settings.subtitle')} />
       <div className="mb-4">
         <Callout tone="warning">{t('social.settings.legal')}</Callout>
+        {company.jurisdiction && <div className="mt-3"><Callout tone="info">{company.jurisdiction === 'TR' ? 'Türkiye SGK ve işsizlik' : 'KKTC sigorta, ihtiyat ve istihdam katkısı'} hesapları, bordronun kayıtlı ülke kuralından alınır. İhtiyat sigorta primi toplamına eklenmez. Oranları, çalışan rejimini ve önizlemeyi <Link to="/hr/payroll/settings" className="underline">Bordro ayarlarında</Link> yönetin.</Callout></div>}
       </div>
       <div className="flex flex-col gap-6">
         <ProfilesCard />
@@ -45,7 +50,7 @@ function ProfilesCard() {
   const toast = useToast();
   const can = useCan();
   const manage = can('hr.payroll_manage');
-  const { data } = useCQuery<{ profiles: SocialProfileRow[] }>(['social', 'profiles'], '/api/social-security/profiles');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ profiles: SocialProfileRow[] }>(['social', 'profiles'], '/api/social-security/profiles');
   const { data: emps } = useEmployees();
   const [employeeId, setEmployeeId] = useState('');
   const [from, setFrom] = useState(todayIso());
@@ -69,6 +74,8 @@ function ProfilesCard() {
   const reveal = useCMutation((v: { id: string; reason: string }, call) => call<{ value: string }>(`/api/social-security/profiles/${v.id}/reveal`, { method: 'POST', body: { reason: v.reason } }), [['privacy']]);
   const rows = data?.profiles ?? [];
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('social.profiles.title')} description={t('social.profiles.desc')} />
@@ -136,8 +143,9 @@ function ProfilesCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1.4fr_9rem_1fr_9rem_9rem_1fr_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setSsn(''); setType(''); toast.success(t('social.profiles.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setSsn(''); setType(''); toast.success(t('social.profiles.added')); }, onError: setError });
             }}
           >
             <Field label={t('social.profiles.employee')}>
@@ -194,7 +202,7 @@ function RulesCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.payroll_manage');
-  const { data } = useCQuery<{ rules: SupportRuleRow[] }>(['social', 'rules'], '/api/social-security/support-rules');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ rules: SupportRuleRow[] }>(['social', 'rules'], '/api/social-security/support-rules');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [from, setFrom] = useState(todayIso());
@@ -220,6 +228,8 @@ function RulesCard() {
   const remove = useCMutation((id: string, call) => call(`/api/social-security/support-rules/${id}`, { method: 'DELETE' }), SOCIAL_INVALIDATE);
   const rows = data?.rules ?? [];
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('social.rules.title')} description={t('social.rules.desc')} />
@@ -281,8 +291,9 @@ function RulesCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[6rem_1fr_9rem_9rem_9rem_9rem_7rem]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setCode(''); setName(''); setValue(''); setSource(''); setEnabled(false); toast.success(t('social.rules.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setCode(''); setName(''); setValue(''); setSource(''); setEnabled(false); toast.success(t('social.rules.added')); }, onError: setError });
             }}
           >
             <Field label={t('social.rules.code')}>{(id) => <Input id={id} maxLength={30} value={code} onChange={(e) => setCode(e.target.value)} />}</Field>
@@ -342,7 +353,7 @@ function EligibilityCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.payroll_manage');
-  const { data } = useCQuery<{ eligibility: SupportEligibilityRow[] }>(['social', 'eligibility'], '/api/social-security/eligibility');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ eligibility: SupportEligibilityRow[] }>(['social', 'eligibility'], '/api/social-security/eligibility');
   const { data: rules } = useCQuery<{ rules: SupportRuleRow[] }>(['social', 'rules'], '/api/social-security/support-rules');
   const { data: emps } = useEmployees();
   const [employeeId, setEmployeeId] = useState('');
@@ -355,6 +366,8 @@ function EligibilityCard() {
   const rows = data?.eligibility ?? [];
   const codes = [...new Set((rules?.rules ?? []).map((r) => r.code))];
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('social.eligibility.title')} description={t('social.eligibility.desc')} />
@@ -399,8 +412,9 @@ function EligibilityCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1.4fr_10rem_9rem_9rem_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => toast.success(t('social.eligibility.added')), onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); toast.success(t('social.eligibility.added')); }, onError: setError });
             }}
           >
             <Field label={t('social.eligibility.employee')}>

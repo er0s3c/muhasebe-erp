@@ -1,3 +1,5 @@
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { ListToolbar } from '../../components/ui/ListTools';
 import { ArrowLeftRight, ChevronRight, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -6,9 +8,9 @@ import { STOCK_DOC_TYPES } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
-import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { Table, TableWrap, Td, Th, Tr, ProgressiveRows } from '../../components/ui/Table';
 import { currencySymbol, formatDateTR, money } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
@@ -47,9 +49,10 @@ export function MovementsPage() {
   if (warehouseId) qs.set('warehouseId', warehouseId);
   if (from) qs.set('from', from);
   if (to) qs.set('to', to);
-  const { data, isPending } = useCQuery<{ documents: StockDocListRow[]; total: number }>(['stock-docs', 'list', qs.toString()], `/api/stock-documents?${qs}`);
+  const { data, isPending, error: MovementsPageQueryError, refetch: MovementsPageQueryRetry, isFetching: MovementsPageQueryFetching } = useCQuery<{ documents: StockDocListRow[]; total: number }>(['stock-docs', 'list', qs.toString()], `/api/stock-documents?${qs}`);
   const filtered = !!(type || warehouseId || from || to);
 
+  if (MovementsPageQueryError && !data) return <ErrorState error={MovementsPageQueryError} onRetry={() => void MovementsPageQueryRetry()} retrying={MovementsPageQueryFetching} />;
   return (
     <>
       <PageHeader
@@ -64,6 +67,8 @@ export function MovementsPage() {
           )
         }
       />
+      <ListToolbar onReset={() => { setType(''); setWarehouseId(''); setFrom(''); setTo(''); setLimit(PAGE); }}><CompanySavedViews page={'stock-movements'} filters={{ type, warehouseId, from, to }} onApply={view => { setType(view.type as typeof type); setWarehouseId(view.warehouseId as typeof warehouseId); setFrom(view.from as typeof from); setTo(view.to as typeof to); setLimit(PAGE); }} /></ListToolbar>
+
 
       <div className="mb-5 flex flex-wrap items-end gap-4">
         <Select className="w-48" value={type} onChange={(e) => setType(e.target.value as StockDocType | '')} aria-label={t('inventory.movements.type')}>
@@ -122,7 +127,7 @@ export function MovementsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.documents.map((d) => (
+                <ProgressiveRows rows={data.documents}>{(d) => (
                   <Tr
                     key={d.id}
                     clickable
@@ -152,7 +157,7 @@ export function MovementsPage() {
                       <ChevronRight className="size-4 text-muted" aria-hidden />
                     </Td>
                   </Tr>
-                ))}
+                )}</ProgressiveRows>
               </tbody>
             </Table>
           </TableWrap>

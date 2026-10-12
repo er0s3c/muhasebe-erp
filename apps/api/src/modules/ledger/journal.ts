@@ -15,11 +15,11 @@ import {
   type MoneyValue,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { accounts, costCodes, fiscalPeriods, journalEntries, journalLines, parties, projects, projectWbs } from '../../db/schema';
+import { accounts, costCenters, costCodes, fiscalPeriods, journalEntries, journalLines, parties, projects, projectWbs } from '../../db/schema';
 import { notFound, unprocessable } from '../../http/errors';
 import { describeSettlements, entrySettlements } from '../parties/service';
 import { validateDimensions, type DimensionLine } from '../projects/dimension';
-import { formatDocumentNumber, nextNumber } from '../settings/numbering';
+import { nextDocumentNumber } from '../settings/numbering';
 import { requireOpenPeriod } from '../settings/periods';
 import { findRate, requireRate } from '../settings/rates';
 import { lockLeatherCosts, reverseAllocatedJournalCosts } from '../leather/costs';
@@ -40,6 +40,8 @@ export interface LedgerCtx {
   userId: string;
   baseCurrency: string;
   reportingCurrency: string | null;
+  /** Yalnızca onay işleyicisi aynı işlem içinde sağlar; HTTP girdisinden alınmaz. */
+  approvalRequestId?: string;
 }
 
 const JOURNAL_NUMBER_KEY = 'JE';
@@ -60,6 +62,7 @@ interface PreparedLine {
   projectId: string | null;
   wbsId: string | null;
   costCodeId: string | null;
+  costCenterId: string | null;
 }
 
 export interface ReportingLine {
@@ -206,11 +209,17 @@ async function prepareLines(
       projectId: line.projectId ?? null,
       wbsId: line.wbsId ?? null,
       costCodeId: line.costCodeId ?? null,
+      costCenterId: line.costCenterId ?? null,
     });
+    // Maliyet merkezi yalnız sonuç hesaplarında (öneri 11): bilanço satırına departman yazılmaz
+    if (line.costCenterId && !['income', 'expense', 'cost'].includes(account.type)) {
+      throw unprocessable(`${label}: ${account.code} hesabında maliyet merkezi kullanılamaz (yalnızca gelir/gider/maliyet hesapları)`, 'COST_CENTER_ACCOUNT');
+    }
     dimensions.push({ label, projectId: line.projectId, wbsId: line.wbsId, costCodeId: line.costCodeId, accountType: account.type });
   }
   // Proje/iş kalemi etiketleri (yalnızca etiketli satır varsa sorgu yapar)
   await validateDimensions(tx, ctx.companyId, dimensions);
+  await validateCostCenters(tx, prepared.map((p) => p.costCenterId));
   balanceReporting(prepared);
   return prepared;
 }
@@ -235,7 +244,20 @@ function toRows(entryId: string, companyId: string, lines: PreparedLine[]) {
     projectId: l.projectId,
     wbsId: l.wbsId,
     costCodeId: l.costCodeId,
+    costCenterId: l.costCenterId,
   }));
+}
+
+/** Maliyet merkezleri bu şirkette tanımlı ve etkin olmalı (pasif merkeze yeni kayıt yazılmaz). */
+export async function validateCostCenters(tx: Tx, ids: readonly (string | null | undefined)[]) {
+  const wanted = [...new Set(ids.filter((id): id is string => !!id))];
+  if (!wanted.length) return;
+  const rows = await tx.select({ id: costCenters.id, isActive: costCenters.isActive, code: costCenters.code }).from(costCenters).where(inArray(costCenters.id, wanted));
+  for (const id of wanted) {
+    const row = rows.find((r) => r.id === id);
+    if (!row) throw unprocessable('Maliyet merkezi bulunamadı', 'COST_CENTER_NOT_FOUND');
+    if (!row.isActive) throw unprocessable(`${row.code} maliyet merkezi pasif`, 'COST_CENTER_INACTIVE');
+  }
 }
 
 export async function createJournalEntry(
@@ -321,11 +343,11 @@ export async function postJournalEntry(tx: Tx, ctx: LedgerCtx, id: string) {
   await requireOpenPeriod(tx, entry.entryDate);
 
   const year = isoYear(entry.entryDate);
-  const seq = await nextNumber(tx, ctx.companyId, JOURNAL_NUMBER_KEY, year);
+  const entryNo = await nextDocumentNumber(tx, ctx.companyId, JOURNAL_NUMBER_KEY, year, 'YV');
   await tx
     .update(journalEntries)
     .set({
-      entryNo: formatDocumentNumber('YV', year, seq),
+      entryNo,
       status: 'posted',
       postedAt: new Date(),
       postedBy: ctx.userId,
@@ -356,8 +378,10 @@ export async function reverseJournalEntry(
   }
   // Banka ekstresiyle eşleşmiş satırı olan fiş ters çevrilemez: önce eşleşme kaldırılır
   const reconciled = await tx.execute(sql`
-    select 1 from bank_statement_lines b join journal_lines l on l.id = b.journal_line_id
-    where b.status = 'matched' and l.entry_id = ${id} limit 1`);
+    select 1 from journal_lines l where l.entry_id = ${id} and (
+      exists (select 1 from bank_statement_lines b where b.journal_line_id = l.id and b.status = 'matched')
+      or exists (select 1 from bank_statement_line_matches m join bank_statement_lines b on b.id = m.statement_line_id and b.company_id = m.company_id
+                  where m.journal_line_id = l.id and b.status = 'matched')) limit 1`);
   if (reconciled.rows.length > 0) {
     throw unprocessable('Bu fişin banka satırı ekstreyle eşleşmiş; ters kayıttan önce Banka ekstresi sekmesinden eşleşmeyi kaldırın', 'ENTRY_RECONCILED');
   }
@@ -435,6 +459,8 @@ export async function getJournalEntry(tx: Tx, id: string) {
       entryDate: journalEntries.entryDate,
       description: journalEntries.description,
       status: journalEntries.status,
+      legalProfileSnapshot: journalEntries.legalProfileSnapshot,
+      branchId:journalEntries.branchId,
       reversalOfId: journalEntries.reversalOfId,
       reversedById: journalEntries.reversedById,
       sourceType: journalEntries.sourceType,

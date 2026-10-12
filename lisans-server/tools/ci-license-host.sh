@@ -50,7 +50,7 @@ ADMIN_PASSWORD="$(printf '%s\n' "$ADMIN" | sed -n 's/^Parola[^:]*: //p' | head -
 ADMIN_TOTP="$(printf '%s\n' "$ADMIN" | sed -n 's/^TOTP sırrı[^:]*: //p' | head -1)"
 [ -n "$ADMIN_PASSWORD" ] && [ -n "$ADMIN_TOTP" ] || { echo "yönetici bilgileri okunamadı" >&2; exit 1; }
 
-ISSUE="$(node lisans-server/server/dist/cli.js license:issue --customer='CI Müşterisi' --sectors=CONSTRUCTION,RETAIL_MARKET,COMMERCE \
+ISSUE="$(node lisans-server/server/dist/cli.js license:issue --customer='CI Müşterisi' --sectors=CONSTRUCTION,RETAIL_MARKET,COMMERCE,LEATHER_FASHION,MANUFACTURING_WHOLESALE \
   --devices=500 --companies=500 --valid-until="$(date -u -d '+2 years' +%F)")"
 CODE="$(printf '%s\n' "$ISSUE" | grep -oE '[0-9A-Z]{5}(-[0-9A-Z]{5}){4}' | head -1)"
 [ -n "$CODE" ] || { echo "etkinleştirme kodu okunamadı: $ISSUE" >&2; exit 1; }

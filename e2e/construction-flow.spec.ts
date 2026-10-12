@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 async function setup(page: Page) {
@@ -14,7 +15,7 @@ async function setup(page: Page) {
   const token = (await r.json()).accessToken;
   const c = await page.request.post('/api/companies', {
     headers: { authorization: `Bearer ${token}` },
-    data: { name: 'İnşaat Kabul Testi', sector: 'CONSTRUCTION' },
+    data: { name: 'İnşaat Kabul Testi', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(c.status()).toBe(201);
   const headers = { authorization: `Bearer ${token}`, 'x-company-id': (await c.json()).company.id };
@@ -162,7 +163,7 @@ test('çevrimdışı kapatıp açma, fotoğraflı kayıt, tek eşitleme ve şirk
   expect((await photos.json()).items).toHaveLength(1);
   const second = await offline.request.post('/api/companies', {
     headers,
-    data: { name: 'Farklı Şirket', sector: 'CONSTRUCTION' },
+    data: { name: 'Farklı Şirket', sector: 'CONSTRUCTION', jurisdiction: 'KKTC' },
   });
   expect(second.status()).toBe(201);
   await offline.goto(`/workspace/project-control?projectId=${project.id}`);
@@ -171,5 +172,6 @@ test('çevrimdışı kapatıp açma, fotoğraflı kayıt, tek eşitleme ve şirk
   await offline.goto('/field-offline');
   await offline.getByLabel('Cihaz kodu', { exact: true }).fill('Saha-Test-12345');
   await offline.getByRole('button', { name: 'Saha paketini aç' }).click();
-  await expect(offline.getByText('Bu cihazda indirilmiş saha paketi yok.')).toBeVisible();
+  // Şirket değişince paket arka planda silinir; silme tamamlanmadan açılırsa sahiplik denetimi yine engeller.
+  await expect(offline.getByRole('alert')).toHaveText(/Bu cihazda indirilmiş saha paketi yok\.|Saha paketi farklı kullanıcı veya şirkete ait/);
 });

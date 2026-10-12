@@ -1,11 +1,11 @@
-import { ArrowLeft, Copy, Percent, Plus, Power, Star, Trash2, Upload } from 'lucide-react';
+import { Copy, Percent, Plus, Power, Star, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { parseTR } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
@@ -97,25 +97,27 @@ export function PriceListDetailPage() {
 
   return (
     <>
-      <Link to="/price-lists" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t('pricing.lists.back')}
-      </Link>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{list.name}</h1>
+      <PageHeader
+        title={list.name}
+        helpKey="price-list-detail"
+        back={{ to: '/price-lists', label: t('pricing.lists.back') }}
+        recent={{ kind: 'Fiyat listesi' }}
+        meta={
+          <>
             <KindBadge kind={list.kind} />
             <Badge>{currencySymbol(list.currencyCode)}</Badge>
             {list.isDefault && <Badge tone="brand">{t('pricing.lists.default')}</Badge>}
             {!list.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
-          </div>
-          <p className="mt-1 text-sm text-muted">
+          </>
+        }
+        eyebrow={
+          <span className="normal-case tracking-normal">
             <span className="font-mono">{list.code}</span> ·{' '}
             {list.validFrom || list.validTo ? `${list.validFrom ? formatDateTR(list.validFrom) : '…'} – ${list.validTo ? formatDateTR(list.validTo) : '…'}` : t('pricing.lists.always')}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+          </span>
+        }
+        actions={
+          <>
           <ExportMenu exportKey="price-list-items" params={{ listId: list.id }} print={false} />
           {canManage && (
             <>
@@ -146,8 +148,9 @@ export function PriceListDetailPage() {
               </Button>
             </>
           )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <Card>
         <CardHeader

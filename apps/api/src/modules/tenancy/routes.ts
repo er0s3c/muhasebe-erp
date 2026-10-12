@@ -12,12 +12,15 @@ import {
   hasPermission,
   updateCompanySchema,
   type ModuleToggleReason,
+  companyProfileInputSchema,
+  activateCompanyProfileSchema,
 } from '@erp/shared';
 import { companies, companyModules, memberships, users } from '../../db/schema';
 import { authedRoute, tenantRoute } from '../../http/context';
 import { notFound, unauthorized, unprocessable } from '../../http/errors';
 import { publicUser } from '../auth/routes';
 import { assertCanCreateCompany, createCompany } from './service';
+import { getCompanyProfile, previewCompanyProfile, activateCompanyProfile } from './profiles';
 
 export const tenancyRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -42,6 +45,12 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
           sector: companies.sector,
           baseCurrency: companies.baseCurrency,
           reportingCurrency: companies.reportingCurrency,
+          jurisdiction: companies.jurisdiction,
+          profileMode: companies.profileMode,
+          profileVersionId: companies.profileVersionId,
+          timeZone: companies.timeZone,
+          fxProvider: companies.fxProvider,
+          taxSetupStatus: companies.taxSetupStatus,
           role: memberships.role,
         })
         .from(memberships)
@@ -67,7 +76,7 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     '/api/navigation',
-    tenantRoute(app, {}, async ({ company, role, enabledModules, access }) => {
+    tenantRoute(app, {}, async ({ company, role, enabledModules, access,branch }) => {
       const groups = NAV_GROUPS.map((g) => ({
         key: g.key,
         labelKey: g.labelKey,
@@ -83,6 +92,7 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
 
       return {
         company,
+        branch,
         role,
         // Etkin izinler (rol + kullanıcı bazlı modül erişimi): menü, sayfa kapıları ve düğmeler bunlara bakar
         permissions: [...access.permissions],
@@ -125,6 +135,13 @@ export const tenancyRoutes: FastifyPluginAsync = async (app) => {
       return { company: row };
     }),
   );
+
+  app.get('/api/company/profile', tenantRoute(app, { permission: 'settings.read' }, async ({ tx, company }) => getCompanyProfile(tx, company.id)));
+  app.post('/api/company/profile/preview', tenantRoute(app, { permission: 'company.manage' }, async ({ tx, company, req }) => previewCompanyProfile(tx, company.id, companyProfileInputSchema.parse(req.body))));
+  app.post('/api/company/profile/activate', tenantRoute(app, { permission: 'company.manage' }, async ({ tx, company, user, req }) => {
+    const { revision, ...input } = activateCompanyProfileSchema.parse(req.body);
+    return activateCompanyProfile(tx, company.id, user.id, input, revision);
+  }));
 
   // ---- Modül istisnaları (Ayarlar > Modüller) -------------------------------------------------
   const labelsOf = (keys: string[]) => keys.map((k) => MODULES.find((m) => m.key === k)?.label ?? k).join(', ');

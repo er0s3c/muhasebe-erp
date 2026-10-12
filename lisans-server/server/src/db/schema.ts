@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, boolean, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, check, customType, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { uuidv7 } from 'uuidv7';
 
 const id = () =>
@@ -201,4 +201,49 @@ export const releases = pgTable(
     check('releases_manifest_ck', sql`(${t.status} = 'draft') = (${t.manifest} is null)`),
   ],
 );
+
+const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
+
+/** Customer support reports, including bounded raster attachments, are backed up with the vendor database. */
+export const feedback = pgTable('feedback', {
+  id: id(),
+  reference: text().notNull(),
+  installationId: uuid().notNull(),
+  activationId: uuid().references(() => activations.id, { onDelete: 'set null' }),
+  customerId: uuid().references(() => customers.id, { onDelete: 'set null' }),
+  customerName: text().notNull(),
+  requestId: uuid().notNull(),
+  nonce: text().notNull(),
+  contentHash: text().notNull(),
+  status: text().notNull().default('new'),
+  companyId: uuid().notNull(),
+  companyName: text().notNull(),
+  companySector: text().notNull(),
+  reporterId: uuid().notNull(),
+  reporterName: text().notNull(),
+  reporterEmail: text().notNull(),
+  pagePath: text().notNull(),
+  pageTitle: text().notNull().default(''),
+  message: text().notNull().default(''),
+  steps: text().notNull().default(''),
+  expected: text().notNull().default(''),
+  appVersion: text().notNull(),
+  screenshotName: text(),
+  screenshotMime: text(),
+  screenshotSize: integer(),
+  screenshotData: bytea(),
+  internalNote: text().notNull().default(''),
+  createdAt: createdAt(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex('feedback_reference_uq').on(t.reference),
+  uniqueIndex('feedback_installation_request_uq').on(t.installationId, t.requestId),
+  uniqueIndex('feedback_installation_nonce_uq').on(t.installationId, t.nonce),
+  index('feedback_created_idx').on(t.createdAt, t.id),
+  index('feedback_status_created_idx').on(t.status, t.createdAt),
+  index('feedback_customer_idx').on(t.customerId),
+  check('feedback_status_ck', sql`${t.status} in ('new','in_review','resolved')`),
+  check('feedback_content_ck', sql`length(btrim(${t.message})) > 0 or ${t.screenshotData} is not null`),
+  check('feedback_screenshot_ck', sql`(${t.screenshotData} is null and ${t.screenshotName} is null and ${t.screenshotMime} is null and ${t.screenshotSize} is null) or (${t.screenshotData} is not null and ${t.screenshotName} is not null and ${t.screenshotMime} is not null and ${t.screenshotMime} in ('image/png','image/jpeg') and ${t.screenshotSize} is not null and ${t.screenshotSize} between 1 and 5242880 and octet_length(${t.screenshotData}) = ${t.screenshotSize})`),
+]);
 

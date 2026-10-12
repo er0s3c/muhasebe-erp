@@ -5,10 +5,10 @@ import { Link } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
@@ -30,7 +30,7 @@ export function PrivacyPage() {
         <Callout tone="warning">{t('privacy.legal')}</Callout>
       </div>
       <div className="mb-4">
-        <SegmentedTabs
+        <SegmentedTabs id="hr-privacypage-tabs" panelId={() => 'hr-privacypage-tabs-panel'}
           value={tab}
           onChange={setTab}
           items={[
@@ -40,9 +40,11 @@ export function PrivacyPage() {
           ]}
         />
       </div>
+      <TabPanel id="hr-privacypage-tabs-panel" labelledBy={`hr-privacypage-tabs-${tab}`}>
       {tab === 'inventory' && <InventoryTab />}
       {tab === 'requests' && <RequestsTab />}
       {tab === 'log' && <LogTab />}
+      </TabPanel>
     </>
   );
 }
@@ -50,7 +52,7 @@ export function PrivacyPage() {
 function InventoryTab() {
   const { t } = useTranslation();
   const toast = useToast();
-  const { data, isPending } = useCQuery<{ inventory: InventoryRow[] }>(['privacy', 'inventory'], '/api/privacy/inventory');
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ inventory: InventoryRow[] }>(['privacy', 'inventory'], '/api/privacy/inventory');
   const [edit, setEdit] = useState<InventoryRow | null>(null);
   const [purpose, setPurpose] = useState('');
   const [basis, setBasis] = useState('');
@@ -59,6 +61,7 @@ function InventoryTab() {
   const [error, setError] = useState<Error | null>(null);
   const save = useCMutation((_: void, call) => call(`/api/privacy/inventory/${edit!.id}`, { method: 'PATCH', body: { purpose: purpose.trim(), legalBasis: basis.trim(), retention: retention.trim() || null, transferAbroad: abroad } }), [['privacy']]);
   const verify = useCMutation((id: string, call) => call(`/api/privacy/inventory/${id}/verify`, { method: 'POST', body: {} }), [['privacy']]);
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   const open = (r: InventoryRow) => {
     setEdit(r);
@@ -142,7 +145,7 @@ const DSR_TONE = { open: 'warning', completed: 'success', rejected: 'neutral' } 
 function RequestsTab() {
   const { t } = useTranslation();
   const toast = useToast();
-  const { data, isPending } = useCQuery<{ requests: DsrRow[] }>(['privacy', 'requests'], '/api/privacy/requests');
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ requests: DsrRow[] }>(['privacy', 'requests'], '/api/privacy/requests');
   const { data: emps } = useCQuery<{ employees: EmployeeRow[] }>(['employees', 'list', ''], '/api/employees');
   const [adding, setAdding] = useState(false);
   const [resolving, setResolving] = useState<DsrRow | null>(null);
@@ -163,6 +166,7 @@ function RequestsTab() {
   const create = useCMutation((_: void, call) => call('/api/privacy/requests', { method: 'POST', body: { kind, requesterName: requester.trim(), ...(employeeId ? { employeeId } : {}), ...(contactId ? { contactId } : {}), ...(description.trim() ? { description: description.trim() } : {}) } }), HR_INVALIDATE);
   const resolve = useCMutation((_: void, call) => call(`/api/privacy/requests/${resolving!.id}/resolve`, { method: 'POST', body: { outcome, resolutionNote: note.trim() } }), HR_INVALIDATE);
   const doExport = useCMutation((_: void, call) => call<unknown>(exporting!.contactId ? `/api/privacy/contacts/${exporting!.contactId}/export` : `/api/privacy/employees/${exporting!.employeeId}/export`, { method: 'POST', body: { reason: `Talep: ${exporting!.kind} (${exporting!.requesterName})` } }), HR_INVALIDATE);
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   const rows = data.requests;
   return (
@@ -301,7 +305,8 @@ function RequestsTab() {
 
 function LogTab() {
   const { t } = useTranslation();
-  const { data, isPending } = useCQuery<{ log: AccessLogRow[] }>(['privacy', 'log'], '/api/privacy/access-log');
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ log: AccessLogRow[] }>(['privacy', 'log'], '/api/privacy/access-log');
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   if (data.log.length === 0) return <Card><EmptyState icon={<ShieldCheck className="size-5" />} title={t('privacy.log.empty')} description={t('privacy.log.emptyDesc')} /></Card>;
   return (

@@ -52,7 +52,7 @@ export function NotificationBell() {
               data-testid="notification-badge"
               data-critical={hasCritical || undefined}
               className={cn(
-                'absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-md bg-inverted px-1 text-[10px] leading-none text-on-inverted',
+                'absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-md bg-inverted px-1 text-[12px] leading-none text-on-inverted',
                 hasCritical && 'border border-danger-on-inverted',
               )}
             >
@@ -67,7 +67,7 @@ export function NotificationBell() {
           sideOffset={8}
           collisionPadding={12}
           aria-label={t('notifications.title')}
-          className="z-50 w-[min(26rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-surface [animation:pop-in_0.12s_ease-out] print:hidden"
+          className="z-50 w-[min(26rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-surface shadow-pop [animation:pop-in_0.12s_ease-out] print:hidden"
         >
           <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <h2 className="text-sm">{t('notifications.title')}</h2>

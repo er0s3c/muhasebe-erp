@@ -1,3 +1,5 @@
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { ListToolbar } from '../../components/ui/ListTools';
 import { FileText, PackageCheck, Plus, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -5,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { SALES_DOC_STATUSES, todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { ExportMenu } from '../../components/ui/ExportMenu';
@@ -48,7 +50,7 @@ function SalesDocsPage({ kind }: { kind: SalesDocKind }) {
   const qs = new URLSearchParams({ kind, from, to, limit: String(limit) });
   if (status) qs.set('status', status);
   if (query) qs.set('query', query);
-  const { data, isPending } = useCQuery<{ docs: SalesDocListRow[]; total: number }>(['sales-docs', 'list', qs.toString()], `/api/sales-docs?${qs}`);
+  const { data, isPending, error: SalesDocsPageQueryError, refetch: SalesDocsPageQueryRetry, isFetching: SalesDocsPageQueryFetching } = useCQuery<{ docs: SalesDocListRow[]; total: number }>(['sales-docs', 'list', qs.toString()], `/api/sales-docs?${qs}`);
   const filtered = !!(status || query);
 
   const newButton = (
@@ -59,6 +61,7 @@ function SalesDocsPage({ kind }: { kind: SalesDocKind }) {
   );
 
 
+  if (SalesDocsPageQueryError && !data) return <ErrorState error={SalesDocsPageQueryError} onRetry={() => void SalesDocsPageQueryRetry()} retrying={SalesDocsPageQueryFetching} />;
   return (
     <>
       <PageHeader
@@ -71,6 +74,8 @@ function SalesDocsPage({ kind }: { kind: SalesDocKind }) {
           </>
         }
       />
+      <ListToolbar onReset={() => { setStatus(''); setFrom(`${year}-01-01`); setTo(`${year}-12-31`); setText(''); setQuery(''); setLimit(PAGE); }}><CompanySavedViews page={`sales-docs-${kind}`} filters={{ status, from, to }} onApply={view => { setStatus(view.status as typeof status); setFrom(view.from as typeof from); setTo(view.to as typeof to); setText(''); setQuery(''); setLimit(PAGE); }} /></ListToolbar>
+
 
       <div className="mb-5 flex flex-wrap items-end gap-4">
         <Field label={t('common.from')}>{(id) => <Input id={id} type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />}</Field>

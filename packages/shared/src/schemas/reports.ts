@@ -34,10 +34,10 @@ export type GeneralLedgerQuery = z.infer<typeof generalLedgerQuerySchema>;
 
 // --- Satış / alış / kârlılık ---------------------------------------------------
 
-export const SALES_REPORT_GROUPS = ['party', 'item', 'month', 'invoice'] as const;
+export const SALES_REPORT_GROUPS = ['party', 'item', 'month', 'invoice', 'branch', 'creator'] as const;
 export type SalesReportGroup = (typeof SALES_REPORT_GROUPS)[number];
 
-/** Satış veya alış raporu (kaydedilmiş faturalar; iadeler düşülür, iptal ve taslak hariç). */
+/** Satış veya alış raporu: iadeler ve iptaller olay tarihinde düşülür, taslaklar hariçtir. */
 export const salesReportQuerySchema = z.object({
   from: isoDate,
   to: isoDate,

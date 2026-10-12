@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +10,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -49,7 +51,7 @@ test('gayrimenkul satışı: toplu birim → sözleşme + taksit planı → yür
   await dialog.getByRole('button', { name: '4 birim üret' }).click();
   await expect(page.getByText('4 birim eklendi, 0 atlandı')).toBeVisible();
   await expect(page.getByRole('row', { name: /A-101/ })).toBeVisible();
-  await page.getByRole('tab', { name: 'Kat planı' }).click();
+  await page.getByRole('button', { name: 'Kat planı' }).click();
   await expect(page.getByRole('button', { name: /^A-202 Satışa açık/ })).toBeVisible();
 
   // 2) Sözleşme: TL bedel 100.000, peşinat 20.000, 4 eşit taksit → plan 20.000 + 4 × 20.000

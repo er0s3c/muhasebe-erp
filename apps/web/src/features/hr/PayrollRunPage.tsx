@@ -1,13 +1,13 @@
 import { PAYROLL_PARAM_META, todayIso } from '@erp/shared';
-import { AlertTriangle, ArrowLeft, Calculator, CheckCircle2, FileText, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Calculator, CheckCircle2, FileText, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Stat } from '../../components/ui/Stat';
@@ -20,6 +20,7 @@ import type { PayrollItemRow, PayrollLineRow, PayrollRunDetail } from '../../lib
 import { AdvanceDeductionModal } from './AdvanceDeductionModal';
 import { formatParamValue, PAYROLL_INVALIDATE, PayrollStatusBadge, UnverifiedBadge, useWarningText } from './payroll-common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
 
 type DoneKey = 'payroll.run.approved' | 'payroll.run.paid' | 'payroll.run.unpaid' | 'payroll.run.cancelled';
 type Dlg = null | 'approve' | 'pay' | 'unpay' | 'cancel' | 'delete';
@@ -32,7 +33,7 @@ export function PayrollRunPage() {
   const toast = useToast();
   const can = useCan();
   const manage = can('hr.payroll_manage');
-  const { data, isPending, error: loadError } = useCQuery<PayrollRunDetail>(['payroll', 'run', id], `/api/payroll/runs/${id}`);
+  const { data, isPending, error: loadError , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<PayrollRunDetail>(['payroll', 'run', id], `/api/payroll/runs/${id}`);
   const [dlg, setDlg] = useState<Dlg>(null);
   const [text, setText] = useState('');
   const [paidAt, setPaidAt] = useState(todayIso());
@@ -45,6 +46,7 @@ export function PayrollRunPage() {
   const act = useCMutation((v: { path: string; body?: unknown }, call) => call<PayrollRunDetail>(`/api/payroll/runs/${id}/${v.path}`, { method: 'POST', body: v.body ?? {} }), PAYROLL_INVALIDATE);
   const remove = useCMutation((_: void, call) => call(`/api/payroll/runs/${id}`, { method: 'DELETE' }), PAYROLL_INVALIDATE);
 
+  if (loadError) return <ErrorState description={errorMessage(loadError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending) return <PageLoading />;
   if (!data) return <Callout tone="danger">{errorMessage(loadError)}</Callout>;
   const { run, lines, missingTerms, lock } = data;
@@ -63,18 +65,21 @@ export function PayrollRunPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <Link to="/hr/payroll" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
-          <ArrowLeft className="size-4" aria-hidden />
-          {t('payroll.title')}
-        </Link>
-        <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-          {t('payroll.run.title', { month: run.month })}
-          <span className="font-mono text-[15px] text-muted">{run.number}</span>
-          <PayrollStatusBadge status={run.status} />
-          {run.hasUnverifiedParams && <UnverifiedBadge />}
-        </h1>
-      </div>
+      <PageHeader
+        className="mb-0"
+        title={t('payroll.run.title', { month: run.month })}
+        helpKey="payroll-run"
+        back={{ to: '/hr/payroll', label: t('payroll.title') }}
+        recent={{ kind: 'Bordro' }}
+        eyebrow={<span className="font-mono normal-case tracking-normal">{run.number}</span>}
+        meta={
+          <>
+            <PayrollStatusBadge status={run.status} />
+            {run.jurisdiction && <Badge tone="brand">{run.jurisdiction === 'TR' ? 'Türkiye' : 'KKTC'}</Badge>}
+            {run.hasUnverifiedParams && <UnverifiedBadge />}
+          </>
+        }
+      />
 
       <Callout tone="warning">{t('payroll.notice')}</Callout>
       {error && !dlg && <Callout tone="danger">{errorMessage(error)}</Callout>}
@@ -204,6 +209,7 @@ export function PayrollRunPage() {
           </ul>
         </Card>
       )}
+      {run.countryConfigSnapshot && <Card><CardHeader title="Kaydedilmiş ülke bordro kuralı" description="Bu bordronun hesaplandığı tarife, prim rejimi ve doğrulama kaydı." /><div className="flex flex-col gap-2 p-4 text-sm"><p>{run.jurisdiction === 'TR' ? 'Türkiye / standart 4/a / teşviksiz prim' : `KKTC / ${run.countryConfigSnapshot.regime}`}</p><p>{run.countryConfigSnapshot.rulePackVersion} — {run.countryConfigSnapshot.verifiedBy}</p><p className="text-muted">{run.countryConfigSnapshot.sourceNote}</p><div className="flex flex-wrap gap-3">{run.countryConfigSnapshot.sourceRefs.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer" className="text-brand underline">Kural kaynağı</a>)}</div></div></Card>}
 
       <Modal
         open={dlg === 'approve'}
@@ -324,8 +330,9 @@ function AdjustModal({ runId, line, detail, onClose }: { runId: string; line: Pa
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_8rem_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setAmount(''); setNote(''); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setAmount(''); setNote(''); }, onError: setError });
             }}
           >
             <Field label={t('payroll.adjust.item')}>

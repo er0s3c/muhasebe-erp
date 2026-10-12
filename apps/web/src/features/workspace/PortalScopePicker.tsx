@@ -1,0 +1,5 @@
+import { PORTAL_SCOPE_LABELS, type PortalDocumentScopes } from '@erp/shared';
+
+export function PortalScopePicker({ value, available, onChange }: { value: PortalDocumentScopes; available: PortalDocumentScopes; onChange: (value: PortalDocumentScopes) => void }) {
+  return <fieldset className="space-y-3 rounded-lg border border-border p-4"><legend className="px-1 text-sm font-medium">Satış belgesi kapsamı</legend><p className="text-xs text-muted">Yalnız bu cariye ait kesinleşmiş faturalar, gönderilmiş teklifler ve onaylanmış siparişler paylaşılır. Tüm seçenekler başlangıçta kapalıdır.</p>{(Object.entries(PORTAL_SCOPE_LABELS) as [keyof PortalDocumentScopes, string][]).map(([key, label]) => <label key={key} className="flex min-w-0 items-start gap-2 text-sm"><input type="checkbox" className="mt-1 shrink-0 accent-text" checked={value[key]} disabled={!available[key] && !value[key]} onChange={event => onChange({ ...value, [key]: event.target.checked })} /><span className="min-w-0">{label}{!available[key] && <span className="mt-1 block text-xs text-muted">Bu kapsam için modül ve görüntüleme/dışa aktarma yetkisi gerekli.</span>}</span></label>)}</fieldset>;
+}

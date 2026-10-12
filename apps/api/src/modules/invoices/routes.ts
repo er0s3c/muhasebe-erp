@@ -11,7 +11,12 @@ import {
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { tenantRoute, type TenantCtx } from '../../http/context';
-import { forbidden } from '../../http/errors';
+import { z } from 'zod';
+import { forbidden, notFound, unprocessable } from '../../http/errors';
+import { retryOutboxMessage, sourceDeliveries } from '../outbox/service';
+import { invoiceDeliveries, sendInvoiceDocument, sendInvoiceDocumentSchema } from './deliveries';
+import { salesChain, salesChainQuerySchema } from '../sales/chain';
+import { runEach } from '../batch/runner';
 import { lockItems } from '../inventory/balances';
 import { lockOrderLines } from '../sales/usage';
 import { lockDeliveryLines } from './delivery-link';
@@ -19,6 +24,8 @@ import { itemProfitability, salesReport } from './analytics';
 import { evaluateInvoiceMatch } from '../procurement/matching';
 import { cancelInvoice, postInvoice } from './posting';
 import { invoiceSummary, vatSummary } from './reports';
+import { documentTaxRuleRoutes } from './tax-rules';
+import { documentTaxReport } from './tax-report';
 import {
   createInvoiceDraft,
   deleteInvoiceDraft,
@@ -48,6 +55,8 @@ async function lockForPosting(tx: Tx, lines: readonly { itemId?: string | null; 
 }
 
 export const invoiceRoutes: FastifyPluginAsync = async (app) => {
+  await app.register(documentTaxRuleRoutes);
+  app.get('/api/reports/document-taxes', tenantRoute(app, { module: 'core.invoices', permission: 'reports.read' }, async ({ tx, req }) => documentTaxReport(tx, vatSummaryQuerySchema.parse(req.query))));
   const read = { module: 'core.invoices', permission: 'invoices.read' } as const;
   const manage = { module: 'core.invoices', permission: 'invoices.manage' } as const;
   const post = { module: 'core.invoices', permission: 'invoices.post' } as const;
@@ -75,7 +84,8 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/invoices',
-    tenantRoute(app, manage, async (c) => {
+    // Cevabı kaybolup yeniden gönderilen kayıt ikinci fatura oluşturmaz (Idempotency-Key)
+    tenantRoute(app, { ...manage, idempotent: true }, async (c) => {
       const input = createInvoiceSchema.parse(c.req.body);
       // Taslak hazırlama ile muhasebeleştirme ayrı yetkilerdir
       if (input.post) c.require('invoices.post');
@@ -121,6 +131,51 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
     tenantRoute(app, post, async (c) =>
       cancelInvoice(c.tx, invoiceCtx(c), idParam.parse(c.req.params).id, cancelInvoiceSchema.parse(c.req.body)),
     ),
+  );
+
+  // Önizlemeli toplu muhasebeleştirme (öneri 6): önizleme aynı kurallarla dener ve geri alır; uygulamada her fatura ayrı savepoint'tedir
+  app.post(
+    '/api/invoices/batch-post',
+    tenantRoute(app, { ...post, idempotent: true }, async (c) => {
+      const input = z.object({ ids: z.array(z.string().uuid()).min(1).max(100).transform((v) => [...new Set(v)]), dryRun: z.boolean() }).parse(c.req.body);
+      const results = await runEach(c.tx, input.ids, async (sp, id) => {
+        const { lines } = await getInvoice(sp, id);
+        await lockForPosting(sp, lines);
+        const posted = await postInvoice(sp, invoiceCtx(c), id);
+        return { invoiceNo: posted.invoice.invoiceNo as string | null, grossTotal: String(posted.invoice.grossTotal), currencyCode: posted.invoice.currencyCode as string };
+      }, { dryRun: input.dryRun });
+      return { dryRun: input.dryRun, results, summary: { ok: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length } };
+    }),
+  );
+
+  // Satış belge zinciri (öneri 3): teklif → sipariş → irsaliye → fatura/iade → tahsilat; her aşama kendi yetkisiyle görünür
+  app.get('/api/sales-chain', tenantRoute(app, read, async (c) => salesChain(c, salesChainQuerySchema.parse(c.req.query))));
+
+  // Belge gönderimi (öneri 7): dışa aktarma işlemi sayılır; ileti kalıcı outbox'a yazılır, gönderim zamanlayıcıdadır
+  const send = { ...read, operation: 'export' } as const;
+  app.get(
+    '/api/invoices/:id/deliveries',
+    tenantRoute(app, read, async ({ tx, req }) => invoiceDeliveries(tx, idParam.parse(req.params).id)),
+  );
+  app.post(
+    '/api/invoices/:id/deliveries',
+    tenantRoute(app, { ...send, idempotent: true }, async (c) => {
+      if (!app.mailer.enabled) throw unprocessable('Giden e-posta bu kurulumda yapılandırılmamış', 'MAIL_DISABLED');
+      const key = c.req.headers['idempotency-key'];
+      const result = await sendInvoiceDocument(c.tx, { companyId: c.company.id, userId: c.user.id }, idParam.parse(c.req.params).id, sendInvoiceDocumentSchema.parse(c.req.body), typeof key === 'string' ? key : null);
+      c.reply.code(result.created ? 201 : 200);
+      return { delivery: result.delivery };
+    }),
+  );
+  app.post(
+    '/api/invoices/:id/deliveries/:deliveryId/retry',
+    tenantRoute(app, send, async ({ tx, req }) => {
+      const { id, deliveryId } = z.object({ id: z.string().uuid(), deliveryId: z.string().uuid() }).parse(req.params);
+      const own = (await sourceDeliveries(tx, 'invoice', id)).some((d) => d.id === deliveryId);
+      if (!own) throw notFound('Gönderim kaydı');
+      const row = await retryOutboxMessage(tx, deliveryId);
+      return { delivery: { id: row.id, status: row.status } };
+    }),
   );
 
   app.get(

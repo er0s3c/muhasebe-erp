@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const localFields = (value: Date) => ({
   date: value.toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' }),
@@ -24,7 +24,7 @@ test('bakım başlangıçla açılır, saatin tamamı tıklanır ve gerçekleşe
   const auth = { authorization: `Bearer ${(await registered.json()).accessToken}` };
   const companyResponse = await request.post('/api/companies', {
     headers: auth,
-    data: { name: `Bakım testi ${suffix}`, sector: 'MANUFACTURING_WHOLESALE' },
+    data: { name: `Bakım testi ${suffix}`, sector: 'MANUFACTURING_WHOLESALE', jurisdiction: 'KKTC' },
   });
   expect(companyResponse.ok(), await companyResponse.text()).toBeTruthy();
   const headers = { ...auth, 'x-company-id': (await companyResponse.json()).company.id };

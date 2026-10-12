@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
-import { isoYear, todayIso, type CreateCompanyInput } from '@erp/shared';
+import { isoYear, todayIso, JURISDICTION_PROFILES, type CreateCompanyInput } from '@erp/shared';
 import { setContext, type Tx } from '../../db/client';
 import { companies, memberships, organizations, warehouses } from '../../db/schema';
 import { seedChartOfAccounts } from '../ledger/accounts';
@@ -11,6 +11,8 @@ import { generatePeriods } from '../settings/periods';
 import type { AuthUser } from '../../http/context';
 import { forbidden } from '../../http/errors';
 import { pinInstallationOwner } from '../../licensing/installation';
+import { insertCompanyProfile } from './profiles';
+import { withCompanyTimeZone } from '../../http/company-time';
 
 /**
  * Yeni kuruluş (kayıt). `organizations` RLS ile yalıtıldığından kimlik önce üretilir ve işlem bağlamına (app.org_id)
@@ -89,10 +91,12 @@ export async function createCompany(
   // Bundan sonraki eklemeler şirket bağlamında (RLS) yapılır.
   await setContext(tx, { userId: user.id, orgId: user.orgId, companyId, ip });
 
-  await generatePeriods(tx, companyId, isoYear(todayIso()));
+  await insertCompanyProfile(tx, companyId, user.id, { jurisdiction: input.jurisdiction, effectiveFrom: '1900-01-01', legalEntityType: input.legalEntityType, vatRegistered: input.vatRegistered, activityCode: input.activityCode });
+  const currentDate = withCompanyTimeZone(JURISDICTION_PROFILES[input.jurisdiction].timeZone, () => todayIso());
+  await generatePeriods(tx, companyId, isoYear(currentDate));
   await seedChartOfAccounts(tx, companyId);
   await seedMappings(tx, companyId, input.sector);
-  await seedTaxRates(tx, companyId);
+  await seedTaxRates(tx, companyId, input.jurisdiction);
   await seedCostCodes(tx, companyId);
   await tx.insert(warehouses).values({ companyId, code: 'ANA', name: 'Ana depo', isDefault: true });
 

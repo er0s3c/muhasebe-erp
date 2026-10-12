@@ -1,3 +1,4 @@
+import { errorMessage } from '../../lib/errors';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { todayIso } from '@erp/shared';
@@ -6,7 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { RelatedContacts } from '../directory/RelatedContacts';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -31,8 +32,9 @@ export function OverviewTab({ project, onOpenBudget, onOpenWbs }: Props) {
   const can = useCan();
   const [asOf, setAsOf] = useState(todayIso());
   const [hideEmpty, setHideEmpty] = useState(true);
-  const { data, isPending } = useCQuery<ProjectCostReport>(['project', project.id, 'cost-report', asOf], `/api/projects/${project.id}/cost-report?asOf=${asOf}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<ProjectCostReport>(['project', project.id, 'cost-report', asOf], `/api/projects/${project.id}/cost-report?asOf=${asOf}`);
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   const { totals, rows, budget } = data;
   const hasRows = rows.length > 0;

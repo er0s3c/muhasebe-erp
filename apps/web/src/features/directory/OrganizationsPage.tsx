@@ -1,3 +1,4 @@
+import { errorMessage } from '../../lib/errors';
 import { Building2, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { TruncatedNote, useListLimit } from '../../components/ui/ListLimit';
@@ -7,7 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useCan, useCQuery } from '../../lib/queries';
@@ -32,7 +33,7 @@ export function OrganizationsPage() {
     return p.toString();
   }, [q, archived]);
   const lim = useListLimit(qs);
-  const { data, isPending } = useCQuery<{ organizations: DirOrg[] } & { truncated?: boolean }>(['directory', 'orgs', qs, lim.limit], `/api/directory/organizations?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ organizations: DirOrg[] } & { truncated?: boolean }>(['directory', 'orgs', qs, lim.limit], `/api/directory/organizations?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = data?.organizations ?? [];
   const addButton = canManage && (
     <Button variant="primary" onClick={() => setAdding(true)}>
@@ -52,7 +53,7 @@ export function OrganizationsPage() {
           </div>
         }
       />
-      {isPending ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : rows.length === 0 && !q && archived === 'active' ? (
         <Card><EmptyState icon={<Building2 className="size-5" />} title={t('directory.org.empty')} description={t('directory.org.emptyDesc')} action={addButton || undefined} /></Card>

@@ -121,7 +121,7 @@ function DayRows({ sheet, date, canEdit }: { sheet: AttendanceSheetData; date: s
       <div className="overflow-auto rounded-2xl border border-border bg-surface">
         <table className="w-full border-collapse text-sm" aria-label={t('attendance.tabs.day')}>
           <thead>
-            <tr className="[&>th]:border-b [&>th]:border-border [&>th]:bg-surface-2 [&>th]:px-3 [&>th]:py-2.5 [&>th]:text-left [&>th]:text-[11px] [&>th]:font-normal [&>th]:uppercase [&>th]:tracking-[0.05em] [&>th]:text-muted">
+            <tr className="[&>th]:border-b [&>th]:border-border [&>th]:bg-surface-2 [&>th]:px-3 [&>th]:py-2.5 [&>th]:text-left [&>th]:text-[12px] [&>th]:font-normal [&>th]:uppercase [&>th]:tracking-[0.05em] [&>th]:text-muted">
               <th>{t('attendance.grid.employee')}</th>
               <th>{t('attendance.dayType')}</th>
               <th>{t('attendance.normalHours')}</th>
@@ -140,7 +140,7 @@ function DayRows({ sheet, date, canEdit }: { sheet: AttendanceSheetData; date: s
                 <tr key={emp.id} className="align-top [&>td]:border-b [&>td]:border-border/70 [&>td]:px-3 [&>td]:py-2">
                   <td className="min-w-44">
                     <div>{emp.fullName}</div>
-                    <div className="font-mono text-[11px] text-muted">{emp.code}</div>
+                    <div className="font-mono text-[12px] text-muted">{emp.code}</div>
                   </td>
                   <td className="w-44">
                     <Select aria-label={`${t('attendance.dayType')} ${emp.fullName}`} value={r.dayType} disabled={!canEdit} onChange={(e) => patch(emp, { dayType: e.target.value as AttendanceDayType | '' })} aria-invalid={bad}>

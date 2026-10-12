@@ -1,10 +1,11 @@
-import { ArrowLeft, Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DELIVERY_NOTE_TYPE_META, dec, todayIso } from '@erp/shared';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
@@ -86,6 +87,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
   const [driverName, setDriverName] = useState(initial?.note.driverName ?? '');
   const [description, setDescription] = useState(initial?.note.description ?? '');
   const [returnOfId, setReturnOfId] = useState(initial?.note.returnOfId ?? '');
+  const [inspectionRequired, setInspectionRequired] = useState(initial?.note.inspectionRequired ?? false);
   const [lines, setLines] = useState<LineState[]>(() =>
     initial
       ? initial.lines.map((l) => ({
@@ -178,6 +180,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
     noteDate,
     externalNo: showExternal ? externalNo.trim() || undefined : undefined,
     returnOfId: isReturn && returnOfId ? returnOfId : null,
+    ...(type === 'sales_return' ? { inspectionRequired } : {}),
     warehouseId: effectiveWh || null,
     vehiclePlate: vehiclePlate.trim() || undefined,
     driverName: driverName.trim() || undefined,
@@ -207,6 +210,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
   const remove = useCMutation((_: void, c) => c(`/api/delivery-notes/${initial!.note.id}`, { method: 'DELETE' }), DELIVERY_INVALIDATE);
 
   const submit = (post: boolean) => {
+    if (save.isPending || remove.isPending) return;
     setError(null);
     setFieldError(null);
     if (!partyId) return setFieldError(t('deliveries.form.partyRequired'));
@@ -215,6 +219,7 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
     if (lines.some((l) => l.maxQty && dec(l.quantity).gt(l.maxQty))) return setFieldError(t('deliveries.form.returnQtyExceeded'));
     save.mutate(post, {
       onSuccess: (res) => {
+        markFormSaved(document.querySelector('[data-form-guard-scope="DeliveryNoteForm"]'));
         toast.success(post ? t('deliveries.form.postedMsg', { no: res.note.noteNo ?? '' }) : t('deliveries.form.savedMsg'));
         navigate(`/delivery-notes/${res.note.id}`, { replace: true });
       },
@@ -230,18 +235,14 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
     ? 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_96px_minmax(0,1fr)_88px_minmax(0,0.8fr)_32px]'
     : 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_120px_32px]';
 
-  return (
+  return (<FormGuard captureAll scopeKey="DeliveryNoteForm" pending={save.isPending || remove.isPending}>{(
     <>
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t(`deliveries.${side}.title`)}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-heading">
-          {initial ? t('deliveries.form.editTitle', { type: t(`deliveries.types.${type}`) }) : t('deliveries.form.newTitle', { type: t(`deliveries.types.${type}`) })}
-        </h1>
-      </div>
+      <PageHeader
+        title={initial ? t('deliveries.form.editTitle', { type: t(`deliveries.types.${type}`) }) : t('deliveries.form.newTitle', { type: t(`deliveries.types.${type}`) })}
+        helpKey="delivery-note-editor"
+        back={{ to: listPath, label: t(`deliveries.${side}.title`) }}
+        favorite={false}
+      />
 
       <div className="flex flex-col gap-5">
         {(error || fieldError) && <Callout tone="danger">{error ? errorMessage(error) : fieldError}</Callout>}
@@ -278,6 +279,15 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
                   </Select>
                 )}
               </Field>
+            )}
+            {type === 'sales_return' && (
+              <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" className="mt-0.5 size-4" checked={inspectionRequired} onChange={(e) => setInspectionRequired(e.target.checked)} />
+                <span>
+                  {t('deliveries.form.inspectionRequired')}
+                  <span className="block text-xs text-muted">{t('deliveries.form.inspectionRequiredHint')}</span>
+                </span>
+              </label>
             )}
             <Field label={t('deliveries.form.noteDate')} required>
               {(id) => <Input id={id} type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} />}
@@ -449,5 +459,5 @@ export function DeliveryNoteForm({ type, initial }: { type: DeliveryNoteType; in
         {null}
       </Modal>
     </>
-  );
+  )}</FormGuard>);
 }

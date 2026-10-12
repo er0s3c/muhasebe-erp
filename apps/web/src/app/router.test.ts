@@ -3,6 +3,7 @@ import type { RouteObject } from 'react-router-dom';
 import { NAV_ITEMS, PERMISSIONS } from '@erp/shared';
 import { router } from './router';
 import type { RouteHandle } from './guards';
+import { NAV_MERGES } from '../components/layout/navigation';
 
 /** Uygulama kabuğu altındaki tüm sayfa rotaları: tam yol -> izin (handle). */
 function collect(routes: readonly RouteObject[], base = ''): Map<string, RouteHandle | undefined> {
@@ -28,6 +29,14 @@ describe('rota izinleri (UI-7)', () => {
 
   it('menüdeki her sayfanın rota izni menü izniyle aynı (menüde görünen sayfa yetki ekranı vermez)', () => {
     for (const item of NAV_ITEMS) {
+      // Birleşen ekranlar menüde merkez sayfa olarak görünür; merkez ya aynı izni ister ya da kapıyı sekme başına uygular (null)
+      const merge = NAV_MERGES.find(m => m.from.includes(item.key));
+      if (merge) {
+        expect(pages.has(merge.path), merge.path).toBe(true);
+        const hubPermission = pages.get(merge.path)!.permission;
+        expect(hubPermission === null || hubPermission === item.permission, `${item.key} → ${merge.path}`).toBe(true);
+        continue;
+      }
       const pathname = item.path.split('?')[0]!;
       expect(pages.has(pathname), item.path).toBe(true);
       const pagePermission = pages.get(pathname)!.permission;

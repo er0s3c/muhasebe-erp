@@ -73,6 +73,7 @@ export function RequireModule({ module, alternatives = [] }: { module: string; a
 /** Rota meta verisi: sayfanın ana API çağrısının istediği izin (menüdeki izinle aynı; `null` = herkese açık). */
 export interface RouteHandle {
   permission: Permission | null;
+  layout?: 'normal' | 'wide' | 'form';
 }
 
 /**

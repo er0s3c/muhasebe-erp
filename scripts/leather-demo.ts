@@ -22,7 +22,7 @@ async function request<T>(path: string, data?: unknown): Promise<T> {
 type Entity = { id: string };
 const dated = (fields: Record<string, unknown> = {}) => ({ date, requestKey: randomUUID(), note: 'Deri kabul demosu', ...fields });
 token = (await request<{ accessToken: string }>('/api/auth/login', { email, password })).accessToken;
-const company = await request<{ company: Entity }>('/api/companies', { name: `Deri atölyesi demo ${suffix}`, sector: 'LEATHER_FASHION' });
+const company = await request<{ company: Entity }>('/api/companies', { name: `Deri atölyesi demo ${suffix}`, sector: 'LEATHER_FASHION', jurisdiction: 'KKTC' });
 companyId = company.company.id;
 console.log(`Yeni demo şirketi: ${companyId}`);
 const warehouseId = (await request<{ warehouses: Entity[] }>('/api/warehouses')).warehouses[0]!.id;

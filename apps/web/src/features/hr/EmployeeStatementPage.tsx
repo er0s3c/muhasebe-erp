@@ -1,9 +1,8 @@
-import { ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router-dom';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { useParams } from 'react-router-dom';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Field, Input } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
@@ -21,19 +20,17 @@ export function EmployeeStatementPage() {
   const [from, setFrom] = useState(`${new Date().getFullYear()}-01-01`);
   // Bordro yevmiyesi ay sonu tarihlidir: varsayılan bitiş yıl sonu (bu ayın bordrosu ay bitmeden de görünür)
   const [to, setTo] = useState(`${new Date().getFullYear()}-12-31`);
-  const { data, isPending, error } = useCQuery<EmployeeStatement>(['employee-ledger', 'statement', id, from, to], `/api/employee-ledger/employees/${id}/statement?from=${from}&to=${to}`);
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<EmployeeStatement>(['employee-ledger', 'statement', id, from, to], `/api/employee-ledger/employees/${id}/statement?from=${from}&to=${to}`);
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <Link to="/hr/employee-ledger" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
-          <ArrowLeft className="size-4" aria-hidden />
-          {t('employeeLedger.title')}
-        </Link>
-        <h1 className="text-2xl">
-          {t('employeeLedger.statement.title')}
-          {data && <span className="ml-3 text-[15px] text-muted"><span className="font-mono">{data.employee.code}</span> {data.employee.fullName}</span>}
-        </h1>
-      </div>
+      <PageHeader
+        className="mb-0"
+        title={t('employeeLedger.statement.title')}
+        helpKey="employee-statement"
+        back={{ to: '/hr/employee-ledger', label: t('employeeLedger.title') }}
+        recent={data ? { kind: 'Personel ekstresi', title: data.employee.fullName } : false}
+        meta={data && <span className="text-[15px] text-muted"><span className="font-mono">{data.employee.code}</span> {data.employee.fullName}</span>}
+      />
       <Callout tone="warning">{t('employeeLedger.notice')}</Callout>
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <div className="flex flex-wrap gap-3">
@@ -42,7 +39,7 @@ export function EmployeeStatementPage() {
         </div>
         <ExportMenu exportKey="employee-statement" params={{ employeeId: id, from, to }} disabled={!data} />
       </div>
-      {isPending ? (
+      {error ? (<ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : !data ? (
         <Callout tone="danger">{errorMessage(error)}</Callout>

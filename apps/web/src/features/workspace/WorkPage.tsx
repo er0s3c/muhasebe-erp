@@ -130,7 +130,7 @@ function WorkContent() {
           ].map((metric, index) => <button key={metric.label} type="button"
             className={`min-w-0 px-5 py-5 text-left transition-colors hover:bg-surface-2 ${index > 1 ? 'border-t border-border lg:border-t-0' : ''}`}
             onClick={() => { setStatus(metric.status); setDue(metric.filter); setOffset(0); }}>
-            <span className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wider text-muted">{metric.label}<metric.icon className="size-4" aria-hidden /></span>
+            <span className="flex items-center justify-between gap-2 text-[12px] uppercase tracking-wider text-muted">{metric.label}<metric.icon className="size-4" aria-hidden /></span>
             <span className={`mt-2 block text-[28px] leading-tight tabular-nums ${index === 2 && metric.value ? 'text-danger' : ''}`}>{metric.value ?? '—'}</span>
             <span className="mt-1 block text-xs text-muted">{metric.hint}</span>
           </button>)}
@@ -142,7 +142,7 @@ function WorkContent() {
           <CardHeader title="Çalışma listesi" description={`${formatDateTR(tasks.data?.today ?? todayIso())} · ${scope === 'mine' ? 'Bana atanan işler' : 'Ekipteki tüm işler'}`}
             action={<Select aria-label="Görev kapsamı" className="w-auto" value={scope} onChange={e => { setScope(e.target.value); setOffset(0); }}><option value="mine">Benim işlerim</option><option value="team">Ekip işleri</option></Select>} />
           <div className="flex flex-wrap items-center gap-3 px-5 pt-4">
-            <SegmentedTabs
+            <SegmentedTabs variant="filter"
               items={[
                 { key: 'open', label: 'Açık işler' },
                 { key: 'done', label: 'Tamamlanan' },

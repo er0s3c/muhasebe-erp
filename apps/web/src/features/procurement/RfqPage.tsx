@@ -1,14 +1,14 @@
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -30,7 +30,7 @@ export function RfqPage() {
   const toast = useToast();
   const can = useCan();
   const base = useCompany().baseCurrency;
-  const { data, isPending } = useCQuery<RfqDetail>(['rfq', id], `/api/rfqs/${id}`);
+  const { data, isPending, error: RfqPageQueryError, refetch: RfqPageQueryRetry, isFetching: RfqPageQueryFetching } = useCQuery<RfqDetail>(['rfq', id], `/api/rfqs/${id}`);
   const [offerOpen, setOfferOpen] = useState(false);
   const [editing, setEditing] = useState<RfqOfferRow | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -39,6 +39,7 @@ export function RfqPage() {
   const cancel = useCMutation((_: void, call) => call(`/api/rfqs/${id}/cancel`, { method: 'POST', body: {} }), PROCUREMENT_INVALIDATE);
   const removeOffer = useCMutation((offerId: string, call) => call(`/api/rfqs/${id}/offers/${offerId}`, { method: 'DELETE' }), PROCUREMENT_INVALIDATE);
 
+  if (RfqPageQueryError && !data) return <ErrorState error={RfqPageQueryError} onRetry={() => void RfqPageQueryRetry()} retrying={RfqPageQueryFetching} />;
   if (isPending || !data) return <PageLoading />;
   const { rfq, lines, offers } = data;
   const open = rfq.status === 'open';
@@ -47,14 +48,14 @@ export function RfqPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <Link to="/purchasing/rfqs" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-text print:hidden">
-          <ArrowLeft className="size-4" aria-hidden />
-          {t('procurement.rfqs.title')}
-        </Link>
-        <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-          {rfq.code}
-          <RfqStatusBadge status={rfq.status} />
-        </h1>
+        <PageHeader
+          className="mb-0"
+          title={rfq.code}
+          helpKey="rfq-detail"
+          back={{ to: '/purchasing/rfqs', label: t('procurement.rfqs.title') }}
+          recent={{ kind: 'Teklif karşılaştırma' }}
+          meta={<RfqStatusBadge status={rfq.status} />}
+        />
         <p className="mt-1 text-sm text-muted">
           <Link className="link" to={`/purchasing/requests/${rfq.requestId}`}>{rfq.requestCode}</Link> — {rfq.requestTitle} · {rfq.projectCode}
           {rfq.dueDate && <> · {t('procurement.rfqs.dueDate')}: {formatDateTR(rfq.dueDate)}</>}

@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Textarea } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
@@ -31,7 +31,7 @@ export function ContactDetailPage() {
   const can = useCan();
   const canManage = can('directory.manage');
   const canPrivacy = canManage && can('privacy.manage');
-  const { data, isPending, error } = useCQuery<{ contact: DirContact }>(['directory', 'contact', id], id ? `/api/directory/contacts/${id}` : null);
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ contact: DirContact }>(['directory', 'contact', id], id ? `/api/directory/contacts/${id}` : null);
   const { data: agenda } = useCQuery<{ items: AgendaItem[] }>(['agenda', 'contact', id], id ? `/api/agenda?scope=all&contactId=${id}` : null);
   const { contacts } = useContactOptions(canManage);
   const [editing, setEditing] = useState(false);
@@ -51,6 +51,7 @@ export function ContactDetailPage() {
   if (error instanceof ApiError && error.status === 404) {
     return <EmptyState title={t('directory.contact.notFound')} action={<Link to="/directory/contacts"><Button>{t('directory.contact.back')}</Button></Link>} />;
   }
+  if (error) return <ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   const c = data.contact;
   const frozen = c.isArchived && (!!c.anonymizedAt || !!c.mergedIntoId);

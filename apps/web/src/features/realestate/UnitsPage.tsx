@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -50,7 +50,7 @@ export function UnitsPage() {
     return q.toString();
   }, [projectId, status]);
   const lim = useListLimit(qs, 2000, 5000);
-  const { data, isPending } = useCQuery<{ units: UnitRow[] } & { truncated?: boolean }>(['units', 'list', qs, lim.limit], `/api/real-estate/units?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
+  const { data, isPending, error: UnitsPageQueryError, refetch: UnitsPageQueryRetry, isFetching: UnitsPageQueryFetching } = useCQuery<{ units: UnitRow[] } & { truncated?: boolean }>(['units', 'list', qs, lim.limit], `/api/real-estate/units?${qs}${qs ? '&' : ''}limit=${lim.limit}`);
   const rows = useMemo(() => data?.units ?? [], [data]);
   const filtered = !!(projectId || status);
 
@@ -80,6 +80,7 @@ export function UnitsPage() {
     return [...m.entries()];
   }, [rows]);
 
+  if (UnitsPageQueryError && !data) return <ErrorState error={UnitsPageQueryError} onRetry={() => void UnitsPageQueryRetry()} retrying={UnitsPageQueryFetching} />;
   return (
     <>
       <PageHeader title={t('realEstate.units.title')} description={t('realEstate.units.subtitle')} actions={actions || undefined} />
@@ -104,7 +105,7 @@ export function UnitsPage() {
                 <option key={s} value={s}>{t(`realEstate.unitStatus.${s}`)}</option>
               ))}
             </Select>
-            <SegmentedTabs
+            <SegmentedTabs variant="filter"
               items={[{ key: 'table', label: t('realEstate.units.viewTable') }, { key: 'grid', label: t('realEstate.units.viewGrid') }]}
               value={view}
               onChange={setView}

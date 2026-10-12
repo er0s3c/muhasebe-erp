@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { createBrowserRouter, type RouteObject } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet, useLocation, type RouteObject } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { PageLoading } from '../components/ui/Feedback';
 import { NotFoundPage } from '../features/NotFoundPage';
@@ -9,7 +9,6 @@ import { PasswordChangeRequiredPage } from '../features/auth/PasswordChangeRequi
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
 import { VerifyEmailPage } from '../features/auth/VerifyEmailPage';
-import { CreateCompanyPage } from '../features/onboarding/CreateCompanyPage';
 import type { Permission } from '@erp/shared';
 import {
   PublicOnly,
@@ -20,6 +19,8 @@ import {
   type RouteHandle,
 } from './guards';
 import { RouteError } from './RouteError';
+import { RouteChangeGuard } from '../components/ui/UnsavedChanges';
+import { QueryStateBoundary } from '../components/ui/QueryStateBoundary';
 
 /**
  * Sayfalar modül bazında lazy yüklenir: kullanıcının açmadığı (ya da şirketinin sektöründe
@@ -32,11 +33,29 @@ function page<K extends string>(
   name: K,
   permission: Permission | null,
 ): Pick<RouteObject, 'lazy' | 'handle'> {
-  const handle: RouteHandle = { permission };
+  const form = /Editor|Create|OpeningBalances/.test(name);
+  const normal = /Dashboard|WorkPage|Security|Notification|Activation/.test(name);
+  const handle: RouteHandle = { permission, layout: form ? 'form' : normal ? 'normal' : 'wide' };
   return { handle, lazy: async () => ({ Component: (await load())[name] }) };
 }
 
-export const router = createBrowserRouter([
+/** Birleşen eski ekran adresleri: yer imleri ve eski bağlantılar ilgili sekmeye gider; ek sorgu parametreleri korunur. */
+function MovedTo({ to }: { to: string }) {
+  const { search } = useLocation();
+  const [path, query = ''] = to.split('?');
+  const params = new URLSearchParams(query);
+  new URLSearchParams(search).forEach((value, key) => {
+    if (!params.has(key)) params.set(key, value);
+  });
+  const qs = params.toString();
+  return <Navigate to={qs ? `${path}?${qs}` : path!} replace />;
+}
+const moved = (path: string, to: string): RouteObject => ({ path, element: <MovedTo to={to} /> });
+const hub = (name: 'HrSettingsHub' | 'CashPlanningHub' | 'IntegrationsHub' | 'DataTransferHub' | 'ExpensesHub', permission: Permission | null) =>
+  page(() => import('../features/hubs/HubPages'), name, permission);
+
+const routes: RouteObject[] = [
+  { path: '/offline-drafts', ...page(() => import('../features/offline/OfflineDraftPage'), 'OfflineDraftPage', null), errorElement: <RouteError />, hydrateFallbackElement: <PageLoading /> },
   { path:'/field-offline', ...page(()=>import('../features/construction-control/OfflineFieldPage'),'OfflineFieldPage',null), errorElement:<RouteError/>, hydrateFallbackElement:<PageLoading/> },
   { path: '/portal', ...page(() => import('../features/workspace/PortalPage'), 'PortalPage', null), errorElement: <RouteError />, hydrateFallbackElement: <PageLoading /> },
   {
@@ -64,7 +83,8 @@ export const router = createBrowserRouter([
     hydrateFallbackElement: <PageLoading />,
     children: [
       { path: '/password-change', element: <PasswordChangeRequiredPage /> },
-      { path: '/company/new', element: <CreateCompanyPage /> },
+      // Nadiren açılır (ilk şirket/yeni şirket): ilk yükten ayrı parçada
+      { path: '/company/new', ...page(() => import('../features/onboarding/CreateCompanyPage'), 'CreateCompanyPage', null) },
       {
         element: <RequireCompany />,
         children: [
@@ -78,12 +98,28 @@ export const router = createBrowserRouter([
                 children: [
                   { index: true, ...page(() => import('../features/dashboard/DashboardPage'), 'DashboardPage', null) },
                   { path: 'workspace', ...page(() => import('../features/workspace/WorkPage'), 'WorkPage', null) },
+                  { path: 'me/employee', ...page(() => import('../features/hr/EmployeePortalPage'), 'EmployeePortalPage', null) },
+                  { path: 'workspace/offline', ...page(() => import('../features/offline/OfflineSetupPage'), 'OfflineSetupPage', 'workspace.use') },
+                  { element: <RequireModule module="core.integrations" />, children: [{ path: 'settings/integrations', ...hub('IntegrationsHub', 'core.integrations.read') }] },
+                  moved('integrations', '/settings/integrations?tab=channels'),
+                  // Sekmeler farklı izinlere bağlı: kapıyı merkez sayfa sekme başına uygular (izinsiz kullanıcı yetki ekranı görür)
+                  { path: 'hr/settings', ...hub('HrSettingsHub', null) },
+                  moved('hr/payroll/settings', '/hr/settings?tab=payroll'),
+                  moved('hr/social-security/settings', '/hr/settings?tab=social'),
+                  moved('hr/foreign-workers/settings', '/hr/settings?tab=foreign'),
+                  { path: 'settings/data-transfer', ...hub('DataTransferHub', null) },
+                  moved('reports/data-export', '/settings/data-transfer?tab=export'),
+                  moved('reports/file-exchange', '/settings/data-transfer?tab=exchange'),
+                  moved('workspace/scenarios', '/treasury/cash-planning?tab=scenarios'),
+                  moved('treasury/cash-forecast', '/treasury/cash-planning?tab=forecast'),
+                  moved('treasury/expense-cards', '/treasury/expenses?tab=cards'),
                   { path: 'workspace/portal', ...page(() => import('../features/workspace/PortalAdminPage'), 'PortalAdminPage', 'members.manage') },
                   { path: 'workspace/project-control', element:<RequireModule module="construction.projects"/>, children:[{index:true,...page(()=>import('../features/construction-control/ProjectControlPage'),'ProjectControlPage','projects.read')}] },
                   { path: 'workspace/construction', element: <RequireModule module="construction.projects" />, children: [{ index: true, ...page(() => import('../features/workspace/ConstructionPage'), 'ConstructionPage', 'projects.read') }] },
                   { path: 'workspace/operations', ...page(() => import('../features/workspace/OperationsPage'), 'OperationsPage', null) },
+                  { path: 'reports/supplier-performance', ...page(() => import('../features/reports/SupplierPerformancePage'), 'SupplierPerformancePage', 'procurement.read') },
+                  { path: 'purchasing/replenishment', ...page(() => import('../features/procurement/ReplenishmentPage'), 'ReplenishmentPage', 'procurement.read') },
                   { path: 'workspace/handover', ...page(() => import('../features/workspace/HandoverPage'), 'HandoverPage', 'realestate.read') },
-                  { path: 'workspace/scenarios', element: <RequireModule module="core.treasury" />, children: [{ index: true, ...page(() => import('../features/workspace/ScenariosPage'), 'ScenariosPage', 'treasury.read') }] },
                   { path: 'workspace/documents', ...page(() => import('../features/workspace/DocumentsPage'), 'DocumentsPage', null) },
                   {
                     element: <RequireModule module="core.ledger" />,
@@ -134,6 +170,7 @@ export const router = createBrowserRouter([
                     children: [
                       { path: 'sales/quotes', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesQuotesPage', 'invoices.read') },
                       { path: 'sales/orders', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesOrdersPage', 'invoices.read') },
+                      { path: 'sales/reps', ...page(() => import('../features/sales/SalesRepsPage'), 'SalesRepsPage', 'invoices.read') },
                       { path: 'sales/docs/new', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage', 'invoices.manage') },
                       { path: 'sales/docs/:id', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage', 'invoices.read') },
                     ],
@@ -157,8 +194,7 @@ export const router = createBrowserRouter([
                   {
                     element: <RequireModule module="treasury.expenses" />,
                     children: [
-                      { path: 'treasury/expenses', ...page(() => import('../features/expenses/ExpenseEntriesPage'), 'ExpenseEntriesPage', 'treasury.read') },
-                      { path: 'treasury/expense-cards', ...page(() => import('../features/expenses/ExpenseCardsPage'), 'ExpenseCardsPage', 'treasury.read') },
+                      { path: 'treasury/expenses', ...hub('ExpensesHub', 'treasury.read') },
                       { path: 'treasury/expense-reports', ...page(() => import('../features/expenses/ExpenseReportPage'), 'ExpenseReportPage', 'treasury.read') },
                     ],
                   },
@@ -173,7 +209,7 @@ export const router = createBrowserRouter([
                     children: [
                       { path: 'treasury/accounts', ...page(() => import('../features/treasury/AccountsPage'), 'AccountsPage', 'treasury.read') },
                       { path: 'treasury/accounts/:id', ...page(() => import('../features/treasury/AccountDetailPage'), 'AccountDetailPage', 'treasury.read') },
-                      { path: 'treasury/cash-forecast', ...page(() => import('../features/treasury/CashForecastPage'), 'CashForecastPage', 'treasury.read') },
+                      { path: 'treasury/cash-planning', ...hub('CashPlanningHub', 'treasury.read') },
                       { path: 'treasury/transactions', ...page(() => import('../features/treasury/TransactionsPage'), 'TransactionsPage', 'treasury.read') },
                       { path: 'reports/fx-differences', ...page(() => import('../features/reports/FxDifferencePage'), 'FxDifferencePage', 'reports.read') },
                       { path: 'reports/fx-position', ...page(() => import('../features/reports/FxPositionPage'), 'FxPositionPage', 'reports.read') },
@@ -194,6 +230,7 @@ export const router = createBrowserRouter([
                   {
                     element: <RequireModule module="core.inventory" />,
                     children: [
+                      { path: 'reports/stock-analytics', ...page(() => import('../features/reports/StockAnalyticsPage'), 'StockAnalyticsPage', 'inventory.read') },
                       { path: 'inventory/items', ...page(() => import('../features/inventory/ItemsPage'), 'ItemsPage', 'inventory.read') },
                       { path: 'inventory/items/:id', ...page(() => import('../features/inventory/ItemDetailPage'), 'ItemDetailPage', 'inventory.read') },
                       { path: 'inventory/status', ...page(() => import('../features/inventory/StockStatusPage'), 'StockStatusPage', 'inventory.read') },
@@ -224,7 +261,6 @@ export const router = createBrowserRouter([
                     element: <RequireModule module="hr.payroll" />,
                     children: [
                       { path: 'hr/payroll', ...page(() => import('../features/hr/PayrollPage'), 'PayrollPage', 'hr.payroll') },
-                      { path: 'hr/payroll/settings', ...page(() => import('../features/hr/PayrollSettingsPage'), 'PayrollSettingsPage', 'hr.payroll') },
                       { path: 'hr/payroll/:id', ...page(() => import('../features/hr/PayrollRunPage'), 'PayrollRunPage', 'hr.payroll') },
                       { path: 'hr/payroll/:id/slip/:employeeId', ...page(() => import('../features/hr/PayrollSlipPage'), 'PayrollSlipPage', 'hr.payroll') },
                     ],
@@ -262,7 +298,6 @@ export const router = createBrowserRouter([
                     element: <RequireModule module="hr.socialsecurity" />,
                     children: [
                       { path: 'hr/social-security', ...page(() => import('../features/hr/SocialSecurityPage'), 'SocialSecurityPage', 'hr.payroll') },
-                      { path: 'hr/social-security/settings', ...page(() => import('../features/hr/SocialSettingsPage'), 'SocialSettingsPage', 'hr.payroll') },
                       { path: 'hr/social-security/:id', ...page(() => import('../features/hr/SocialDeclarationPage'), 'SocialDeclarationPage', 'hr.payroll') },
                     ],
                   },
@@ -270,7 +305,6 @@ export const router = createBrowserRouter([
                     element: <RequireModule module="hr.foreign" />,
                     children: [
                       { path: 'hr/foreign-workers', ...page(() => import('../features/hr/ForeignWorkersPage'), 'ForeignWorkersPage', 'hr.read') },
-                      { path: 'hr/foreign-workers/settings', ...page(() => import('../features/hr/ForeignSettingsPage'), 'ForeignSettingsPage', 'hr.read') },
                     ],
                   },
                   {
@@ -314,6 +348,8 @@ export const router = createBrowserRouter([
                     element: <RequireModule module="core.settings" />,
                     children: [
                       { path: 'settings/company', ...page(() => import('../features/settings/CompanyPage'), 'CompanyPage', 'settings.read') },
+                      { path: 'settings/branches', ...page(() => import('../features/settings/BranchesPage'), 'BranchesPage', 'company.manage') },
+                      { path: 'settings/approvals', ...page(() => import('../features/settings/DocumentApprovalsPage'), 'DocumentApprovalsPage', 'settings.read') },
                       { path: 'settings/operations', ...page(() => import('../features/settings/OperationsSettingsPage'), 'OperationsSettingsPage', 'settings.manage') },
                       { path: 'settings/backups', ...page(() => import('../features/settings/BackupsPage'), 'BackupsPage', 'company.manage') },
                       { path: 'settings/recurring', ...page(() => import('../features/settings/RecurringPage'), 'RecurringPage', 'settings.manage') },
@@ -328,7 +364,6 @@ export const router = createBrowserRouter([
                       { path: 'settings/license', ...page(() => import('../features/settings/LicensePage'), 'LicensePage', 'settings.read') },
                       { path: 'settings/devices', ...page(() => import('../features/settings/DevicesPage'), 'DevicesPage', 'members.manage') },
                       { path: 'settings/account-mapping', ...page(() => import('../features/settings/AccountMappingPage'), 'AccountMappingPage', 'accounts.manage') },
-                      { path: 'reports/data-export', ...page(() => import('../features/reports/DataExportPage'), 'DataExportPage', 'data.export') },
                     ],
                   },
                   { path: 'account/security', ...page(() => import('../features/settings/SecurityPage'), 'SecurityPage', null) },
@@ -347,7 +382,6 @@ export const router = createBrowserRouter([
                   {element:<RequireModule module="manufacturing.catalog"/>,children:[{path:'manufacturing',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingOverviewPage','manufacturing.catalog.read')}]},
                   {element:<RequireModule module="inventory.wms"/>,children:[{path:'wms',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingWarehousePage','inventory.wms.read')}]},
                   {element:<RequireModule module="sales.logistics"/>,children:[{path:'logistics',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingLogisticsPage','sales.logistics.read')}]},
-                  {element:<RequireModule module="core.integrations"/>,children:[{path:'integrations',...page(()=>import('../features/manufacturing/ManufacturingPages'),'ManufacturingIntegrationsPage','core.integrations.read')}]},
                   { element: <RequireModule module="leather.catalog" />, children: [
                     {path:'leather',...page(()=>import('../features/leather/LeatherPages'),'LeatherOverviewPage','leather.catalog.read')},
                     {path:'leather/models',...page(()=>import('../features/leather/LeatherPages'),'LeatherModelsPage','leather.catalog.read')},
@@ -373,4 +407,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter([{ element: <RouteChangeGuard><QueryStateBoundary><Outlet /></QueryStateBoundary></RouteChangeGuard>, children: routes }]);

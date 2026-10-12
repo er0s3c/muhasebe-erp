@@ -7,6 +7,7 @@
  *   npm run db:seed      giriş: demo@ornek.local / Demo-Sifre-123
  */
 import { seedManufacturingDemo } from './demo-manufacturing';
+import { seedDemoTaxHistory } from './demo-tax';
 import { hash } from '@node-rs/argon2';
 import { eq, sql } from 'drizzle-orm';
 import {
@@ -789,6 +790,9 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
       {
         name: 'Örnek İnşaat Ltd.',
         sector: 'CONSTRUCTION',
+        jurisdiction: 'KKTC',
+        legalEntityType: 'company',
+        vatRegistered: true,
         baseCurrency: 'TRY',
         reportingCurrency: 'GBP',
         taxNumber: '1234567',
@@ -801,6 +805,7 @@ export async function seedDemo(db: Db, log: (message: string) => void = console.
       baseCurrency: 'TRY',
       reportingCurrency: 'GBP',
     };
+    await seedDemoTaxHistory(tx, company.id);
     // Şirket açılışı bugünün yılının dönemlerini üretir; çizelge önceki yıla yazılıyorsa o yılın dönemleri de gerekir
     await generatePeriods(tx, company.id, year);
 

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +10,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Arslan İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Zeynep' })).toBeVisible();
 }
@@ -82,10 +84,11 @@ test('cari: kart aç → cariye bağlı yevmiye (zorunlu) → ekstre ve yaşland
   const row = page.getByRole('row', { name: /Ömer Çakır/ });
   await expect(row).toBeVisible();
   await expect(row.getByRole('cell', { name: '1.000,00' }).first()).toBeVisible();
-  await page.getByRole('tab', { name: 'Borçlar' }).click();
+  await page.getByRole('button', { name: 'Borçlar' }).click();
   await expect(page.getByText('Bu tarihte açık kalem yok')).toBeVisible();
 
   // 6) Genel bakışta toplam alacak
   await nav.getByRole('link', { name: 'Genel bakış' }).click();
-  await expect(page.getByRole('link', { name: /Toplam alacak/ })).toContainText('1.000,00');
+  // V3 panosu: "Açık alacaklar" kartı; ayrıntı bağlantısı kartın tamamını kaplar
+  await expect(page.getByRole('link', { name: 'Açık alacaklar ayrıntıları' }).locator('xpath=..')).toContainText('1.000,00');
 });

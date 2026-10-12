@@ -9,7 +9,7 @@ import { createCipheriv, createDecipheriv, createPrivateKey, createPublicKey, ge
  *    etkinleştirmede satıcıya bildirilen (sabitlenen) kurulum açık anahtarıyla doğrulanır.
  */
 export type TokenKind = 'lease' | 'offline-lease' | 'release' | 'server-time' | 'installer';
-export type EnvelopeKind = 'activate' | 'heartbeat' | 'deactivate' | 'offline-request';
+export type EnvelopeKind = 'activate' | 'heartbeat' | 'deactivate' | 'offline-request' | 'feedback';
 
 export type TokenErrorCode = 'MALFORMED' | 'UNKNOWN_KID' | 'REVOKED_KID' | 'BAD_SIGNATURE' | 'BAD_PAYLOAD';
 

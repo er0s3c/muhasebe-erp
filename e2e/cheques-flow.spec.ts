@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +10,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -82,7 +84,7 @@ test('çek/senet: alınan çek (fatura kalemi kapanır) → tahsile ver → taka
 
   // 5) Takas: toplu tahsil
   await page.getByRole('tab', { name: 'Takas' }).click();
-  await page.getByRole('tab', { name: 'Toplu tahsil', exact: true }).click();
+  await page.getByRole('button', { name: 'Toplu tahsil', exact: true }).click();
   await page.getByRole('checkbox', { name: 'C-1001' }).check();
   await expect(page.getByText(/1 belge seçili/)).toBeVisible();
   await page.getByRole('button', { name: 'Tahsil edildi olarak işle' }).click();

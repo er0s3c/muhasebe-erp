@@ -79,7 +79,7 @@ export function ExpenseReportPage() {
             </Select>
           )}
         </Field>
-        <SegmentedTabs value={group} onChange={setGroup} items={GROUPS.map((g) => ({ key: g, label: t(`expenses.report.groups.${g}`) }))} />
+        <SegmentedTabs variant="filter" value={group} onChange={setGroup} items={GROUPS.map((g) => ({ key: g, label: t(`expenses.report.groups.${g}`) }))} />
       </div>
 
       {error ? (

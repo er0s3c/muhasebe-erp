@@ -2,7 +2,7 @@ import { finiteManufacturingSchedule, type ScheduledOperation } from '@erp/share
 import type { Tx } from '../../db/client';
 import { type LeatherCtx, type Row, fail } from '../leather/common';
 import { command } from './commands';
-import { createRecord, getRecord, listRecords, recordShape } from './service';
+import { createRecord, getRecord, listRecords, recordShape, schedulingRules } from './service';
 
 export async function scenario(tx: Tx, ctx: LeatherCtx, input: Row & { requestKey: string }) {
   return command(tx, ctx, 'scenario', input, async () => {
@@ -44,6 +44,7 @@ export async function scenario(tx: Tx, ctx: LeatherCtx, input: Row & { requestKe
         ]),
       ),
       schedules.flatMap((r) => r.operations ?? []) as ScheduledOperation[],
+      schedulingRules(resources),
     );
     const differences = operations.map((op) => ({
       orderId: op.orderId,

@@ -397,7 +397,7 @@ describe('banka ekstresi: içe aktarma, eşleştirme ve mutabakat', async () => 
 
     const cancel = await c.post(`/api/treasury/transactions/${t1.id}/cancel`, { reason: 'Vazgeçildi', date: day(3, 2) });
     expect(cancel.statusCode).toBe(422);
-    expect(cancel.json().error.code).toBe('TXN_RECONCILED');
+    expect(cancel.json().error).toMatchObject({ code: 'TXN_RECONCILED', details: { accountId: bank.id } });
     const reverse = await c.post(`/api/journal-entries/${first.match!.entryId}/reverse`, { description: 'Ters', entryDate: day(3, 2) });
     expect(reverse.statusCode).toBe(422);
     // Hareketin yevmiyesi kaynaklıdır (treasury): doğrudan ters kayıt zaten kaynak korumasıyla reddedilir
@@ -620,5 +620,40 @@ describe('banka ekstresi: içe aktarma, eşleştirme ve mutabakat', async () => 
     expect(data.lines[0]!.suggestions[0]).toMatchObject({ confidence: 'exact' });
     expect((await ok(c.post(`/api/treasury/accounts/${bank.id}/reconciliation/auto-match`, {}))).matched).toBe(1);
     expect((await recon(c, bank.id)).summary).toMatchObject({ ledgerBalance: '100.0000', matchedLines: 1, unmatchedLedgerCount: 0 });
+  });
+  it('çoktan bire: bir ekstre satırı toplamı eşit birden çok defter satırıyla eşleşir; korumalar grubu da görür (öneri 55)', async () => {
+    const x = await fixture('GrupEslesme');
+    const { c, bank } = x;
+    await ok(stmt(c, 'commit', bank.id, [{ date: trDate(day(3, 26)), description: 'Toplu ödeme', reference: 'DKN-8', amount: '-1.000,00', balance: '6.745,50' }]));
+    let data = await recon(c, bank.id);
+    const line = lineBy(data, 'Toplu ödeme');
+    const ledger = (txnNo: string) => data.unmatchedLedger.find((u) => u.txnNo === txnNo)!.journalLineId;
+    const kira = ledger(x.t5.txnNo), aidat = ledger(x.t6.txnNo), ucret = ledger(x.t3.txnNo);
+    const group = (ids: string[]) => c.post(`/api/bank-statement-lines/${line.id}/match-group`, { journalLineIds: ids });
+
+    expect((await group([kira])).statusCode).toBe(400);
+    const mismatch = await group([kira, ucret]);
+    expect(mismatch.statusCode).toBe(422);
+    expect(mismatch.json().error).toMatchObject({ code: 'GROUP_TOTAL_MISMATCH', details: { total: '-535.00', amount: '-1000.00' } });
+    const matched = await group([kira, aidat]);
+    expect(matched.statusCode, matched.body).toBe(200);
+    data = await recon(c, bank.id);
+    expect(lineBy(data, 'Toplu ödeme')).toMatchObject({ status: 'matched', journalLineId: null });
+    expect(lineBy(data, 'Toplu ödeme').group.map((g) => g.amount).sort()).toEqual(['-500.0000', '-500.0000']);
+    expect(data.unmatchedLedger.some((u) => u.journalLineId === kira || u.journalLineId === aidat)).toBe(false);
+
+    // Gruptaki defter satırı birebir eşleştirilemez; hareket iptal edilemez
+    expect((await c.post(`/api/bank-statement-lines/${lineBy(data, 'Kira ödemesi').id}/match`, { journalLineId: kira })).json().error.code).toBe('LEDGER_LINE_ALREADY_MATCHED');
+    expect((await c.post(`/api/treasury/transactions/${x.t6.id}/cancel`, { reason: 'Vazgeçildi', date: day(3, 27) })).json().error.code).toBe('TXN_RECONCILED');
+    // Eşleşmiş satırın grubu veritabanında değiştirilemez
+    await asOwner(async (q) => {
+      await expect(q('insert into bank_statement_line_matches (id, company_id, statement_line_id, journal_line_id) values (gen_random_uuid(), $1, $2, $3)', [x.company.id, line.id, ucret])).rejects.toThrow(/açık ekstre satırında/);
+    });
+
+    // Eşleşme kaldırılınca grup silinir, hareket iptal edilebilir
+    expect((await c.post(`/api/bank-statement-lines/${line.id}/unmatch`, {})).statusCode).toBe(200);
+    data = await recon(c, bank.id);
+    expect(lineBy(data, 'Toplu ödeme')).toMatchObject({ status: 'open', group: [] });
+    expect((await c.post(`/api/treasury/transactions/${x.t6.id}/cancel`, { reason: 'Vazgeçildi', date: day(3, 27) })).statusCode).toBe(200);
   });
 });

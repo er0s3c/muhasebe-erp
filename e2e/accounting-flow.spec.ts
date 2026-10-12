@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const shot = (page: Page, name: string) => page.screenshot({ path: `test-results/screens/${name}.png`, fullPage: false });
 
@@ -19,6 +20,7 @@ test('kayıt → şirket kurulumu → kur girişi → dövizli yevmiye → mizan
   await expect(page.getByRole('heading', { name: 'İlk şirketinizi kuralım' })).toBeVisible();
   await page.getByLabel('Şirket unvanı').fill('Yılmaz İnşaat Ltd.');
   await shot(page, '02-onboarding');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
 
   // 3) Genel bakış + kurulum kontrol listesi
@@ -33,7 +35,7 @@ test('kayıt → şirket kurulumu → kur girişi → dövizli yevmiye → mizan
 
   // 4) Kur girişi: 1 GBP = 40 TRY
   await nav.getByRole('link', { name: 'Para birimi ve kurlar' }).click();
-  await page.getByLabel('Alış', { exact: true }).first().fill('40');
+  await page.getByLabel('Döviz alış', { exact: true }).first().fill('40');
   await page.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByText('Kur kaydedildi')).toBeVisible();
   await shot(page, '04-rates');
@@ -97,6 +99,7 @@ test('sektör yalıtımı: başka şirketin verisi görünmez, koyu tema ve komu
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Demir Market A.Ş.');
   await page.getByLabel('Faaliyet alanı').selectOption('RETAIL_MARKET');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Mehmet' })).toBeVisible();
 

@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { dec, todayIso } from '@erp/shared';
+import { BlockedHint, ErrorCallout } from '../../components/layout/Blocked';
 import { Button } from '../../components/ui/Button';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
@@ -13,6 +14,7 @@ import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
+import { permissionBlocker } from '../../lib/blockers';
 import type { TreasuryTxnDetail } from '../../lib/types';
 import { TREASURY_INVALIDATE, TxnStatusBadge, TxnTypeBadge } from './common';
 import { fmtDate } from '../../lib/license';
@@ -38,14 +40,18 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
   const toast = useToast();
   const company = useCompany();
   const base = company.baseCurrency;
-  const canPost = useCan()('treasury.post');
+  const can = useCan();
+  const canPost = can('treasury.post');
   const { data, error } = useCQuery<TreasuryTxnDetail>(['treasury', 'txn', id], id ? `/api/treasury/transactions/${id}` : null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelDate, setCancelDate] = useState(todayIso());
   const [reason, setReason] = useState('');
+  // İptal reddi (ör. ekstreyle eşleşmiş hareket) pencerede nedeni ve çözüm bağlantısıyla kalır
+  const [cancelError, setCancelError] = useState<unknown>(null);
 
   useEffect(() => {
     setCancelling(false);
+    setCancelError(null);
     setReason('');
     setCancelDate(todayIso());
   }, [id]);
@@ -67,11 +73,14 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
         title={tx ? tx.txnNo : t('treasury.view.title')}
         description={tx ? formatDateTR(tx.txnDate) : undefined}
         footer={
-          tx && tx.status === 'posted' && canPost ? (
-            <Button variant="danger" onClick={() => setCancelling(true)}>
-              <Ban className="size-4" aria-hidden />
-              {t('treasury.view.cancel')}
-            </Button>
+          tx && tx.status === 'posted' ? (
+            <div className="flex flex-col items-end gap-1">
+              <Button variant="danger" disabled={!canPost} aria-describedby={canPost ? undefined : 'txn-cancel-blocked'} onClick={() => setCancelling(true)}>
+                <Ban className="size-4" aria-hidden />
+                {t('treasury.view.cancel')}
+              </Button>
+              {!canPost && <BlockedHint id="txn-cancel-blocked" blocker={permissionBlocker('Hareketi iptal etmek', can)} onNavigate={onClose} />}
+            </div>
           ) : undefined
         }
       >
@@ -209,12 +218,12 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
 
       <Modal
         open={cancelling}
-        onOpenChange={setCancelling}
+        onOpenChange={(o) => { setCancelling(o); if (!o) setCancelError(null); }}
         title={t('treasury.view.cancelTitle')}
         description={t('treasury.view.cancelDesc')}
         footer={
           <>
-            <Button onClick={() => setCancelling(false)}>{t('common.cancel')}</Button>
+            <Button onClick={() => { setCancelling(false); setCancelError(null); }}>{t('common.cancel')}</Button>
             <Button
               variant="danger"
               loading={cancel.isPending}
@@ -227,10 +236,7 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
                       toast.success(t('treasury.view.cancelledMsg'));
                       setCancelling(false);
                     },
-                    onError: (e) => {
-                      setCancelling(false);
-                      toast.error(errorMessage(e));
-                    },
+                    onError: (e) => setCancelError(e),
                   },
                 )
               }
@@ -241,6 +247,7 @@ export function TransactionDetailSheet({ id, onClose }: Props) {
         }
       >
         <div className="flex flex-col gap-4">
+          {cancelError != null && <ErrorCallout error={cancelError} title="Hareket iptal edilemedi" discardDraft onNavigate={() => { setCancelling(false); setCancelError(null); onClose(); }} />}
           <Field label={t('treasury.view.cancelDate')}>{(fid) => <Input id={fid} type="date" value={cancelDate} min={tx?.txnDate} onChange={(e) => setCancelDate(e.target.value)} />}</Field>
           <Field label={t('treasury.view.cancelReason')} required>
             {(fid) => <Input id={fid} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />}

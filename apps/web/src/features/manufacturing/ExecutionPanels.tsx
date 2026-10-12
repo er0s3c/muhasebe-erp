@@ -11,7 +11,7 @@ import {
   options,
   type Values,
 } from '../leather/common';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState } from '../../components/ui/Feedback';
 import { displayDateTime, displayQuantity } from '../../lib/presentation';
 import { moneyIn } from '../../lib/format';
 import { useCompany } from '../../lib/session';
@@ -19,215 +19,6 @@ import { errorMessage } from '../../lib/errors';
 type Ref = { id: string; name?: string; code?: string };
 const reason = textField('reason', 'İşlem nedeni', true),
   cmd = (v: Values) => ({ requestKey: v._requestKey, reason: v.reason });
-
-export function PlanningExecutionPanel() {
-  const company = useCompany();
-  const { call } = useCompanyApi(),
-    can = useCan(),
-    queries = useQueryClient();
-  const resources = useCQuery<{ records: Ref[] }>(
-    ['manufacturing', 'resources'],
-    '/api/manufacturing/resources',
-  );
-  const schedules = useCQuery<{
-    records: (Ref & {
-      version?: number;
-      parentId?: string;
-      reason?: string;
-      previewOnly?: boolean;
-      scenarioCost?: number | null;
-      jobs?: { minutes: number }[];
-      differences?: { previousEnd?: string; end: string }[];
-    })[];
-  }>(['manufacturing', 'schedules'], '/api/manufacturing/planning/schedules');
-  const from = todayIso() + 'T00:00:00+03:00',
-    to = new Date(Date.parse(from) + 7 * 86400000).toISOString();
-  const capacity = useCQuery<{
-    resources: (Ref & {
-      capacityMinutes: number;
-      loadMinutes: number;
-      loadPct: number | null;
-      noCalendar: boolean;
-    })[];
-  }>(
-    ['manufacturing', 'capacity', from],
-    `/api/manufacturing/planning/capacity?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-  );
-  const save = async (path: string, body: unknown) => {
-    await call(path, { method: 'POST', body });
-    await queries.invalidateQueries();
-  };
-  return (
-    <section className="my-6 space-y-5">
-      <h2 className="text-subheading">Net kapasite ve darboğazlar · Önümüzdeki 7 gün</h2>
-      <Records
-        rows={capacity.data?.resources ?? []}
-        loading={capacity.isPending}
-        error={capacity.error}
-        columns={[
-          { label: 'Kaynak', render: (r) => r.name },
-          { label: 'Net kapasite (dk)', numeric: true, render: (r) => r.capacityMinutes },
-          { label: 'Yayımlanmış yük (dk)', numeric: true, render: (r) => r.loadMinutes },
-          { label: 'Yük oranı (%)', numeric: true, render: (r) => displayQuantity(r.loadPct) },
-          {
-            label: 'Takvim',
-            render: (r) => (r.noCalendar ? 'Çalışma takvimi yok' : 'Vardiya ve istisnalardan'),
-          },
-        ]}
-      />
-      <Records
-        rows={schedules.data?.records ?? []}
-        columns={[
-          { label: 'Plan', render: (r) => r.code },
-          { label: 'Sürüm', numeric: true, render: (r) => r.version ?? 1 },
-          { label: 'Değişiklik nedeni', render: (r) => r.reason ?? 'İlk plan' },
-          { label: 'Varsayım', render: (r) => (r.previewOnly ? 'Simülasyon' : 'Gerçek takvim') },
-          {
-            label: 'İş yükü (dk)',
-            numeric: true,
-            render: (r) => r.jobs?.reduce((s, j) => s + Number(j.minutes), 0) ?? '—',
-          },
-          {
-            label: 'Termin farkı (dk)',
-            numeric: true,
-            render: (r) =>
-              r.differences?.length
-                ? displayQuantity(
-                    Math.max(
-                      ...r.differences.map((d) =>
-                        d.previousEnd ? (Date.parse(d.end) - Date.parse(d.previousEnd)) / 60000 : 0,
-                      ),
-                    ),
-                  )
-                : '—',
-          },
-          {
-            label: 'Fiyatı tanımlı kaynaklar (tahmin)',
-            numeric: true,
-            render: (r) =>
-              r.scenarioCost == null
-                ? 'Tanımlı değil'
-                : moneyIn(String(r.scenarioCost), company.baseCurrency),
-          },
-        ]}
-      />
-      {can('manufacturing.planning.manage') && (
-        <>
-          <OperationForm
-            title="Tekrar eden vardiya ve tatiller"
-            fields={[
-              selectField(
-                'resourceId',
-                'Kaynak',
-                options(resources.data?.records ?? [], (r) => r.name ?? 'Kaynak'),
-              ),
-              { name: 'from', label: 'İlk gün', type: 'date', required: true, value: todayIso() },
-              { name: 'to', label: 'Son gün', type: 'date', required: true, value: todayIso() },
-              textField(
-                'weekdays',
-                'Hafta günleri (1=Pazartesi, 0=Pazar)',
-                true,
-                'Örnek: 1,2,3,4,5',
-              ),
-              {
-                name: 'startTime',
-                label: 'Vardiya başlangıcı',
-                type: 'time',
-                required: true,
-                value: '08:00',
-              },
-              {
-                name: 'endTime',
-                label: 'Vardiya bitişi',
-                type: 'time',
-                required: true,
-                value: '17:00',
-              },
-              textField(
-                'holidays',
-                'Tatil tarihleri',
-                false,
-                'Yıl-ay-gün biçiminde virgülle ayırın. Örnek: 2026-10-29, 2027-01-01',
-              ),
-              reason,
-            ]}
-            submit={(v) =>
-              save('/api/manufacturing/planning/calendar-template', {
-                ...cmd(v),
-                resourceId: v.resourceId,
-                from: v.from,
-                to: v.to,
-                weekdays: v.weekdays.split(',').map((x) => Number(x.trim())),
-                startTime: v.startTime,
-                endTime: v.endTime,
-                utcOffset: '+03:00',
-                holidays: v.holidays ? v.holidays.split(',').map((x) => x.trim()) : [],
-              })
-            }
-          />
-          <OperationForm
-            title="Planı yeni sürüm / simülasyon olarak çoğalt"
-            fields={[
-              selectField(
-                'parentId',
-                'Kaynak plan',
-                options(schedules.data?.records ?? [], (r) => r.code ?? 'Plan'),
-              ),
-              selectField(
-                'resourceId',
-                'Varsayım kaynağı (isteğe bağlı)',
-                options(resources.data?.records ?? [], (r) => r.name ?? 'Kaynak'),
-                false,
-              ),
-              { name: 'date', label: 'Varsayım günü', type: 'date', value: todayIso() },
-              { name: 'start', label: 'Varsayım başlangıcı', type: 'time', value: '08:00' },
-              { name: 'end', label: 'Varsayım bitişi', type: 'time', value: '10:00' },
-              selectField('available', 'Varsayım', [
-                { value: 'no', label: 'Kaynak çalışmayacak' },
-                { value: 'yes', label: 'Ek çalışma aralığı' },
-              ]),
-              { ...numberField('capacity', 'Varsayılan eşzamanlı kapasite'), required: false },
-              { ...numberField('speedFactor', 'Varsayılan hız çarpanı', '1'), min: 0.1 },
-              { ...numberField('hourlyCost', 'Varsayılan saat maliyeti'), required: false },
-              reason,
-            ]}
-            submit={(v) =>
-              save('/api/manufacturing/planning/scenarios', {
-                ...cmd(v),
-                parentId: v.parentId,
-                calendarOverrides: v.resourceId
-                  ? [
-                      {
-                        resourceId: v.resourceId,
-                        start: new Date(v.date + 'T' + v.start + ':00+03:00').toISOString(),
-                        end: new Date(v.date + 'T' + v.end + ':00+03:00').toISOString(),
-                        available: v.available === 'yes',
-                      },
-                    ]
-                  : [],
-                resourceOverrides:
-                  v.resourceId && (v.capacity || v.hourlyCost || Number(v.speedFactor) !== 1)
-                    ? [
-                        {
-                          resourceId: v.resourceId,
-                          capacity: v.capacity ? Number(v.capacity) : undefined,
-                          speedFactor: Number(v.speedFactor),
-                          hourlyCost: v.hourlyCost || undefined,
-                        },
-                      ]
-                    : [],
-              })
-            }
-          />
-          <Callout>
-            Simülasyon takvimi, kaynak hızını veya muhasebe değerini değiştirmez. Varsayımlı plan
-            karşılaştırma içindir; yayım için gerçek kapasiteyle yeni plan hazırlayın.
-          </Callout>
-        </>
-      )}
-    </section>
-  );
-}
 
 export function ChannelExecutionPanel({
   connections,
@@ -242,6 +33,18 @@ export function ChannelExecutionPanel({
     warehouseName: string;
     channelSku: string;
     connectionId: string;
+    status: string;
+    lastCheck?: { adaQuantity: number; channelQuantity: number; difference: number; at: string };
+    health?: { ok: boolean; issues: string[]; lastErrorKind: string | null };
+  };
+  const ISSUE: Record<string, string> = {
+    paused: 'Duraklatıldı',
+    retired: 'Emekli',
+    item_inactive: 'Ürün pasif',
+    warehouse_inactive: 'Depo pasif',
+    connection_not_configured: 'Bağlantı yapılandırılmamış',
+    last_send_failed: 'Son gönderim başarısız',
+    stock_difference: 'Stok farkı var',
   };
   const mappings = useCQuery<{ records: Mapping[]; items: Ref[]; warehouses: Ref[] }>(
     ['integrations', 'mappings'],
@@ -255,6 +58,7 @@ export function ChannelExecutionPanel({
       status: string;
       attempts: number;
       error?: string;
+      errorHint?: string;
       retryAfter?: string;
     })[];
   }>(['integrations', 'outbox'], '/api/integrations/inventory-outbox');
@@ -271,7 +75,7 @@ export function ChannelExecutionPanel({
       </Callout>
       <Records
         rows={mappings.data?.records ?? []}
-        loading={mappings.isPending}
+        loading={mappings.isPending} onRetry={() => void mappings.refetch()} retrying={mappings.isFetching}
         error={mappings.error}
         columns={[
           {
@@ -281,7 +85,50 @@ export function ChannelExecutionPanel({
           { label: 'Ada ürünü', render: (r) => r.itemName },
           { label: 'Depo', render: (r) => r.warehouseName },
           { label: 'Kanal ürün kodu', render: (r) => r.channelSku },
+          { label: 'Durum', render: (r) => <Status value={r.status} /> },
+          {
+            label: 'Sağlık',
+            render: (r) => (r.health?.ok ? 'Sorun yok' : (r.health?.issues ?? []).map((i) => ISSUE[i] ?? i).join(', ')),
+          },
+          {
+            label: 'Son kontrol (Ada / kanal)',
+            render: (r) => (r.lastCheck ? `${r.lastCheck.adaQuantity} / ${r.lastCheck.channelQuantity}${r.lastCheck.difference ? ` (fark ${r.lastCheck.difference})` : ''}` : '—'),
+          },
         ]}
+        action={
+          can('core.integrations.manage')
+            ? (r) =>
+                r.status !== 'retired' && (
+                  <div className="flex flex-wrap gap-1">
+                    {r.status === 'active' && (
+                      <OperationForm
+                        title="Kanal stok farkını kontrol et"
+                        description="Kanaldaki miktar okunur ve Ada'nın kullanılabilir miktarıyla karşılaştırılır. Seçerseniz Ada miktarı yayın kuyruğuna alınır."
+                        fields={[selectField('queue', 'Fark varsa', [{ value: 'no', label: 'Yalnız kontrol et' }, { value: 'yes', label: 'Ada miktarını kuyruğa al' }])]}
+                        submit={(v) => save(`/api/integrations/channel-mappings/${r.id}/check`, { requestKey: crypto.randomUUID(), queue: v.queue === 'yes' })}
+                      />
+                    )}
+                    <OperationForm
+                      title="Eşleme durumunu değiştir"
+                      description="Duraklatılan eşleme stok yayını yapmaz. Emekli eşleme yeniden açılamaz."
+                      fields={[
+                        selectField(
+                          'status',
+                          'Yeni durum',
+                          [
+                            { value: 'active', label: 'Etkin' },
+                            { value: 'paused', label: 'Duraklat' },
+                            { value: 'retired', label: 'Emekliye ayır' },
+                          ].filter((o) => o.value !== r.status),
+                        ),
+                        reason,
+                      ]}
+                      submit={(v) => save(`/api/integrations/channel-mappings/${r.id}/status`, { status: v.status, reason: v.reason })}
+                    />
+                  </div>
+                )
+            : undefined
+        }
       />
       {can('core.integrations.manage') && (
         <OperationForm
@@ -328,7 +175,7 @@ export function ChannelExecutionPanel({
       <h2 className="text-subheading">Stok yayın geçmişi</h2>
       <Records
         rows={outbox.data?.records ?? []}
-        loading={outbox.isPending}
+        loading={outbox.isPending} onRetry={() => void outbox.refetch()} retrying={outbox.isFetching}
         error={outbox.error}
         columns={[
           { label: 'Stok', render: (r) => r.itemName },
@@ -337,7 +184,7 @@ export function ChannelExecutionPanel({
           { label: 'Durum', render: (r) => <Status value={r.status} /> },
           { label: 'Deneme', numeric: true, render: (r) => r.attempts },
           { label: 'Sonraki deneme', render: (r) => displayDateTime(r.retryAfter) },
-          { label: 'Sonuç', render: (r) => r.error ?? '—' },
+          { label: 'Sonuç', render: (r) => (r.error ? `${r.error}${r.errorHint ? ` — ${r.errorHint}` : ''}` : '—') },
         ]}
         action={
           can('core.integrations.manage')
@@ -373,6 +220,11 @@ export function ProductionCostClosePanel({ orderId }: { orderId: string }) {
     materialActualValue: string;
     materialVariance: string;
     standardSource: string;
+    variance?: {
+      material: { standard: string; actual: string; price: string; usage: string; total: string; traceDifference: string; items: { itemId: string; code: string | null; name: string | null; standardQty: string; standardUnitCost: string; actualQty: string; actualValue: string; priceVariance: string; usageVariance: string }[] };
+      labor: { operations: { operationKey: string; name: string; standardMinutes: string; actualMinutes: string; minuteVariance: string; hourlyCost: string | null; efficiencyVariance: string | null }[]; minuteVariance: string; efficiencyVariance: string | null };
+      other: { kind: string; actual: string }[];
+    };
   }>(
     ['manufacturing', 'cost-close', orderId],
     `/api/manufacturing/production/orders/${orderId}/cost-close`,
@@ -382,7 +234,7 @@ export function ProductionCostClosePanel({ orderId }: { orderId: string }) {
   return (
     <section className="my-6 space-y-4">
       <h2 className="text-subheading">Maliyet kapanış kontrolü</h2>
-      {report.error && <Callout tone="danger">{errorMessage(report.error)}</Callout>}
+      {report.error && <ErrorState description={errorMessage(report.error)} onRetry={() => void report.refetch()} retrying={report.isFetching} />}
       {report.data && (
         <>
           <Callout tone={report.data.canClose ? 'info' : 'warning'}>
@@ -430,6 +282,40 @@ export function ProductionCostClosePanel({ orderId }: { orderId: string }) {
               },
             ]}
           />
+          {report.data.variance && (
+            <details className="text-sm" open>
+              <summary className="cursor-pointer py-1 font-medium">Sapma bileşenleri</summary>
+              <p className="my-2 text-xs text-muted">
+                Fiyat sapması = (gerçek birim − tahmini birim) × gerçek miktar; miktar sapması = (gerçek − tahmini miktar) × tahmini birim. Gerçek değer üretim çıkış/iade belgelerinden;
+                maliyet izi farkı {moneyIn(report.data.variance.material.traceDifference, company.baseCurrency)}. Fason ve genel gider için tahmin tutulmaz.
+              </p>
+              <Records
+                rows={report.data.variance.material.items.map((m) => ({ id: m.itemId, ...m }))}
+                columns={[
+                  { label: 'Malzeme', render: (r) => `${r.code ?? ''} ${r.name ?? ''}`.trim() },
+                  { label: 'Tahmini miktar', numeric: true, render: (r) => r.standardQty },
+                  { label: 'Gerçek miktar', numeric: true, render: (r) => r.actualQty },
+                  { label: 'Fiyat sapması', numeric: true, render: (r) => moneyIn(r.priceVariance, company.baseCurrency) },
+                  { label: 'Miktar sapması', numeric: true, render: (r) => moneyIn(r.usageVariance, company.baseCurrency) },
+                ]}
+              />
+              <Records
+                rows={report.data.variance.labor.operations.map((o) => ({ id: o.operationKey, ...o }))}
+                columns={[
+                  { label: 'Operasyon', render: (r) => r.name },
+                  { label: 'Tahmini dk', numeric: true, render: (r) => r.standardMinutes },
+                  { label: 'Gerçek dk', numeric: true, render: (r) => r.actualMinutes },
+                  { label: 'Dakika farkı', numeric: true, render: (r) => r.minuteVariance },
+                  { label: 'Verimlilik sapması', numeric: true, render: (r) => (r.efficiencyVariance === null ? 'Saatlik maliyet yok' : moneyIn(r.efficiencyVariance, company.baseCurrency)) },
+                ]}
+              />
+              {report.data.variance.other.length > 0 && (
+                <p className="mt-2 text-xs text-muted">
+                  Diğer gerçekleşen: {report.data.variance.other.map((o) => `${o.kind} ${moneyIn(o.actual, company.baseCurrency)}`).join(' · ')}
+                </p>
+              )}
+            </details>
+          )}
         </>
       )}
     </section>
@@ -472,7 +358,7 @@ export function ReworkExecutionPanel({
       <h2 className="text-subheading">Yeniden işleme ve tekrar kalite</h2>
       <Records
         rows={(data.data?.records ?? []).filter((r) => r.orderId === orderId)}
-        loading={data.isPending}
+        loading={data.isPending} onRetry={() => void data.refetch()} retrying={data.isFetching}
         error={data.error}
         columns={[
           { label: 'İş', render: (r) => r.code },

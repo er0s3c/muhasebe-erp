@@ -628,7 +628,7 @@ describe('çoklu şirket konsolidasyonu', async () => {
       expect(dOff.hr.payroll).toBeUndefined();
       // Ticari sektör: proje bölümü yok
       const u2 = await registerUser(app, 'Ozet3b');
-      const K = await createCompany(app, u2.token, { sector: 'COMMERCE', name: 'Ticaret' });
+      const K = await createCompany(app, u2.token, { sector: 'COMMERCE', jurisdiction: 'KKTC', name: 'Ticaret' });
       const dk = (await exec(client(app, u2.token, K.id))).json().report;
       expect('projects' in dk).toBe(false);
       expect(dk.income).toBeDefined();

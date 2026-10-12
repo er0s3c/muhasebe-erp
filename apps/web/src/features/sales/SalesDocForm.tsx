@@ -3,8 +3,9 @@ import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { calcInvoice, dec, todayIso, type SalesDocKind } from '@erp/shared';
+import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageTitle } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -72,6 +73,9 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
   const [vatIncluded, setVatIncluded] = useState(initial?.doc.vatIncluded ?? false);
   const [warehouseId, setWarehouseId] = useState(initial?.doc.warehouseId ?? '');
   const [notes, setNotes] = useState(initial?.doc.notes ?? '');
+  // Boş: carinin satış sorumlusu (F6: öneri 13)
+  const [salesRepId, setSalesRepId] = useState(initial?.doc.salesRepId ?? '');
+  const { data: repData } = useCQuery<{ reps: { id: string; name: string }[] }>(['sales-reps'], '/api/sales-reps');
   const [lines, setLines] = useState<LineState[]>(() =>
     initial
       ? initial.lines.map((l) => ({
@@ -154,6 +158,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
     vatIncluded,
     warehouseId: warehouseId || null,
     notes: notes.trim() || undefined,
+    salesRepId: salesRepId || undefined,
     lines: lines.map((l) => ({
       itemId: l.itemId || null,
       description: l.description.trim() || undefined,
@@ -179,6 +184,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
   const remove = useCMutation((_: void, c) => c(`/api/sales-docs/${initial!.doc.id}`, { method: 'DELETE' }), SALES_INVALIDATE);
 
   const submit = (advance: 'send' | 'confirm' | null) => {
+    if (save.isPending || remove.isPending || cancelDoc.isPending) return;
     setError(null);
     setFieldError(null);
     if (!partyId) return setFieldError(t('sales.form.partyRequired'));
@@ -186,6 +192,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
     if (lines.some((l) => !l.itemId && l.unitPrice === '')) return setFieldError(t('sales.form.priceRequired'));
     save.mutate(advance, {
       onSuccess: (res) => {
+        markFormSaved(document.querySelector('[data-form-guard-scope="SalesDocForm"]'));
         toast.success(advance ? t(`sales.actions.done.${advance}`) : t('sales.form.savedMsg'));
         navigate(`/sales/docs/${res.doc.id}`, { replace: true });
       },
@@ -197,13 +204,15 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
   if (!whData || !itemData || !taxData) return <PageLoading />;
   const gridCols = 'lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1.5fr)_88px_120px_72px_minmax(0,0.9fr)_32px]';
 
-  return (
+  return (<FormGuard captureAll scopeKey="SalesDocForm" pending={save.isPending || remove.isPending || cancelDoc.isPending}>{(
     <>
       <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
         <ArrowLeft className="size-4" aria-hidden />
         {t(`sales.${kind}.title`)}
       </Link>
-      <h1 className="mb-6 text-heading">{initial ? t('sales.form.editTitle', { type: t(`sales.kind.${kind}`) }) : t(`sales.new.${kind}`)}</h1>
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <PageTitle title={initial ? t('sales.form.editTitle', { type: t(`sales.kind.${kind}`) }) : t(`sales.new.${kind}`)} helpKey="sales-doc" favorite={false} />
+      </div>
 
       <div className="flex flex-col gap-5">
         {(error || fieldError) && <Callout tone="danger">{error ? errorMessage(error) : fieldError}</Callout>}
@@ -235,6 +244,18 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label="Satış sorumlusu">
+              {(id) => (
+                <Select id={id} value={salesRepId} onChange={(e) => setSalesRepId(e.target.value)}>
+                  <option value="">Carinin sorumlusu</option>
+                  {(repData?.reps ?? []).map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
                     </option>
                   ))}
                 </Select>
@@ -383,7 +404,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
               onClick={() =>
                 cancelDoc.mutate(cancelReason.trim(), {
                   onSuccess: () => {
-                    toast.success(t('sales.actions.done.cancel'));
+                    markFormSaved(document.querySelector('[data-form-guard-scope="SalesDocForm"]')); toast.success(t('sales.actions.done.cancel'));
                     navigate(listPath, { replace: true });
                   },
                   onError: (e) => {
@@ -435,5 +456,5 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
         {null}
       </Modal>
     </>
-  );
+  )}</FormGuard>);
 }

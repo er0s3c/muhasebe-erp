@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { Callout } from '../../components/ui/Feedback';
+import { Callout, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Switch } from '../../components/ui/Switch';
@@ -17,6 +17,7 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { ForeignDocTypeRow, ForeignParamRow } from '../../lib/types';
 import { FOREIGN_INVALIDATE, ForeignUnverifiedBadge } from './foreign-common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
 
 /** Yabancı işçi ayarları: belge türü kataloğu ve tarihli parametreler (uyarı günü, teminat tutarı; varsayılan kapalı, doğrulanmadı). */
 export function ForeignSettingsPage() {
@@ -39,13 +40,15 @@ function TypesCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.manage');
-  const { data } = useCQuery<{ types: ForeignDocTypeRow[] }>(['foreign', 'types'], '/api/foreign-workers/doc-types');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ types: ForeignDocTypeRow[] }>(['foreign', 'types'], '/api/foreign-workers/doc-types');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const add = useCMutation((_: void, call) => call('/api/foreign-workers/doc-types', { method: 'POST', body: { code: code.trim(), name: name.trim() } }), FOREIGN_INVALIDATE);
   const toggle = useCMutation((v: { id: string; active: boolean }, call) => call(`/api/foreign-workers/doc-types/${v.id}`, { method: 'PATCH', body: { active: v.active } }), FOREIGN_INVALIDATE);
   const rows = data?.types ?? [];
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('foreign.settings.types.title')} description={t('foreign.settings.types.desc')} />
@@ -78,8 +81,9 @@ function TypesCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[10rem_1fr_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setCode(''); setName(''); toast.success(t('foreign.settings.types.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setCode(''); setName(''); toast.success(t('foreign.settings.types.added')); }, onError: setError });
             }}
           >
             <Field label={t('foreign.settings.types.code')}>{(id) => <Input id={id} maxLength={30} value={code} onChange={(e) => setCode(e.target.value)} />}</Field>
@@ -99,7 +103,7 @@ function ParamsCard() {
   const { t } = useTranslation();
   const toast = useToast();
   const manage = useCan()('hr.manage');
-  const { data } = useCQuery<{ params: ForeignParamRow[] }>(['foreign', 'params'], '/api/foreign-workers/params');
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ params: ForeignParamRow[] }>(['foreign', 'params'], '/api/foreign-workers/params');
   const [key, setKey] = useState<ForeignParamKey>('expiry_warning_days');
   const [value, setValue] = useState('');
   const [currency, setCurrency] = useState<string>('EUR');
@@ -124,6 +128,8 @@ function ParamsCard() {
   const rows = data?.params ?? [];
   const valid = isAmount ? /^\d{1,13}([.,]\d{1,4})?$/.test(value.trim()) : /^\d{1,4}$/.test(value.trim());
 
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader title={t('foreign.settings.params.title')} description={t('foreign.settings.params.desc')} />
@@ -177,8 +183,9 @@ function ParamsCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1.4fr_8rem_7rem_9rem_7rem]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setValue(''); setSource(''); setEnabled(false); toast.success(t('foreign.settings.params.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setValue(''); setSource(''); setEnabled(false); toast.success(t('foreign.settings.params.added')); }, onError: setError });
             }}
           >
             <Field label={t('foreign.settings.params.key')}>

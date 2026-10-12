@@ -15,7 +15,7 @@ import { startSession } from './admin-auth';
  * Kurulum kodu `LICENSE_DATA_KEY`'den türetilir (`cli setup:token`); panel internete açıkken hesabı ilk gelenin kapmasını önler.
  * Bekleyen TOTP sırrı sunucuda tutulmaz: şifreli ve süreli bir blob olarak istemciye verilir, tamamlarken geri gelir.
  */
-export const TOTP_ISSUER = 'Muhasebe Lisans';
+export const TOTP_ISSUER = 'Ada ERP Lisans';
 const PENDING_TTL_MS = 30 * 60_000;
 const FAIL_WINDOW_MS = 15 * 60_000;
 const MAX_FAILS_PER_IP = 10;

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +10,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -98,6 +100,8 @@ test('fiyat listesi ve cari iskonto satıra yansır; seri takipli kart: giriş �
 
   // Satış faturası: seri no zorunlu; SN-100 satılır, kaynak/iskonto görünür
   await nav.getByRole('link', { name: 'Satış faturaları' }).click();
+  // Teklif kaydedilmeden çıkılıyor: taslak koruması onay ister
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
   await page.getByRole('button', { name: 'Yeni satış faturası' }).first().click();
   await pick('Müşteri', 'Ömer');
   await pick('Kart / hizmet 1', 'dizüstü');

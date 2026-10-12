@@ -245,7 +245,7 @@ export const DateInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLIn
             align="end"
             sideOffset={6}
             collisionPadding={12}
-            className="z-50 rounded-xl border border-border bg-surface p-3 [animation:pop-in_0.12s_ease-out] print:hidden"
+            className="z-50 rounded-xl border border-border bg-surface p-3 shadow-pop [animation:pop-in_0.12s_ease-out] print:hidden"
             onOpenAutoFocus={(e) => e.preventDefault()}
             onCloseAutoFocus={(e) => {
               e.preventDefault();

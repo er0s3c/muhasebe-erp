@@ -1,3 +1,4 @@
+import { RestructureSection } from './RestructureSection';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -8,7 +9,7 @@ import { PrintNote, PrintSignatures } from '../../components/print/PrintBlocks';
 import { ExportMenu } from '../../components/ui/ExportMenu';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageTitle } from '../../components/ui/Card';
 import { Combobox } from '../../components/ui/Combobox';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -151,10 +152,16 @@ export function SalesContractPage() {
           {t('realEstate.contracts.title')}
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="flex flex-wrap items-center gap-3 text-2xl">
-            {isNew ? t('realEstate.contracts.newTitle') : c?.code}
-            {!isNew && <ContractStatusBadge status={status} />}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <PageTitle
+              title={isNew ? t('realEstate.contracts.newTitle') : (c?.code ?? '…')}
+              helpKey="sales-contract-detail"
+              favorite={!isNew}
+              recent={!isNew && c ? { kind: 'Satış sözleşmesi', title: `${c.code} · ${c.partyName}` } : false}
+            >
+              {!isNew && <ContractStatusBadge status={status} />}
+            </PageTitle>
+          </div>
           {!isNew && <ExportMenu exportKey="sales-schedule" params={{ contractId: id }} />}
         </div>
         {c && <p className="mt-1 text-sm text-muted">{c.projectCode} · {unitLabel(c)} · {c.partyName}</p>}
@@ -251,7 +258,7 @@ export function SalesContractPage() {
                       {!editable && (
                         <Td>
                           {d && (status === 'active' || status === 'handed_over') ? (
-                            dec(d.remaining).isZero() ? <Badge tone="success">{t('realEstate.installments.paid')}</Badge> : d.daysOverdue > 0 ? <Badge tone="danger">{t('realEstate.installments.daysOverdue', { n: d.daysOverdue })}</Badge> : <Badge tone="neutral">{t('realEstate.installments.upcoming')}</Badge>
+                            d.restructuredIn ? <Badge tone="neutral">Yapılandırıldı</Badge> : dec(d.remaining).isZero() ? <Badge tone="success">{t('realEstate.installments.paid')}</Badge> : d.daysOverdue > 0 ? <Badge tone="danger">{t('realEstate.installments.daysOverdue', { n: d.daysOverdue })}</Badge> : <Badge tone="neutral">{t('realEstate.installments.upcoming')}</Badge>
                           ) : null}
                         </Td>
                       )}
@@ -295,6 +302,15 @@ export function SalesContractPage() {
             <div className="col-span-full"><dt className="text-muted">{t('realEstate.contracts.reason')}</dt><dd>{detail.termination.reason}</dd></div>
           </dl>
         </Card>
+      )}
+
+      {c && detail && (status === 'active' || status === 'handed_over') && (
+        <RestructureSection
+          contractId={c.id}
+          currency={cur}
+          canEdit={can('realestate.approve')}
+          open={detail.installments.filter((i) => i.kind !== 'fee').reduce((s, i) => s.plus(i.remaining), dec(0)).toFixed(2)}
+        />
       )}
 
       {c?.activatedOn && (

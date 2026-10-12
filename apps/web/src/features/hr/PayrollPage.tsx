@@ -7,10 +7,10 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { errorMessage } from '../../lib/errors';
 import { money } from '../../lib/format';
@@ -34,7 +34,7 @@ export function PayrollPage() {
         <ParamsStatus />
       </div>
       <div className="mb-4">
-        <SegmentedTabs
+        <SegmentedTabs id="hr-payrollpage-tabs" panelId={() => 'hr-payrollpage-tabs-panel'}
           value={tab}
           onChange={setTab}
           items={[
@@ -43,7 +43,9 @@ export function PayrollPage() {
           ]}
         />
       </div>
+      <TabPanel id="hr-payrollpage-tabs-panel" labelledBy={`hr-payrollpage-tabs-${tab}`}>
       {tab === 'runs' ? <RunsTab canManage={can('hr.payroll_manage')} /> : <CostTab />}
+      </TabPanel>
     </>
   );
 }
@@ -62,7 +64,7 @@ function ParamsStatus() {
 function RunsTab({ canManage }: { canManage: boolean }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isPending } = useCQuery<{ runs: PayrollRunRow[] }>(['payroll', 'runs'], '/api/payroll/runs');
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ runs: PayrollRunRow[] }>(['payroll', 'runs'], '/api/payroll/runs');
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(todayIso().slice(0, 7));
   const [error, setError] = useState<Error | null>(null);
@@ -78,7 +80,7 @@ function RunsTab({ canManage }: { canManage: boolean }) {
   return (
     <>
       <div className="mb-3 flex justify-end">{addButton}</div>
-      {isPending ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : rows.length === 0 ? (
         <Card>
@@ -154,7 +156,7 @@ function CostTab() {
   const [from, setFrom] = useState(`${year}-01`);
   const [to, setTo] = useState(todayIso().slice(0, 7));
   const valid = isMonth(from) && isMonth(to) && from <= to;
-  const { data, isPending } = useCQuery<PayrollCostReport>(['payroll', 'cost', from, to], valid ? `/api/payroll/reports/cost?from=${from}&to=${to}` : null);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<PayrollCostReport>(['payroll', 'cost', from, to], valid ? `/api/payroll/reports/cost?from=${from}&to=${to}` : null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -173,7 +175,7 @@ function CostTab() {
       {data?.unverified && <Callout tone="warning">{t('payroll.cost.unverified')}</Callout>}
       {!valid ? (
         <Callout tone="warning">{t('payroll.cost.invalid')}</Callout>
-      ) : isPending || !data ? (
+      ) : queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending || !data ? (
         <PageLoading />
       ) : data.rows.length === 0 ? (
         <Card>

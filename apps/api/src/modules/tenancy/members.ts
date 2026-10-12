@@ -2,17 +2,19 @@ import { hash } from '@node-rs/argon2';
 import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { WEAK_PASSWORD_MESSAGE, addMemberSchema, isWeakPassword, updateMemberSchema, uuid, type PermissionSet, type Role } from '@erp/shared';
+import { WEAK_PASSWORD_MESSAGE, addMemberSchema, isWeakPassword, updateMemberSchema, uuid, type Role } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { memberModuleAccess, memberships, userMfa, users } from '../../db/schema';
-import { tenantRoute } from '../../http/context';
+import { companyRoles, memberBranchAccess, memberModuleAccess, memberships, userMfa, users } from '../../db/schema';
+import { tenantRoute, type TenantCtx } from '../../http/context';
 import { AppError, forbidden, notFound, unprocessable } from '../../http/errors';
 import { TR } from '../../db/search';
 import { recordSecurityEvent } from '../auth/events';
 import { issueUserToken } from '../auth/tokens';
 import { queueMail } from '../mail/queue';
 import { verifyEmailMail } from '../mail/templates';
-import { buildAccess, loadOverrides } from '../access/effective';
+import { buildAccess, loadMemberAccess, type MemberAccess } from '../access/effective';
+import { assertAccessWithinGranter } from '../access/company-roles';
+import { assertMemberScopeWithinGranter } from '../access/grant-scope';
 
 const userIdParam = z.object({ userId: uuid });
 
@@ -27,11 +29,8 @@ function requireOwnerFor(callerRole: string, ...roles: (string | null | undefine
 }
 
 /** Rol ataması da yetki verir: kısıtlı yönetici, modül/işlem kısıtlarını yeni bir kullanıcı veya rol değişimiyle aşamaz. */
-function assertRoleWithinGranter(granter: PermissionSet, role: Role, before: PermissionSet = new Set()) {
-  const extra = [...buildAccess(role, {}).permissions].filter((permission) => !before.has(permission) && !granter.has(permission));
-  if (extra.length > 0) {
-    throw forbidden('Bu rol, kendinizde bulunmayan yetkiler veriyor; bu atamayı şirket sahibi yapmalıdır', 'MODULE_ACCESS_EXCEEDS_OWN');
-  }
+function assertRoleWithinGranter(c: TenantCtx, role: Role, before?: MemberAccess) {
+  assertAccessWithinGranter(c, buildAccess(role, {}), before);
 }
 
 export const memberRoutes: FastifyPluginAsync = async (app) => {
@@ -47,12 +46,15 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
           fullName: users.fullName,
           isActive: users.isActive,
           role: memberships.role,
+          customRoleId: memberships.customRoleId,
+          customRoleName: companyRoles.name,
           mfaEnabled: sql<boolean>`exists (select 1 from user_mfa m where m.user_id = ${users.id} and m.enabled_at is not null)`,
           // Özel modül erişimi olan alan sayısı (liste rozeti); yalnızca sahip/yönetici bu satırları okuyabilir (RLS)
           customAccessCount: sql<number>`(select count(*)::int from member_module_access a where a.company_id = ${memberships.companyId} and a.user_id = ${users.id})`,
         })
         .from(memberships)
         .innerJoin(users, eq(users.id, memberships.userId))
+        .leftJoin(companyRoles, and(eq(companyRoles.id, memberships.customRoleId), eq(companyRoles.companyId, memberships.companyId)))
         .where(eq(memberships.companyId, company.id))
         .orderBy(sql`${users.fullName} collate ${TR}`);
       return { members: rows };
@@ -61,10 +63,11 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/company/members',
-    tenantRoute(app, manage, async ({ tx, req, reply, company, user, role, access }) => {
+    tenantRoute(app, manage, async (c) => {
+      const { tx, req, reply, company, user, role } = c;
       const input = addMemberSchema.parse(req.body);
       requireOwnerFor(role, input.role);
-      assertRoleWithinGranter(access.permissions, input.role);
+      assertRoleWithinGranter(c, input.role);
 
       let [target] = await tx.select().from(users).where(eq(users.email, input.email));
       if (target && target.organizationId !== user.orgId) {
@@ -103,7 +106,9 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
         .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, target!.id)));
       if (existing) throw new AppError(409, 'ALREADY_MEMBER', 'Kullanıcı bu şirkete zaten üye');
 
-      await tx.insert(memberships).values({ companyId: company.id, userId: target!.id, role: input.role });
+      // Kısıtlı yönetici yeni üyeyi kendi şube sınırının dışına taşıyamaz.
+      await tx.insert(memberships).values({ companyId: company.id, userId: target!.id, role: input.role, branchScopeMode: c.branch.mode, branchAllowUnassigned: c.branch.allowUnassigned });
+      if (c.branch.mode === 'restricted' && c.branch.branchIds.length) await tx.insert(memberBranchAccess).values(c.branch.branchIds.map(branchId => ({ companyId: company.id, userId: target!.id, branchId })));
       await recordSecurityEvent(app.db, app.log, req, { event: 'member_added', organizationId: user.orgId, userId: target!.id, email: target!.email, meta: { companyId: company.id, role: input.role, by: user.id } });
       void reply.code(201);
       return { member: { userId: target!.id, email: target!.email, fullName: target!.fullName, role: input.role } };
@@ -112,31 +117,35 @@ export const memberRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch(
     '/api/company/members/:userId',
-    tenantRoute(app, manage, async ({ tx, req, company, role: callerRole, user, access }) => {
+    tenantRoute(app, manage, async (c) => {
+      const { tx, req, company, role: callerRole, user } = c;
       const { userId } = userIdParam.parse(req.params);
       const { role } = updateMemberSchema.parse(req.body);
       // Sahip satırları hedef üyeden önce kilitlenir; eşzamanlı rol değişiklikleri aynı sırayla ilerler.
       if (callerRole === 'owner') await lockOwnerMemberships(tx, company.id);
       const [current] = await tx
-        .select({ role: memberships.role })
+        .select({ role: memberships.role, customRoleId: memberships.customRoleId })
         .from(memberships)
         .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)))
         .for('update');
       if (!current) throw notFound('Üye');
+      await assertMemberScopeWithinGranter(c, userId);
       requireOwnerFor(callerRole, role, current.role);
       await assertAccessOverridesAllowRoleChange(tx, company.id, userId, current.role, callerRole, user.id);
-      if (role !== current.role) {
-        const beforePermissions = buildAccess(current.role as Role, await loadOverrides(tx, company.id, userId)).permissions;
-        assertRoleWithinGranter(access.permissions, role, beforePermissions);
+      if (role !== current.role || current.customRoleId) {
+        if (userId === user.id && current.customRoleId) throw forbidden('Kendi özel rolünüzü değiştiremezsiniz', 'MODULE_ACCESS_SELF');
+        const beforeAccess = await loadMemberAccess(tx, company.id, userId, current.role as Role);
+        assertRoleWithinGranter(c, role, beforeAccess);
       }
       if (current.role === 'owner') await assertNotLastOwner(tx, company.id, userId, role);
-      const overridesBefore = role !== current.role ? await countOverrides(tx, company.id, userId) : 0;
+      const overridesBefore = role !== current.role || current.customRoleId ? await countOverrides(tx, company.id, userId) : 0;
       const [row] = await tx
         .update(memberships)
-        .set({ role })
+        .set({ role, customRoleId: null })
         .where(and(eq(memberships.companyId, company.id), eq(memberships.userId, userId)))
         .returning();
       if (!row) throw notFound('Üye');
+      if (current.customRoleId) await tx.delete(memberModuleAccess).where(and(eq(memberModuleAccess.companyId, company.id), eq(memberModuleAccess.userId, userId)));
       await recordSecurityEvent(app.db, app.log, req, { event: 'member_role_changed', organizationId: user.orgId, userId, meta: { companyId: company.id, from: current.role, to: role, by: user.id } });
       // Rol değişince üyenin kullanıcı bazlı modül erişimi (özel istisnalar) veritabanı tetikleyicisiyle silinir: yeni rol şablonu aynen geçerli olur
       return { member: { userId, role: row.role }, clearedModuleAccess: overridesBefore };

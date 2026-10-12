@@ -14,7 +14,7 @@ import { useToast } from '../../components/ui/Toast';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
-import { useCMutation, useCQuery, useCan, useCompanyApi } from '../../lib/queries';
+import { useCMutation, useCQuery, useCan, useCompanyApi, useIdempotencyKey } from '../../lib/queries';
 import type { Account, JournalEntry, PartyListRow } from '../../lib/types';
 import { PROJECT_COST_INVALIDATE, ProjectLineRow, isProjectTaggable, projectFields } from '../projects/common';
 
@@ -151,6 +151,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
       return [...cur, line];
     });
 
+  const command = useIdempotencyKey();
   const save = useCMutation(
     async (v: { post: boolean }, c) => {
       const body = {
@@ -173,7 +174,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
       };
       const res = initial
         ? await c<{ entry: JournalEntry }>(`/api/journal-entries/${initial.id}`, { method: 'PUT', body })
-        : await c<{ entry: JournalEntry }>('/api/journal-entries', { method: 'POST', body });
+        : await c<{ entry: JournalEntry }>('/api/journal-entries', { method: 'POST', body, idempotencyKey: command.key });
       return res.entry;
     },
     // Cari bakiye/ekstre/yaşlandırma da defterden hesaplandığı için birlikte yenilenir
@@ -192,6 +193,7 @@ export function JournalForm({ open, onOpenChange, initial, onSaved }: Props) {
       { post },
       {
         onSuccess: (entry) => {
+          command.renew();
           toast.success(post && entry.entryNo ? t('ledger.journal.postedMsg', { no: entry.entryNo }) : t('ledger.journal.draftSaved'));
           onSaved(entry);
           onOpenChange(false);

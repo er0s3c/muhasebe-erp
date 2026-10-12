@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const PASSWORD = 'Sifre-12345-xyz';
 const year = new Date().getFullYear();
@@ -13,6 +13,7 @@ test('yıl sonu: satış ve gider → ön kontrol → önizleme → yazılı ona
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'İlk şirketinizi kuralım' })).toBeVisible();
   await page.getByLabel('Şirket unvanı').fill('Kaya İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Mert' })).toBeVisible();
 

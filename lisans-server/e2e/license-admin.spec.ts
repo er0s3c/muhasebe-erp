@@ -128,6 +128,8 @@ test('yönetim paneli: TOTP'+"'"+'lu giriş, müşteri ve lisans verme (kod bir 
   await page.getByLabel('İstek kodu').fill('erpreq1.bu-gecerli-bir-istek-kodu-degil.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.yyyyyyyy');
   await page.getByRole('button', { name: 'İmzala' }).click();
   await expect(page.getByText('İstek kodu geçersiz')).toBeVisible();
+  // Kullanılmayan kod kutuda kalırsa sayfadan çıkarken "kaydedilmemiş değişiklik" sorulur; kullanıcı gibi temizlenir
+  await page.getByLabel('İstek kodu').fill('');
 
   // İptal
   await page.getByRole('button', { name: 'İptal et' }).click();

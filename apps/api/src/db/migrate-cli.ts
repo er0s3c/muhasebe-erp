@@ -15,5 +15,8 @@ try {
   console.log('Migration tamamlandı.');
 } catch (err) {
   console.error('Migration başarısız:', err instanceof Error ? err.message : err);
+  if (err instanceof Error && err.cause) {
+    console.error('Neden:', err.cause instanceof Error ? err.cause.message : 'İç hata ayrıntısı günlükte incelenmelidir.');
+  }
   process.exit(1);
 }

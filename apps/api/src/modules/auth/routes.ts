@@ -1,13 +1,14 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
-import { WEAK_PASSWORD_MESSAGE, changePasswordSchema, isWeakPassword, loginSchema, mfaVerifySchema, registerSchema } from '@erp/shared';
+import { WEAK_PASSWORD_MESSAGE, changePasswordSchema, isWeakPassword, loginSchema, mfaVerifySchema, registerSchema, uuid } from '@erp/shared';
 import type { Queryable } from '../../db/client';
 import { refreshTokens, users } from '../../db/schema';
 import { insertOrganization } from '../tenancy/service';
 import { authedRoute } from '../../http/context';
-import { AppError, unauthorized, unprocessable } from '../../http/errors';
+import { AppError, notFound, unauthorized, unprocessable } from '../../http/errors';
 import { assertSameOrigin } from '../../http/origin';
 import { queueMail } from '../mail/queue';
 import { verifyEmailMail } from '../mail/templates';
@@ -317,6 +318,25 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     void reply.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
     return { ok: true };
   });
+
+  app.get('/api/auth/sessions', authedRoute(app, async ({ tx, user }) => {
+    const rows = await tx.selectDistinctOn([refreshTokens.familyId], { id: refreshTokens.familyId, startedAt: refreshTokens.familyStartedAt, lastRenewedAt: refreshTokens.createdAt, expiresAt: refreshTokens.expiresAt, userAgent: refreshTokens.userAgent, ip: refreshTokens.ip }).from(refreshTokens).where(and(eq(refreshTokens.userId, user.id), isNull(refreshTokens.revokedAt), sql`${refreshTokens.expiresAt} > now()`)).orderBy(refreshTokens.familyId, desc(refreshTokens.createdAt));
+    return { sessions: rows.map(row => ({ ...row, current: row.id === user.sessionId })).sort((a, b) => b.lastRenewedAt.getTime() - a.lastRenewedAt.getTime()) };
+  }, { allowMustChange: true }));
+  app.delete('/api/auth/sessions/:id', authedRoute(app, async ({ tx, user, req }) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const rows = await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(and(eq(refreshTokens.userId, user.id), eq(refreshTokens.familyId, id), isNull(refreshTokens.revokedAt))).returning({ id: refreshTokens.id });
+    if (!rows.length) throw notFound('Oturum');
+    await recordSecurityEvent(app.db, app.log, req, { event: 'session_revoked', organizationId: user.orgId, userId: user.id, meta: { familyId: id, current: id === user.sessionId } });
+    return { ok: true };
+  }, { allowMustChange: true }));
+  app.post('/api/auth/sessions/revoke-others', authedRoute(app, async ({ tx, user, req }) => {
+    if (!user.sessionId) throw unprocessable('Bu eski oturumda önce yeniden giriş yapın', 'SESSION_ID_REQUIRED');
+    const rows = await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(and(eq(refreshTokens.userId, user.id), ne(refreshTokens.familyId, user.sessionId), isNull(refreshTokens.revokedAt))).returning({ familyId: refreshTokens.familyId });
+    const count = new Set(rows.map(row => row.familyId)).size;
+    await recordSecurityEvent(app.db, app.log, req, { event: 'session_revoked', organizationId: user.orgId, userId: user.id, meta: { others: true, count } });
+    return { ok: true, count };
+  }, { allowMustChange: true }));
 
   app.post(
     '/api/auth/change-password',

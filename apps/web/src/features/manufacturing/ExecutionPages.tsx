@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { todayIso, CURRENCY_CODES, currencySymbol } from '@erp/shared';
 import { useCan, useCompanyApi, useCQuery } from '../../lib/queries';
 import { PageHeader, Card, CardHeader } from '../../components/ui/Card';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Select } from '../../components/ui/Field';
 import { Stat } from '../../components/ui/Stat';
 import {
@@ -189,7 +189,7 @@ export function ManufacturingPromisePage() {
       <h2 className="mb-3 mt-6 text-subheading">Kayıtlı tahsisler</h2>
       <Records
         rows={allocations.data?.records ?? []}
-        loading={allocations.isPending}
+        loading={allocations.isPending} onRetry={() => void allocations.refetch()} retrying={allocations.isFetching}
         error={allocations.error}
         columns={[
           { label: 'Sipariş', render: (r) => r.orderCode },
@@ -301,8 +301,8 @@ export function ManufacturingShopFloorPage() {
           </Select>
         )}
       </Field>
-      {summary.isPending && selected && <PageLoading />}
-      {summary.error && <Callout tone="danger">{errorMessage(summary.error)}</Callout>}
+      {!summary.error && summary.isPending && selected && <PageLoading />}
+      {summary.error && <ErrorState description={errorMessage(summary.error)} onRetry={() => void summary.refetch()} retrying={summary.isFetching} />}
       {order && (
         <>
           <Card className="my-5">
@@ -617,7 +617,7 @@ export function ManufacturingExceptionsPage() {
       </label>
       <Records
         rows={rows.data?.records ?? []}
-        loading={rows.isPending}
+        loading={rows.isPending} onRetry={() => void rows.refetch()} retrying={rows.isFetching}
         error={rows.error}
         columns={[
           {
@@ -729,7 +729,7 @@ export function ManufacturingSupplyPage() {
       />
       <Records
         rows={lookups.data?.profiles ?? []}
-        loading={lookups.isPending}
+        loading={lookups.isPending} onRetry={() => void lookups.refetch()} retrying={lookups.isFetching}
         error={lookups.error}
         columns={[
           { label: 'Malzeme', render: (r) => r.itemName },
@@ -753,7 +753,7 @@ export function ManufacturingSupplyPage() {
       <h2 className="text-subheading mt-6">Stok yenileme önerileri</h2>
       <Records
         rows={(replenishment.data?.recommendations ?? []).map((r) => ({ ...r, id: r.policyId }))}
-        loading={replenishment.isPending}
+        loading={replenishment.isPending} onRetry={() => void replenishment.refetch()} retrying={replenishment.isFetching}
         error={replenishment.error}
         columns={[
           { label: 'Malzeme', render: (r) => r.itemName },
@@ -782,7 +782,7 @@ export function ManufacturingSupplyPage() {
           <h2 className="text-subheading mt-6">Açık satın alma arzı</h2>
           <Records
             rows={(supply.data?.open ?? []).map((o) => ({ ...o, id: o.code ?? 'Arz' }))}
-            loading={supply.isPending}
+            loading={supply.isPending} onRetry={() => void supply.refetch()} retrying={supply.isFetching}
             error={supply.error}
             columns={[
               { label: 'Sipariş', render: (r) => r.code },

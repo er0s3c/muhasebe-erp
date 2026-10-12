@@ -1,4 +1,4 @@
-import { verifyToken, type Envelope, type PublicKeyring } from '@erp/license-core';
+import { feedbackReceiptSchema, verifyToken, type Envelope, type FeedbackReceipt, type PublicKeyring } from '@erp/license-core';
 import { z } from 'zod';
 
 /** Lisans sunucusu hata yanıtı verdi (4xx/5xx; `code` satıcının hata kodudur). */
@@ -28,6 +28,7 @@ export interface LicenseTransport {
   /** `update`: satıcı bu kuruluma bir sürüm gönderdiyse güncelleme teklifi (doğrulanmamış ham veri). */
   heartbeat(envelope: Envelope): Promise<{ lease: string; update?: unknown }>;
   deactivate(envelope: Envelope): Promise<{ ok: true }>;
+  feedback?(envelope: Envelope): Promise<{ feedback: FeedbackReceipt }>;
 }
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -96,6 +97,12 @@ export function httpTransport(baseUrl: string, opts: { fetchImpl?: typeof fetch;
     deactivate: async (envelope) => {
       await post('/v1/deactivate', envelope);
       return { ok: true };
+    },
+    feedback: async envelope => {
+      const response = await post<{ feedback: unknown }>('/v1/feedback', envelope);
+      const parsed = feedbackReceiptSchema.safeParse(response.feedback);
+      if (!parsed.success) throw new LicenseUnreachableError('Geri bildirim sunucusunun yanıtı geçersiz');
+      return { feedback: parsed.data };
     },
   };
 }

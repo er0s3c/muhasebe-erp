@@ -1,3 +1,4 @@
+import { errorMessage } from '../../lib/errors';
 import { TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -6,7 +7,7 @@ import { dec, todayIso } from '@erp/shared';
 import { PrintHeader } from '../../components/ui/PrintHeader';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -37,7 +38,8 @@ export function ProfitabilityPage() {
   const navigate = useNavigate();
   const [asOf, setAsOf] = useState(todayIso());
   const [view, setView] = useState<'base' | 'reporting'>('base');
-  const { data, isPending } = useCQuery<Data>(['projects', 'profitability', asOf], `/api/projects/profitability?asOf=${asOf}`);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<Data>(['projects', 'profitability', asOf], `/api/projects/profitability?asOf=${asOf}`);
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   const repOk = !!data.reportingCurrency && data.reportingCurrency !== data.baseCurrency && data.rows.every((r) => r.reporting) && data.totals.reporting;
   const useRep = view === 'reporting' && repOk;
@@ -54,7 +56,7 @@ export function ProfitabilityPage() {
       <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
         <Field label={t('profitability.asOf')}>{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-44" />}</Field>
         {repOk && (
-          <SegmentedTabs
+          <SegmentedTabs variant="filter"
             items={[{ key: 'base', label: t('profitability.view.base', { cur: currencySymbol(data.baseCurrency) }) }, { key: 'reporting', label: t('profitability.view.reporting', { cur: currencySymbol(data.reportingCurrency!) }) }]}
             value={view}
             onChange={setView}

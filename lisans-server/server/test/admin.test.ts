@@ -96,7 +96,7 @@ describe('yönetim uçlarının korunması', () => {
     );
     const others = s.routes.filter((r) => !r.url.startsWith('/admin/api')).map((r) => r.url).sort();
     // /v1/releases: kalp atışında verilen kısa ömürlü, kuruluma özel indirme belirteciyle (HMAC) korunur
-    expect([...new Set(others)]).toEqual(['/ci/api/releases', '/ci/api/releases/:id/files/:name', '/downloads/:version/MuhasebeERP-Kurulum.exe', '/healthz', '/v1/activate', '/v1/deactivate', '/v1/heartbeat', '/v1/releases/:version/:name', '/v2/time']);
+    expect([...new Set(others)]).toEqual(['/ci/api/releases', '/ci/api/releases/:id/files/:name', '/downloads/:version/MuhasebeERP-Kurulum.exe', '/healthz', '/v1/activate', '/v1/deactivate', '/v1/feedback', '/v1/heartbeat', '/v1/releases/:version/:name', '/v2/time']);
   });
 
   it('çerezsiz her yönetim isteği 401; değiştiren isteklerde CSRF başlığı ve köken denetimi', async () => {

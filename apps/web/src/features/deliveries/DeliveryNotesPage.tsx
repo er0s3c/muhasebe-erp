@@ -1,3 +1,5 @@
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { ListToolbar } from '../../components/ui/ListTools';
 import { Plus, Search, Truck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -5,7 +7,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR, moneyIn } from '../../lib/format';
@@ -58,7 +60,7 @@ function DeliveryNotesPage({ type }: { type: DeliveryNoteType }) {
   if (status) qs.set('status', status);
   if (invoicing) qs.set('invoicing', invoicing);
   if (query) qs.set('query', query);
-  const { data, isPending } = useCQuery<{ notes: DeliveryNoteListRow[]; total: number }>(['delivery-notes', 'list', qs.toString()], `/api/delivery-notes?${qs}`);
+  const { data, isPending, error: DeliveryNotesPageQueryError, refetch: DeliveryNotesPageQueryRetry, isFetching: DeliveryNotesPageQueryFetching } = useCQuery<{ notes: DeliveryNoteListRow[]; total: number }>(['delivery-notes', 'list', qs.toString()], `/api/delivery-notes?${qs}`);
   const { data: summary } = useCQuery<DeliverySummary>(['delivery-summary'], '/api/delivery-notes/summary');
   const filtered = !!(status || invoicing || query);
   const open = summarySide ? summary?.[summarySide] : undefined;
@@ -70,9 +72,12 @@ function DeliveryNotesPage({ type }: { type: DeliveryNoteType }) {
     </Button>
   );
 
+  if (DeliveryNotesPageQueryError && !data) return <ErrorState error={DeliveryNotesPageQueryError} onRetry={() => void DeliveryNotesPageQueryRetry()} retrying={DeliveryNotesPageQueryFetching} />;
   return (
     <>
       <PageHeader title={t(`deliveries.${side}.title`)} description={t(`deliveries.${side}.subtitle`)} actions={canManage && newButton} />
+      <ListToolbar onReset={() => { setStatus(''); setInvoicing(''); setFrom(`${year}-01-01`); setTo(`${year}-12-31`); setText(''); setQuery(''); setLimit(PAGE); }}><CompanySavedViews page={`delivery-notes-${type}`} filters={{ status, invoicing, from, to }} onApply={view => { setStatus(view.status as typeof status); setInvoicing(view.invoicing as typeof invoicing); setFrom(view.from as typeof from); setTo(view.to as typeof to); setText(''); setQuery(''); setLimit(PAGE); }} /></ListToolbar>
+
 
       {open && open.openCount > 0 && (
         <div className="mb-5">

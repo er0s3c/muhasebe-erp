@@ -1,9 +1,10 @@
+import { errorMessage } from '../../lib/errors';
 import { Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader } from '../../components/ui/Card';
-import { EmptyState } from '../../components/ui/Feedback';
+import { EmptyState, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { useCan, useCQuery, useModuleEnabled } from '../../lib/queries';
 import type { DirContact } from '../../lib/types';
 
@@ -13,9 +14,11 @@ export function RelatedContacts({ partyId, projectId }: { partyId?: string; proj
   const can = useCan();
   const on = useModuleEnabled('core.directory') && can('directory.read');
   const qs = partyId ? `partyId=${partyId}` : `projectId=${projectId}`;
-  const { data } = useCQuery<{ contacts: DirContact[] }>(['directory', 'contacts', `related-${qs}`], `/api/directory/contacts?${qs}`, { enabled: on });
+  const { data , error: queryError, isPending: loadingQuery, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ contacts: DirContact[] }>(['directory', 'contacts', `related-${qs}`], `/api/directory/contacts?${qs}`, { enabled: on });
   if (!on) return null;
   const contacts = data?.contacts ?? [];
+  if (queryError) return <ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
+  if (loadingQuery) return <PageLoading />;
   return (
     <Card>
       <CardHeader

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { queueMail } from '../mail/queue';
+import { enqueueEmail } from '../outbox/service';
 import { scanAll, type ScanOptions } from './scan';
 
 /** Uygulama ayarlarından tarama seçenekleri (zamanlayıcı ve elle tarama aynı seçenekleri kullanır). */
@@ -11,8 +11,13 @@ export function notificationScanOptions(app: FastifyInstance): ScanOptions {
       const s = await app.license.current();
       return { enforced: s.enforced, state: s.state, daysUntilExpiry: s.daysUntilExpiry ?? null };
     },
-    // E-posta yalnızca SMTP (ya da geliştirme günlük kipi) yapılandırılmışsa: kapalıysa özet hiç üretilmez
-    enqueueMail: app.mailer.enabled ? (m) => queueMail(app, m) : undefined,
+    // E-posta yalnızca SMTP (ya da geliştirme günlük kipi) yapılandırılmışsa: kapalıysa özet hiç üretilmez. Özet kalıcı outbox'a
+    // yazılır (kullanıcı + gün başına tek ileti); gönderim ve yeniden deneme outbox göndericisindedir.
+    persistMail: app.mailer.enabled
+      ? async (tx, m, meta) => {
+          await enqueueEmail(tx, { companyId: meta.companyId, kind: 'notification_digest', dedupeKey: `digest:${meta.userId}:${meta.date}`, recipient: m.to, subject: m.subject, bodyText: m.text, bodyHtml: m.html ?? null });
+        }
+      : undefined,
     baseUrl: c.APP_BASE_URL,
     retentionDays: c.NOTIFY_RETENTION_DAYS,
     digestHour: c.NOTIFY_DIGEST_HOUR,

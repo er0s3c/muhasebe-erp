@@ -307,4 +307,9 @@ export interface ImportCommitResult {
   summary: { label: string; value: string }[];
   /** Oluşan yevmiye/belge kayıtları (varsa) */
   entries: { type: 'journal' | 'stock' | 'invoice'; id: string; no: string }[];
+  /**
+   * Aktarım sonrası mutabakat (öneri 8): kaynak dosya toplamı ile yazılan kayıtların veritabanından yeniden okunan toplamı.
+   * `ok: false` satırı, dosya ile sonuç arasında açıklanması gereken fark olduğunu gösterir.
+   */
+  reconciliation?: { label: string; source: string; result: string; ok: boolean }[];
 }

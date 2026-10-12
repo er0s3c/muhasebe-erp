@@ -95,6 +95,8 @@ const envSchema = z
     CONSTRUCTION_AI_URL: z.url().startsWith('https://').optional(),
     CONSTRUCTION_AI_KEY: z.string().optional(),
     CONSTRUCTION_AI_MODEL: z.string().default(''),
+    GEMINI_API_KEY: z.string().optional(),
+    GEMINI_MODEL: z.string().default('gemini-flash-lite-latest'),
     /**
      * Lisans sunucusu (satıcı) adresi; verilmezse derlemede gömülen adres kullanılır. Sahte bir sunucu kira üretemez
      * (kiralar derlemeye gömülü satıcı anahtarıyla doğrulanır); yine de üretimde https zorunludur.
@@ -125,6 +127,18 @@ const envSchema = z
     NOTIFY_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(90),
     /** E-posta özetinin gönderileceği ilk yerel saat (Europe/Nicosia, 0–23). */
     NOTIFY_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(8),
+    /** Kalıcı e-posta outbox göndericisi (yalnız server.ts başlatır; posta kapalıysa çalışmaz) ve tur aralığı. */
+    OUTBOX_ENABLED: flag(true),
+    OUTBOX_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(3600).default(30),
+    /**
+     * Otomatik resmî kur çekimi: yalnız ayarı açık şirketler, hafta içi. Yayın saati VARSAYILMAZ (docs/LEGAL-NOTES §6):
+     * bülten tarihi bugüne eşit olunca kaydedilir. İsteğe bağlı SS:DD eşiği yalnız gereksiz indirmeyi azaltmak içindir.
+     * Testlerde süreç başlatılmaz.
+     */
+    FX_AUTO_ENABLED: flag(true),
+    FX_AUTO_INTERVAL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
+    FX_AUTO_TCMB_AFTER: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('00:00'),
+    FX_AUTO_KKTCMB_AFTER: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('00:00'),
     /** Sürüm etiketi (imaj derlemesinde verilir); destek için `/api/public-config` döndürür. */
     APP_VERSION: z.string().default('dev'),
   })

@@ -1,4 +1,4 @@
-import { ArrowLeft, Banknote, Pencil, Power, Trash2 } from 'lucide-react';
+import { Banknote, Pencil, Power, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -6,12 +6,17 @@ import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Card, CardHeader } from '../../components/ui/Card';
+import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Stat } from '../../components/ui/Stat';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { RelatedRecords } from '../../components/layout/RelatedRecords';
+import { PartyBankAccounts } from './PartyBankAccounts';
+import { PartyReconciliations } from './PartyReconciliations';
+import { PartyDisputes } from './PartyDisputes';
+import { PartySalesRep } from './PartySalesRep';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
 import { useCurrencyLabel } from '../../components/ui/CurrencyOptions';
@@ -19,7 +24,7 @@ import { cn } from '../../lib/cn';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
-import { useCan, useCMutation, useCQuery, useNavigation } from '../../lib/queries';
+import { useCan, useCanOperation, useCMutation, useCQuery, useNavigation } from '../../lib/queries';
 import { useCompany } from '../../lib/session';
 import type { OpenItem, OpenItemsData, PartyDetail, PartyStatementData } from '../../lib/types';
 import { BalanceText } from './BalanceText';
@@ -27,7 +32,7 @@ import { PartyFormSheet } from './PartyFormSheet';
 import { PartyPricingCard } from '../pricing/PartyPricingCard';
 import { RelatedContacts } from '../directory/RelatedContacts';
 
-type Tab = 'statement' | 'openItems' | 'card';
+type Tab = 'statement' | 'openItems' | 'card' | 'related';
 
 export function PartyDetailPage() {
   const { t } = useTranslation();
@@ -36,9 +41,11 @@ export function PartyDetailPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const can = useCan();
-  const canManage = can('parties.manage');
+  const canOperation = useCanOperation();
+  const canManage = can('parties.manage') && canOperation('core.parties', 'update');
+  const canDelete = can('parties.manage') && canOperation('core.parties', 'delete');
   const { data: nav } = useNavigation();
-  const canCollect = can('treasury.post') && (nav?.modules.includes('core.treasury') ?? false);
+  const canCollect = can('treasury.post') && canOperation('core.treasury', 'create') && (nav?.modules.includes('core.treasury') ?? false);
   const company = useCompany();
   const { data, isPending, error } = useCQuery<PartyDetail>(['party', id], id ? `/api/parties/${id}` : null);
   const [tab, setTab] = useState<Tab>('statement');
@@ -69,23 +76,21 @@ export function PartyDetailPage() {
 
   return (
     <>
-      <Link to="/parties" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t('parties.detail.back')}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{party.name}</h1>
+      <PageHeader
+        title={party.name}
+        helpKey="party-detail"
+        back={{ to: '/parties', label: t('parties.detail.back') }}
+        recent={{ kind: 'Cari' }}
+        eyebrow={<span className="font-mono normal-case tracking-normal">{party.code}</span>}
+        meta={
+          <>
             <Badge tone={party.kind === 'customer' ? 'brand' : party.kind === 'supplier' ? 'warning' : 'neutral'}>{t(`parties.kinds.${party.kind}`)}</Badge>
             {!party.isActive && <Badge tone="danger">{t('common.inactive')}</Badge>}
-            {overLimit && <Badge tone="danger">{t('parties.detail.limitExceeded')}</Badge>}
-          </div>
-          <p className="mt-1 font-mono text-sm text-muted">{party.code}</p>
-        </div>
-        {(canManage || canCollect) && (
-          <div className="flex flex-wrap items-center gap-2">
+            {overLimit && <Badge tone="danger" dot>{t('parties.detail.limitExceeded')}</Badge>}
+          </>
+        }
+        actions={(canManage || canCollect) && (
+          <>
             {canCollect && party.isActive && party.kind !== 'supplier' && (
               <Button variant="primary" onClick={() => navigate(`/treasury/transactions?new=receipt&party=${party.id}`)}>
                 <Banknote className="size-4" aria-hidden />
@@ -104,9 +109,9 @@ export function PartyDetailPage() {
                 {t('common.edit')}
               </Button>
             )}
-          </div>
+          </>
         )}
-      </div>
+      />
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Stat
@@ -138,24 +143,29 @@ export function PartyDetailPage() {
         <Stat label={t('parties.detail.totalCredit')}>{money(summary.credit)}</Stat>
       </div>
 
-      <SegmentedTabs
+      <SegmentedTabs id="parties-PartyDetailPage-0" panelId={() => 'parties-PartyDetailPage-0-panel'}
         className="mb-5"
         value={tab}
         onChange={setTab}
-        items={(['statement', 'openItems', 'card'] as const).map((k) => ({ key: k, label: t(`parties.detail.tabs.${k}`) }))}
+        items={(['statement', 'openItems', 'related', 'card'] as const).map((k) => ({ key: k, label: t(`parties.detail.tabs.${k}`) }))}
       />
 
-      {tab === 'statement' && <StatementTab partyId={party.id} />}
+      <TabPanel id="parties-PartyDetailPage-0-panel" labelledBy={"parties-PartyDetailPage-0-" + (tab)}>
+{tab === 'statement' && <StatementTab partyId={party.id} />}
+      {tab === 'statement' && party.kind !== 'employee' && <PartyReconciliations partyId={party.id} partyEmail={party.email ?? null} />}
+      {tab === 'statement' && (party.kind === 'customer' || party.kind === 'both') && <PartyDisputes partyId={party.id} />}
       {tab === 'openItems' && <OpenItemsTab partyId={party.id} />}
+      {tab === 'related' && <RelatedRecords kind="party" id={party.id} />}
       {tab === 'card' && (
         <Card>
           <CardHeader
             title={t('parties.detail.tabs.card')}
             action={
-              canManage ? (
+              canManage || canDelete ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
+                    disabled={!canManage}
                     loading={toggleActive.isPending}
                     onClick={() =>
                       toggleActive.mutate(
@@ -167,7 +177,7 @@ export function PartyDetailPage() {
                     <Power className="size-3.5" aria-hidden />
                     {party.isActive ? t('parties.detail.deactivate') : t('parties.detail.activate')}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
+                  <Button size="sm" variant="ghost" disabled={!canDelete} onClick={() => setConfirmDelete(true)}>
                     <Trash2 className="size-3.5 text-danger" aria-hidden />
                     {t('parties.detail.delete')}
                   </Button>
@@ -198,6 +208,8 @@ export function PartyDetailPage() {
         </Card>
       )}
       {tab === 'card' && party.kind !== 'employee' && <PartyPricingCard partyId={party.id} kind={party.kind} />}
+      {tab === 'card' && party.kind !== 'employee' && <PartyBankAccounts partyId={party.id} />}
+      {tab === 'card' && (party.kind === 'customer' || party.kind === 'both') && <PartySalesRep partyId={party.id} />}
       {tab === 'card' && party.kind !== 'employee' && <div className="mt-5"><RelatedContacts partyId={party.id} /></div>}
 
       <PartyFormSheet open={editing} onOpenChange={setEditing} party={party} onSaved={() => undefined} />
@@ -233,6 +245,7 @@ export function PartyDetailPage() {
       >
         {null}
       </Modal>
+</TabPanel>
     </>
   );
 }

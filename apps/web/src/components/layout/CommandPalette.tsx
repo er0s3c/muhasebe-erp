@@ -5,8 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/cn';
 import { useCQuery, useNavigation } from '../../lib/queries';
+import { useFavorites, useRecentItems } from '../../lib/personal';
 import type { SearchHit } from '@erp/shared';
 import { navIcon } from './icons';
+import { buildDisplayNavigation } from './navigation';
 
 interface Command {
   id: string;
@@ -28,6 +30,8 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const [debounced, setDebounced] = useState('');
   useEffect(() => { const timer = setTimeout(() => setDebounced(query.trim()), 250); return () => clearTimeout(timer); }, [query]);
   const recordSearch = useCQuery<{ items: SearchHit[] }>(['record-search', debounced], open && debounced.length >= 2 ? `/api/workspace/search?q=${encodeURIComponent(debounced)}` : null);
+  const { favorites } = useFavorites();
+  const recent = useRecentItems();
   const [active, setActive] = useState(0);
   const listId = useId();
   const optionId = (i: number) => `${listId}-o${i}`;
@@ -57,9 +61,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     if (modules.includes('core.settings') && can('rates.manage')) {
       list.push({ id: 'enter-rates', label: t('shell.enterRates'), group: t('shell.quickActions'), path: '/settings/currencies', icon: 'coins', keywords: 'döviz kur dolar euro sterlin' });
     }
-    for (const g of nav?.groups ?? []) {
+    for (const g of buildDisplayNavigation(nav?.groups)) {
       for (const item of g.items) {
-        list.push({ id: item.key, label: t(item.labelKey as never), group: t('shell.pages'), path: item.path, icon: item.icon });
+        list.push({ id: item.key, label: item.label ?? t(item.labelKey as never), group: g.label, path: item.path, icon: item.icon });
       }
     }
     return list;
@@ -68,9 +72,14 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const results = useMemo(() => {
     const q = norm(query.trim());
     const pages = q ? commands.filter((c) => norm(`${c.label} ${c.keywords ?? ''}`).includes(q)) : commands;
+    // Sorgu boşken önce kişisel kısayollar: favoriler ve bu tarayıcıda son açılan kayıtlar
+    const personal: Command[] = q ? [] : [
+      ...favorites.map((f) => ({ id: `fav:${f.path}`, label: f.title, group: 'Favoriler', path: f.path, icon: 'star' })),
+      ...recent.filter((r) => !favorites.some((f) => f.path === r.path)).slice(0, 8).map((r) => ({ id: `recent:${r.path}`, label: r.kind ? `${r.title} · ${r.kind}` : r.title, group: 'Son açılanlar', path: r.path, icon: 'history' })),
+    ];
     const records: Command[] = debounced === query.trim() && q.length >= 2 ? (recordSearch.data?.items ?? []).map((item) => ({ id: `${item.kind}:${item.id}`, label: item.label, group: 'Kayıtlar', path: item.path, icon: 'search' })) : [];
-    return [...pages, ...records];
-  }, [commands, query, debounced, recordSearch.data]);
+    return [...personal, ...pages, ...records];
+  }, [commands, query, debounced, recordSearch.data, favorites, recent]);
 
   useEffect(() => setActive(0), [query, open]);
   // Ok tuşlarıyla seçilen öğe görünür kalsın
@@ -101,7 +110,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-inverted/50 backdrop-blur-[8px] [animation:fade-in_0.15s_ease-out]" />
-        <Dialog.Content className="fixed left-1/2 top-[15vh] z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-2xl border border-border bg-surface [animation:pop-in_0.15s_ease-out]">
+        <Dialog.Content className="fixed left-1/2 top-[15vh] z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-2xl border border-border bg-surface shadow-pop [animation:pop-in_0.15s_ease-out]">
           <Dialog.Title className="sr-only">{t('shell.commandPalette')}</Dialog.Title>
           <Dialog.Description className="sr-only">{t('shell.typeToSearch')}</Dialog.Description>
           <div className="flex items-center gap-3 border-b border-border px-4">
@@ -131,7 +140,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
               aria-label={t('shell.typeToSearch')}
             />
-            <kbd className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted">Esc</kbd>
+            <kbd className="rounded border border-border px-1.5 py-0.5 text-[12px] text-muted">Esc</kbd>
           </div>
           <div id={listId} role="listbox" aria-label={t('shell.commandPalette')} className="max-h-80 overflow-y-auto p-2">
             {recordSearch.isFetching && <p role="status" className="px-3 py-2 text-sm text-muted">Kayıtlar aranıyor…</p>}

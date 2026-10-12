@@ -22,6 +22,8 @@ export type SecurityEventName =
   | 'member_role_changed'
   | 'member_removed'
   | 'member_module_access_changed'
+  | 'company_role_changed'
+  | 'session_revoked'
   | 'license_activated'
   | 'license_offline_activated'
   | 'license_refreshed'

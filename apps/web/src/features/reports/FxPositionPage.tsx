@@ -24,7 +24,7 @@ export function FxPositionPage() {
     <div className="print-wide">
       <PageHeader title={t('fxPosition.title')} description={t('fxPosition.subtitle')} actions={<ExportMenu exportKey="fx-position" params={{ asOf, rateDate, rates: rates.trim() }} disabled={!data} />} />
       <PrintHeader subtitle={`${formatDateTR(asOf)} ${t('fxPosition.asOfShort')}`} />
-      <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
+      <div className="mb-5 flex flex-wrap items-start gap-4 print:hidden" data-testid="report-filters">
         <Field label={t('fxPosition.asOf')}>{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className="w-44" />}</Field>
         <Field label={t('fxPosition.rateDate')} hint={t('fxPosition.rateDateHint')}>{(id) => <Input id={id} type="date" value={rateDate} onChange={(e) => setRateDate(e.target.value)} className="w-44" />}</Field>
         <Field label={t('fxPosition.manualRates')} hint={t('fxPosition.manualRatesHint')}>{(id) => <Input id={id} value={rates} onChange={(e) => setRates(e.target.value)} placeholder="USD:35,EUR:38" className="w-56" />}</Field>

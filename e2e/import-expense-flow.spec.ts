@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +10,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -60,7 +62,7 @@ test('ithalat maliyet dağıtımı: alış faturası → dosya → navlun/gümr�
   await expect(page.getByRole('heading', { name: /AF-\d{4}-000001/, level: 1 })).toBeVisible();
 
   // 1) İthalat dosyası: kaynak satır + navlun 150 ₺ + gümrük vergisi 50 ₺ (kullanıcı girişi)
-  await nav.getByRole('link', { name: 'İthalat dosyaları' }).click();
+  await nav.getByRole('link', { name: 'İthalat maliyet dosyaları' }).click();
   await expect(page.getByText('Henüz ithalat dosyası yok')).toBeVisible();
   await expect(page.getByText('mali müşavirce doğrulanmamıştır').first()).toBeVisible();
   await page.getByRole('button', { name: 'Yeni ithalat dosyası' }).first().click();
@@ -101,7 +103,7 @@ test('ithalat maliyet dağıtımı: alış faturası → dosya → navlun/gümr�
   await expect(page.getByText('Stok defteri muhasebe bakiyesiyle uyumlu')).toBeVisible();
 
   // Kart bazında rapor sekmesi
-  await nav.getByRole('link', { name: 'İthalat dosyaları' }).click();
+  await nav.getByRole('link', { name: 'İthalat maliyet dosyaları' }).click();
   await page.getByRole('tab', { name: 'Kart bazında maliyet' }).click();
   await expect(page.getByRole('row', { name: /Seramik karo/ })).toContainText('120,0000');
 
@@ -122,7 +124,8 @@ test('ithalat maliyet dağıtımı: alış faturası → dosya → navlun/gümr�
   await dialog.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByRole('heading', { name: 'KTB TL', level: 1 })).toBeVisible();
 
-  await nav.getByRole('link', { name: 'Gider kartları' }).click();
+  await nav.getByRole('link', { name: 'Giderler' }).click();
+  await page.getByRole('tab', { name: 'Gider türleri' }).click();
   await expect(page.getByText('Henüz gider kartı yok')).toBeVisible();
   await page.getByRole('button', { name: 'Yeni gider kartı' }).first().click();
   await dialog.getByLabel(/^Kod/).fill('NKL');
@@ -136,7 +139,8 @@ test('ithalat maliyet dağıtımı: alış faturası → dosya → navlun/gümr�
   await expect(page.getByText('Gider kartı kaydedildi')).toBeVisible();
   await expect(page.getByRole('row', { name: /Nakliye/ })).toContainText('KDV-16');
 
-  await nav.getByRole('link', { name: 'Gider fişleri' }).click();
+  await nav.getByRole('link', { name: 'Giderler' }).click();
+  await page.getByRole('tab', { name: 'Gider fişleri' }).click();
   await expect(page.getByText('Henüz gider fişi yok')).toBeVisible();
   await page.getByRole('button', { name: 'Yeni gider' }).first().click();
   await pick('Gider kartı', 'nakliye');
@@ -152,13 +156,14 @@ test('ithalat maliyet dağıtımı: alış faturası → dosya → navlun/gümr�
   await nav.getByRole('link', { name: 'Gider raporları' }).click();
   await expect(page.getByRole('row', { name: /Nakliye/ })).toContainText('1.000,00');
   await expect(page.getByRole('row', { name: /Nakliye/ })).toContainText('160,00');
-  await page.getByRole('tab', { name: 'Aylık eğilim' }).click();
+  await page.getByRole('button', { name: 'Aylık eğilim' }).click();
   await expect(page.getByRole('row', { name: /Toplam/ })).toContainText('1.160,00');
-  await page.getByRole('tab', { name: 'En yüksek giderler' }).click();
+  await page.getByRole('button', { name: 'En yüksek giderler' }).click();
   await expect(page.getByRole('row', { name: /Şantiye nakliyesi/ })).toBeVisible();
 
   // İptal edilen gider rapordan düşer
-  await nav.getByRole('link', { name: 'Gider fişleri' }).click();
+  await nav.getByRole('link', { name: 'Giderler' }).click();
+  await page.getByRole('tab', { name: 'Gider fişleri' }).click();
   await page.getByRole('row', { name: /GDF-\d{4}-000001/ }).getByRole('button', { name: 'İptal' }).click();
   await dialog.getByLabel('İptal nedeni').fill('Çift giriş');
   await dialog.getByRole('button', { name: 'İptal', exact: true }).click();

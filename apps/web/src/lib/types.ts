@@ -13,6 +13,9 @@ import type {
   MaturityBucket,
   NotificationKind,
   NotificationSeverity,
+  CountryPayrollSnapshot,
+  LegalProfileSnapshot,
+  CountryPayrollConfig,
 } from '@erp/shared';
 
 export interface Account {
@@ -73,6 +76,8 @@ export interface Member {
   fullName: string;
   isActive: boolean;
   role: string;
+  customRoleId?: string | null;
+  customRoleName?: string | null;
   mfaEnabled: boolean;
   /** Rol varsayılanından farklı (özel) modül erişimi tanımlı alan sayısı. */
   customAccessCount: number;
@@ -117,6 +122,8 @@ export interface JournalLine {
   wbsId: string | null;
   wbsCode: string | null;
   wbsName: string | null;
+  costCenterId?: string | null;
+  costCenterCode?: string | null;
 }
 
 export interface JournalEntry extends Omit<JournalListItem, 'totalBase'> {
@@ -200,6 +207,7 @@ export interface Party {
   kind: PartyKind;
   taxNumber: string | null;
   taxOffice: string | null;
+  taxStatus?: 'unknown' | 'consumer' | 'business' | 'vat_registered' | 'withholding_agent' | 'nonresident';
   phone: string | null;
   email: string | null;
   address: string | null;
@@ -309,9 +317,12 @@ export interface Item {
   salePrice: string | null;
   saleCurrency: string;
   minLevel: string | null;
+  targetLevel?: string | null;
   notes: string | null;
   isActive: boolean;
   tracksSerial: boolean;
+  /** Raf ömrü (gün); partilere son kullanma tarihi önerir. */
+  shelfLifeDays?: number | null;
 }
 
 export interface ItemListRow {
@@ -465,6 +476,8 @@ export interface StockCountDetail {
     countDate: string;
     status: 'draft' | 'posted';
     description: string | null;
+    blind?: boolean;
+    recountTolerancePct?: string | null;
     warehouseId: string;
     warehouseName: string;
     documentId: string | null;
@@ -479,8 +492,11 @@ export interface StockCountDetail {
     countedQty: string | null;
     systemQty: string | null;
     diffQty: string | null;
+    countedBy?: string | null;
+    recountQty?: string | null;
+    recountRequired?: boolean | null;
   }[];
-  summary: { lines: number; counted: number; uncounted: number; surplus: number; shortage: number };
+  summary: { lines: number; counted: number; uncounted: number; surplus: number | null; shortage: number | null; recountRequired?: number | null };
   warnings?: { zeroCostItems: string[] };
 }
 
@@ -545,6 +561,12 @@ export interface InvoiceListRow {
 }
 
 export interface InvoiceLineRow {
+  taxRuleId?: string | null;
+  taxRuleSnapshot?: import('@erp/shared').DocumentTaxRuleSnapshot | null;
+  taxCalculation?: import('@erp/shared').DocumentTaxCalculation | null;
+  productClass?: string | null;
+  transactionType?: import('@erp/shared').InvoiceLineInput['transactionType'];
+  taxTreatment?: string | null;
   id: string;
   /** Seri takipli kartta satıra girilen seri no'lar (X3). */
   serials?: string[];
@@ -585,10 +607,23 @@ export interface InvoiceLineRow {
   wbsId: string | null;
   wbsCode: string | null;
   wbsName: string | null;
+  costCenterId?: string | null;
+  costCenterCode?: string | null;
 }
 
 export interface InvoiceDetail {
   invoice: Omit<InvoiceListRow, 'returnOfId'> & {
+    taxTotalsSnapshot?: import('@erp/shared').InvoiceTaxTotalsSnapshot | null;
+    legalProfileSnapshot?: import('@erp/shared').LegalProfileSnapshot | null;
+    fxRateType?: import('@erp/shared').FxRateType | null;
+    fxReason?: string | null;
+    fxSnapshot?: import('@erp/shared').FinancialFxSnapshot | null;
+    documentMetadata?: {
+      company?: { name: string; taxNumber: string | null; taxOffice: string | null; address?: string | null; jurisdiction?: string | null };
+      party?: { name: string; taxNumber: string | null; taxOffice: string | null; address: string | null };
+      originalInvoice?: { id: string; invoiceNo: string | null; invoiceDate: string } | null;
+      capturedAt?: string;
+    } | null;
     fxRate: string | null;
     vatIncluded: boolean;
     warehouseId: string | null;
@@ -701,6 +736,8 @@ export interface DeliveryNoteDetail {
     externalNo: string | null;
     returnOfId: string | null;
     returnOfNo: string | null;
+    /** Satış iadesinde: kalite kararı bekleniyor (öneri 52). */
+    inspectionRequired?: boolean;
     noteDate: string;
     partyId: string;
     partyCode: string;
@@ -811,6 +848,9 @@ export interface SalesDocDetail {
     warehouseId: string | null;
     warehouseName: string | null;
     notes: string | null;
+    /** Satış sorumlusu (F6: öneri 13). */
+    salesRepId?: string | null;
+    salesRepName?: string | null;
     quoteId: string | null;
     quoteNo: string | null;
     orderId: string | null;
@@ -1078,7 +1118,7 @@ export interface GeneralLedgerData {
   accounts: GeneralLedgerAccount[];
 }
 
-export type SalesReportGroup = 'party' | 'item' | 'month' | 'invoice';
+export type SalesReportGroup = import('@erp/shared').SalesReportGroup;
 
 export interface SalesReportRow {
   key: string;
@@ -1876,6 +1916,10 @@ export interface SalesInstallmentRow {
   paid: string;
   remaining: string;
   daysOverdue: number;
+  /** Yeniden yapılandırma (öneri 92): yeni taksidin yapılandırması, eski taksidin devredildiği yapılandırma ve devredilen kalan. */
+  restructureId?: string | null;
+  restructuredIn?: string | null;
+  restructuredAmount?: string;
 }
 
 export interface SalesContractDetail {
@@ -1972,6 +2016,8 @@ export interface FeeEstimate {
 export type EmployeeStatus = 'active' | 'left';
 
 export interface EmployeeRow {
+  /** Çalışan portalı kullanıcısı (öneri 93). */
+  userId?: string | null;
   id: string;
   code: string;
   fullName: string;
@@ -2167,6 +2213,7 @@ export interface PayrollItemRow {
   kind: 'earning' | 'deduction';
   affectsSocialBase: boolean;
   affectsTaxBase: boolean;
+  affectsStampBase: boolean | null;
   liability: 'tax' | 'social' | 'other';
   isActive: boolean;
 }
@@ -2188,6 +2235,10 @@ export interface PayrollRunRow {
   month: string;
   description: string | null;
   status: PayrollRunStatus;
+  jurisdiction: 'TR' | 'KKTC' | null;
+  engineVersion: string;
+  legalProfileSnapshot: LegalProfileSnapshot | null;
+  countryConfigSnapshot: (CountryPayrollConfig & { configId: string; verifiedAt: string; verifiedBy: string; sourceNote: string }) | null;
   employeeCount: number;
   grossTotal: string;
   deductionsTotal: string;
@@ -2214,7 +2265,7 @@ export interface PayrollWarningRow {
 
 export interface PayrollLineItemRow {
   kind: 'earning' | 'deduction' | 'employer';
-  source: 'manual' | 'param';
+  source: 'manual' | 'param' | 'country';
   code: string;
   label: string;
   amount: string;
@@ -2228,6 +2279,7 @@ export interface PayrollLineRow {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  legalCalculationSnapshot: CountryPayrollSnapshot | null;
   department: string | null;
   jobTitle: string | null;
   ibanMasked: string | null;
@@ -2363,6 +2415,9 @@ export interface SocialDeclarationRow {
   status: SocialDeclarationStatus;
   payrollRunId: string;
   payrollRunNumber: string;
+  jurisdiction: 'TR' | 'KKTC' | null;
+  legalProfileSnapshot: LegalProfileSnapshot | null;
+  countryConfigSnapshot: Record<string, unknown> | null;
   employeeCount: number;
   premiumBaseTotal: string;
   employeePremiumTotal: string;
@@ -2395,6 +2450,10 @@ export interface SocialDeclarationLine {
   premiumBase: string;
   employeePremium: string;
   employerPremium: string;
+  employeeProvident: string;
+  employerProvident: string;
+  employerLocalEmployment: string;
+  legalCalculationSnapshot: CountryPayrollSnapshot | null;
   supportEmployee: string;
   supportEmployer: string;
   employeeDue: string;
@@ -3182,7 +3241,7 @@ export interface AgendaSummary {
 }
 
 // --- Konsolidasyon, döviz pozisyonu, yönetici özeti (Faz X7) ------------------
-export type ConsolidationDenyReason = 'NOT_A_MEMBER' | 'ROLE_INSUFFICIENT' | 'MODULE_DISABLED' | 'LICENSE_SECTOR_MISMATCH';
+export type ConsolidationDenyReason = 'NOT_A_MEMBER' | 'ROLE_INSUFFICIENT' | 'MODULE_DISABLED' | 'LICENSE_SECTOR_MISMATCH' | 'BRANCH_SCOPE_INSUFFICIENT';
 export interface ConsolidationGroup {
   id: string;
   name: string;

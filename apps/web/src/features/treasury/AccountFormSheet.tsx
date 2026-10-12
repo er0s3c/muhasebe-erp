@@ -140,7 +140,7 @@ export function AccountFormSheet({ open, onOpenChange, account, onSaved }: Props
         {!editing && (
           <div>
             <p className="mb-1.5 text-[13px]">{t('treasury.form.kind')}</p>
-            <SegmentedTabs value={kind} onChange={setKind} items={(['bank', 'cash'] as const).map((k) => ({ key: k, label: t(`treasury.kinds.${k}`) }))} />
+            <SegmentedTabs variant="filter" value={kind} onChange={setKind} items={(['bank', 'cash'] as const).map((k) => ({ key: k, label: t(`treasury.kinds.${k}`) }))} />
           </div>
         )}
 

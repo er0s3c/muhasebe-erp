@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError } from '../../lib/api';
 import { errorMessage } from '../../lib/errors';
@@ -21,7 +21,7 @@ export function OrganizationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const toast = useToast();
   const canManage = useCan()('directory.manage');
-  const { data, isPending, error } = useCQuery<{ organization: DirOrg }>(['directory', 'org', id], id ? `/api/directory/organizations/${id}` : null);
+  const { data, isPending, error , refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ organization: DirOrg }>(['directory', 'org', id], id ? `/api/directory/organizations/${id}` : null);
   const { data: cdata } = useCQuery<{ contacts: DirContact[] }>(['directory', 'contacts', `org-${id}`], id ? `/api/directory/contacts?organizationId=${id}` : null);
   const [editing, setEditing] = useState(false);
   const [addingContact, setAddingContact] = useState(false);
@@ -30,6 +30,7 @@ export function OrganizationDetailPage() {
   if (error instanceof ApiError && error.status === 404) {
     return <EmptyState title={t('directory.org.notFound')} action={<Link to="/directory/organizations"><Button>{t('directory.org.back')}</Button></Link>} />;
   }
+  if (error) return <ErrorState description={errorMessage(error)} onRetry={() => void retryQuery()} retrying={retryingQuery} />;
   if (isPending || !data) return <PageLoading />;
   const o = data.organization;
   const contacts = cdata?.contacts ?? [];

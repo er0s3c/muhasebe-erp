@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PARTY_TAX_STATUSES, PARTY_TAX_STATUS_LABELS } from '@erp/shared';
+import { FormDetailToggle } from '../../components/layout/FormDetailToggle';
+import { FormSection } from '../../components/ui/FormSection';
 import { Button } from '../../components/ui/Button';
 import { Callout } from '../../components/ui/Feedback';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
@@ -8,6 +11,7 @@ import { Sheet } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
 import { CurrencyOptions } from '../../components/ui/CurrencyOptions';
 import { errorMessage, fieldErrors } from '../../lib/errors';
+import { useFormDetail } from '../../lib/personal';
 import { useCMutation } from '../../lib/queries';
 import type { Party, PartyKind } from '../../lib/types';
 
@@ -19,6 +23,7 @@ interface FormState {
   email: string;
   taxNumber: string;
   taxOffice: string;
+  taxStatus: (typeof PARTY_TAX_STATUSES)[number];
   address: string;
   currencyCode: string;
   creditLimit: string;
@@ -34,6 +39,7 @@ const empty: FormState = {
   email: '',
   taxNumber: '',
   taxOffice: '',
+  taxStatus: 'unknown',
   address: '',
   currencyCode: 'TRY',
   creditLimit: '',
@@ -49,6 +55,7 @@ const fromParty = (p: Party): FormState => ({
   email: p.email ?? '',
   taxNumber: p.taxNumber ?? '',
   taxOffice: p.taxOffice ?? '',
+  taxStatus: p.taxStatus ?? 'unknown',
   address: p.address ?? '',
   currencyCode: p.currencyCode,
   creditLimit: p.creditLimit ? p.creditLimit.replace(/\.?0+$/, '') : '',
@@ -71,6 +78,8 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
   const [f, setF] = useState<FormState>(empty);
   const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Temel görünüm: değer veya hata taşımayan ikincil alanlar gizlenir (öneri 24)
+  const { detailed, mode: detailMode, setMode: setDetailMode } = useFormDetail('party');
   const editing = !!party;
 
   useEffect(() => {
@@ -97,6 +106,7 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
             email: f.email,
             taxNumber: f.taxNumber,
             taxOffice: f.taxOffice,
+            taxStatus: f.taxStatus,
             address: f.address,
             currencyCode: f.currencyCode,
             creditLimit: f.creditLimit === '' ? null : f.creditLimit,
@@ -116,6 +126,7 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
           email: f.email,
           taxNumber: f.taxNumber,
           taxOffice: f.taxOffice,
+          taxStatus: f.taxStatus,
           address: f.address,
           currencyCode: f.currencyCode,
           ...(f.creditLimit ? { creditLimit: f.creditLimit } : {}),
@@ -129,6 +140,7 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
   );
 
   const submit = () => {
+    if (save.isPending) return;
     setError(null);
     setErrors({});
     save.mutate(undefined, {
@@ -166,7 +178,9 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
         }}
         noValidate
       >
+        <div className="flex justify-end"><FormDetailToggle mode={detailMode} onChange={setDetailMode} /></div>
         {error && <Callout tone="danger">{error}</Callout>}
+        <FormSection title="Temel bilgiler">
         <Field label={t('parties.form.name')} error={errors.name} required>
           {(id) => <Input id={id} value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus />}
         </Field>
@@ -182,10 +196,12 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
               </Select>
             )}
           </Field>
-          <Field label={t('parties.form.code')} hint={editing ? undefined : t('parties.form.codeHint')} error={errors.code}>
+          {(detailed || editing || f.code || errors.code) && <Field label={t('parties.form.code')} hint={editing ? undefined : t('parties.form.codeHint')} error={errors.code}>
             {(id) => <Input id={id} value={f.code} onChange={(e) => set('code', e.target.value)} disabled={editing} placeholder="CR-000001" />}
-          </Field>
+          </Field>}
         </div>
+        </FormSection>
+        <FormSection title="İletişim ve vergi">
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label={t('parties.form.phone')} error={errors.phone}>
             {(id) => <Input id={id} value={f.phone} onChange={(e) => set('phone', e.target.value)} inputMode="tel" />}
@@ -201,10 +217,17 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
           <Field label={t('parties.form.taxOffice')} error={errors.taxOffice}>
             {(id) => <Input id={id} value={f.taxOffice} onChange={(e) => set('taxOffice', e.target.value)} />}
           </Field>
+          {(detailed || f.taxStatus !== empty.taxStatus || errors.taxStatus) && <Field label="Vergi durumu" error={errors.taxStatus}>
+            {(id) => <Select id={id} value={f.taxStatus} onChange={(e) => set('taxStatus', e.target.value as FormState['taxStatus'])}>
+              {PARTY_TAX_STATUSES.map(status => <option key={status} value={status}>{PARTY_TAX_STATUS_LABELS[status]}</option>)}
+            </Select>}
+          </Field>}
         </div>
         <Field label={t('parties.form.address')} error={errors.address}>
           {(id) => <Input id={id} value={f.address} onChange={(e) => set('address', e.target.value)} />}
         </Field>
+        </FormSection>
+        {(detailed || f.creditLimit || f.paymentTermDays !== empty.paymentTermDays || f.currencyCode !== empty.currencyCode || errors.creditLimit || errors.paymentTermDays) && <FormSection title="Finansal koşullar">
         <div className="grid gap-5 sm:grid-cols-3">
           <Field label={t('parties.form.currency')}>
             {(id) => (
@@ -222,9 +245,12 @@ export function PartyFormSheet({ open, onOpenChange, party, onSaved }: Props) {
             )}
           </Field>
         </div>
+        </FormSection>}
+        {(detailed || f.notes || errors.notes) && <FormSection title="Gelişmiş bilgiler">
         <Field label={t('parties.form.notes')} error={errors.notes}>
           {(id) => <Textarea id={id} value={f.notes} onChange={(e) => set('notes', e.target.value)} maxLength={1000} />}
         </Field>
+        </FormSection>}
       </form>
     </Sheet>
   );

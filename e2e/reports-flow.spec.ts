@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -10,13 +11,14 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
 
 /** "Dışa aktar" menüsünden bir biçim seçer ve inen dosyayı yerel yola kaydeder. */
 async function downloadVia(page: Page, itemName: RegExp) {
-  await page.getByRole('button', { name: 'Dışa aktar' }).click();
+  await page.getByRole('button', { name: 'Dışa aktar', exact: true }).click();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: itemName }).click()]);
   const path = await download.path();
   return { name: download.suggestedFilename(), path };
@@ -74,12 +76,13 @@ test('raporlar: yevmiye defteri, mizan dışa aktarma (xlsx/csv), yazdır başl�
   await page.emulateMedia({ media: 'print' });
   await expect(printedAt).toBeVisible();
   await expect(page.locator('main').getByText('Yücel İnşaat Ltd.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Dışa aktar' })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Dışa aktar', exact: true })).toBeHidden();
   await page.emulateMedia({ media: 'screen' });
   await expect(printedAt).toBeHidden();
 
   // 6) Veri dışa aktarma: tüm veriler tek xlsx
-  await nav.getByRole('link', { name: 'Veri dışa aktarma' }).click();
+  await nav.getByRole('link', { name: 'Veri aktarımı' }).click();
+  await page.getByRole('tab', { name: 'Tüm veriyi dışa aktar' }).click();
   await expect(page.getByText('Dosya şirketin tüm verisini içerir')).toBeVisible();
   const all = await downloadVia(page, /\.xlsx/);
   expect(all.name).toMatch(/^tum-veriler-\d{4}-\d{2}-\d{2}\.xlsx$/);

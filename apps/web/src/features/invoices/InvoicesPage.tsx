@@ -1,17 +1,22 @@
-import { Layers, Plus, Receipt, Search, Upload } from 'lucide-react';
+import { CompanySavedViews } from '../../components/layout/CompanySavedViews';
+import { SearchInput } from '../../components/ui/SearchInput';
+import { ListToolbar, ResultFooter } from '../../components/ui/ListTools';
+import { CheckCheck, Layers, Plus, Receipt, Upload } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { BatchActionDialog, type BatchResponse } from '../../components/layout/BatchAction';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { invoiceTypesOf, todayIso, type InvoiceSide } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { EmptyState, ErrorState, ListSkeleton } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
-import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
+import { Table, TableWrap, Td, Th, Tr, ProgressiveRows } from '../../components/ui/Table';
 import { SegmentedTabs } from '../../components/ui/Tabs';
 import { cn } from '../../lib/cn';
 import { formatDateTR, moneyIn } from '../../lib/format';
-import { useCan, useCQuery } from '../../lib/queries';
+import { useCan, useCompanyApi, useCQuery } from '../../lib/queries';
 import type { InvoiceListRow, InvoiceStatus, InvoiceType } from '../../lib/types';
 import { ImportWizard } from '../imports/ImportWizard';
 import { InvoiceStatusBadge, InvoiceTypeBadge } from './common';
@@ -24,8 +29,12 @@ export const PurchaseInvoicesPage = () => <InvoicesPage side="purchases" />;
 function InvoicesPage({ side }: { side: InvoiceSide }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const canManage = useCan()('invoices.manage');
+  const can = useCan();
+  const canManage = can('invoices.manage');
   const [importing, setImporting] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const { call } = useCompanyApi();
+  const qc = useQueryClient();
   const year = todayIso().slice(0, 4);
   const types = invoiceTypesOf(side);
   const [type, setType] = useState<InvoiceType | ''>('');
@@ -47,8 +56,10 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
   if (type) qs.set('type', type);
   if (status) qs.set('status', status);
   if (query) qs.set('query', query);
-  const { data, isPending } = useCQuery<{ invoices: InvoiceListRow[]; total: number }>(['invoices', 'list', qs.toString()], `/api/invoices?${qs}`);
+  const { data, isPending, error, refetch, isFetching } = useCQuery<{ invoices: InvoiceListRow[]; total: number }>(['invoices', 'list', qs.toString()], `/api/invoices?${qs}`);
   const filtered = !!(type || status || query);
+  // Önizlemeli toplu muhasebeleştirme (öneri 6): listede görünen taslaklar
+  const drafts = (data?.invoices ?? []).filter((r) => r.status === 'draft').slice(0, 100);
 
   const newButtons = types.map((k, i) => (
     <Button key={k} variant={i === 0 ? 'primary' : 'secondary'} onClick={() => navigate(`/invoices/new?type=${k}`)}>
@@ -83,8 +94,9 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
         }
       />
 
-      <div className="mb-5 flex flex-wrap items-end gap-4">
-        <SegmentedTabs
+      <ListToolbar onReset={() => { setText(''); setType(''); setStatus(''); setFrom(`${year}-01-01`); setTo(`${year}-12-31`); setLimit(PAGE); }}>
+        <CompanySavedViews page={`invoices-${side}`} filters={{ type, status, from, to }} onApply={(v) => { setText(''); setType(v.type as InvoiceType | ''); setStatus(v.status as InvoiceStatus | ''); setFrom(String(v.from)); setTo(String(v.to)); setLimit(PAGE); }} />
+        <SegmentedTabs variant="filter"
           value={type}
           onChange={setType}
           items={[{ key: '' as const, label: t('invoices.allTypes') }, ...types.map((k) => ({ key: k, label: t(`invoices.types.${k}`) }))]}
@@ -103,14 +115,27 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
             </Select>
           )}
         </Field>
-        <div className="relative w-full max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted" aria-hidden />
-          <Input className="pl-9" placeholder={t('invoices.searchPlaceholder')} value={text} onChange={(e) => setText(e.target.value)} aria-label={t('common.search')} />
-        </div>
-      </div>
+        <SearchInput placeholder={t('invoices.searchPlaceholder')} value={text} onChange={setText} aria-label={t('common.search')} />
+        {status === 'draft' && can('invoices.post') && drafts.length > 0 && (
+          <Button onClick={() => setBatchOpen(true)}><CheckCheck className="size-4" aria-hidden />Taslakları toplu kaydet</Button>
+        )}
+      </ListToolbar>
+      <BatchActionDialog<{ invoiceNo: string | null; grossTotal: string; currencyCode: string }>
+        open={batchOpen}
+        onOpenChange={setBatchOpen}
+        title="Taslak faturaları toplu kaydet"
+        description="Listede görünen taslaklar (en çok 100) muhasebeleştirilir. Önizleme her faturayı kurallarla dener ve hiçbir değişiklik yapmaz."
+        actionLabel={(n) => `${n} faturayı kaydet`}
+        items={drafts.map((r) => ({ id: r.id, label: r.partyName, detail: `${formatDateTR(r.invoiceDate)} · ${moneyIn(r.grossTotal, r.currencyCode)}` }))}
+        run={(ids, dryRun, idempotencyKey) => call<BatchResponse<{ invoiceNo: string | null; grossTotal: string; currencyCode: string }>>('/api/invoices/batch-post', { method: 'POST', body: { ids, dryRun }, idempotencyKey })}
+        describe={(v) => `${v.invoiceNo ?? 'Numara'} · ${moneyIn(v.grossTotal, v.currencyCode)}`}
+        onDone={() => void qc.invalidateQueries()}
+      />
 
       {isPending ? (
-        <PageLoading />
+        <ListSkeleton />
+      ) : error ? (
+        <ErrorState error={error} onRetry={() => void refetch()} retrying={isFetching} />
       ) : !data?.invoices.length ? (
         <Card>
           <EmptyState
@@ -135,7 +160,7 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
                 </tr>
               </thead>
               <tbody>
-                {data.invoices.map((r) => (
+                <ProgressiveRows rows={data.invoices}>{(r) => (
                   <Tr
                     key={r.id}
                     clickable
@@ -167,15 +192,11 @@ function InvoicesPage({ side }: { side: InvoiceSide }) {
                       <InvoiceStatusBadge status={r.status} />
                     </Td>
                   </Tr>
-                ))}
+                )}</ProgressiveRows>
               </tbody>
             </Table>
           </TableWrap>
-          {data.total > data.invoices.length && (
-            <div className="mt-4 flex justify-center">
-              <Button onClick={() => setLimit((l) => l + PAGE)}>{t('common.loadMore')}</Button>
-            </div>
-          )}
+          <ResultFooter shown={data.invoices.length} total={data.total} loading={isFetching} onMore={() => setLimit((l) => l + PAGE)} />
         </>
       )}
       <ImportWizard kind={side === 'sales' ? 'sales_invoices' : 'purchase_invoices'} open={importing} onOpenChange={setImporting} />

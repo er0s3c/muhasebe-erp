@@ -7,6 +7,7 @@ import { buildApp } from '../src/app';
 import { loadConfig, type Config } from '../src/config';
 import { createDb, type DbHandle } from '../src/db/client';
 import type { Mailer } from '../src/modules/mail/mailer';
+import type { WebhookTransport } from '../src/modules/platform-integrations/transport';
 
 export const PASSWORD = 'Sifre-12345-xyz';
 
@@ -17,11 +18,11 @@ export interface TestApp {
 
 /** Test dosyası başına bir uygulama örneği; dosya bitince kapanır. */
 export async function makeApp(
-  opts: { rateFetcher?: (isoDate?: string) => Promise<string>; configOverrides?: Partial<Config>; mailer?: Mailer } = {},
+  opts: { rateFetcher?: (isoDate?: string) => Promise<string>; configOverrides?: Partial<Config>; mailer?: Mailer;webhookTransport?:WebhookTransport } = {},
 ): Promise<TestApp> {
   const config = { ...loadConfig(), ...opts.configOverrides };
   const handle = createDb(config.DATABASE_URL);
-  const app = await buildApp({ db: handle.db, config, logger: false, rateFetcher: opts.rateFetcher, mailer: opts.mailer });
+  const app = await buildApp({ db: handle.db, config, logger: false, rateFetcher: opts.rateFetcher, mailer: opts.mailer,webhookTransport:opts.webhookTransport });
   await app.ready();
   afterAll(async () => {
     await app.close();
@@ -85,10 +86,24 @@ export async function createCompany(
   const res = await client(app, token).post('/api/companies', {
     name: 'Deneme İnşaat Ltd.',
     sector: 'CONSTRUCTION',
+    jurisdiction: 'KKTC',
     ...overrides,
   });
   if (res.statusCode !== 201) throw new Error(`createCompany failed: ${res.body}`);
-  return res.json().company;
+  const company = res.json().company;
+  // Eski muhasebe regresyonları 2020–2026 tarihli yapay işlemler kullanır. Bu test
+  // tarifeleri resmî ülke tohumundan ayrı tutulur; üretim oranı geriye taşınmaz.
+  if ((overrides.jurisdiction ?? 'KKTC') === 'KKTC') {
+    const scoped = client(app, token, company.id);
+    for (const rate of [0, 5, 10, 16, 20]) {
+      const created = await scoped.post('/api/tax-rates', {
+        code: `KDV-${rate}`, name: `Test KDV %${rate}`, rate: String(rate), validFrom: '2020-01-01',
+        sourceNote: 'Yalnız test senaryolarına ait sentetik geçmiş oranı; resmî mevzuat değildir.',
+      });
+      if (created.statusCode !== 201 && created.statusCode !== 409) throw new Error(`test tax rate failed: ${created.body}`);
+    }
+  }
+  return company;
 }
 
 /** Hesap koduna göre id sözlüğü. */
@@ -138,7 +153,7 @@ export async function asDb<T>(
   try {
     await c.query('BEGIN');
     await c.query(
-      `select set_config('app.user_id', $1, true), set_config('app.org_id', $2, true), set_config('app.company_id', $3, true)`,
+      `select set_config('app.user_id', $1, true), set_config('app.org_id', $2, true), set_config('app.company_id', $3, true), set_config('app.branch_selection','all',true),set_config('app.branch_id','',true)`,
       [ctx.userId ?? '', ctx.orgId ?? '', ctx.companyId ?? ''],
     );
     return await fn((sql, params) => c.query(sql, params));

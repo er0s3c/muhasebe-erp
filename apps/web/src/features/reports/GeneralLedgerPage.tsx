@@ -45,7 +45,7 @@ export function GeneralLedgerPage() {
       />
       <PrintHeader subtitle={`${periodText(from, to)}${prefix.trim() ? ` · ${t('reports.generalLedger.prefixNote', { prefix: prefix.trim() })}` : ''}`} note={t('reports.print.internalNote')} />
 
-      <div className="mb-5 flex flex-wrap items-end gap-4 print:hidden">
+      <div className="mb-5 flex flex-wrap items-start gap-4 print:hidden" data-testid="report-filters">
         <PeriodFields from={from} to={to} onFrom={setFrom} onTo={setTo} />
         <Field label={t('reports.generalLedger.prefix')} hint={t('reports.generalLedger.prefixHint')}>
           {(id) => <Input id={id} value={prefix} onChange={(e) => setPrefix(e.target.value)} className="w-40" placeholder="120" maxLength={20} />}

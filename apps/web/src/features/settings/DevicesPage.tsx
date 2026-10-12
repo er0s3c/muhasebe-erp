@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { PageHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, ErrorState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -22,7 +22,7 @@ export function DevicesPage() {
   const queryClient = useQueryClient();
   const { logout } = useSession();
   const license = useLicense();
-  const { data, isPending } = useQuery<DeviceList>({ queryKey: ['devices'], queryFn: () => api<DeviceList>('/api/devices') });
+  const { data, isPending, error, refetch, isFetching } = useQuery<DeviceList>({ queryKey: ['devices'], queryFn: () => api<DeviceList>('/api/devices') });
   const [renaming, setRenaming] = useState<DeviceRow | null>(null);
   const [name, setName] = useState('');
   const [revoking, setRevoking] = useState<DeviceRow | null>(null);
@@ -53,6 +53,15 @@ export function DevicesPage() {
     onError: (e) => toast.error(errorMessage(e)),
   });
 
+  // Yetki dışı kullanıcı (ör. kurulum sahibi olmayan kuruluşun yöneticisi) sonsuz yükleme yerine nedeni görür
+  if (error && !data) {
+    return (
+      <>
+        <PageHeader title={t('devices.title')} description={t('devices.subtitle')} />
+        <ErrorState description={errorMessage(error)} onRetry={() => void refetch()} retrying={isFetching} />
+      </>
+    );
+  }
   if (isPending || !data) return <PageLoading />;
   if (!data.enforced) {
     return (

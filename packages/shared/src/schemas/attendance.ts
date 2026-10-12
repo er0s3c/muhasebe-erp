@@ -93,3 +93,27 @@ export type AttendanceLaborQuery = z.infer<typeof attendanceLaborQuerySchema>;
 export const closeAttendanceMonthSchema = z.object({ month: yearMonth, note: text(300).nullable().optional() });
 /** Kapalı ayı açmak gerekçe ister; açma denetim izine ve ayın kaydına yazılır. */
 export const reopenAttendanceMonthSchema = z.object({ month: yearMonth, reason: text(300).min(3, 'Gerekçe gerekli (en az 3 karakter)') });
+
+// --- Puantaj düzeltme talebi (öneri 94) -------------------------------------------------------------------
+
+/** Talep, bir günün istenen kaydını taşır; onayda puantaja aynen yazılır. Çalışan portalda `employeeId` vermez (kendi kaydı). */
+export const attendanceCorrectionSchema = z
+  .object({
+    employeeId: uuid.optional(),
+    workDate: isoDate,
+    dayType: z.enum(ATTENDANCE_DAY_TYPES),
+    normalHours: hoursString.default('0'),
+    overtimeHours: hoursString.default('0'),
+    reason: text(500).min(3, 'Gerekçe gerekli (en az 3 karakter)'),
+  })
+  .superRefine((v, ctx) => {
+    if (!dayTypeAllowsHours(v.dayType) && (Number(v.normalHours) > 0 || Number(v.overtimeHours) > 0))
+      ctx.addIssue({ code: 'custom', path: ['normalHours'], message: 'İzin ve devamsızlık günlerinde saat girilmez' });
+    if (Number(v.normalHours) + Number(v.overtimeHours) > 24) ctx.addIssue({ code: 'custom', path: ['overtimeHours'], message: 'Günlük toplam 24 saati aşamaz' });
+  });
+export type AttendanceCorrectionInput = z.infer<typeof attendanceCorrectionSchema>;
+
+export const attendanceCorrectionDecisionSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  note: text(500).optional(),
+});

@@ -10,7 +10,8 @@ import {
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, PageHeader } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, ErrorState, PageLoading } from '../../components/ui/Feedback';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
 import { Field, Input, Select, Textarea } from '../../components/ui/Field';
 import { Table, TableWrap, Td, Th } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
@@ -147,15 +148,19 @@ function OperationFormContent({
     <Card className="my-5">
       <CardHeader title={title} description={description} />
       <form
+        aria-busy={pending}
         aria-label={title}
         className="space-y-4 p-5"
         onSubmit={async (event) => {
           event.preventDefault();
+          if (pending) return;
+          const form = event.currentTarget;
           setPending(true);
           setError('');
           setFieldErrors({});
           try {
             await submit(values);
+            markFormSaved(form);
             toast.success(successMessage);
             setValues(initial());
             onDone?.();
@@ -314,6 +319,8 @@ export function Records<T extends { id: string }>({
   error,
   empty = 'Henüz kayıt yok',
   action,
+  onRetry,
+  retrying,
 }: {
   rows?: T[];
   columns: {
@@ -326,9 +333,11 @@ export function Records<T extends { id: string }>({
   error?: Error | null;
   empty?: string;
   action?: (row: T) => ReactNode;
+  onRetry?: () => void;
+  retrying?: boolean;
 }) {
+  if (error) return <ErrorState error={error} onRetry={onRetry} retrying={retrying} />;
   if (loading) return <PageLoading />;
-  if (error) return <Callout tone="danger">{errorMessage(error)}</Callout>;
   if (!rows?.length)
     return (
       <Card>

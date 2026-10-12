@@ -8,7 +8,6 @@ import {
   MODULES,
   areaAccessOf,
   areaOfPermission,
-  effectivePermissions,
   exceedsGranter,
   isAccessArea,
   isRoleBoundPermission,
@@ -18,6 +17,11 @@ import {
   permissionOfOverride,
   permissionOverrideKey,
   permissionsOfArea,
+  RESOURCE_OPERATIONS,
+  RESOURCE_OPERATION_LABELS,
+  resourceOperationKey,
+  resourceOperationOf,
+  resourceOperationAllowed,
   roleDefaultPermissions,
   setModuleAccessSchema,
   uuid,
@@ -34,7 +38,9 @@ import { memberModuleAccess, memberships, users } from '../../db/schema';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import { AppError, notFound, unprocessable } from '../../http/errors';
 import { recordSecurityEvent } from '../auth/events';
-import { buildAccess, loadOverrides } from './effective';
+import { buildAccess, loadOverrides, loadRoleOverrides } from './effective';
+import { registerCompanyRoleRoutes } from './company-roles';
+import { assertMemberScopeWithinGranter } from './grant-scope';
 
 const userIdParam = z.object({ userId: uuid });
 
@@ -80,6 +86,7 @@ interface AreaRow {
     key: Permission; label: string; roleDefault: boolean; inherited: boolean;
     override: Exclude<PermissionChoice, 'default'> | null; effective: boolean; roleBound: boolean; canAllow: boolean;
   }[];
+  resourceOperations: { key: string; label: string; override: 'allow' | 'deny' | null; inherited: boolean; effective: boolean; canAllow: boolean }[];
 }
 
 async function areaRows(tx: Tx, ctx: TenantCtx, targetId: string, targetRole: Role): Promise<AreaRow[]> {
@@ -90,9 +97,11 @@ async function areaRows(tx: Tx, ctx: TenantCtx, targetId: string, targetRole: Ro
     .where(and(eq(memberModuleAccess.companyId, ctx.company.id), eq(memberModuleAccess.userId, targetId)));
   const byKey = new Map(rows.map((r) => [r.key, r]));
   const overrides = await loadOverrides(tx, ctx.company.id, targetId);
-  const eff = buildAccess(targetRole, overrides).permissions;
-  const def = roleDefaultPermissions(targetRole);
-  const inherited = effectivePermissions(targetRole, Object.fromEntries(Object.entries(overrides).filter(([key]) => isAccessArea(key))));
+  const roleOverrides = await loadRoleOverrides(tx, ctx.company.id, targetId);
+  const effectiveAccess = buildAccess(targetRole, overrides, roleOverrides);
+  const eff = effectiveAccess.permissions;
+  const def = buildAccess(targetRole, {}, roleOverrides).permissions;
+  const inherited = buildAccess(targetRole, Object.fromEntries(Object.entries(overrides).filter(([key]) => isAccessArea(key))), roleOverrides).permissions;
   return areasForSector(ctx.company.sector).map((key) => {
     const m = moduleLabel(key)!;
     const row = byKey.get(key);
@@ -118,8 +127,15 @@ async function areaRows(tx: Tx, ctx: TenantCtx, targetId: string, targetRole: Ro
           key: permission, label: permissionLabel(permission), roleDefault: def.has(permission), inherited: inherited.has(permission),
           override: choice === 'none' ? 'deny' : choice === 'write' ? 'allow' : null,
           effective: eff.has(permission), roleBound,
-          canAllow: ctx.access.permissions.has(permission) && (!roleBound || def.has(permission)),
+          canAllow: ctx.access.permissions.has(permission) && (!roleBound || roleDefaultPermissions(targetRole).has(permission)),
         };
+      }),
+      resourceOperations: RESOURCE_OPERATIONS.map((operation) => {
+        const opKey = resourceOperationKey(key, operation);
+        const choice = overrides[opKey];
+        return { key: opKey, label: RESOURCE_OPERATION_LABELS[operation], override: choice === 'none' ? 'deny' : choice === 'write' ? 'allow' : null,
+          inherited: resourceOperationAllowed(eff, roleOverrides, key, operation), effective: resourceOperationAllowed(eff, effectiveAccess.overrides, key, operation),
+          canAllow: resourceOperationAllowed(ctx.access.permissions, ctx.access.overrides, key, operation) };
       }),
     };
   });
@@ -127,7 +143,7 @@ async function areaRows(tx: Tx, ctx: TenantCtx, targetId: string, targetRole: Ro
 
 async function memberOf(tx: Tx, companyId: string, userId: string, lock = false) {
   const q = tx
-    .select({ userId: memberships.userId, role: memberships.role, fullName: users.fullName, email: users.email })
+    .select({ userId: memberships.userId, role: memberships.role, customRoleId: memberships.customRoleId, fullName: users.fullName, email: users.email })
     .from(memberships)
     .innerJoin(users, eq(users.id, memberships.userId))
     .where(and(eq(memberships.companyId, companyId), eq(memberships.userId, userId)));
@@ -140,7 +156,7 @@ async function view(tx: Tx, ctx: TenantCtx, userId: string) {
   const member = await memberOf(tx, ctx.company.id, userId);
   const block = editBlock(ctx.user.id, ctx.role, member.userId, member.role);
   return {
-    member: { userId: member.userId, fullName: member.fullName, email: member.email, role: member.role },
+    member: { userId: member.userId, fullName: member.fullName, email: member.email, role: member.role, customRoleId: member.customRoleId },
     canEdit: block === null,
     blockedReason: block ? block.message : null,
     areas: await areaRows(tx, ctx, member.userId, member.role),
@@ -148,6 +164,7 @@ async function view(tx: Tx, ctx: TenantCtx, userId: string) {
 }
 
 export const accessRoutes: FastifyPluginAsync = async (app) => {
+  registerCompanyRoleRoutes(app);
   const manage = { permission: 'members.manage' } as const;
 
   /** Üyenin modül erişimi: rol varsayılanı, yönetici seçimi ve etkin sonuç (yalnızca sahip/yönetici). */
@@ -173,8 +190,14 @@ export const accessRoutes: FastifyPluginAsync = async (app) => {
       if (choice === 'default') delete overrides[overrideKey];
       else overrides[overrideKey] = choice === 'allow' ? 'write' : 'none';
     }
-    const permissions = buildAccess(member.role, overrides).permissions;
-    return { permissions: [...permissions], areas: [...allowed].map(key => ({ key, ...areaAccessOf(permissions, key) })) };
+    for (const [key, choice] of Object.entries(input.operations)) {
+      const operation = resourceOperationOf(key);
+      if (!operation || !allowed.has(operation.area)) throw unprocessable('Bu kayıt işlemi için erişim belirlenemez', 'MODULE_ACCESS_UNKNOWN_MODULE');
+      if (choice === 'default') delete overrides[key]; else overrides[key] = choice === 'allow' ? 'write' : 'none';
+    }
+    const a = buildAccess(member.role, overrides, await loadRoleOverrides(c.tx, c.company.id, userId));
+    const permissions = a.permissions;
+    return { permissions: [...permissions], areas: [...allowed].map(key => ({ key, ...areaAccessOf(permissions, key) })), resourceOperations: Object.fromEntries([...allowed].flatMap(area => RESOURCE_OPERATIONS.map(operation => [resourceOperationKey(area, operation), resourceOperationAllowed(permissions, a.overrides, area, operation)]))) };
   }));
 
   /**
@@ -192,6 +215,8 @@ export const accessRoutes: FastifyPluginAsync = async (app) => {
       const block = editBlock(user.id, callerRole, member.userId, member.role);
       if (block) throw new AppError(403, block.code, block.message);
 
+      await assertMemberScopeWithinGranter(c, userId);
+
       const allowed = new Set(areasForSector(company.sector));
       for (const key of Object.keys(input.levels)) {
         if (!isAccessArea(key) || !allowed.has(key)) throw unprocessable('Bu modül için erişim düzeyi belirlenemez', 'MODULE_ACCESS_UNKNOWN_MODULE', { module: key });
@@ -206,6 +231,11 @@ export const accessRoutes: FastifyPluginAsync = async (app) => {
         if (choice === 'allow' && !c.access.permissions.has(permission)) {
           throw new AppError(403, 'MODULE_ACCESS_EXCEEDS_OWN', 'Kendinizde bulunmayan bir yetkiyi başkasına veremezsiniz', { permission });
         }
+      }
+      for (const [key, choice] of Object.entries(input.operations)) {
+        const operation = resourceOperationOf(key);
+        if (!operation || !allowed.has(operation.area)) throw unprocessable('Bu kayıt işlemi için erişim belirlenemez', 'MODULE_ACCESS_UNKNOWN_MODULE');
+        if (choice === 'allow' && !resourceOperationAllowed(c.access.permissions, c.access.overrides, operation.area, operation.operation)) throw new AppError(403, 'MODULE_ACCESS_EXCEEDS_OWN', 'Kendinizde bulunmayan kayıt işlemini başkasına veremezsiniz');
       }
 
       const before = await loadOverrides(tx, company.id, userId);
@@ -228,18 +258,31 @@ export const accessRoutes: FastifyPluginAsync = async (app) => {
         else after[key] = to;
         changes.push({ area: key, from, to });
       }
+      for (const [key, choice] of Object.entries(input.operations)) {
+        const to = choice === 'default' ? null : choice === 'allow' ? 'write' : 'none';
+        const from = before[key] ?? null;
+        if (from === to) continue;
+        if (to === null) delete after[key]; else after[key] = to;
+        changes.push({ area: key, from, to });
+      }
 
       // Verme sınırı: yeni açılacak haklar çağıranın etkin izinlerinin dışına çıkamaz; salt kısıtlama serbesttir.
-      const targetAfter = effectivePermissions(member.role, after);
-      const targetBefore = effectivePermissions(member.role, before);
+      const roleOverrides = await loadRoleOverrides(tx, company.id, userId);
+      const accessAfter = buildAccess(member.role, after, roleOverrides);
+      const accessBefore = buildAccess(member.role, before, roleOverrides);
+      const targetAfter = accessAfter.permissions;
+      const targetBefore = accessBefore.permissions;
       const newlyGranted = new Set([...targetAfter].filter((p) => !targetBefore.has(p)));
       for (const ch of changes) {
         const permission = permissionOfOverride(ch.area);
-        const area = permission ? areaOfPermission(permission)! : ch.area as AccessAreaKey;
+        const area = permission ? areaOfPermission(permission)! : resourceOperationOf(ch.area)?.area ?? ch.area as AccessAreaKey;
         const extra = exceedsGranter(c.access.permissions, newlyGranted, area);
         if (extra.length > 0) {
           throw new AppError(403, 'MODULE_ACCESS_EXCEEDS_OWN', 'Kendinizde bulunmayan bir yetkiyi başkasına veremezsiniz', { module: ch.area, permissions: extra });
         }
+      }
+      for (const area of allowed) for (const operation of RESOURCE_OPERATIONS) {
+        if (!resourceOperationAllowed(accessBefore.permissions, accessBefore.overrides, area, operation) && resourceOperationAllowed(accessAfter.permissions, accessAfter.overrides, area, operation) && !resourceOperationAllowed(c.access.permissions, c.access.overrides, area, operation)) throw new AppError(403, 'MODULE_ACCESS_EXCEEDS_OWN', 'Kendinizde bulunmayan kayıt işlemini başkasına veremezsiniz');
       }
 
       for (const ch of changes) {
@@ -278,17 +321,24 @@ export const accessRoutes: FastifyPluginAsync = async (app) => {
       const member = await memberOf(tx, company.id, userId, true);
       const block = editBlock(user.id, callerRole, member.userId, member.role);
       if (block) throw new AppError(403, block.code, block.message);
+      await assertMemberScopeWithinGranter(c, userId);
       const before = await loadOverrides(tx, company.id, userId);
       const keys = Object.keys(before);
       // Kaldırmak da bir verme olabilir (kısıt kalkınca rol varsayılanı döner): çağıranın sınırı aşılamaz
-      const targetAfter = effectivePermissions(member.role, {});
-      const targetBefore = effectivePermissions(member.role, before);
+      const roleOverrides = await loadRoleOverrides(tx, company.id, userId);
+      const afterAccess = buildAccess(member.role, {}, roleOverrides);
+      const beforeAccess = buildAccess(member.role, before, roleOverrides);
+      const targetAfter = afterAccess.permissions;
+      const targetBefore = beforeAccess.permissions;
       const newlyGranted = new Set([...targetAfter].filter((p) => !targetBefore.has(p)));
       for (const key of keys) {
         const permission = permissionOfOverride(key);
-        const area = permission ? areaOfPermission(permission)! : key as AccessAreaKey;
+        const area = permission ? areaOfPermission(permission)! : resourceOperationOf(key)?.area ?? key as AccessAreaKey;
         const extra = exceedsGranter(c.access.permissions, newlyGranted, area);
         if (extra.length > 0) throw new AppError(403, 'MODULE_ACCESS_EXCEEDS_OWN', 'Kendinizde bulunmayan bir yetkiyi başkasına veremezsiniz', { module: key, permissions: extra });
+      }
+      for (const area of areasForSector(company.sector)) for (const operation of RESOURCE_OPERATIONS) {
+        if (!resourceOperationAllowed(beforeAccess.permissions, beforeAccess.overrides, area, operation) && resourceOperationAllowed(afterAccess.permissions, afterAccess.overrides, area, operation) && !resourceOperationAllowed(c.access.permissions, c.access.overrides, area, operation)) throw new AppError(403, 'MODULE_ACCESS_EXCEEDS_OWN', 'Kendinizde bulunmayan kayıt işlemini başkasına veremezsiniz');
       }
       if (keys.length > 0) {
         await tx.delete(memberModuleAccess).where(and(eq(memberModuleAccess.companyId, company.id), eq(memberModuleAccess.userId, userId), inArray(memberModuleAccess.moduleKey, keys)));

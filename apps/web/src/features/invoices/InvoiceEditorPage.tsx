@@ -1,16 +1,18 @@
-import { ArrowLeft, Ban, Printer, Undo2, Paperclip } from 'lucide-react';
+import { Ban, Printer, Undo2, Paperclip, Eye } from 'lucide-react';
 import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { DELIVERY_NOTE_TYPE_META, INVOICE_TYPES, INVOICE_TYPE_META, dec, todayIso } from '@erp/shared';
+import { DELIVERY_NOTE_TYPE_META, explainLine, INVOICE_TYPES, INVOICE_TYPE_META, INVOICE_PRINT_TEMPLATES, INVOICE_PRINT_TEMPLATE_LABELS, dec, todayIso, type InvoicePrintTemplate } from '@erp/shared';
+import { BlockedHint, ErrorCallout } from '../../components/layout/Blocked';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
+import { Card, PageHeader } from '../../components/ui/Card';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
-import { Field, Input } from '../../components/ui/Field';
+import { Field, Input, Select } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
+import { permissionBlocker } from '../../lib/blockers';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery, useModuleEnabled } from '../../lib/queries';
@@ -21,6 +23,11 @@ import { INVOICE_INVALIDATE, InvoiceStatusBadge, InvoiceTypeBadge } from './comm
 import { InvoiceForm } from './InvoiceForm';
 import { MatchCard } from './MatchCard';
 import { fmtDate } from '../../lib/license';
+import { InvoicePrintDocument } from './InvoicePrintDocument';
+import { InvoiceShareButton } from './InvoiceShareButton';
+import { InvoiceDelivery } from './InvoiceDelivery';
+import { DocumentChain } from '../sales/DocumentChain';
+import { DocumentApprovalPanel, useDocumentApprovals } from '../approvals/common';
 
 /**
  * /invoices/new (yeni ve iade) ve /invoices/:id: taslaksa düzenlenebilir form,
@@ -38,6 +45,7 @@ export function InvoiceEditorPage() {
   const deliveryNoteId = params.get('deliveryNote');
 
   const detail = useCQuery<InvoiceDetail>(['invoice', id], id ? `/api/invoices/${id}` : null);
+  const approvals = useDocumentApprovals('invoice', id);
   const original = useCQuery<InvoiceDetail>(['invoice', returnOf], !id && returnOf ? `/api/invoices/${returnOf}` : null);
   const fromDelivery = useCQuery<DeliveryNoteDetail>(['delivery-note', deliveryNoteId], !id && deliveryNoteId ? `/api/delivery-notes/${deliveryNoteId}` : null);
 
@@ -51,8 +59,9 @@ export function InvoiceEditorPage() {
   }
   if (detail.error) return <Callout tone="danger">{errorMessage(detail.error)}</Callout>;
   if (!detail.data) return <PageLoading />;
-  if (detail.data.invoice.status === 'draft' && canManage) {
-    return <InvoiceForm key={id} type={detail.data.invoice.type} initial={detail.data} />;
+  if (detail.data.invoice.status === 'draft' && canManage && !approvals.data?.requests.some(request=>request.status==='pending')) {
+    if(approvals.isPending)return <PageLoading/>;
+    return <><DocumentApprovalPanel type="invoice" id={id} status="draft"/><InvoiceForm key={id} type={detail.data.invoice.type} initial={detail.data} /></>;
   }
   return <InvoiceView key={id} data={detail.data} />;
 }
@@ -73,8 +82,12 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
   const [cancelling, setCancelling] = useState(false);
   const [cancelDate, setCancelDate] = useState(todayIso());
   const [reason, setReason] = useState('');
+  const formatSettings = useCQuery<{ invoicePrintTemplate: InvoicePrintTemplate }>(['document-format'], '/api/settings/document-format');
+  const [selectedTemplate, setSelectedTemplate] = useState<InvoicePrintTemplate | null>(null);
+  const [printPreview, setPrintPreview] = useState(false);
+  const printTemplate = selectedTemplate ?? formatSettings.data?.invoicePrintTemplate ?? 'detailed';
   // İptal reddedilirse (ör. tahsil edilmiş fatura) gerekçe ve yönlendirme pencerede kalır: kullanıcı önce tahsilatı iptal eder
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<unknown>(null);
   const creditLimit = (location.state as { creditLimit?: { limit: string; balance: string } } | null)?.creditLimit;
 
   const cancel = useCMutation(
@@ -83,54 +96,66 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
   );
 
   const listPath = meta.side === 'sales' ? '/invoices/sales' : '/invoices/purchases';
-  const canReturn = inv.status === 'posted' && !meta.isReturn && inv.type !== 'expense' && can('invoices.manage');
-  const canCancel = inv.status === 'posted' && can('invoices.post');
+  // Kayıtlı belgede işlem görünür kalır; yetki yoksa pasif düğmenin altında nedeni ve çözüm yolu yazılır (öneri 28)
+  const returnable = inv.status === 'posted' && !meta.isReturn && inv.type !== 'expense';
+  const canReturn = returnable && can('invoices.manage');
+  const cancellable = inv.status === 'posted';
+  const canCancel = cancellable && can('invoices.post');
+  const blockers = [
+    returnable && !canReturn && { id: 'invoice-return-blocked', ...permissionBlocker('İade faturası kesmek', can) },
+    cancellable && !canCancel && { id: 'invoice-cancel-blocked', ...permissionBlocker('Faturayı iptal etmek', can) },
+  ].filter((b) => !!b);
   const returnType: InvoiceType = inv.type === 'sales' ? 'sales_return' : 'purchase_return';
   const showQtyReturned = lines.some((l) => l.returnedQty && dec(l.returnedQty).gt(0));
 
   return (
     <>
-      <Link to={listPath} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text print:hidden">
-        <ArrowLeft className="size-4" aria-hidden />
-        {t(`invoices.${meta.side}.title`)}
-      </Link>
-
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-heading">{inv.invoiceNo}</h1>
+      <div className="print:hidden">
+      <PageHeader
+        title={inv.invoiceNo ?? t('invoices.form.editTitle', { type: t(`invoices.types.${inv.type}`) })}
+        helpKey="invoice-editor"
+        back={{ to: listPath, label: t(`invoices.${meta.side}.title`) }}
+        recent={{ kind: 'Fatura', title: `${inv.invoiceNo ?? ''} ${inv.partyName}`.trim() }}
+        meta={
+          <>
             <InvoiceTypeBadge type={inv.type} />
             <InvoiceStatusBadge status={inv.status} />
-          </div>
-          <p className="mt-1 text-sm text-muted">
-            <Link to={`/parties/${inv.partyId}`} className="link">
-              {inv.partyName}
-            </Link>{' '}
-            · {formatDateTR(inv.invoiceDate)}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          </>
+        }
+        eyebrow={
+          <span className="normal-case tracking-normal">
+            <Link to={`/parties/${inv.partyId}`} className="link">{inv.partyName}</Link> · {formatDateTR(inv.invoiceDate)}
+          </span>
+        }
+        actions={
+          <>
+          <Field label="Çıktı şablonu" className="w-36">{id => <Select id={id} value={printTemplate} onChange={event => setSelectedTemplate(event.target.value as InvoicePrintTemplate)}>{INVOICE_PRINT_TEMPLATES.map(value => <option key={value} value={value}>{INVOICE_PRINT_TEMPLATE_LABELS[value]}</option>)}</Select>}</Field>
           <Link className="link inline-flex items-center gap-2 text-sm" to={`/workspace/documents?kind=invoice&id=${inv.id}`}><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>
+          <Button onClick={() => setPrintPreview(value => !value)} aria-pressed={printPreview}><Eye className="size-4" aria-hidden />{printPreview ? 'Önizlemeyi kapat' : 'Çıktıyı önizle'}</Button>
           <Button onClick={() => window.print()}>
             <Printer className="size-4" aria-hidden />
             {t('invoices.view.print')}
           </Button>
-          {canReturn && (
-            <Button onClick={() => navigate(`/invoices/new?type=${returnType}&returnOf=${inv.id}`)}>
+          <InvoiceShareButton data={data} />
+          {returnable && (
+            <Button disabled={!canReturn} aria-describedby={canReturn ? undefined : 'invoice-return-blocked'} onClick={() => navigate(`/invoices/new?type=${returnType}&returnOf=${inv.id}`)}>
               <Undo2 className="size-4" aria-hidden />
               {t('invoices.view.createReturn')}
             </Button>
           )}
-          {canCancel && (
-            <Button variant="danger" onClick={() => setCancelling(true)}>
+          {cancellable && (
+            <Button variant="danger" disabled={!canCancel} aria-describedby={canCancel ? undefined : 'invoice-cancel-blocked'} onClick={() => setCancelling(true)}>
               <Ban className="size-4" aria-hidden />
               {t('invoices.view.cancel')}
             </Button>
           )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="flex flex-col gap-4">
+        {blockers.length > 0 && <div className="flex flex-col gap-1">{blockers.map(({ id, ...b }) => <BlockedHint key={id} id={id} blocker={b} />)}</div>}
+        <DocumentApprovalPanel type="invoice" id={inv.id} status={inv.status}/>
         {inv.status === 'cancelled' && (
           <Callout tone="danger" title={t('invoices.view.cancelledTitle', { date: inv.cancelledAt ? fmtDate(inv.cancelledAt) : '' })}>
             {inv.cancelReason}
@@ -254,6 +279,17 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                     {showQtyReturned && l.returnedQty && dec(l.returnedQty).gt(0) && (
                       <span className="block text-xs text-muted">{t('invoices.view.returned', { qty: qtyText(l.returnedQty) })}</span>
                     )}
+                    {l.costCenterCode && <span className="block text-xs text-muted">Maliyet merkezi: {l.costCenterCode}</span>}
+                    {/* Tutar açıklaması (öneri 29): kaydedilen tutarla aynı hesaplama yolundan */}
+                    <details className="mt-1 text-xs print:hidden">
+                      <summary className="cursor-pointer text-muted">Tutar nasıl hesaplandı</summary>
+                      <ol className="mt-1 space-y-0.5">
+                        {explainLine({ quantity: l.quantity, unitPrice: l.unitPrice, discountPct: l.discountPct, vatRate: l.vatRate }, inv.vatIncluded).map((s) => (
+                          <li key={s.label}>{s.label}: <span className="num">{s.formula.replace(/(\d)\.(\d)/g, '$1,$2')} = {money(s.value)}</span></li>
+                        ))}
+                        {l.taxCalculation && <li className="text-muted">İşlem vergisi kuralı uygulandı; tevkifat ve damga ayrıntısı toplamlar bölümündedir.</li>}
+                      </ol>
+                    </details>
                   </Td>
                   <Td num>
                     {qtyText(l.quantity)} {l.unit ? unitLabel(l.unit) : ''}
@@ -291,9 +327,13 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                 <dd className="num">{moneyIn(inv.grossTotalBase, base)}</dd>
               </div>
             )}
+            {foreign && inv.fxSnapshot && <div className="mt-2 text-xs text-muted"><dt>Kullanılan kur kaydı</dt><dd className="mt-1">{inv.fxSnapshot.rateDate} · {inv.fxSnapshot.provider ?? 'Defter para birimi'}{inv.fxSnapshot.manualReason && ` · ${inv.fxSnapshot.manualReason}`}{inv.fxSnapshot.originalInvoiceId && ' · özgün faturadan'}</dd></div>}
+            {inv.taxTotalsSnapshot && <><div className="flex justify-between py-1"><dt>KDV tevkifatı</dt><dd className="num">{moneyIn(inv.taxTotalsSnapshot.vatWithheld, inv.currencyCode)}</dd></div><div className="flex justify-between py-1"><dt>Stopaj</dt><dd className="num">{moneyIn(inv.taxTotalsSnapshot.incomeWithheld, inv.currencyCode)}</dd></div><div className="flex justify-between py-1"><dt>Damga / pul</dt><dd className="num">{moneyIn(inv.taxTotalsSnapshot.stamp, inv.currencyCode)}</dd></div><div className="flex justify-between border-t border-border pt-2"><dt>Satıcıya ödenecek</dt><dd className="num">{moneyIn(inv.taxTotalsSnapshot.payableToSeller, inv.currencyCode)}</dd></div></>}
           </dl>
         </div>
 
+        <DocumentChain kind="invoice" id={inv.id} />
+        <InvoiceDelivery data={data} />
         <p className="text-xs text-muted">{t('invoices.view.internalNote')}</p>
         <PrintSignatures labels={[t('printDoc.prepared'), t('printDoc.approved')]} />
       </div>
@@ -321,7 +361,7 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
                       toast.success(t('invoices.view.cancelledMsg'));
                       setCancelling(false);
                     },
-                    onError: (e) => setCancelError(errorMessage(e)),
+                    onError: (e) => setCancelError(e),
                   },
                 )
               }
@@ -332,15 +372,14 @@ function InvoiceView({ data }: { data: InvoiceDetail }) {
         }
       >
         <div className="flex flex-col gap-4">
-          {cancelError && (
-            <Callout tone="danger" title={t('invoices.view.cancelBlocked')}>
-              {cancelError}
-            </Callout>
-          )}
+          {cancelError != null && <ErrorCallout error={cancelError} title={t('invoices.view.cancelBlocked')} discardDraft onNavigate={() => { setCancelling(false); setCancelError(null); }} />}
           <Field label={t('invoices.view.cancelDate')}>{(fid) => <Input id={fid} type="date" value={cancelDate} min={inv.invoiceDate} onChange={(e) => setCancelDate(e.target.value)} />}</Field>
           <Field label={t('invoices.view.cancelReason')} required>{(fid) => <Input id={fid} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />}</Field>
         </div>
       </Modal>
+      </div>
+      {printPreview && <div className="mb-4 mt-6 border-t border-border pt-4 text-sm text-muted print:hidden">Çıktı önizlemesi · {INVOICE_PRINT_TEMPLATE_LABELS[printTemplate]} şablon. Yazdırma penceresinden PDF olarak kaydedebilirsiniz.</div>}
+      <InvoicePrintDocument data={data} template={printTemplate} preview={printPreview} />
     </>
   );
 }

@@ -63,7 +63,7 @@ describe('checkModuleToggle', () => {
 
   it('yaprak modüller (fatura, kasa/banka) serbestçe kapanıp açılır', () => {
     expect(check('invoices.orders', false)).toEqual({ ok: true });
-    expect(check('core.invoices', false, off('invoices.orders', 'sales.pricelists', 'inventory.imports'))).toEqual({ ok: true });
+    expect(check('core.invoices', false, off('invoices.orders', 'sales.pricelists', 'inventory.imports', 'sales.logistics', 'core.procurement', 'sales.pos'))).toEqual({ ok: true });
     expect(check('treasury.cheques', false)).toEqual({ ok: true });
     expect(check('treasury.guarantees', false)).toEqual({ ok: true });
     expect(check('treasury.expenses', false)).toEqual({ ok: true });
@@ -72,12 +72,12 @@ describe('checkModuleToggle', () => {
   });
 
   it('bağımlısı açık modül kapatılamaz ve hangi modüllerin engellediği söylenir', () => {
-    expect(check('core.inventory', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports'] });
+    expect(check('core.inventory', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports', 'core.procurement'] });
     const parties = check('core.parties', false);
     expect(parties).toMatchObject({ ok: false, reason: 'REQUIRED_BY' });
-    expect(parties.ok === false && parties.modules.sort()).toEqual(['core.invoices', 'core.treasury', 'hr.employee_ledger', 'treasury.expenses']);
+    expect(parties.ok === false && parties.modules.sort()).toEqual(['core.invoices', 'core.procurement', 'core.treasury', 'hr.employee_ledger', 'treasury.expenses']);
     // Bağımlılar önce kapatılırsa sıra serbest
-    expect(check('core.inventory', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports'))).toEqual({ ok: true });
+    expect(check('core.inventory', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports', 'core.procurement'))).toEqual({ ok: true });
     expect(check('core.ledger', false, off('core.invoices', 'invoices.orders', 'sales.pricelists', 'inventory.serials', 'inventory.imports', 'treasury.expenses', 'hr.employee_ledger', 'core.treasury', 'core.parties', 'core.inventory', 'hr.payroll', 'reports.executive', 'reports.consolidation'))).toEqual({ ok: true });
   });
 
@@ -95,13 +95,13 @@ describe('checkModuleToggle', () => {
 
   it('kasa/banka, çek/senet ve teminat mektubu modülleri açıkken kapatılamaz; bunlar kapalıyken serbest', () => {
     const blocked = check('core.treasury', false);
-    expect(blocked.ok === false && blocked.modules.sort()).toEqual(['hr.employee_ledger', 'treasury.cheques', 'treasury.expenses', 'treasury.guarantees']);
-    expect(check('core.treasury', false, off('treasury.cheques', 'treasury.guarantees', 'treasury.expenses', 'hr.employee_ledger'))).toEqual({ ok: true });
+    expect(blocked.ok === false && blocked.modules.sort()).toEqual(['hr.employee_ledger', 'sales.pos', 'treasury.cheques', 'treasury.expenses', 'treasury.guarantees']);
+    expect(check('core.treasury', false, off('treasury.cheques', 'treasury.guarantees', 'treasury.expenses', 'hr.employee_ledger', 'sales.pos'))).toEqual({ ok: true });
     expect(check('treasury.cheques', true, off('core.treasury', 'treasury.cheques'))).toMatchObject({ ok: false });
   });
 
   it('satış teklif/sipariş modülü fatura ve stoğa bağlıdır: ikisi açıkken fatura kapatılamaz, kapalıyken sipariş açılamaz', () => {
-    expect(check('core.invoices', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['invoices.orders', 'sales.pricelists', 'inventory.imports'] });
+    expect(check('core.invoices', false)).toEqual({ ok: false, reason: 'REQUIRED_BY', modules: ['sales.logistics', 'invoices.orders', 'sales.pricelists', 'inventory.imports', 'core.procurement', 'sales.pos'] });
     expect(check('invoices.orders', true, off('invoices.orders', 'core.invoices'))).toMatchObject({ ok: false, reason: 'MISSING_REQUIREMENT', modules: ['core.invoices'] });
     expect(check('invoices.orders', true, off('invoices.orders'))).toEqual({ ok: true });
   });

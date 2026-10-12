@@ -3,6 +3,7 @@ import { dec } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { all, one, json, newId, fail, type LeatherCtx, type Row } from '../leather/common';
 import { pickLotPlacements } from './stock-lots';
+import { FEFO_ORDER, NOT_EXPIRED, localToday } from '../inventory/expiry';
 
 export interface LotAllocation {
   lotId: string;
@@ -22,7 +23,7 @@ export async function issueLots(
     if (!explicit) {
       const lots = await all(
         tx,
-        sql`select * from manufacturing_records where kind='lot' and item_id=${line.itemId}::uuid and warehouse_id=${warehouseId}::uuid and status='available' order by created_at,id for update`,
+        sql`select * from manufacturing_records where kind='lot' and item_id=${line.itemId}::uuid and warehouse_id=${warehouseId}::uuid and status='available' and ${NOT_EXPIRED} order by ${FEFO_ORDER} for update`,
       );
       if (!lots.length) continue;
       let need = dec(line.quantity);
@@ -48,7 +49,7 @@ export async function issueLots(
           sql`select coalesce(sum(coalesce(config->>'remainingQty',config->>'quantity')::numeric),0)::text as qty from manufacturing_records where kind='lot' and item_id=${line.itemId}::uuid and warehouse_id=${warehouseId}::uuid`,
         );
         if (need.gt(dec(balance.qty).minus(tracked.qty)))
-          throw fail('İzlenen serbest partiler ve mevcut partisiz stok sarfı karşılamıyor');
+          throw fail('İzlenen serbest partiler ve mevcut partisiz stok sarfı karşılamıyor (süresi geçmiş partiler kullanılmaz)');
       }
       line.lotAllocations = allocations;
     }
@@ -71,6 +72,8 @@ export async function issueLots(
         (lot.config.releasedQty !== undefined && dec(lot.config.releasedQty).lt(a.quantity))
       )
         throw fail('Serbest parti, malzeme, depo ve miktar eşleşmeli');
+      if (lot.config.expiryDate && lot.config.expiryDate < (await localToday(tx)))
+        throw fail(`Son kullanma tarihi geçmiş parti sarf edilemez (${lot.code})`);
       await tx.execute(
         sql`update manufacturing_records set config=config||${json({ remainingQty: left.minus(a.quantity).toFixed(4), ...(lot.config.releasedQty !== undefined ? { releasedQty: dec(lot.config.releasedQty).minus(a.quantity).toFixed(4) } : {}) })},updated_at=now() where id=${lot.id}`,
       );

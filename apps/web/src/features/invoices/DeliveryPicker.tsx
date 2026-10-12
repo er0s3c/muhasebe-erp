@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dec } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
-import { Callout, PageLoading } from '../../components/ui/Feedback';
+import { Callout, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { formatDateTR } from '../../lib/format';
@@ -26,7 +26,7 @@ export function DeliveryPicker({ open, onOpenChange, type, partyId, taken, onAdd
   const { t } = useTranslation();
   const unitLabel = useUnitLabel();
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const { data, isPending } = useCQuery<{ lines: OpenDeliveryLine[] }>(
+  const { data, isPending, error: DeliveryPickerQueryError, refetch: DeliveryPickerQueryRetry, isFetching: DeliveryPickerQueryFetching } = useCQuery<{ lines: OpenDeliveryLine[] }>(
     ['delivery-open-lines', type, partyId],
     `/api/delivery-notes/open-lines?type=${type}&partyId=${partyId}`,
     { enabled: open && !!partyId },
@@ -49,6 +49,7 @@ export function DeliveryPicker({ open, onOpenChange, type, partyId, taken, onAdd
     onOpenChange(false);
   };
 
+  
   return (
     <Sheet
       wide
@@ -74,7 +75,7 @@ export function DeliveryPicker({ open, onOpenChange, type, partyId, taken, onAdd
     >
       {!partyId ? (
         <Callout>{t('deliveries.picker.pickPartyFirst')}</Callout>
-      ) : isPending ? (
+      ) : DeliveryPickerQueryError && !data ? <ErrorState error={DeliveryPickerQueryError} onRetry={() => void DeliveryPickerQueryRetry()} retrying={DeliveryPickerQueryFetching} /> : isPending ? (
         <PageLoading />
       ) : rows.length === 0 ? (
         <Callout>{t('deliveries.picker.empty')}</Callout>

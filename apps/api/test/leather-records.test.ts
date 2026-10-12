@@ -54,7 +54,7 @@ describe('leather shared record tools', () => {
     await c.put(`/api/company/members/${worker.userId}/module-access`, { levels: { 'leather.catalog': 'none' } });
     expect((await worker.client.get('/api/workspace/documents')).json().items).toHaveLength(0);
     expect((await worker.client.get('/api/workspace/tasks')).json().items).toHaveLength(0);
-    const other = await createCompany(app, owner.token, { sector: 'LEATHER_FASHION', name: 'İkinci atölye' });
+    const other = await createCompany(app, owner.token, { sector: 'LEATHER_FASHION', jurisdiction: 'KKTC', name: 'İkinci atölye' });
     expect((await client(app, owner.token, other.id).get(`/api/workspace/record?kind=leather_model&id=${model.id}`)).statusCode).toBe(404);
   });
 

@@ -43,6 +43,7 @@ describe('muhasebe doğruluğu denetimi (ACC)', async () => {
     expect(blocked.statusCode).toBe(422);
     expect(blocked.json().error.code).toBe('INVOICE_HAS_PAYMENTS');
     expect(blocked.json().error.message).toContain(rec.transaction.txnNo);
+    expect(blocked.json().error.details.settlements).toEqual([{ kind: 'treasury', id: rec.transaction.id, ref: rec.transaction.txnNo }]);
     // Genel ters kayıt yolu da kapalı (fatura yevmiyesi elle ters çevrilemez; kaynaklı fiş ya da kapatılmış kalem)
     expect((await c.post(`/api/journal-entries/${inv.journalEntryId}/reverse`, { reason: 'x' })).statusCode).toBe(422);
     // Veritabanı kuralı: kapatılmış kalemi olan fiş ters çevrilmiş olarak işaretlenemez

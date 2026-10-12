@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import { api } from './api';
 import { useCompany } from './session';
+import { useActiveBranch } from './branch';
+import { areaOfModule, resourceOperationAllowed, type Permission, type ResourceOperation } from '@erp/shared';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -9,9 +12,19 @@ export function useCompanyApi() {
   const company = useCompany();
   return {
     company,
-    call: <T>(path: string, opts: { method?: Method; body?: unknown } = {}) =>
+    call: <T>(path: string, opts: { method?: Method; body?: unknown; branchId?: string; idempotencyKey?: string } = {}) =>
       api<T>(path, { ...opts, companyId: company.id }),
   };
+}
+
+/**
+ * Kayıt formu başına işlem anahtarı (öneri 121). Form açıkken aynı anahtar kullanılır: cevap kaybolup kullanıcı tekrar
+ * kaydederse sunucu ilk sonucu döndürür, ikinci kayıt oluşmaz. Başarılı kayıttan sonra `renew()` yeni komut için yeni anahtar üretir.
+ */
+export function useIdempotencyKey() {
+  const [key, setKey] = useState(() => crypto.randomUUID());
+  const renew = useCallback(() => setKey(crypto.randomUUID()), []);
+  return { key, renew };
 }
 
 export function useCQuery<T>(
@@ -25,12 +38,14 @@ export function useCQuery<T>(
     /** Pencere odağına dönüldüğünde yenile (varsayılan kapalı). */
     refetchOnWindowFocus?: boolean;
     staleTime?: number;
+    branchId?: string;
   } = {},
 ) {
   const { company, call } = useCompanyApi();
+  const branchId = useActiveBranch(company.id);
   return useQuery<T>({
-    queryKey: [company.id, ...key],
-    queryFn: () => call<T>(path as string),
+    queryKey: [company.id, ...key, 'branch', opts.branchId ?? branchId],
+    queryFn: () => call<T>(path as string, { branchId: opts.branchId ?? branchId }),
     enabled: path !== null && (opts.enabled ?? true),
     ...(opts.allowForbidden ? { meta: { allowForbidden: true } } : {}),
     ...(opts.refetchInterval ? { refetchInterval: opts.refetchInterval, refetchIntervalInBackground: false } : {}),
@@ -97,4 +112,14 @@ export function useModuleEnabled(key: string): boolean {
 export function useCan() {
   const { data } = useNavigation();
   return (permission: string) => data?.permissions.includes(permission) ?? false;
+}
+
+/** Kayıt işlemi ek kapıdır; çağıran bileşen gerçek API iznini de ayrıca denetler. */
+export function useCanOperation() {
+  const { data } = useNavigation();
+  return (module: string, operation: ResourceOperation) => {
+    if (!data) return false;
+    const area = areaOfModule(module);
+    return !area || resourceOperationAllowed(new Set(data.permissions as Permission[]), data.moduleAccess, area, operation);
+  };
 }

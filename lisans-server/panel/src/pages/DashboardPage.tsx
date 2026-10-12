@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@ui/Card';
-import { PageLoading } from '@ui/Feedback';
+import { ErrorState, PageLoading } from '@ui/Feedback';
 import { Stat } from '@ui/Stat';
-import { api, type Dashboard } from '../api';
+import { api, errorText, type Dashboard } from '../api';
 
 export function DashboardPage() {
-  const { data, isPending } = useQuery({ queryKey: ['dashboard'], queryFn: () => api<Dashboard>('/admin/api/dashboard') });
+  const { data, isPending, error, refetch, isFetching } = useQuery({ queryKey: ['dashboard'], queryFn: () => api<Dashboard>('/admin/api/dashboard') });
+  if (error) return <><PageHeader title="Özet" /><ErrorState description={errorText(error)} onRetry={() => void refetch()} retrying={isFetching} /></>;
   if (isPending || !data) return <PageLoading />;
   const { licenses, activations } = data;
   return (

@@ -4,6 +4,7 @@ import type { Tx } from '../../db/client';
 import type { StockCtx } from '../inventory/documents';
 import type { DraftRow } from '../inventory/planner';
 import { all, one, newId, json, fail } from '../leather/common';
+import { FEFO_ORDER, lotExpiryFor } from '../inventory/expiry';
 
 /** Physical quantity trace only; valuation stays in the shared SKU cost engine. */
 export async function syncStockLots(
@@ -50,8 +51,10 @@ export async function syncStockLots(
     status = 'available',
   ) => {
     const id = newId();
+    // Raf ömrü yalnız kabulde önerilir; devir/iade kaynak partiden devralır, kaynaksız iade tarihi bilinmez
+    const expiryDate = await lotExpiryFor(tx, itemId, code.startsWith('RECEIPT:') ? doc.id : null, parentLotId);
     await tx.execute(
-      sql`insert into manufacturing_records(id,company_id,created_by,kind,code,status,item_id,warehouse_id,source_document_id,config) values(${id},${ctx.companyId},${ctx.userId},'lot',${code},${status},${itemId},${warehouseId},${doc.id},${json({ code, itemId, warehouseId, sourceDocumentId: doc.id, quantity, remainingQty: quantity, parentLotId, serials: [], automatic: true, qualityReason: customerReturn ? 'Satış iadesi kalite bekliyor' : 'Mal kabul kalite bekliyor' })})`,
+      sql`insert into manufacturing_records(id,company_id,created_by,kind,code,status,item_id,warehouse_id,source_document_id,config) values(${id},${ctx.companyId},${ctx.userId},'lot',${code},${status},${itemId},${warehouseId},${doc.id},${json({ code, itemId, warehouseId, sourceDocumentId: doc.id, quantity, remainingQty: quantity, parentLotId, serials: [], automatic: true, expiryDate, qualityReason: customerReturn ? 'Satış iadesi kalite bekliyor' : 'Mal kabul kalite bekliyor' })})`,
     );
     return id;
   };
@@ -74,7 +77,7 @@ export async function syncStockLots(
       );
     const lots = await all(
       tx,
-      sql`select * from manufacturing_records where kind='lot' and item_id=${row.itemId}::uuid and warehouse_id=${row.warehouseId}::uuid ${sourceLots.length ? sql`and source_document_id=${doc.reversalOfId}::uuid and status in ('available','quarantine','leather_traced')` : sql`and status='available'`} order by created_at,id for update`,
+      sql`select * from manufacturing_records where kind='lot' and item_id=${row.itemId}::uuid and warehouse_id=${row.warehouseId}::uuid ${sourceLots.length ? sql`and source_document_id=${doc.reversalOfId}::uuid and status in ('available','quarantine','leather_traced')` : sql`and status='available'`} order by ${FEFO_ORDER} for update`,
     );
     let needed = row.qty.abs();
     for (const lot of lots) {
@@ -232,9 +235,10 @@ export async function completionLots(
 ) {
   for (const [index, output] of outputs.entries()) {
     const id = newId(),
-      code = 'PRODUCTION:' + stockDocumentId + ':' + index;
+      code = 'PRODUCTION:' + stockDocumentId + ':' + index,
+      expiryDate = await lotExpiryFor(tx, output.itemId, stockDocumentId, null);
     await tx.execute(
-      sql`insert into manufacturing_records(id,company_id,created_by,kind,code,status,order_id,item_id,warehouse_id,source_document_id,config) values(${id},${ctx.companyId},${ctx.userId},'lot',${code},'available',${orderId},${output.itemId},${warehouseId},${stockDocumentId},${json({ code, orderId, batchId: batchId ?? null, itemId: output.itemId, warehouseId, sourceDocumentId: stockDocumentId, quantity: output.quantity, remainingQty: output.quantity, serials: index === 0 ? serials : [] })})`,
+      sql`insert into manufacturing_records(id,company_id,created_by,kind,code,status,order_id,item_id,warehouse_id,source_document_id,config) values(${id},${ctx.companyId},${ctx.userId},'lot',${code},'available',${orderId},${output.itemId},${warehouseId},${stockDocumentId},${json({ code, orderId, batchId: batchId ?? null, itemId: output.itemId, warehouseId, sourceDocumentId: stockDocumentId, quantity: output.quantity, remainingQty: output.quantity, serials: index === 0 ? serials : [], expiryDate })})`,
     );
   }
 }

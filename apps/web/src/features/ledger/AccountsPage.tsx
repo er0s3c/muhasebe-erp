@@ -1,3 +1,4 @@
+import { CostCentersSection } from './CostCentersSection';
 import { ListTree, Plus, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -5,7 +6,7 @@ import { currencySymbol } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { Sheet } from '../../components/ui/Sheet';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
@@ -31,7 +32,7 @@ export function AccountsPage() {
   const { t } = useTranslation();
   const toast = useToast();
   const canManage = useCan()('accounts.manage');
-  const { data, isPending } = useCQuery<{ accounts: Account[] }>(['accounts'], '/api/accounts');
+  const { data, isPending, error: AccountsPageQueryError, refetch: AccountsPageQueryRetry, isFetching: AccountsPageQueryFetching } = useCQuery<{ accounts: Account[] }>(['accounts'], '/api/accounts');
   const [query, setQuery] = useState('');
   const [onlyPostable, setOnlyPostable] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -76,6 +77,7 @@ export function AccountsPage() {
     );
   };
 
+  if (AccountsPageQueryError && !data) return <ErrorState error={AccountsPageQueryError} onRetry={() => void AccountsPageQueryRetry()} retrying={AccountsPageQueryFetching} />;
   return (
     <>
       <PageHeader
@@ -207,6 +209,7 @@ export function AccountsPage() {
           </Field>
         </form>
       </Sheet>
+      <CostCentersSection />
     </>
   );
 }

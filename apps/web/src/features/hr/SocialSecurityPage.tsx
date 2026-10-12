@@ -6,10 +6,10 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { ExportMenu } from '../../components/ui/ExportMenu';
-import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
+import { Callout, EmptyState, PageLoading, ErrorState } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
-import { SegmentedTabs } from '../../components/ui/Tabs';
+import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { errorMessage } from '../../lib/errors';
 import { money } from '../../lib/format';
@@ -32,7 +32,7 @@ export function SocialSecurityPage() {
         <Callout tone="warning">{t('social.notice')}</Callout>
       </div>
       <div className="mb-4">
-        <SegmentedTabs
+        <SegmentedTabs id="hr-socialsecuritypage-tabs" panelId={() => 'hr-socialsecuritypage-tabs-panel'}
           value={tab}
           onChange={setTab}
           items={[
@@ -41,7 +41,9 @@ export function SocialSecurityPage() {
           ]}
         />
       </div>
+      <TabPanel id="hr-socialsecuritypage-tabs-panel" labelledBy={`hr-socialsecuritypage-tabs-${tab}`}>
       {tab === 'declarations' ? <DeclarationsTab canManage={can('hr.payroll_manage')} /> : <SummaryTab />}
+      </TabPanel>
     </>
   );
 }
@@ -49,7 +51,7 @@ export function SocialSecurityPage() {
 function DeclarationsTab({ canManage }: { canManage: boolean }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isPending } = useCQuery<{ declarations: SocialDeclarationRow[] }>(['social', 'declarations'], '/api/social-security/declarations');
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<{ declarations: SocialDeclarationRow[] }>(['social', 'declarations'], '/api/social-security/declarations');
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(todayIso().slice(0, 7));
   const [error, setError] = useState<Error | null>(null);
@@ -65,7 +67,7 @@ function DeclarationsTab({ canManage }: { canManage: boolean }) {
   return (
     <>
       <div className="mb-3 flex justify-end">{addButton}</div>
-      {isPending ? (
+      {queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending ? (
         <PageLoading />
       ) : rows.length === 0 ? (
         <Card>
@@ -143,7 +145,7 @@ function SummaryTab() {
   const [from, setFrom] = useState(`${year}-01`);
   const [to, setTo] = useState(todayIso().slice(0, 7));
   const valid = isMonth(from) && isMonth(to) && from <= to;
-  const { data, isPending } = useCQuery<PremiumSummaryReport>(['social', 'premium', from, to], valid ? `/api/social-security/reports/premium?from=${from}&to=${to}` : null);
+  const { data, isPending , error: queryError, refetch: retryQuery, isFetching: retryingQuery } = useCQuery<PremiumSummaryReport>(['social', 'premium', from, to], valid ? `/api/social-security/reports/premium?from=${from}&to=${to}` : null);
   const totalRow = (cols: number, label: string, tot: PremiumSummaryReport['totals']) => (
     <tfoot>
       <tr className="[&>td]:border-t [&>td]:border-border [&>td]:bg-surface-2 [&>td]:px-4 [&>td]:py-2.5">
@@ -185,7 +187,7 @@ function SummaryTab() {
       {data?.unverified && <Callout tone="warning">{t('social.summary.unverified')}</Callout>}
       {!valid ? (
         <Callout tone="warning">{t('social.summary.invalid')}</Callout>
-      ) : isPending || !data ? (
+      ) : queryError ? (<ErrorState description={errorMessage(queryError)} onRetry={() => void retryQuery()} retrying={retryingQuery} />) : isPending || !data ? (
         <PageLoading />
       ) : data.months.length === 0 ? (
         <Card>
