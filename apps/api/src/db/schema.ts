@@ -1146,6 +1146,8 @@ export const employees = pgTable(
     projectId: uuid(),
     /** Personel cari/avans (X5): isteğe bağlı cari bağlantısı (kind = 'employee'); kart başına tek cari, bağlandıktan sonra değişmez. */
     partyId: uuid(),
+    /** Çalışan portalı (öneri 93): personelin kendi kayıtlarını gördüğü kullanıcı hesabı; şirkette bir kullanıcı tek personele bağlanır. */
+    userId: uuid().references(() => users.id),
     note: text(),
     createdBy: uuid().references(() => users.id),
     createdAt: createdAt(),
@@ -1154,6 +1156,7 @@ export const employees = pgTable(
   (t) => [
     unique('employees_company_code_uq').on(t.companyId, t.code),
     unique('employees_id_company_uq').on(t.id, t.companyId),
+    uniqueIndex('employees_user_uq').on(t.companyId, t.userId).where(sql`${t.userId} is not null`),
     foreignKey({name:'employees_branch_fk',columns:[t.branchId,t.companyId],foreignColumns:[companyBranches.id,companyBranches.companyId]}),
     unique('employees_id_hash_uq').on(t.companyId, t.idHash),
     foreignKey({ name: 'employees_project_fk', columns: [t.projectId, t.companyId], foreignColumns: [projects.id, projects.companyId] }),
@@ -6592,5 +6595,80 @@ export const salesRestructures = pgTable(
     foreignKey({ name: 'sales_restructures_contract_fk', columns: [t.contractId, t.companyId], foreignColumns: [salesContracts.id, salesContracts.companyId] }),
     foreignKey({ name: 'sales_restructures_entry_fk', columns: [t.entryId, t.companyId], foreignColumns: [journalEntries.id, journalEntries.companyId] }),
     index('sales_restructures_contract_idx').on(t.companyId, t.contractId),
+  ],
+);
+
+/**
+ * Puantaj düzeltme talebi (öneri 94): çalışan (portaldan) ya da İK bir günün kaydının düzeltilmesini ister; onayda puantaja
+ * yazılır. Kapalı ayda onay verilemez (ay kuralı korunur). Karar verilmiş talep değişmez.
+ */
+export const attendanceCorrections = pgTable(
+  'attendance_corrections',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    workDate: date({ mode: 'string' }).notNull(),
+    dayType: text().notNull(),
+    normalHours: numeric({ precision: 5, scale: 2 }).notNull().default('0'),
+    overtimeHours: numeric({ precision: 5, scale: 2 }).notNull().default('0'),
+    reason: text().notNull(),
+    status: text().$type<'pending' | 'approved' | 'rejected'>().notNull().default('pending'),
+    requestedBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    decidedBy: uuid().references(() => users.id),
+    decidedAt: timestamp({ withTimezone: true }),
+    decisionNote: text(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({ name: 'attendance_corrections_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    index('attendance_corrections_status_idx').on(t.companyId, t.status, t.workDate),
+    check('attendance_corrections_status_ck', sql`${t.status} in ('pending','approved','rejected')`),
+    check('attendance_corrections_decided_ck', sql`(${t.status} = 'pending') = (${t.decidedAt} is null)`),
+  ],
+);
+
+/** İşe giriş/ayrılış kontrol listesi şablonu (öneri 97): şirket başına tür başına bir şablon. */
+export const employeeChecklistTemplates = pgTable(
+  'employee_checklist_templates',
+  {
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    kind: text().$type<'onboarding' | 'offboarding'>().notNull(),
+    items: jsonb().$type<{ key: string; label: string }[]>().notNull(),
+    updatedBy: uuid().references(() => users.id),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.companyId, t.kind] }), check('employee_checklist_templates_kind_ck', sql`${t.kind} in ('onboarding','offboarding')`)],
+);
+
+/** Personel başına başlatılmış kontrol listesi: şablondan kopyalanır, maddeler kim/ne zaman işaretlediğiyle tutulur. */
+export const employeeChecklists = pgTable(
+  'employee_checklists',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    employeeId: uuid().notNull(),
+    kind: text().$type<'onboarding' | 'offboarding'>().notNull(),
+    items: jsonb().$type<{ key: string; label: string; done: boolean; doneBy: string | null; doneAt: string | null; note: string | null }[]>().notNull(),
+    status: text().$type<'open' | 'completed'>().notNull().default('open'),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    completedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({ name: 'employee_checklists_employee_fk', columns: [t.employeeId, t.companyId], foreignColumns: [employees.id, employees.companyId] }),
+    uniqueIndex('employee_checklists_open_uq').on(t.companyId, t.employeeId, t.kind).where(sql`${t.status} = 'open'`),
+    check('employee_checklists_kind_ck', sql`${t.kind} in ('onboarding','offboarding')`),
+    check('employee_checklists_status_ck', sql`(${t.status} = 'completed') = (${t.completedAt} is not null)`),
   ],
 );

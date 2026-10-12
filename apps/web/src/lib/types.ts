@@ -2014,6 +2014,8 @@ export interface FeeEstimate {
 export type EmployeeStatus = 'active' | 'left';
 
 export interface EmployeeRow {
+  /** Çalışan portalı kullanıcısı (öneri 93). */
+  userId?: string | null;
   id: string;
   code: string;
   fullName: string;

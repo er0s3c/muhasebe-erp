@@ -28,7 +28,7 @@ const GROUPS = [
 ] as const;
 
 const TARGETS: Record<string, string> = {
-  'sales-quotes': 'sales', 'sales-orders': 'sales', 'price-lists': 'sales',
+  'sales-quotes': 'sales', 'sales-orders': 'sales', 'sales-reps': 'sales', 'price-lists': 'sales',
   'party-prices': 'sales', campaigns: 'sales', 'sales-pos': 'sales', 'sales.logistics': 'sales',
   'purchase-requests': 'procurement', rfqs: 'procurement', 'purchase-orders': 'procurement',
   'order-matching': 'procurement', 'construction-replenishment': 'procurement',
@@ -57,7 +57,7 @@ export const NAV_MERGES: ReadonlyArray<{ key: string; label: string; path: strin
 ];
 const MERGE_OF = new Map(NAV_MERGES.flatMap(m => m.from.map(key => [key, m] as const)));
 const ORDER: Record<string, readonly string[]> = {
-  overview: ['/', '/workspace', '/workspace/documents', '/notifications'],
+  overview: ['/', '/workspace', '/me/employee', '/workspace/documents', '/notifications'],
   sales: ['/sales/quotes', '/sales/orders', '/sales/reps', '/price-lists', '/party-prices', '/sales/campaigns', '/pos', '/logistics'],
   procurement: ['/purchasing/requests', '/purchasing/rfqs', '/purchasing/orders', '/purchasing/matching', '/purchasing/replenishment'],
 };

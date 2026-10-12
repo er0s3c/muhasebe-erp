@@ -18,7 +18,7 @@ describe('permission-filtered navigation presentation', () => {
     expect(paths).toHaveLength(new Set(paths).size);
     expect(groups).toHaveLength(15);
     expect(JSON.stringify(source)).toBe(original);
-    expect(groups[0]?.items.map(item => item.key)).toEqual(['dashboard', 'workspace', 'documents', 'notifications']);
+    expect(groups[0]?.items.map(item => item.key)).toEqual(['dashboard', 'workspace', 'my-employee', 'documents', 'notifications']);
   });
 
   it('moves alternate procurement modules into one group without inventing permissions', () => {

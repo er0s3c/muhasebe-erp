@@ -87,3 +87,22 @@ export const updateInventorySchema = z
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'En az bir alan verilmeli');
 export const verifyInventorySchema = z.object({ note: optText(500) });
+
+// --- Çalışan portalı ve kontrol listeleri (F10: öneri 93, 97) ----------------------------------------------
+
+export const employeeUserLinkSchema = z.object({ userId: z.string().uuid().nullable() });
+
+export const EMPLOYEE_CHECKLIST_KINDS = ['onboarding', 'offboarding'] as const;
+export type EmployeeChecklistKind = (typeof EMPLOYEE_CHECKLIST_KINDS)[number];
+
+export const checklistTemplateSchema = z.object({
+  items: z
+    .array(z.object({ label: z.string().trim().min(2).max(200) }))
+    .min(1, 'En az bir madde gerekli')
+    .max(100),
+});
+export const checklistItemSchema = z.object({
+  key: z.string().trim().min(1).max(40),
+  done: z.boolean(),
+  note: z.string().trim().max(300).optional(),
+});

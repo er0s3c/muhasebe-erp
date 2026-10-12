@@ -55,6 +55,7 @@ export function toView(r: Row, projectCode?: string | null) {
     projectCode: projectCode ?? null,
     /** Personel carisi (Faz X5; yalnızca bağlantı, hassas alan değildir). */
     partyId: r.partyId,
+    userId: r.userId,
     note: r.note,
     createdAt: r.createdAt,
   };

@@ -988,6 +988,13 @@
       "when": 1791756619573,
       "tag": "0140_sales_restructures",
       "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1791759036093,
+      "tag": "0141_employee_portal",
+      "breakpoints": true
     }
   ]
 }

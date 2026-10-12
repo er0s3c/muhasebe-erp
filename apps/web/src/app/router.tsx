@@ -98,6 +98,7 @@ const routes: RouteObject[] = [
                 children: [
                   { index: true, ...page(() => import('../features/dashboard/DashboardPage'), 'DashboardPage', null) },
                   { path: 'workspace', ...page(() => import('../features/workspace/WorkPage'), 'WorkPage', null) },
+                  { path: 'me/employee', ...page(() => import('../features/hr/EmployeePortalPage'), 'EmployeePortalPage', null) },
                   { path: 'workspace/offline', ...page(() => import('../features/offline/OfflineSetupPage'), 'OfflineSetupPage', 'workspace.use') },
                   { element: <RequireModule module="core.integrations" />, children: [{ path: 'settings/integrations', ...hub('IntegrationsHub', 'core.integrations.read') }] },
                   moved('integrations', '/settings/integrations?tab=channels'),

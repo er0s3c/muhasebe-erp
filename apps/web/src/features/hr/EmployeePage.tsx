@@ -1,3 +1,4 @@
+import { EmployeeChecklists, EmployeeUserLink } from './StaffPanels';
 import { ArrowLeft, Eye, EyeOff, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -211,6 +212,8 @@ export function EmployeePage() {
           <Field label={t('hr.form.leaveDate')} required>{(fid) => <Input id={fid} type="date" value={leaveDate} onChange={(ev) => setLeaveDate(ev.target.value)} />}</Field>
         </div>
       </Modal>
+      <EmployeeUserLink employeeId={e.id} userId={e.userId ?? null} />
+      <EmployeeChecklists employeeId={e.id} />
     </div>
   );
 }

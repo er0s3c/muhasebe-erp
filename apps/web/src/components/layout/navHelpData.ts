@@ -156,6 +156,11 @@ export const NAV_ITEM_HELP: Record<string, NavHelpEntry> = {
     description: 'Müşteri tarafından kabul edilen ve depo hazırlığı / tedarik sürecine başlanan kesinleşmiş sipariş kayıtlarıdır.',
     example: 'Örnek: Teklifi onaylanan müşterinin siparişi işlenir; depodaki ilgili mallar rezerve edilerek başka müşteriye satılması önlenir.',
   },
+  'my-employee': {
+    title: 'Personel Portalım',
+    description: 'Hesabınıza bağlı personel kaydının bordro pusulaları, son iki ayın puantajı ve puantaj düzeltme talepleri. Yalnız kendi kayıtlarınız görünür.',
+    example: 'Örnek: Geçen salı mesaiye kaldığınız saatler puantajda yoksa tarihi ve saati seçip gerekçeyle düzeltme talebi açarsınız; İK onaylayınca puantaja işlenir.',
+  },
   'sales-reps': {
     title: 'Satış Sorumluları',
     description: 'Sorumlu başına teklif kazanma oranı, onaylı sipariş, faturalı net satış, katkı ve aylık hedef gerçekleşmesi; teklif/sipariş için asgari katkı ve kredi limiti politikası.',

@@ -329,6 +329,7 @@ export const NAV_ITEMS: readonly NavItemDef[] = [
   { key: 'site-operations', labelKey: 'nav.siteOperations', path: '/workspace/operations?kind=site_report', icon: 'hard-hat', group: 'construction', module: 'construction.projects', permission: 'projects.read' },
   { key: 'collection-work', labelKey: 'nav.collectionWork', path: '/workspace/operations?kind=collection', icon: 'wallet', group: 'parties', module: 'core.parties', permission: 'parties.read' },
   { key: 'workspace', labelKey: 'nav.workspace', path: '/workspace', icon: 'calendar-check', group: 'overview', module: 'core.dashboard' },
+  { key: 'my-employee', labelKey: 'nav.myEmployee', path: '/me/employee', icon: 'users', group: 'overview', module: 'core.dashboard' },
   { key: 'fixed-assets', labelKey: 'nav.fixedAssets', path: '/accounting/fixed-assets', icon: 'package', group: 'accounting', module: 'core.ledger', permission: 'ledger.read' },
   { key: 'company-budgets', labelKey: 'nav.companyBudgets', path: '/accounting/budgets', icon: 'bar-chart', group: 'accounting', module: 'core.ledger', permission: 'ledger.read' },
   { key: 'documents', labelKey: 'nav.documents', path: '/workspace/documents', icon: 'files', group: 'overview', module: 'core.dashboard' },

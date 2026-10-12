@@ -1,3 +1,4 @@
+import { useAutoSyncOnReconnect } from '../../lib/online';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CloudOff, LockKeyhole, RefreshCw } from 'lucide-react';
@@ -197,6 +198,8 @@ export function OfflineFieldPage() {
       setBusy(false);
     }
   }
+  // Bağlantı gelince bekleyen saha kayıtları kendiliğinden eşitlenir (öneri 17)
+  const online = useAutoSyncOnReconnect(!!data && !busy && session.user?.id === data?.userId, data?.queue.length ?? 0, sync);
   return (
     <main className="mx-auto min-h-screen max-w-5xl space-y-5 bg-background p-4 md:p-8">
       <PageHeader
@@ -233,6 +236,9 @@ export function OfflineFieldPage() {
             24 saat geçerlidir. Oturum kapatma veya şirket değiştirme yerel paketi temizler.
             Kayıtlar eşitlenene kadar bekleyen işler listesinde kalır.
           </Callout>
+          <p className="text-sm">
+            <span className={online ? 'text-success' : 'text-warning'}>{online ? 'Çevrimiçi' : 'Çevrimdışı — bağlantı gelince bekleyen kayıtlar eşitlenir'}</span>
+          </p>
           <div className="flex flex-wrap gap-3">
             <Button onClick={() => void sync()} disabled={busy}>
               <RefreshCw className="size-4" />
