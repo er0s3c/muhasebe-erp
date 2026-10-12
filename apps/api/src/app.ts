@@ -40,6 +40,7 @@ import { projectRoutes } from './modules/projects/routes';
 import { procurementRoutes } from './modules/procurement/routes';
 import { realEstateRoutes } from './modules/realestate/routes';
 import { cashRoutes } from './modules/cash/routes';
+import { obligationRoutes } from './modules/cash/obligations';
 import { subcontractRoutes } from './modules/subcontracts/routes';
 import { hrRoutes } from './modules/hr/routes';
 import { hrPortalRoutes } from './modules/hr/portal-routes';
@@ -344,6 +345,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(procurementRoutes);
   await app.register(realEstateRoutes);
   await app.register(cashRoutes);
+  await app.register(obligationRoutes);
   await app.register(posRoutes);
   await app.register(leatherRoutes);
   await app.register(manufacturingRoutes);

@@ -75,6 +75,18 @@ export const assetDisposals=pgTable('asset_disposals',{
   cancelledAt:timestamp({withTimezone:true}),cancelReason:text(),createdBy:uuid().notNull().references(()=>users.id),createdAt:timestamp({withTimezone:true}).notNull().defaultNow(),
 },t=>[foreignKey({name:'asset_disposal_asset',columns:[t.assetId,t.companyId],foreignColumns:[fixedAssets.id,fixedAssets.companyId]}),foreignKey({name:'asset_disposal_journal',columns:[t.journalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),foreignKey({name:'asset_disposal_reversal',columns:[t.reversalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),uniqueIndex('asset_disposal_active').on(t.assetId).where(sql`${t.cancelledAt} is null`),check('asset_disposal_method',sql`${t.method} in ('sale','scrap')`),check('asset_disposal_proceeds',sql`${t.proceeds}::numeric>=0 and (${t.method}='sale' or ${t.proceeds}::numeric=0)`)]);
 
+/** Düzenli mali yükümlülük (öneri 57): tekrar kuralı, tahmini/sabit tutar ve sorumlu; dönemler ayrı tamamlanır. */
+export const financialObligations=pgTable('financial_obligations',{
+  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),title:text().notNull(),category:text().notNull(),config:jsonb().notNull(),
+  active:boolean().notNull().default(true),version:integer().notNull().default(1),createdBy:uuid().notNull().references(()=>users.id),
+  createdAt:timestamp({withTimezone:true}).notNull().defaultNow(),updatedAt:timestamp({withTimezone:true}).notNull().defaultNow(),
+},t=>[unique('financial_obligation_id_company').on(t.id,t.companyId),check('financial_obligation_category',sql`${t.category} in ('tax','social_security','payroll','rent','loan','insurance','utility','other')`)]);
+export const obligationCompletions=pgTable('obligation_completions',{
+  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),obligationId:uuid().notNull(),periodDate:date({mode:'string'}).notNull(),
+  status:text().$type<'done'|'skipped'>().notNull(),paidAmount:text(),note:text().notNull().default(''),
+  completedBy:uuid().notNull().references(()=>users.id),completedAt:timestamp({withTimezone:true}).notNull().defaultNow(),
+},t=>[foreignKey({name:'obligation_completion_obligation',columns:[t.obligationId,t.companyId],foreignColumns:[financialObligations.id,financialObligations.companyId]}),unique('obligation_completion_period').on(t.obligationId,t.periodDate),check('obligation_completion_status',sql`${t.status} in ('done','skipped')`),check('obligation_completion_amount',sql`${t.paidAmount} is null or ${t.paidAmount}::numeric>=0`)]);
+
 export const companyBudgets=pgTable('company_budgets',{
   id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),seriesId:uuid().notNull(),
   revision:integer().notNull(),version:integer().notNull().default(1),status:text().notNull().default('draft'),config:jsonb().notNull(),

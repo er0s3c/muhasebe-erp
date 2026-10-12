@@ -2901,6 +2901,7 @@
       "manualIn": "Diğer giriş",
       "payables": "Ödeme",
       "manualOut": "Diğer çıkış",
+      "obligations": "Yükümlülük",
       "net": "Net",
       "closing": "Kapanış bakiyesi"
     },
@@ -2920,7 +2921,8 @@
       "receivable": "Alacak",
       "payable": "Borç",
       "manualIn": "Elle giriş",
-      "manualOut": "Elle çıkış"
+      "manualOut": "Elle çıkış",
+      "obligation": "Düzenli yükümlülük"
     },
     "overdue": "gecikmiş",
     "add": "Kalem ekle",

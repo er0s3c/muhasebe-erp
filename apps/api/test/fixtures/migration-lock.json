@@ -578,5 +578,9 @@
   "0144_item_shelf_life": {
     "sha256": "cde68020c6e25ceea9982dbd756ba88521688eeaa85e9c5db009902bdf898357",
     "when": 1791783914168
+  },
+  "0145_financial_obligations": {
+    "sha256": "efa91629ffaf4c9e2454a53f6a5e41649938b485d67a2b54cc2a8aef83aa3a9a",
+    "when": 1791784291368
   }
 }

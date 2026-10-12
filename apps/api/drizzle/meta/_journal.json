@@ -1016,6 +1016,13 @@
       "when": 1791783914168,
       "tag": "0144_item_shelf_life",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1791784291368,
+      "tag": "0145_financial_obligations",
+      "breakpoints": true
     }
   ]
 }

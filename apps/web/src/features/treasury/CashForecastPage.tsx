@@ -27,6 +27,7 @@ interface Bucket {
   manualIn: string;
   payables: string;
   manualOut: string;
+  obligations?: string;
   inflow: string;
   outflow: string;
   net: string;
@@ -219,6 +220,7 @@ export function CashForecastPage() {
               <Th num>{t('cashForecast.cols.manualIn')}</Th>
               <Th num>{t('cashForecast.cols.payables')}</Th>
               <Th num>{t('cashForecast.cols.manualOut')}</Th>
+              <Th num>{t('cashForecast.cols.obligations')}</Th>
               <Th num>{t('cashForecast.cols.net')}</Th>
               <Th num>{t('cashForecast.cols.closing')}</Th>
               <Th className="w-44 print:hidden">Bakiye büyüklüğü</Th>
@@ -235,6 +237,7 @@ export function CashForecastPage() {
                 <Td num>{moneyIn(b.manualIn, cur, 0)}</Td>
                 <Td num>{moneyIn(b.payables, cur, 0)}</Td>
                 <Td num>{moneyIn(b.manualOut, cur, 0)}</Td>
+                <Td num>{moneyIn(b.obligations ?? '0', cur, 0)}</Td>
                 <Td num className={cn(neg(b.net) && 'text-danger')}>
                   {moneyIn(b.net, cur, 0)}
                 </Td>

@@ -80,6 +80,7 @@ export * from './insights';
 export * from './campaigns';
 export * from './fixed-assets';
 export * from './expiry';
+export * from './obligations';
 export * from './company-budgets';
 export * from './leather';
 export * from './pos';

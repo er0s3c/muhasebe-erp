@@ -7,6 +7,7 @@ import type { LedgerCtx } from '../ledger/journal';
 import { allOpenItems } from '../parties/service';
 import { findRate } from '../settings/rates';
 import { treasurySummary } from '../treasury/accounts';
+import { obligationCalendar } from './obligations';
 
 const addDays = (iso: string, days: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -17,7 +18,7 @@ const addDays = (iso: string, days: number) => {
 export interface ForecastItem {
   date: string;
   week: number | null;
-  source: 'receivable' | 'payable' | 'manual';
+  source: 'receivable' | 'payable' | 'manual' | 'obligation';
   direction: 'in' | 'out';
   description: string;
   partyName: string | null;
@@ -30,7 +31,7 @@ export interface ForecastItem {
   /** Çek/senet portföyünden gelen kalem (vade = belge vadesi). */
   cheque?: boolean;
   dueDate?: string;
-  timingSource?: 'due' | 'payment_history' | 'conservative_history' | 'manual' | 'cheque';
+  timingSource?: 'due' | 'payment_history' | 'conservative_history' | 'manual' | 'cheque' | 'obligation';
   sampleCount?: number;
   delayDays?: number;
   confidence?: 'low' | 'medium' | 'high';
@@ -158,6 +159,26 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
       timingSource: 'manual',
     });
   }
+  // Düzenli yükümlülükler (öneri 57): tutarı olan ve kapatılmamış dönemler çıkıştır; projeye bağlı değildir
+  if (!q.projectId)
+    for (const p of await obligationCalendar(tx, from, horizonEnd, today, true)) {
+      if (!p.amount || !['overdue', 'due_soon', 'upcoming'].includes(p.state)) continue;
+      items.push({
+        date: p.dueDate,
+        week: weekOf(p.dueDate),
+        source: 'obligation',
+        direction: 'out',
+        description: `${p.title}${p.amountKind === 'estimated' ? ' (tahmini)' : ''}`,
+        partyName: null,
+        currencyCode: p.currency,
+        amount: dec(p.amount).toFixed(2),
+        amountBase: (await toBase(dec(p.amount), p.currency)).toFixed(2),
+        overdue: p.dueDate < from,
+        itemId: p.obligationId,
+        dueDate: p.periodDate,
+        timingSource: 'obligation',
+      });
+    }
   items.sort((a, b) => a.date.localeCompare(b.date) || a.description.localeCompare(b.description, 'tr'));
 
   const summary = await treasurySummary(tx, ctx, today);
@@ -170,25 +191,28 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
     payables: dec(0),
     manualIn: dec(0),
     manualOut: dec(0),
+    obligations: dec(0),
   }));
-  const later = { receivables: dec(0), payables: dec(0) };
+  const later = { receivables: dec(0), payables: dec(0), obligations: dec(0) };
   for (const it of items) {
     const amt = dec(it.amountBase);
     if (it.week === null) {
       if (it.source === 'receivable') later.receivables = later.receivables.plus(amt);
       else if (it.source === 'payable') later.payables = later.payables.plus(amt);
+      else if (it.source === 'obligation') later.obligations = later.obligations.plus(amt);
       continue;
     }
     const b = buckets[it.week - 1]!;
     if (it.source === 'receivable') b.receivables = b.receivables.plus(amt);
     else if (it.source === 'payable') b.payables = b.payables.plus(amt);
+    else if (it.source === 'obligation') b.obligations = b.obligations.plus(amt);
     else if (it.direction === 'in') b.manualIn = b.manualIn.plus(amt);
     else b.manualOut = b.manualOut.plus(amt);
   }
   let running = opening;
   const outBuckets = buckets.map((b) => {
     const inflow = b.receivables.plus(b.manualIn);
-    const outflow = b.payables.plus(b.manualOut);
+    const outflow = b.payables.plus(b.manualOut).plus(b.obligations);
     const net = inflow.minus(outflow);
     running = running.plus(net);
     return {
@@ -199,6 +223,7 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
       manualIn: b.manualIn.toFixed(2),
       payables: b.payables.toFixed(2),
       manualOut: b.manualOut.toFixed(2),
+      obligations: b.obligations.toFixed(2),
       inflow: inflow.toFixed(2),
       outflow: outflow.toFixed(2),
       net: net.toFixed(2),
@@ -213,7 +238,7 @@ export async function cashForecast(tx: Tx, ctx: LedgerCtx, q: CashForecastQuery)
     opening: opening.toFixed(2),
     openingApproximate: summary.approximate,
     buckets: outBuckets,
-    later: { receivables: later.receivables.toFixed(2), payables: later.payables.toFixed(2) },
+    later: { receivables: later.receivables.toFixed(2), payables: later.payables.toFixed(2), obligations: later.obligations.toFixed(2) },
     lowest: { week: lowest.week, balance: lowest.value.toFixed(2) },
     items: items.filter((i) => i.week !== null),
     missingRate: missing,
