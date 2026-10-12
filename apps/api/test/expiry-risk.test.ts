@@ -33,7 +33,7 @@ describe('son kullanma ve raf ömrü riski', async () => {
       )
     ).document.id;
     const lots = (await ok(c.get('/api/wms/lots'))).records;
-    const auto = lots.find((l: { code: string }) => l.code.startsWith(`RECEIPT:${receipt}`));
+    const auto = lots.find((l: { sourceDocumentId: string; itemId: string }) => l.sourceDocumentId === receipt && l.itemId === raw.id);
     expect(auto).toMatchObject({ status: 'quarantine', expiryDate: addDays(TODAY_LOCAL, 30) });
 
     // Elle parti: tarih verilmezse kart raf ömrü (açılış belgesi tarihi + 10 gün)
