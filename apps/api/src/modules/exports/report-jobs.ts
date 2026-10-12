@@ -24,6 +24,8 @@ interface JobCtx {
   companyId: string;
   userId: string;
   orgId: string;
+  /** İsteği yapanın şube görünümü; arka plan işi de aynı şube süzgeciyle okur. */
+  branch: { id: string; selection: string };
   build: Omit<BuildCtx, 'tx'>;
 }
 
@@ -51,12 +53,18 @@ export async function runReportJob(app: FastifyInstance, id: string, ctx: JobCtx
     }
     const def = EXPORTS.find((d) => d.key === started.reportKey);
     if (!def) return setJob(app, ctx, id, { status: 'failed', error: 'Rapor tanımı bulunamadı', finishedAt: new Date() });
-    const tables = await app.db.transaction(async (tx) => {
-      // Tutarlı görünüm: raporun tüm sorguları aynı anlık görüntüden okur
-      await tx.execute(sql`set transaction isolation level repeatable read`);
-      await tx.execute(sql`select set_config('app.user_id', ${ctx.userId}, true), set_config('app.org_id', ${ctx.orgId}, true), set_config('app.company_id', ${ctx.companyId}, true)`);
-      return def.build({ ...ctx.build, tx }, def.schema.parse(started.params) as never);
-    });
+    // Saklanan ham sorgu çalıştırılırken bir kez ayrıştırılır (ayrıştırılmış çıktı şemaya yeniden girmez: ör. "true" → true)
+    const query = def.schema.parse(started.params);
+    // Tutarlı görünüm: raporun tüm sorguları aynı anlık görüntüden okur
+    const tables = await app.db.transaction(
+      async (tx) => {
+        await tx.execute(
+          sql`select set_config('app.user_id', ${ctx.userId}, true), set_config('app.org_id', ${ctx.orgId}, true), set_config('app.company_id', ${ctx.companyId}, true), set_config('app.branch_id', ${ctx.branch.id}, true), set_config('app.branch_selection', ${ctx.branch.selection}, true), set_config('transaction_read_only', 'on', true)`,
+        );
+        return def.build({ ...ctx.build, tx }, query as never);
+      },
+      { isolationLevel: 'repeatable read' },
+    );
     const rowCount = (started.format === 'csv' ? [tables[0]!] : tables).reduce((n, t) => n + t.rows.length, 0);
     const body = started.format === 'csv' ? Buffer.from(renderCsv(tables[0]!), 'utf8') : Buffer.from(writeXlsx(tables));
     await withContext(app.db, { userId: ctx.userId, orgId: ctx.orgId, companyId: ctx.companyId }, async (tx) => {
@@ -67,7 +75,7 @@ export async function runReportJob(app: FastifyInstance, id: string, ctx: JobCtx
           status: 'completed',
           progress: 100,
           rowCount,
-          fileName: `${def.fileName(def.schema.parse(started.params) as never)}.${started.format}`,
+          fileName: `${def.fileName(query as never)}.${started.format}`,
           content: body.toString('base64'),
           finishedAt: new Date(),
           expiresAt: new Date(Date.now() + TTL_MS),
@@ -77,6 +85,7 @@ export async function runReportJob(app: FastifyInstance, id: string, ctx: JobCtx
       if (done) await tx.insert(exportEvents).values({ companyId: ctx.companyId, userId: ctx.userId, reportKey: def.key, format: started.format, rowCount, requestId: `job:${id}` });
     });
   } catch (error) {
+    if (!(error instanceof AppError)) app.log.error({ err: error, reportJobId: id }, 'Arka plan raporu hazırlanamadı');
     await setJob(app, ctx, id, { status: 'failed', error: error instanceof AppError ? error.message : 'Rapor hazırlanamadı', finishedAt: new Date() }).catch(() => undefined);
   } finally {
     app.exportGate.release();
@@ -110,7 +119,8 @@ export const reportJobRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/report-jobs',
-    tenantRoute(app, { limit: { name: 'report-job', max: 20, windowMs: 60_000 } }, async (c) => {
+    // Asıl yetki raporun kendi iznidir (aşağıda); rota düzeyinde yalnız çalışma alanı kullanımı istenir
+    tenantRoute(app, { permission: 'workspace.use', operation: 'read', limit: { name: 'report-job', max: 20, windowMs: 60_000 } }, async (c) => {
       const body = z.object({ reportKey: z.string().max(80), format: z.enum(EXPORT_FORMATS).default('xlsx'), query: z.record(z.string(), z.unknown()).default({}) }).parse(c.req.body);
       const def = EXPORTS.find((d) => d.key === body.reportKey);
       if (!def) throw badRequest('Rapor bulunamadı', 'REPORT_NOT_FOUND');
@@ -119,12 +129,14 @@ export const reportJobRoutes: FastifyPluginAsync = async (app) => {
       if (!def.alternateModules && !c.enabledModules.has(def.module)) throw forbidden('Bu raporun modülü şirketinizde etkin değil');
       assertExportAllowed(def, c);
       if (!def.formats.includes(body.format)) throw badRequest(`Bu rapor yalnızca ${def.formats.join(', ').toUpperCase()} olarak alınabilir`, 'EXPORT_FORMAT_UNSUPPORTED');
-      const params = def.schema.parse(body.query);
-      const [job] = await c.tx.insert(reportJobs).values({ companyId: c.company.id, userId: c.user.id, reportKey: def.key, format: body.format, params }).returning();
+      // Sorgu şimdi doğrulanır, ham hali saklanır; çalıştırıcı aynı şemayla ayrıştırır
+      def.schema.parse(body.query);
+      const [job] = await c.tx.insert(reportJobs).values({ companyId: c.company.id, userId: c.user.id, reportKey: def.key, format: body.format, params: body.query }).returning();
       const jobCtx: JobCtx = {
         companyId: c.company.id,
         userId: c.user.id,
         orgId: c.user.orgId,
+        branch: { id: c.branch.activeBranchId ?? '', selection: c.branch.selection },
         build: {
           company: { name: c.company.name, baseCurrency: c.company.baseCurrency, reportingCurrency: c.company.reportingCurrency, timeZone: c.company.timeZone },
           user: { id: c.user.id, role: c.role },
@@ -146,7 +158,7 @@ export const reportJobRoutes: FastifyPluginAsync = async (app) => {
   app.get('/api/report-jobs/:id', tenantRoute(app, {}, async (c) => ({ job: jobOut(await own(c, idParam.parse(c.req.params).id)) })));
   app.post(
     '/api/report-jobs/:id/cancel',
-    tenantRoute(app, {}, async (c) => {
+    tenantRoute(app, { permission: 'workspace.use', operation: 'read' }, async (c) => {
       const j = await own(c, idParam.parse(c.req.params).id);
       if (!['queued', 'running'].includes(j.status)) throw badRequest('Yalnız bekleyen ya da çalışan rapor iptal edilir', 'REPORT_JOB_NOT_ACTIVE');
       const [u] = await c.tx.update(reportJobs).set({ status: 'cancelled', finishedAt: new Date() }).where(eq(reportJobs.id, j.id)).returning();
