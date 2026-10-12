@@ -321,6 +321,8 @@ export interface Item {
   notes: string | null;
   isActive: boolean;
   tracksSerial: boolean;
+  /** Raf ömrü (gün); partilere son kullanma tarihi önerir. */
+  shelfLifeDays?: number | null;
 }
 
 export interface ItemListRow {

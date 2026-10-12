@@ -139,6 +139,8 @@ export const createItemSchema = z.object({
   notes: optionalText(1000),
   /** Seri no takibi (X3): giriş/çıkışta miktar kadar seri no girilir; yalnızca mal kartında. */
   tracksSerial: z.boolean().optional(),
+  /** Raf ömrü (gün): partilere son kullanma tarihi önerir (öneri 47). */
+  shelfLifeDays: z.number().int().min(1).max(3650).nullable().optional(),
 });
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 
@@ -159,6 +161,7 @@ export const updateItemSchema = z.object({
   notes: clearableText(1000),
   isActive: z.boolean().optional(),
   tracksSerial: z.boolean().optional(),
+  shelfLifeDays: z.number().int().min(1).max(3650).nullable().optional(),
 });
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
 

@@ -574,5 +574,9 @@
   "0143_asset_disposals": {
     "sha256": "b096e7e0b1b385d3ea5112b5b98b93ccc4a3a732baa1398cdf89c96a37a0cfe8",
     "when": 1791783320220
+  },
+  "0144_item_shelf_life": {
+    "sha256": "cde68020c6e25ceea9982dbd756ba88521688eeaa85e9c5db009902bdf898357",
+    "when": 1791783914168
   }
 }

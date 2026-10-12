@@ -140,6 +140,8 @@ export const wmsLotSchema = z.object({
   status: z.enum(['available', 'quarantine', 'blocked']).default('quarantine'),
   sourceDocumentId: uuid,
   serials: z.array(name).max(1000).default([]),
+  /** Son kullanma tarihi (öneri 47); boşsa stok kartı raf ömründen önerilir. */
+  expiryDate: isoDate.nullable().default(null),
 });
 export const wmsPlacementSchema = z.object({
   lotId: uuid,

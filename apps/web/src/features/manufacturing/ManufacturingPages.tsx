@@ -524,13 +524,19 @@ export function ManufacturingWarehousePage() {
                   ? 'Yerleştirilen miktar'
                   : 'Başlangıç miktarı',
           },
-          ...(selection === 'lots' ? [{ key: 'remainingQty', label: 'Kalan miktar' }] : []),
+          ...(selection === 'lots'
+            ? [
+                { key: 'remainingQty', label: 'Kalan miktar' },
+                { key: 'expiryDate', label: 'Son kullanma' },
+              ]
+            : []),
           { key: 'status', label: 'Durum' },
         ]}
         actions={(r) =>
           selection === 'lots' &&
           can('manufacturing.quality.approve') &&
           can('inventory.wms.manage') ? (
+            <>
             <OperationForm
               title="Kalite kararı"
               fields={[
@@ -547,6 +553,17 @@ export function ManufacturingWarehousePage() {
                 })
               }
             />
+            <OperationForm
+              title="Son kullanma tarihi"
+              fields={[
+                { name: 'expiryDate', label: 'Son kullanma tarihi (boş: tarihsiz)', type: 'date', value: String(r.expiryDate ?? '') },
+                textField('reason', 'Düzeltme nedeni', true),
+              ]}
+              submit={(v) =>
+                save(`/api/wms/lots/${r.id}/expiry`, { expiryDate: v.expiryDate || null, reason: v.reason })
+              }
+            />
+            </>
           ) : null
         }
       />
@@ -591,8 +608,14 @@ export function ManufacturingWarehousePage() {
                   options(lookups.data?.documents ?? [], (r) => String(r.code)),
                 ),
                 numberField('quantity', 'Miktar'),
+                {
+                  name: 'expiryDate',
+                  label: 'Son kullanma tarihi',
+                  type: 'date',
+                  hint: 'Boş bırakılırsa stok kartındaki raf ömründen önerilir.',
+                },
               ]}
-              submit={(v) => save('/api/wms/lots', v)}
+              submit={(v) => save('/api/wms/lots', { ...v, expiryDate: v.expiryDate || null })}
             />
           )}
           {selection === 'placements' && (

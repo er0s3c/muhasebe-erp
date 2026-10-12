@@ -2276,6 +2276,8 @@ export const items = pgTable(
     isActive: boolean().notNull().default(true),
     /** Seri no takibi (X3): giriş/çıkış satırlarında miktar kadar seri no girilir. Hareketi olan kartta değiştirilemez (tetikleyici). */
     tracksSerial: boolean().notNull().default(false),
+    /** Raf ömrü (gün, öneri 47): doluysa kabul ve üretim partilerine son kullanma tarihi bu süreyle önerilir. */
+    shelfLifeDays: integer(),
     createdAt: createdAt(),
   },
   (t) => [
@@ -2297,6 +2299,7 @@ export const items = pgTable(
       'items_amounts_ck',
       sql`(${t.purchasePrice} is null or ${t.purchasePrice} >= 0) and (${t.salePrice} is null or ${t.salePrice} >= 0) and (${t.minLevel} is null or ${t.minLevel} >= 0)`,
     ),
+    check('items_shelf_life_ck', sql`${t.shelfLifeDays} is null or ${t.shelfLifeDays} between 1 and 3650`),
     check('items_target_level_ck',sql`${t.targetLevel} is null or (${t.targetLevel}>=0 and (${t.minLevel} is null or ${t.targetLevel}>=${t.minLevel}))`),
   ],
 );

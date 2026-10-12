@@ -32,6 +32,7 @@ interface FormState {
   targetLevel: string;
   notes: string;
   tracksSerial: boolean;
+  shelfLifeDays: string;
 }
 
 /** "12.500000" -> "12.5" */
@@ -54,6 +55,7 @@ const fromItem = (i: Item): FormState => ({
   targetLevel: trim(i.targetLevel ?? null),
   notes: i.notes ?? '',
   tracksSerial: i.tracksSerial,
+  shelfLifeDays: i.shelfLifeDays ? String(i.shelfLifeDays) : '',
 });
 
 interface Props {
@@ -72,7 +74,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
   const editing = !!item;
   const empty: FormState = {
     name: '', code: '', kind: 'goods', inventoryRole: 'merchandise', unit: 'adet', categoryId: '', barcode: '', vatCode: '',
-    purchasePrice: '', purchaseCurrency: company.baseCurrency, salePrice: '', saleCurrency: company.baseCurrency, minLevel: '', targetLevel: '', notes: '', tracksSerial: false,
+    purchasePrice: '', purchaseCurrency: company.baseCurrency, salePrice: '', saleCurrency: company.baseCurrency, minLevel: '', targetLevel: '', notes: '', tracksSerial: false, shelfLifeDays: '',
   };
   const [f, setF] = useState<FormState>(empty);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +118,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
             targetLevel: goods && f.targetLevel ? f.targetLevel : null,
             notes: f.notes,
             tracksSerial: goods && f.tracksSerial,
+            shelfLifeDays: goods && f.shelfLifeDays ? Number(f.shelfLifeDays) : null,
           },
         });
         return res.item;
@@ -138,6 +141,7 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           ...(goods && f.minLevel ? { minLevel: f.minLevel } : {}),
           ...(goods && f.targetLevel ? { targetLevel: f.targetLevel } : {}),
           ...(goods && f.tracksSerial ? { tracksSerial: true } : {}),
+          ...(goods && f.shelfLifeDays ? { shelfLifeDays: Number(f.shelfLifeDays) } : {}),
           notes: f.notes,
         },
       });
@@ -282,6 +286,9 @@ export function ItemFormSheet({ open, onOpenChange, item, onSaved }: Props) {
           </Field>
           <Field label="Hedef stok miktarı" hint="Minimuma düşünce satın alma önerisi bu hedefe tamamlar. Boş bırakılırsa hedef tahmin edilmez." error={errors.targetLevel}>
             {id => <MoneyInput id={id} value={f.targetLevel} onChange={value => set('targetLevel', value)} decimals={0} maxDecimals={4} />}
+          </Field>
+          <Field label="Raf ömrü (gün)" hint="Doluysa mal kabul ve üretim partilerine son kullanma tarihi belge tarihi + bu süre olarak önerilir." error={errors.shelfLifeDays}>
+            {id => <Input id={id} type="number" min={1} max={3650} value={f.shelfLifeDays} onChange={e => set('shelfLifeDays', e.target.value.replace(/[^0-9]/g, ''))} />}
           </Field>
         </>)}
         {goods && (
