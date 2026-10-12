@@ -65,6 +65,16 @@ export const assetDepreciation=pgTable('asset_depreciation',{
   cancelledAt:timestamp({withTimezone:true}),cancelReason:text(),createdBy:uuid().notNull().references(()=>users.id),createdAt:timestamp({withTimezone:true}).notNull().defaultNow(),
 },t=>[foreignKey({name:'asset_depreciation_asset',columns:[t.assetId,t.companyId],foreignColumns:[fixedAssets.id,fixedAssets.companyId]}),foreignKey({name:'asset_depreciation_journal',columns:[t.journalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),foreignKey({name:'asset_depreciation_reversal',columns:[t.reversalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),uniqueIndex('asset_depreciation_period').on(t.assetId,t.month).where(sql`${t.cancelledAt} is null`),check('asset_depreciation_month',sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),check('asset_depreciation_amount',sql`${t.amount}::numeric>0`)]);
 
+/** Demirbaşın satış ya da hurdaya ayrılması (öneri 60): kayıtlı yevmiyeyle kapanır, iptal ters kayıtla geri alınır. */
+export const assetDisposals=pgTable('asset_disposals',{
+  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),assetId:uuid().notNull(),
+  disposalDate:date({mode:'string'}).notNull(),method:text().$type<'sale'|'scrap'>().notNull(),
+  proceeds:text().notNull(),cost:text().notNull(),accumulated:text().notNull(),bookValue:text().notNull(),gainLoss:text().notNull(),
+  accounts:jsonb().$type<{assetAccountId:string;proceedsAccountId:string|null;gainAccountId:string|null;lossAccountId:string|null}>().notNull(),
+  note:text().notNull().default(''),journalEntryId:uuid().notNull(),reversalEntryId:uuid(),
+  cancelledAt:timestamp({withTimezone:true}),cancelReason:text(),createdBy:uuid().notNull().references(()=>users.id),createdAt:timestamp({withTimezone:true}).notNull().defaultNow(),
+},t=>[foreignKey({name:'asset_disposal_asset',columns:[t.assetId,t.companyId],foreignColumns:[fixedAssets.id,fixedAssets.companyId]}),foreignKey({name:'asset_disposal_journal',columns:[t.journalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),foreignKey({name:'asset_disposal_reversal',columns:[t.reversalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),uniqueIndex('asset_disposal_active').on(t.assetId).where(sql`${t.cancelledAt} is null`),check('asset_disposal_method',sql`${t.method} in ('sale','scrap')`),check('asset_disposal_proceeds',sql`${t.proceeds}::numeric>=0 and (${t.method}='sale' or ${t.proceeds}::numeric=0)`)]);
+
 export const companyBudgets=pgTable('company_budgets',{
   id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),seriesId:uuid().notNull(),
   revision:integer().notNull(),version:integer().notNull().default(1),status:text().notNull().default('draft'),config:jsonb().notNull(),

@@ -791,6 +791,7 @@
         "invoice": "Fatura",
         "stock_document": "Stok belgesi",
         "asset_depreciation": "Amortisman",
+        "asset_disposal": "Demirbaş elden çıkarma",
         "expense_entry": "Gider fişi",
         "treasury": "Kasa/banka hareketi"
       },

@@ -570,5 +570,9 @@
   "0142_report_jobs": {
     "sha256": "d33af8842a77c82ccc59d9ee9b8fe865414709a662fcfd7078b1e789e8e1da4f",
     "when": 1791772051044
+  },
+  "0143_asset_disposals": {
+    "sha256": "b096e7e0b1b385d3ea5112b5b98b93ccc4a3a732baa1398cdf89c96a37a0cfe8",
+    "when": 1791783320220
   }
 }
