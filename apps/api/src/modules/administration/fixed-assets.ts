@@ -336,7 +336,8 @@ export const fixedAssetRoutes: FastifyPluginAsync = async (app) => {
         { id: input.assetAccountId, types: ['asset'], label: 'Demirbaş maliyet hesabı' },
         { id: dec(proceeds).gt(0) ? input.proceedsAccountId : null, types: ['asset'], label: 'Satış bedeli karşı hesabı' },
         { id: gl.gt(0) ? input.gainAccountId : null, types: ['income'], label: 'Kâr hesabı' },
-        { id: gl.lt(0) ? input.lossAccountId : null, types: ['expense', 'cost'], label: 'Zarar hesabı' },
+        // Tekdüzende 6 sınıfı (ör. 689) gelir tablosu hesabıdır ve 'income' türündedir
+        { id: gl.lt(0) ? input.lossAccountId : null, types: ['expense', 'cost', 'income'], label: 'Zarar hesabı' },
       ]);
       const base = c.company.baseCurrency as CurrencyCode,
         line = (accountId: string, debit: string, credit: string) => ({ accountId, currency: base, debit, credit });

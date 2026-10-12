@@ -369,7 +369,7 @@ function DisposeModal({
               <Combobox
                 id={id}
                 value={form.lossAccountId || null}
-                options={combo(['expense', 'cost'])}
+                options={combo(['expense', 'cost', 'income'])}
                 onChange={(v) => set('lossAccountId', v)}
               />
             )}
