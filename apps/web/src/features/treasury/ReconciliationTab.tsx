@@ -17,6 +17,7 @@ import { useToast } from '../../components/ui/Toast';
 import { errorMessage } from '../../lib/errors';
 import { currencySymbol, formatDateTR, isZero, money, moneyIn } from '../../lib/format';
 import { useCan, useCMutation, useCQuery } from '../../lib/queries';
+import { GroupMatchDialog } from './GroupMatchDialog';
 import type { TreasuryAccount } from '../../lib/types';
 import { ImportWizard } from '../imports/ImportWizard';
 import { TransactionSheet } from './TransactionSheet';
@@ -40,6 +41,7 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
   const [ignoring, setIgnoring] = useState<BankLine | null>(null);
   const [ignoreReason, setIgnoreReason] = useState('');
   const [undoing, setUndoing] = useState<{ id: string; name: string } | null>(null);
+  const [grouping, setGrouping] = useState<BankLine | null>(null);
 
   const query = new URLSearchParams({ from, to });
   const { data, isPending, error } = useCQuery<ReconciliationData>(['treasury', 'reconciliation', account.id, from, to], `/api/treasury/accounts/${account.id}/reconciliation?${query}`, {
@@ -205,6 +207,17 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
                               <span className="block truncate text-xs text-muted">{l.match.description}</span>
                             </span>
                           )}
+                          {l.status === 'matched' && l.group.length > 0 && (
+                            <span className="block text-[13px]">
+                              <span className="block">{l.group.length} kayıtla eşleşti</span>
+                              {l.group.map((g) => (
+                                <span key={g.journalLineId} className="block text-xs">
+                                  <Link to={`/accounting/journal?open=${g.entryId}`} className="link font-mono">{g.entryNo}</Link>
+                                  <span className="ml-2 text-muted">{money(g.amount)}{g.txnNo ? ` · ${g.txnNo}` : ''}</span>
+                                </span>
+                              ))}
+                            </span>
+                          )}
                           {l.status === 'ignored' && <span className="text-[13px] text-muted">{l.ignoreReason ?? t('treasury.recon.filter.ignored')}</span>}
                           {l.status === 'open' &&
                             (best ? (
@@ -233,6 +246,7 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
                                       {t('treasury.recon.actions.candidates')} ({l.suggestions.length})
                                     </Button>
                                   )}
+                                  <Button size="sm" onClick={() => setGrouping(l)}>Birden çok kayıtla</Button>
                                   <Button size="sm" onClick={() => setCreating(l)}>
                                     <Plus className="size-3.5" aria-hidden />
                                     {t('treasury.recon.actions.create')}
@@ -378,6 +392,7 @@ export function ReconciliationTab({ account }: { account: TreasuryAccount }) {
         onSaved={() => setCreating(null)}
       />
 
+      <GroupMatchDialog line={grouping} candidates={data.unmatchedLedger} onClose={() => setGrouping(null)} onMatched={() => { setGrouping(null); toast.success(t('treasury.recon.matchedOk')); }} />
       <Modal
         open={ignoring !== null}
         onOpenChange={(o) => !o && setIgnoring(null)}

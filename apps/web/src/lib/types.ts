@@ -122,6 +122,8 @@ export interface JournalLine {
   wbsId: string | null;
   wbsCode: string | null;
   wbsName: string | null;
+  costCenterId?: string | null;
+  costCenterCode?: string | null;
 }
 
 export interface JournalEntry extends Omit<JournalListItem, 'totalBase'> {
@@ -319,6 +321,8 @@ export interface Item {
   notes: string | null;
   isActive: boolean;
   tracksSerial: boolean;
+  /** Raf ömrü (gün); partilere son kullanma tarihi önerir. */
+  shelfLifeDays?: number | null;
 }
 
 export interface ItemListRow {
@@ -472,6 +476,8 @@ export interface StockCountDetail {
     countDate: string;
     status: 'draft' | 'posted';
     description: string | null;
+    blind?: boolean;
+    recountTolerancePct?: string | null;
     warehouseId: string;
     warehouseName: string;
     documentId: string | null;
@@ -486,8 +492,11 @@ export interface StockCountDetail {
     countedQty: string | null;
     systemQty: string | null;
     diffQty: string | null;
+    countedBy?: string | null;
+    recountQty?: string | null;
+    recountRequired?: boolean | null;
   }[];
-  summary: { lines: number; counted: number; uncounted: number; surplus: number; shortage: number };
+  summary: { lines: number; counted: number; uncounted: number; surplus: number | null; shortage: number | null; recountRequired?: number | null };
   warnings?: { zeroCostItems: string[] };
 }
 
@@ -598,6 +607,8 @@ export interface InvoiceLineRow {
   wbsId: string | null;
   wbsCode: string | null;
   wbsName: string | null;
+  costCenterId?: string | null;
+  costCenterCode?: string | null;
 }
 
 export interface InvoiceDetail {
@@ -725,6 +736,8 @@ export interface DeliveryNoteDetail {
     externalNo: string | null;
     returnOfId: string | null;
     returnOfNo: string | null;
+    /** Satış iadesinde: kalite kararı bekleniyor (öneri 52). */
+    inspectionRequired?: boolean;
     noteDate: string;
     partyId: string;
     partyCode: string;
@@ -835,6 +848,9 @@ export interface SalesDocDetail {
     warehouseId: string | null;
     warehouseName: string | null;
     notes: string | null;
+    /** Satış sorumlusu (F6: öneri 13). */
+    salesRepId?: string | null;
+    salesRepName?: string | null;
     quoteId: string | null;
     quoteNo: string | null;
     orderId: string | null;
@@ -1900,6 +1916,10 @@ export interface SalesInstallmentRow {
   paid: string;
   remaining: string;
   daysOverdue: number;
+  /** Yeniden yapılandırma (öneri 92): yeni taksidin yapılandırması, eski taksidin devredildiği yapılandırma ve devredilen kalan. */
+  restructureId?: string | null;
+  restructuredIn?: string | null;
+  restructuredAmount?: string;
 }
 
 export interface SalesContractDetail {
@@ -1996,6 +2016,8 @@ export interface FeeEstimate {
 export type EmployeeStatus = 'active' | 'left';
 
 export interface EmployeeRow {
+  /** Çalışan portalı kullanıcısı (öneri 93). */
+  userId?: string | null;
   id: string;
   code: string;
   fullName: string;

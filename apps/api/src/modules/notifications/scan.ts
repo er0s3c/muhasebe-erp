@@ -38,6 +38,11 @@ export interface ScanOptions {
   license?: () => Promise<LicenseView | null>;
   /** E-posta özeti gönderimi: yalnızca verilirse (SMTP/günlük kipi açıksa) özet üretilir. Gönderim işlem tamamlandıktan sonradır. */
   enqueueMail?: (message: MailMessage) => void;
+  /**
+   * Kalıcı gönderim: verilirse özet, talebiyle AYNI işlemde outbox'a yazılır (SMTP hatasında kaybolmaz, gönderici yeniden dener).
+   * Verildiğinde `enqueueMail` kullanılmaz.
+   */
+  persistMail?: (tx: Tx, message: MailMessage, meta: { companyId: string; userId: string; date: string }) => Promise<void>;
   /** E-postadaki bağlantıların kökü (APP_BASE_URL). */
   baseUrl?: string;
   /** Kapanmış bildirim saklama süresi (gün). */
@@ -191,7 +196,7 @@ export async function scanCompany(db: Db, target: { companyId: string; orgId: st
       }
 
       // --- E-posta özeti (isteğe bağlı, günde en çok bir) ---------------------------------------------------------------
-      if (opts.enqueueMail && Number(local.time.slice(0, 2)) >= (opts.digestHour ?? 8)) {
+      if ((opts.persistMail || opts.enqueueMail) && Number(local.time.slice(0, 2)) >= (opts.digestHour ?? 8)) {
         const emailKinds = eligible.filter((k) => prefs.get(k)?.email);
         if (emailKinds.length > 0) {
           const rows = (
@@ -207,7 +212,9 @@ export async function scanCompany(db: Db, target: { companyId: string; orgId: st
               on conflict do nothing returning 1`);
             if (claim.rows.length > 0) {
               const companyName = (await tx.execute<{ name: string }>(sql`select name from companies where id = ${target.companyId}::uuid`)).rows[0]?.name ?? '';
-              mails.push(notificationDigestMail(member.email, member.fullName, companyName, rows.map((r) => r.title), `${opts.baseUrl ?? ''}/notifications`));
+              const mail = notificationDigestMail(member.email, member.fullName, companyName, rows.map((r) => r.title), `${opts.baseUrl ?? ''}/notifications`);
+              if (opts.persistMail) await opts.persistMail(tx, mail, { companyId: target.companyId, userId: member.userId, date: local.date });
+              else mails.push(mail);
               res.digests++;
             }
           }

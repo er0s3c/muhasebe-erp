@@ -2,6 +2,8 @@ import { sql } from 'drizzle-orm';
 import { dec } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { all, one } from '../leather/common';
+import { whKey } from '../inventory/balances';
+import { pendingReturnHolds } from '../deliveries/inspections';
 
 /** Physical quantity and independent commitments; never creates a valuation pool. */
 export async function stockAvailability(
@@ -39,7 +41,9 @@ export async function stockAvailability(
     .filter((a) => !ownSalesLines.includes(a.sales_order_line_id))
     .reduce<ReturnType<typeof dec>>((s, a) => s.plus(a.quantity), dec(0));
   // Acceptance is counted once per source receipt, even if both hide and WMS trace exist.
-  const quality = dec(blocked.qty);
+  // Kalite kararı bekleyen satış iadesi de kullanılamaz (öneri 52)
+  const returnHold = (await pendingReturnHolds(tx, [itemId], [warehouseId])).get(whKey(itemId, warehouseId)) ?? dec(0);
+  const quality = dec(blocked.qty).plus(returnHold);
   const free = dec(physical.qty).minus(quality).minus(reserved.qty).minus(sales);
   return {
     physical: physical.qty,

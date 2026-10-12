@@ -2,7 +2,7 @@ import { ArrowRight, CheckCircle2, Circle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { dec } from '@erp/shared';
+import { dec, ROLE_STARTS, SECTOR_PACKAGES, type StartTask } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { ListSkeleton } from '../../components/ui/Feedback';
@@ -10,6 +10,7 @@ import { Stat, type StatTrend } from '../../components/ui/Stat';
 import { cn } from '../../lib/cn';
 import { currencySymbol, formatDateTR, money, moneyIn } from '../../lib/format';
 import { useCan, useCQuery } from '../../lib/queries';
+import { useSession } from '../../lib/session';
 import type { Member, TaxRate } from '../../lib/types';
 import { NotificationsCard } from '../notifications/NotificationsCard';
 import { useAutoFxStatus } from '../settings/AutoFxCard';
@@ -75,6 +76,15 @@ function trendOf(series: { sales: string; purchases: string }[] | undefined, fie
 }
 
 export const WIDGETS: WidgetDef[] = [
+  {
+    id: 'start',
+    title: 'Başlangıç',
+    help: 'Şirketinizin sektörüne ve rolünüze göre önerilen ilk işler. Yalnız yetkiniz olan işler gösterilir.',
+    sections: [],
+    sizes: ['m', 'l'],
+    defaultSize: 'm',
+    render: () => <StartCard />,
+  },
   kpi({
     id: 'cash',
     title: 'Kasa ve banka',
@@ -360,6 +370,38 @@ function SetupCard({ data }: { data: DashboardSummary | undefined }) {
                   <span className={cn('block text-sm', s.done && 'text-muted line-through')}>{s.title}</span>
                   <span className="block text-[13px] text-muted">{s.description}</span>
                 </span>
+                <ArrowRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/** Sektör ve rol başlangıç paketi (öneri 1, 2): şirketin işine ve kullanıcının rolüne göre ilk işler. */
+function StartCard() {
+  const can = useCan();
+  const company = useSession().activeCompany;
+  if (!company) return null;
+  const sector = SECTOR_PACKAGES[company.sector];
+  const role = ROLE_STARTS[company.role];
+  const seen = new Set<string>();
+  const tasks = [...role.tasks, ...sector.tasks].filter((t: StartTask) => can(t.permission) && !seen.has(t.to + t.label) && seen.add(t.to + t.label));
+  return (
+    <Card className="h-full">
+      <CardHeader title={`${sector.label} · başlangıç`} />
+      <div className="flex flex-col gap-2 px-5 pb-2 text-sm">
+        <p>{role.focus}</p>
+        <p className="text-[13px] text-muted">{sector.summary}</p>
+      </div>
+      {tasks.length > 0 && (
+        <ul>
+          {tasks.map((t) => (
+            <li key={t.to + t.label} className="border-t border-border">
+              <Link to={t.to} className="group flex items-center gap-3 px-5 py-3 text-sm transition-colors hover:bg-surface-2/60">
+                <span className="min-w-0 flex-1">{t.label}</span>
                 <ArrowRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
               </Link>
             </li>

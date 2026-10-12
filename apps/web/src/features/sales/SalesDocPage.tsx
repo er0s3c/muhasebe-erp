@@ -7,6 +7,7 @@ import { useCan, useCQuery } from '../../lib/queries';
 import type { SalesDocDetail, SalesDocKind } from '../../lib/types';
 import { SalesDocForm } from './SalesDocForm';
 import { SalesDocView } from './SalesDocView';
+import { DocumentChain } from './DocumentChain';
 import { DocumentApprovalPanel, useDocumentApprovals } from '../approvals/common';
 
 /** /sales/docs/new?kind=quote|order ve /sales/docs/:id: taslaksa düzenlenebilir form, değilse salt okunur görünüm (eylemler, yazdırma). */
@@ -28,5 +29,5 @@ export function SalesDocPage() {
   if (!detail.data) return <PageLoading />;
   const quote=detail.data.doc.kind==='quote',pending=quote&&!!approvals.data?.requests.some(request=>request.status==='pending');
   if(quote&&approvals.isPending)return <PageLoading/>;
-  return <>{quote&&<DocumentApprovalPanel type="sales_quote" id={id} status={detail.data.doc.status}/>} {detail.data.doc.status==='draft'&&canManage&&!pending?<SalesDocForm key={id} kind={detail.data.doc.kind} initial={detail.data}/>:<SalesDocView key={id} data={detail.data} approvalPending={pending}/>}</>;
+  return <>{quote&&<DocumentApprovalPanel type="sales_quote" id={id} status={detail.data.doc.status}/>} {detail.data.doc.status==='draft'&&canManage&&!pending?<SalesDocForm key={id} kind={detail.data.doc.kind} initial={detail.data}/>:<SalesDocView key={id} data={detail.data} approvalPending={pending}/>}<div className="mt-4"><DocumentChain kind={detail.data.doc.kind} id={id}/></div></>;
 }

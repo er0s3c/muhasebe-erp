@@ -8,6 +8,7 @@ import { useToast } from '../../components/ui/Toast';
 import { cn } from '../../lib/cn';
 import { formatDateTR } from '../../lib/format';
 import { usePreference } from '../../lib/personal';
+import { ROLE_STARTS } from '@erp/shared';
 import { useSession } from '../../lib/session';
 import { useDashboardSummary, useSectionAccess, type SummarySection } from './summary';
 import { WIDGET_BY_ID, WIDGETS, type WidgetDef, type WidgetSize } from './widgets';
@@ -52,7 +53,12 @@ export function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [ready, JSON.stringify(access)],
   );
-  const defaults = useMemo<Layout>(() => ({ version: 1, widgets: available.map(w => ({ id: w.id, size: w.defaultSize })) }), [available]);
+  // Kayıtlı düzeni olmayan kullanıcı rolünün başlangıç panosuyla açılır (öneri 2); rolde tanımlı olmayan kartlar eklenebilir
+  const preset = activeCompany ? ROLE_STARTS[activeCompany.role].widgets : null;
+  const defaults = useMemo<Layout>(() => {
+    const chosen = preset ? preset.flatMap(id => available.filter(w => w.id === id)) : available;
+    return { version: 1, widgets: (chosen.length ? chosen : available).map(w => ({ id: w.id, size: w.defaultSize })) };
+  }, [available, preset]);
   const pref = usePreference<Layout | null>('dashboard.layout', parseLayout, null);
   const saved = pref.value ?? defaults;
   const [draft, setDraft] = useState<Layout | null>(null);

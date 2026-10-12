@@ -33,6 +33,8 @@ import { lockLeatherCosts, one } from '../leather/common';
 import { orderLineUsage, zeroUsage } from './usage';
 import { assertDocumentApproved, assertDocumentNotPending } from '../approvals/document-gate';
 import { captureQuote } from '../approvals/source-snapshot';
+import { recordCommercialSnapshot, type CommercialGate } from './commercial';
+import { assertSalesRep } from './reps';
 
 export interface SalesCtx {
   companyId: string;
@@ -160,6 +162,9 @@ async function writeDoc(
   }
   if (input.warehouseId) await requireActiveWarehouse(tx, input.warehouseId, 'Depo');
   const { lines, totals } = await prepareLines(tx, input, currency);
+  // Satış sorumlusu verilmezse carinin sorumlusu (öneri 13)
+  const salesRepId = input.salesRepId !== undefined ? input.salesRepId : party.salesRepId;
+  if (salesRepId) await assertSalesRep(tx, ctx.companyId, salesRepId);
 
   const header = {
     partyId: party.id,
@@ -170,6 +175,7 @@ async function writeDoc(
     vatIncluded: input.vatIncluded,
     warehouseId: input.warehouseId ?? null,
     notes: input.notes ?? null,
+    salesRepId: salesRepId ?? null,
     netTotal: toDbAmount(totals.net),
     vatTotal: toDbAmount(totals.vat),
     grossTotal: toDbAmount(totals.gross),
@@ -262,6 +268,7 @@ export async function transitionSalesDoc(
   id: string,
   to: SalesDocStatus,
   reason?: string,
+  gate: CommercialGate = { canOverride: false },
 ) {
   if (to === 'cancelled') {
     const company = await one(
@@ -309,6 +316,10 @@ export async function transitionSalesDoc(
       );
     }
   }
+  // Ticari kontrol ve görüntü (F6): teklif gönderimi ve sipariş onayı
+  if (doc.status === 'draft' && ((kind === 'quote' && to === 'sent') || (kind === 'order' && to === 'confirmed'))) {
+    await recordCommercialSnapshot(tx, ctx, id, to, gate);
+  }
   let docNo = doc.docNo;
   if (doc.status === 'draft' && to !== 'cancelled' && !docNo) {
     const year = isoYear(doc.docDate);
@@ -355,6 +366,7 @@ export async function convertQuote(tx: Tx, ctx: SalesCtx, quoteId: string) {
       vatIncluded: quote.vatIncluded,
       warehouseId: quote.warehouseId,
       notes: quote.notes ?? undefined,
+      salesRepId: quote.salesRepId,
       lines: qLines.map((l) => ({
         itemId: l.itemId,
         description: l.description,
@@ -426,6 +438,7 @@ export async function getSalesDoc(tx: Tx, id: string) {
            o.doc_date::text as "docDate", o.valid_until::text as "validUntil", o.delivery_date::text as "deliveryDate",
            o.currency_code as "currencyCode", o.vat_included as "vatIncluded", o.warehouse_id as "warehouseId", w.name as "warehouseName",
            o.notes, o.quote_id as "quoteId", q.doc_no as "quoteNo",
+           o.sales_rep_id as "salesRepId", rep.full_name as "salesRepName",
            o.net_total as "netTotal", o.vat_total as "vatTotal", o.gross_total as "grossTotal", o.created_at as "createdAt",
            (select so.id from sales_orders so where so.quote_id = o.id limit 1) as "orderId",
            (select so.doc_no from sales_orders so where so.quote_id = o.id limit 1) as "orderNo"
@@ -433,6 +446,7 @@ export async function getSalesDoc(tx: Tx, id: string) {
     join parties p on p.id = o.party_id
     left join warehouses w on w.id = o.warehouse_id
     left join sales_orders q on q.id = o.quote_id
+    left join users rep on rep.id = o.sales_rep_id
     where o.id = ${id}`);
   const doc = head.rows[0];
   if (!doc) throw notFound('Teklif/sipariş');

@@ -73,6 +73,7 @@ export async function createItem(tx: Tx, companyId: string, input: CreateItemInp
       targetLevel: input.targetLevel ?? null,
       notes: input.notes ?? null,
       tracksSerial: input.tracksSerial ?? false,
+      shelfLifeDays: input.shelfLifeDays ?? null,
     })
     .returning();
   return row!;
@@ -110,7 +111,7 @@ export async function updateItem(tx: Tx, id: string, input: UpdateItemInput) {
   const values: Partial<typeof items.$inferInsert> = {};
   for (const key of [
     'name', 'kind', 'unit', 'categoryId', 'barcode', 'vatCode', 'purchasePrice', 'purchaseCurrency',
-    'salePrice', 'saleCurrency', 'minLevel', 'targetLevel', 'notes', 'isActive', 'tracksSerial', 'inventoryRole',
+    'salePrice', 'saleCurrency', 'minLevel', 'targetLevel', 'notes', 'isActive', 'tracksSerial', 'inventoryRole', 'shelfLifeDays',
   ] as const) {
     if (input[key] !== undefined) (values as Record<string, unknown>)[key] = input[key];
   }

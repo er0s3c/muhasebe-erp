@@ -31,20 +31,26 @@ import { invoiceRoutes } from './modules/invoices/routes';
 import { platformIntegrationRoutes } from './modules/platform-integrations/routes';
 import { secureWebhookTransport,type WebhookTransport } from './modules/platform-integrations/transport';
 import { treasuryRoutes } from './modules/treasury/routes';
+import { paymentBatchRoutes } from './modules/treasury/payment-batches';
 import { exportRoutes } from './modules/exports/routes';
+import { reportJobRoutes } from './modules/exports/report-jobs';
+import { observabilityRoutes, registerTracing } from './modules/system/observability';
 import { importRoutes } from './modules/imports/routes';
 import { bankStatementRoutes } from './modules/bank-statements/routes';
 import { projectRoutes } from './modules/projects/routes';
 import { procurementRoutes } from './modules/procurement/routes';
 import { realEstateRoutes } from './modules/realestate/routes';
 import { cashRoutes } from './modules/cash/routes';
+import { obligationRoutes } from './modules/cash/obligations';
 import { subcontractRoutes } from './modules/subcontracts/routes';
 import { hrRoutes } from './modules/hr/routes';
+import { hrPortalRoutes } from './modules/hr/portal-routes';
 import { payrollRoutes } from './modules/payroll/routes';
 import { socialSecurityRoutes } from './modules/socialsecurity/routes';
 import { foreignWorkerRoutes } from './modules/foreignworkers/routes';
 import { chequeRoutes } from './modules/cheques/routes';
 import { salesRoutes } from './modules/sales/routes';
+import { salesCommercialRoutes } from './modules/sales/commercial-routes';
 import { pricingRoutes } from './modules/sales/pricing-routes';
 import { serialRoutes } from './modules/inventory/serial-routes';
 import { landedRoutes } from './modules/landed/routes';
@@ -58,16 +64,22 @@ import { constructionJobRoutes } from './modules/construction-control/jobs';
 import { constructionAssistantRoutes } from './modules/construction-control/assistant';
 import { constructionWorkflowRoutes } from './modules/construction-control/workflows';
 import { constructionControlRoutes } from './modules/construction-control/routes';
+import { constructionInsightRoutes } from './modules/construction-control/insights';
 import { operationRoutes } from './modules/workspace/operations';
 import { scenarioRoutes } from './modules/workspace/scenarios';
 import { portalRoutes } from './modules/workspace/portal';
 import { notificationRoutes } from './modules/notifications/routes';
 import { preferenceRoutes } from './modules/preferences/routes';
+import { viewRoutes } from './modules/views/routes';
 import { dashboardRoutes } from './modules/dashboard/routes';
 import { consolidationRoutes } from './modules/consolidation/routes';
 import { ledgerRoutes } from './modules/ledger/routes';
 import { yearEndRoutes } from './modules/yearend/routes';
 import { partyRoutes } from './modules/parties/routes';
+import { partyBankAccountRoutes } from './modules/parties/bank-accounts';
+import { partyReconciliationRoutes } from './modules/parties/reconciliations';
+import { periodCloseRoutes } from './modules/settings/period-close';
+import { costCenterRoutes } from './modules/settings/cost-centers';
 import { fetchKktcmbXml } from './modules/settings/kktcmb';
 import { fetchProviderXml } from './modules/settings/fx-providers';
 import { settingsRoutes } from './modules/settings/routes';
@@ -86,10 +98,13 @@ import { tenancyRoutes } from './modules/tenancy/routes';
 import { branchRoutes } from './modules/tenancy/branches';
 import { offlineDraftRoutes } from './modules/workspace/offline-drafts';
 import { documentApprovalRoutes } from './modules/approvals/document-routes';
+import { approvalDelegationRoutes } from './modules/approvals/delegation-routes';
 import { posRoutes } from './modules/pos/routes';
 import { manufacturingIntegrationRoutes } from './modules/manufacturing/integrations';
 import { manufacturingRoutes } from './modules/manufacturing/routes';
 import { manufacturingWarehouseRoutes } from './modules/manufacturing/warehouse-routes';
+import { expiryRoutes } from './modules/inventory/expiry';
+import { wmsGuidanceRoutes } from './modules/manufacturing/wms-guidance';
 import { leatherRoutes } from './modules/leather/routes';
 
 export interface BuildAppOptions {
@@ -157,6 +172,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.addHook('onRequest', async (req, reply) => {
     void reply.header('x-request-id', req.id);
   });
+  // Uçtan uca teknik iz (öneri 113): traceparent, server-timing ve yavaş istek kaydı
+  registerTracing(app);
   // Lisans kapısı (genel): lisanssız kurulumda yalnızca etkinleştirme akışı, salt-okunur modda yalnızca okuma açık.
   // Aynı denetim authedRoute/tenantRoute içinde de yapılır (bağımsız ikinci kapı).
   app.addHook('onRequest', async (req) => {
@@ -182,9 +199,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
     await app.register(cors, {
       origin: config.CORS_ORIGIN,
       credentials: true,
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Id'],
-      // Dosya indirmede tarayıcı betiğinin dosya adını okuyabilmesi için
-      exposedHeaders: ['Content-Disposition'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Id', 'Idempotency-Key'],
+      // Dosya indirmede tarayıcı betiğinin dosya adını okuyabilmesi için; tekrar gönderimde ilk cevabın döndüğü bilgisi
+      exposedHeaders: ['Content-Disposition', 'Idempotent-Replay'],
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       maxAge: 600,
     });
@@ -266,6 +283,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(branchRoutes);
   await app.register(offlineDraftRoutes);
   await app.register(documentApprovalRoutes);
+  await app.register(approvalDelegationRoutes);
   await app.register(memberRoutes);
   await app.register(accessRoutes);
   await app.register(settingsRoutes);
@@ -279,11 +297,16 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(ledgerRoutes);
   await app.register(yearEndRoutes);
   await app.register(partyRoutes);
+  await app.register(partyBankAccountRoutes);
+  await app.register(partyReconciliationRoutes);
+  await app.register(periodCloseRoutes);
+  await app.register(costCenterRoutes);
   await app.register(inventoryRoutes);
   await app.register(invoiceRoutes);
   await app.register(platformIntegrationRoutes);
   await app.register(deliveryRoutes);
   await app.register(salesRoutes);
+  await app.register(salesCommercialRoutes);
   await app.register(pricingRoutes);
   await app.register(serialRoutes);
   await app.register(landedRoutes);
@@ -295,6 +318,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(operationRoutes);
   await app.register(constructionControlRoutes);
   await app.register(constructionWorkflowRoutes);
+  await app.register(constructionInsightRoutes);
   await app.register(constructionAnalyticsRoutes);
   await app.register(constructionJobRoutes);
   await app.register(constructionAssistantRoutes);
@@ -302,15 +326,20 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(portalRoutes);
   await app.register(notificationRoutes);
   await app.register(preferenceRoutes);
+  await app.register(viewRoutes);
   await app.register(dashboardRoutes);
   await app.register(consolidationRoutes);
   await app.register(treasuryRoutes);
+  await app.register(paymentBatchRoutes);
   await app.register(exportRoutes);
+  await app.register(reportJobRoutes);
+  await app.register(observabilityRoutes);
   await app.register(importRoutes);
   await app.register(bankStatementRoutes);
   await app.register(projectRoutes);
   await app.register(subcontractRoutes);
   await app.register(hrRoutes);
+  await app.register(hrPortalRoutes);
   await app.register(payrollRoutes);
   await app.register(socialSecurityRoutes);
   await app.register(foreignWorkerRoutes);
@@ -318,10 +347,13 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(procurementRoutes);
   await app.register(realEstateRoutes);
   await app.register(cashRoutes);
+  await app.register(obligationRoutes);
   await app.register(posRoutes);
   await app.register(leatherRoutes);
   await app.register(manufacturingRoutes);
   await app.register(manufacturingWarehouseRoutes);
+  await app.register(expiryRoutes);
+  await app.register(wmsGuidanceRoutes);
   await app.register(manufacturingIntegrationRoutes);
   await app.register(manufacturingAdapterRoutes);
 

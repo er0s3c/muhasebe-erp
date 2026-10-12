@@ -128,6 +128,7 @@ async function writeDraft(tx: Tx, ctx: DeliveryCtx, type: DeliveryNoteType, inpu
     noteDate: input.noteDate,
     externalNo: input.externalNo ?? null,
     returnOfId: input.returnOfId ?? null,
+    inspectionRequired: type === 'sales_return' && input.inspectionRequired === true,
     partyId: party.id,
     warehouseId,
     vehiclePlate: input.vehiclePlate ?? null,
@@ -202,6 +203,7 @@ interface HeadRow extends Record<string, unknown> {
   externalNo: string | null;
   returnOfId: string | null;
   returnOfNo: string | null;
+  inspectionRequired: boolean;
   noteDate: string;
   partyId: string;
   partyCode: string;
@@ -243,7 +245,7 @@ interface LineRow extends Record<string, unknown> {
 export async function getDeliveryNote(tx: Tx, id: string) {
   const head = await tx.execute<HeadRow>(sql`
     select n.id, n.type, n.status, n.note_no as "noteNo", n.external_no as "externalNo",
-           n.return_of_id as "returnOfId", ro.note_no as "returnOfNo",
+           n.return_of_id as "returnOfId", ro.note_no as "returnOfNo", n.inspection_required as "inspectionRequired",
            n.note_date::text as "noteDate", n.party_id as "partyId", p.code as "partyCode", p.name as "partyName",
            n.warehouse_id as "warehouseId", w.name as "warehouseName",
            n.vehicle_plate as "vehiclePlate", n.driver_name as "driverName", n.description,

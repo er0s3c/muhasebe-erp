@@ -1,0 +1,2 @@
+ALTER TABLE "items" ADD COLUMN "shelf_life_days" integer;--> statement-breakpoint
+ALTER TABLE "items" ADD CONSTRAINT "items_shelf_life_ck" CHECK ("items"."shelf_life_days" is null or "items"."shelf_life_days" between 1 and 3650);

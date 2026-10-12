@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +10,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -59,11 +61,19 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
   await page.getByRole('button', { name: 'Yeni satış faturası' }).first().click();
   await pick('Müşteri', 'Ömer');
   await pick('Kart / hizmet 1', 'boya');
+  // Kesirli adet birimle tutarsızdır: satır altında açıklanır, kaydı engellemez (öneri 31)
+  await page.getByLabel('Miktar 1').fill('2,5');
+  await expect(page.getByTestId('quantity-hint')).toContainText('adet tam sayı olarak girilir');
   await page.getByLabel('Miktar 1').fill('4');
+  await expect(page.getByTestId('quantity-hint')).toHaveCount(0);
   await page.getByLabel('Birim fiyat 1').fill('100');
   await expect(page.getByTestId('gross-total')).toHaveText('₺464,00');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByRole('heading', { name: /SF-\d{4}-000001/, level: 1 })).toBeVisible();
+  // Bu ortamda giden posta yok: gönderim düğmesi nedeniyle pasif görünür (öneri 7, 28)
+  const mailSection = page.getByRole('region', { name: 'E-posta gönderimleri' });
+  await expect(mailSection.getByRole('button', { name: 'E-postayla gönder' })).toBeDisabled();
+  await expect(mailSection).toContainText('giden e-posta yapılandırılmamış');
   await expect(page.getByText('Kaydedildi', { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId('gross-total')).toHaveText('₺464,00');
 
@@ -87,7 +97,21 @@ test('fatura: alış → satış → iade → iptal; stok, cari, KDV özeti ve m
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByRole('heading', { name: /SIF-\d{4}-000001/, level: 1 })).toBeVisible();
 
-  // İadesi olan fatura iptal edilemez; önce iade iptal edilir
+  // İadesi olan fatura iptal edilemez: neden ve iade faturasına giden çözüm bağlantısı pencerede kalır (öneri 28)
+  await nav.getByRole('link', { name: 'Satış faturaları' }).click();
+  await expect(async () => {
+    await page.getByRole('row', { name: /SF-\d{4}-000001/ }).click({ timeout: 3_000 });
+    await expect(page.getByRole('button', { name: 'Faturayı iptal et' })).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 25_000 });
+  await page.getByRole('button', { name: 'Faturayı iptal et' }).click();
+  await dialog.getByLabel('İptal nedeni').fill('Yanlış fatura');
+  await dialog.getByRole('button', { name: 'Faturayı iptal et' }).click();
+  await expect(dialog).toContainText('numaralı iade kesilmiş');
+  await dialog.getByRole('link', { name: /SIF-\d{4}-000001 faturasını aç/ }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: /SIF-\d{4}-000001/, level: 1 })).toBeVisible();
+
+  // Önce iade iptal edilir
   await page.getByRole('button', { name: 'Faturayı iptal et' }).click();
   await dialog.getByLabel('İptal nedeni').fill('Yanlış iade');
   await dialog.getByRole('button', { name: 'Faturayı iptal et' }).click();

@@ -5,7 +5,7 @@ import type { GenerateAiOptions, AiExecutionResult } from './types';
 export async function generateAiChatResponse(
   options: GenerateAiOptions,
 ): Promise<AiExecutionResult> {
-  const { message, history, context, apiKey, model = 'gemini-flash-lite-latest', tx } = options;
+  const { message, history, context, apiKey, model = 'gemini-flash-lite-latest', runTool } = options;
 
   // Girdi temizleme & doğrulama
   const sanitizedMessage = sanitizeUserInput(message);
@@ -20,7 +20,7 @@ export async function generateAiChatResponse(
   // Güvenli sistem talimatını ve bağlamı oluştur
   const systemInstruction = buildSystemInstruction(context);
 
-  // Gemini çağrısını ERP araçları ve DB oturumu ile yürüt
+  // Gemini çağrısını ERP araçlarıyla yürüt; her araç kendi kısa işleminde çalışır
   return callGemini({
     apiKey,
     model,
@@ -28,6 +28,6 @@ export async function generateAiChatResponse(
     history,
     message: sanitizedMessage,
     context,
-    tx,
+    runTool,
   });
 }

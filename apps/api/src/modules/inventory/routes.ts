@@ -17,6 +17,7 @@ import {
   updateItemCategorySchema,
   updateItemSchema,
   updateStockCountSchema,
+  recountStockCountSchema,
   updateWarehouseSchema,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
@@ -28,6 +29,7 @@ import {
   listStockCounts,
   postStockCount,
   updateStockCount,
+  recountStockCount,
 } from './counts';
 import {
   getStockDocument,
@@ -170,7 +172,14 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
       return result;
     }),
   );
-  app.get('/api/stock-counts/:id', tenantRoute(app, read, async ({ tx, req }) => getStockCount(tx, idParam.parse(req.params).id)));
+  // Kör sayımda sistem miktarı ve fark yalnız stok yönetim yetkilisine görünür (öneri 45)
+  app.get('/api/stock-counts/:id', tenantRoute(app, read, async (c) => getStockCount(c.tx, idParam.parse(c.req.params).id, { reveal: c.can('inventory.manage') })));
+  app.put(
+    '/api/stock-counts/:id/recount',
+    tenantRoute(app, move, async (c) =>
+      recountStockCount(c.tx, stockCtx(c), idParam.parse(c.req.params).id, recountStockCountSchema.parse(c.req.body)),
+    ),
+  );
   app.put(
     '/api/stock-counts/:id',
     tenantRoute(app, move, async (c) =>

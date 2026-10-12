@@ -14,6 +14,24 @@ import { manufacturingCtx } from './routes';
 import { decryptField } from '../hr/crypto';
 
 export const channelMappingSchema = manufacturingChannelMappingSchema;
+
+/**
+ * Kanal hata türü (öneri 110): kimlik/yetki hatası yeniden denemeyle düzelmez, hemen elle incelemeye düşer; hız sınırı ve ağ
+ * hataları geri çekilmeyle tekrar denenir; kanalın reddettiği değişiklik veri düzeltmesi ister.
+ */
+export type ChannelErrorKind = 'auth' | 'rate_limit' | 'rejected' | 'network';
+export function classifyChannelError(message: string): ChannelErrorKind {
+  if (/HTTP (401|403)\b/.test(message)) return 'auth';
+  if (/HTTP 429\b/.test(message)) return 'rate_limit';
+  if (/reddetti|reddedildi|bulunamadı/i.test(message)) return 'rejected';
+  return 'network';
+}
+const ERROR_HINT: Record<ChannelErrorKind, string> = {
+  auth: 'Kanal kimlik bilgisi geçersiz ya da yetkisi yok; bağlantıyı yenileyin. Otomatik tekrar yapılmaz.',
+  rate_limit: 'Kanal istek sınırına ulaşıldı; bekleme süresinden sonra tekrar denenir.',
+  rejected: 'Kanal değişikliği reddetti; eşleme ve ürün kimliklerini kontrol edin.',
+  network: 'Bağlantı ya da zaman aşımı; aynı komut ve işlem kimliğiyle tekrar denenir.',
+};
 export async function queueInventoryChanges(
   tx: Tx,
   ctx: StockCtx,
@@ -165,12 +183,74 @@ export async function sendInventoryOutbox(
       sentAt: new Date().toISOString(),
     });
   } catch (error) {
-    return updateRecord(tx, id, attempts + 1 >= 5 ? 'dead_letter' : 'failed', {
+    const message = error instanceof Error ? error.message.slice(0, 500) : 'Kanal hatası';
+    const errorKind = classifyChannelError(message);
+    return updateRecord(tx, id, errorKind === 'auth' || attempts + 1 >= 5 ? 'dead_letter' : 'failed', {
       ...config,
-      error: error instanceof Error ? error.message.slice(0, 500) : 'Kanal hatası',
+      error: message,
+      errorKind,
+      errorHint: ERROR_HINT[errorKind],
       retryAfter: new Date(Date.now() + Math.min(3600000, 30000 * 2 ** attempts)).toISOString(),
     });
   }
+}
+
+/** Eşleme sağlığı (öneri 109): kart/depo pasifliği, bağlantı durumu ve son gönderim sonucu. */
+async function mappingHealth(tx: Tx, mappings: Row[]) {
+  const items = new Map((await all(tx, sql`select id, is_active from items`)).map((r) => [r.id, r.is_active]));
+  const whs = new Map((await all(tx, sql`select id, is_active from warehouses`)).map((r) => [r.id, r.is_active]));
+  const connections = new Map((await listRecords(tx, 'connection')).map((r) => [r.id, r]));
+  const outbox = await listRecords(tx, 'inventory_outbox');
+  return mappings.map((m) => {
+    const issues: string[] = [];
+    if (m.status === 'retired') issues.push('retired');
+    if (m.status === 'paused') issues.push('paused');
+    if (items.get(m.itemId) === false) issues.push('item_inactive');
+    if (whs.get(m.warehouseId) === false) issues.push('warehouse_inactive');
+    const conn = connections.get(m.connectionId);
+    if (!conn || conn.status !== 'configured') issues.push('connection_not_configured');
+    const last = outbox.find((o) => o.mappingId === m.id);
+    if (last && ['failed', 'dead_letter'].includes(last.status)) issues.push('last_send_failed');
+    if (m.lastCheck && Number(m.lastCheck.difference) !== 0) issues.push('stock_difference');
+    return { ...m, health: { ok: issues.length === 0, issues, lastSendStatus: last?.status ?? null, lastErrorKind: last?.errorKind ?? null } };
+  });
+}
+
+/**
+ * Kanallar arası stok farkı (öneri 108): kanaldaki miktar okunur, Ada'nın kullanılabilir miktarıyla karşılaştırılır ve
+ * eşlemeye son kontrol olarak yazılır. İstenirse Ada miktarı (stok yetkisi Ada'dadır) yayın kuyruğuna alınır; otomatik gönderim yapılmaz.
+ */
+export async function checkChannelStock(tx: Tx, ctx: StockCtx, mappingId: string, secret: string, queue: boolean, requestKey: string, fetcher: typeof fetch = fetch) {
+  const mapping = await getRecord(tx, mappingId, 'channel_mapping', true);
+  if (mapping.status !== 'active') throw fail('Yalnız etkin eşleme kontrol edilir');
+  const connection = await getRecord(tx, mapping.config.connectionId, 'connection');
+  if (connection.status !== 'configured' || !connection.config.credentials) throw fail('Bağlı kanal gerekli');
+  if (connection.config.provider !== 'shopify') throw fail('Bu kanalda stok okuması desteklenmiyor; farkı kanal panelinden kontrol edin', 'CHANNEL_READ_UNSUPPORTED');
+  const { shopifyGraphql } = await import('./integrations');
+  const token = decryptField(connection.config.credentials, 'integrations:' + secret);
+  const m = mapping.config;
+  let channelQuantity: number;
+  try {
+    const response = await shopifyGraphql(
+      connection.config.shop,
+      connection.config.apiVersion ?? '2026-10',
+      token,
+      'query Stock($id:ID!,$location:ID!){inventoryItem(id:$id){inventoryLevel(locationId:$location){quantities(names:["available"]){name quantity}}}}',
+      { id: m.inventoryItemId, location: m.locationId },
+      fetcher,
+    );
+    channelQuantity = response.inventoryItem?.inventoryLevel?.quantities?.[0]?.quantity;
+    if (!Number.isInteger(channelQuantity)) throw fail('Shopify stok konumu bulunamadı');
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 300) : 'Kanal hatası';
+    const kind = classifyChannelError(message);
+    throw fail(`${message} — ${ERROR_HINT[kind]}`, 'CHANNEL_READ_FAILED');
+  }
+  const ada = Math.floor(Number((await stockAvailability(tx, m.itemId, m.warehouseId)).available));
+  const lastCheck = { adaQuantity: ada, channelQuantity, difference: ada - channelQuantity, at: new Date().toISOString(), by: ctx.userId };
+  await updateRecord(tx, mapping.id, mapping.status, { ...m, lastCheck });
+  if (queue && lastCheck.difference !== 0) await queueInventoryChanges(tx, ctx, 'reconcile:' + requestKey, [m.itemId]);
+  return { mappingId: mapping.id, ...lastCheck, queued: queue && lastCheck.difference !== 0 };
 }
 
 export const manufacturingChannelRoutes: FastifyPluginAsync = async (app) => {
@@ -179,7 +259,7 @@ export const manufacturingChannelRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     '/api/integrations/channel-mappings',
     tenantRoute(app, read, async (c) => ({
-      records: await listRecords(c.tx, 'channel_mapping'),
+      records: await mappingHealth(c.tx, await listRecords(c.tx, 'channel_mapping')),
       items: await all(
         c.tx,
         sql`select id,code,name from items where kind='goods' and unit='adet' and is_active`,
@@ -226,15 +306,18 @@ export const manufacturingChannelRoutes: FastifyPluginAsync = async (app) => {
             )
           )
             throw fail('Kanal ürün kodu ve depo eşlemesi başka stokta kullanılıyor');
+          // Emekli eşleme yeniden açılmaz; aynı kart/depo için yeni eşleme kaydı oluşur (öneri 109)
           const existing = mappings.find(
             (m) =>
               m.connectionId === input.connectionId &&
               m.itemId === input.itemId &&
-              m.warehouseId === input.warehouseId,
+              m.warehouseId === input.warehouseId &&
+              m.status !== 'retired',
           );
+          const history = [...((existing?.history as Row[] | undefined) ?? []), { status: 'active', at: new Date().toISOString(), by: c.user.id, reason: input.reason }];
           const record = existing
-            ? await updateRecord(c.tx, existing.id, 'active', input)
-            : await createRecord(c.tx, manufacturingCtx(c), 'channel_mapping', input, 'active');
+            ? await updateRecord(c.tx, existing.id, 'active', { ...input, history })
+            : await createRecord(c.tx, manufacturingCtx(c), 'channel_mapping', { ...input, history }, 'active');
           await queueInventoryChanges(c.tx, manufacturingCtx(c), 'mapping:' + input.requestKey, [
             input.itemId,
           ]);
@@ -242,6 +325,33 @@ export const manufacturingChannelRoutes: FastifyPluginAsync = async (app) => {
         }),
       };
     }),
+  );
+  // Eşleme yaşam döngüsü (öneri 109): etkin ↔ duraklatıldı, emekli (geri dönüşsüz); her geçiş gerekçesiyle geçmişe yazılır
+  app.post(
+    '/api/integrations/channel-mappings/:id/status',
+    tenantRoute(app, write, async (c) => {
+      const id = z.object({ id: uuid }).parse(c.req.params).id;
+      const input = z.object({ status: z.enum(['active', 'paused', 'retired']), reason: z.string().trim().min(3).max(300) }).parse(c.req.body);
+      const m = await getRecord(c.tx, id, 'channel_mapping', true);
+      if (m.status === 'retired') throw fail('Emekli eşleme yeniden açılmaz; yeni eşleme oluşturun', 'CHANNEL_MAPPING_RETIRED');
+      if (m.status === input.status) return { record: recordShape(m) };
+      const history = [...((m.config.history as Row[] | undefined) ?? []), { status: input.status, from: m.status, at: new Date().toISOString(), by: c.user.id, reason: input.reason }];
+      return { record: await updateRecord(c.tx, id, input.status, { ...m.config, history }) };
+    }),
+  );
+  app.post(
+    '/api/integrations/channel-mappings/:id/check',
+    tenantRoute(app, write, async (c) => {
+      const id = z.object({ id: uuid }).parse(c.req.params).id;
+      const input = z.object({ queue: z.boolean().default(false), requestKey: uuid }).parse(c.req.body);
+      return checkChannelStock(c.tx, manufacturingCtx(c), id, app.config.JWT_SECRET, input.queue, input.requestKey);
+    }),
+  );
+  app.get(
+    '/api/integrations/channel-differences',
+    tenantRoute(app, read, async (c) => ({
+      records: (await mappingHealth(c.tx, await listRecords(c.tx, 'channel_mapping'))).filter((m) => m.health.issues.includes('stock_difference')),
+    })),
   );
   app.get(
     '/api/integrations/inventory-outbox',

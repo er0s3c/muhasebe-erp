@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // Gerçek lisans sunucusuna karşı, üretim paketinde (E2E_TARGET=bundle): etkinleştirilmiş kurulum, sahip görünümü, gerçek kalp atışı.
 test.skip(process.env.E2E_TARGET !== 'bundle', 'Üretim paketi modunda çalışır');

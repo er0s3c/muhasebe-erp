@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // Üretim paketi modunda (E2E_TARGET=bundle) gerçek lisans sunucusuyla etkinleştirilmiş kurulumda çalışır.
 test.skip(process.env.E2E_TARGET !== 'bundle', 'Üretim paketi modunda çalışır');
@@ -15,6 +16,7 @@ async function signUpWithCompany(page: Page, tag: string, sector?: string) {
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel Ltd.');
   if (sector) await page.getByLabel('Faaliyet alanı').selectOption(sector);
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }

@@ -65,9 +65,17 @@ class AiToolRegistry {
     try {
       // Araç parametreleri backend tarafında güvenle çalıştırılır (Asla keyfi SQL yok)
       const result = await tool.handler(args, ctx, tx);
+      const meta = SOURCES[name] ?? { label: tool.definition.description.slice(0, 80), path: '/' };
       return {
         name,
         result,
+        source: {
+          tool: name,
+          ...meta,
+          asOf: ctx.today,
+          scope: `${ctx.company.name} · ${ctx.user.role} yetkisiyle görülen kayıtlar`,
+          ...countsOf(result),
+        },
       };
     } catch {
       return {
@@ -79,6 +87,26 @@ class AiToolRegistry {
 }
 
 export const toolRegistry = new AiToolRegistry();
+
+/** Araçların okuduğu ERP ekranı (öneri 18): yanıtla birlikte kullanıcıya kaynak olarak gösterilir. */
+const SOURCES: Record<string, { label: string; path: string }> = {
+  list_critical_stock: { label: 'Stok durumu (kritik seviye)', path: '/reports/stock-status' },
+  get_cash_and_bank_balances: { label: 'Kasa ve banka hesapları', path: '/treasury' },
+  get_overdue_receivables: { label: 'Vadesi geçmiş alacak ve borçlar', path: '/parties/aging' },
+  get_recent_invoices: { label: 'Son faturalar', path: '/invoices/sales' },
+  list_projects: { label: 'Projeler', path: '/projects' },
+  get_pending_approvals: { label: 'Bekleyen onaylar', path: '/approvals' },
+  get_subcontracts: { label: 'Taşeron sözleşmeleri', path: '/subcontracts' },
+};
+
+/** Sonuçtaki liste sınırı ve toplam sayı (araçların ortak alan adlarından). */
+function countsOf(result: unknown): { shown?: number; total?: number } {
+  if (!result || typeof result !== 'object') return {};
+  const r = result as Record<string, unknown>;
+  const list = Object.values(r).find((v) => Array.isArray(v)) as unknown[] | undefined;
+  const total = Object.entries(r).find(([k, v]) => /^(toplam|total)(kayit|.*sayisi|.*count|.*adet)$/i.test(k) && typeof v === 'number')?.[1] as number | undefined;
+  return { ...(list ? { shown: list.length } : {}), ...(total !== undefined ? { total } : {}) };
+}
 
 // ---------------------------------------------------------------------------
 // 1. Kritik Stokları Listeleme

@@ -88,7 +88,8 @@ export const salesRoutes: FastifyPluginAsync = async (app) => {
       tenantRoute(app, manage, async (c) => {
         const { id } = idParam.parse(c.req.params);
         const body = salesDocActionSchema.parse(c.req.body ?? {});
-        await transitionSalesDoc(c.tx, salesCtx(c), id, to, body.reason);
+        // Ticari kontrolü gerekçeyle geçmek fatura kaydetme yetkisi ister (F6: öneri 35, 38)
+        await transitionSalesDoc(c.tx, salesCtx(c), id, to, body.reason, { overrideReason: body.overrideReason, canOverride: c.can('invoices.post') });
         return getSalesDoc(c.tx, id);
       }),
     );

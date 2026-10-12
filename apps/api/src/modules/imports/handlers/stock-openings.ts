@@ -1,10 +1,10 @@
-import { inArray } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { type CurrencyCode, currencySymbol, dec, formatTR, type ImportMessage, type ImportRow, type MoneyValue, roundMoney, type StockLineInput, stockOpeningsOptionsSchema, sum, toDbRate } from '@erp/shared';
 import { items, stockMovements, warehouses } from '../../../db/schema';
 import { loadMappings } from '../../ledger/mappings';
 import { postStockDocument } from '../../inventory/documents';
 import { foldKey, parseDecimal } from '../values';
-import { RowState, cellOf, stockCtxOf, type ImportCtx, type ImportHandler, type PlanResult } from './common';
+import { RowState, cellOf, reconRow, stockCtxOf, type ImportCtx, type ImportHandler, type PlanResult } from './common';
 import { fxResolver, periodProblem } from './openings-common';
 import { parseCurrency } from './parties';
 
@@ -200,6 +200,11 @@ export const stockOpeningsHandler: ImportHandler = {
             entries.push({ type: 'stock', id: res.document.id, no: res.document.docNo });
           }
         }
+        // Mutabakat: dosyadaki miktar ve değer ↔ yazılan stok hareketleri
+        const moved = (await tx.execute<{ qty: string; value: string; n: number }>(sql`
+          select coalesce(sum(qty), 0)::text as qty, coalesce(sum(value), 0)::text as value, count(*)::int as n
+            from stock_movements where document_id in (${sql.join(entries.map((e) => sql`${e.id}::uuid`), sql`, `)})`)).rows[0]!;
+        const fileQty = planned.reduce((q, p) => q.plus(p.line.quantity), dec(0));
         return {
           created: planned.length,
           skipped,
@@ -209,6 +214,11 @@ export const stockOpeningsHandler: ImportHandler = {
             { label: `Stok değeri (${currencySymbol(base)})`, value: formatTR(total) },
           ],
           entries,
+          reconciliation: [
+            reconRow('Stok satırı', planned.length, moved.n),
+            reconRow('Toplam miktar', fileQty, dec(moved.qty), (v) => formatTR(v, 4).replace(/,?0+$/, '')),
+            reconRow(`Stok değeri (${currencySymbol(base)})`, total, dec(moved.value), (v) => formatTR(v)),
+          ],
         };
       },
     };

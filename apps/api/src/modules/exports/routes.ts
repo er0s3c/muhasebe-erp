@@ -8,9 +8,23 @@ import { writeXlsxStream, XLSX_CONTENT_TYPE } from '../../files/xlsx-write';
 import { AppError, badRequest, forbidden } from '../../http/errors';
 import { tenantRoute } from '../../http/context';
 import { EXPORTS } from './registry';
-import { isModuleDenied, requireResourceOperation } from '../access/effective';
+import { isModuleDenied, requireResourceOperation, type MemberAccess } from '../access/effective';
 
 const formatSchema = z.object({ format: z.enum(EXPORT_FORMATS).default('xlsx') });
+
+/** Ekran raporuyla aynı modül/erişim kuralı: anlık dışa aktarma ve arka plan raporu (öneri 20) birlikte kullanır. */
+export function assertExportAllowed(def: (typeof EXPORTS)[number], c: { access: MemberAccess; enabledModules: ReadonlySet<string> }) {
+  if (def.alternateModules) {
+    if (![def.module, ...def.alternateModules].some((module) => c.enabledModules.has(module) && !isModuleDenied(c.access, module)))
+      throw forbidden('Bu raporun modülü şirketinizde etkin değil veya erişiminiz yok.');
+    const module = [def.module, ...def.alternateModules].find((module) => {
+      const area = areaOfModule(module);
+      return c.enabledModules.has(module) && !isModuleDenied(c.access, module) && (!area || resourceOperationAllowed(c.access.permissions, c.access.overrides, area, 'export'));
+    });
+    if (!module) throw forbidden('Bu rapor için dışa aktarma yetkiniz yok.', 'RESOURCE_OPERATION_DENIED');
+    requireResourceOperation(c.access, module, 'export');
+  }
+}
 
 /**
  * `GET /api/exports/<rapor>?format=xlsx|csv&…rapor sorgusu`: raporu dosya olarak indirir. Her uç, ekrandaki
@@ -28,16 +42,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
     app.get(
       `/api/exports/${def.key}`,
       tenantRoute(app, { module: def.alternateModules ? undefined : def.module, permission: def.permission, limit: { name: 'export', max: 30, windowMs: 60_000 } }, async ({ tx, req, reply, company, user, role, access, enabledModules }) => {
-        if (def.alternateModules && ![def.module,...def.alternateModules].some(module=>enabledModules.has(module)&&!isModuleDenied(access,module)))
-          throw forbidden('Bu raporun modülü şirketinizde etkin değil veya erişiminiz yok.');
-        if (def.alternateModules) {
-          const module = [def.module, ...def.alternateModules].find(module => {
-            const area = areaOfModule(module);
-            return enabledModules.has(module) && !isModuleDenied(access, module) && (!area || resourceOperationAllowed(access.permissions, access.overrides, area, 'export'));
-          });
-          if (!module) throw forbidden('Bu rapor için dışa aktarma yetkiniz yok.', 'RESOURCE_OPERATION_DENIED');
-          requireResourceOperation(access, module, 'export');
-        }
+        assertExportAllowed(def, { access, enabledModules });
         const { format } = formatSchema.parse(req.query);
         if (!def.formats.includes(format)) throw badRequest(`Bu rapor yalnızca ${def.formats.join(', ').toUpperCase()} olarak alınabilir`, 'EXPORT_FORMAT_UNSUPPORTED');
         const q = def.schema.parse(req.query);

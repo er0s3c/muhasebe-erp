@@ -8,6 +8,8 @@ import type {
   ImportUnmatched,
   Permission,
 } from '@erp/shared';
+import { sql, type SQL } from 'drizzle-orm';
+import { dec, type MoneyValue } from '@erp/shared';
 import type { Tx } from '../../../db/client';
 import type { CompanyInfo } from '../../../http/context';
 import type { LedgerCtx } from '../../ledger/journal';
@@ -73,6 +75,21 @@ export const cellOf = (row: ImportRow, key: string): string => (row.cells[key] ?
 
 export interface ApplyResult extends Omit<ImportCommitResult, 'kind' | 'skipped'> {
   skipped?: number;
+}
+
+/** Mutabakat satırı: kaynak ve sonuç aynı biçimde metne çevrilir, eşitlik sayısal karşılaştırılır. */
+export function reconRow(label: string, source: MoneyValue | number, result: MoneyValue | number, format: (v: MoneyValue) => string = (v) => v.toString()) {
+  const s = dec(source), r = dec(result);
+  return { label, source: format(s), result: format(r), ok: s.eq(r) };
+}
+
+/** Yazılan yevmiyenin yeniden okunan borç/alacak toplamı (defter para birimi); `where` satırları süzer (ör. yalnız cari satırları). */
+export async function journalTotals(tx: Tx, entryId: string, where: SQL = sql`true`) {
+  const r = await tx.execute<{ d: string; c: string; n: number }>(sql`
+    select coalesce(sum(debit_base), 0)::text as d, coalesce(sum(credit_base), 0)::text as c, count(*)::int as n
+      from journal_lines where entry_id = ${entryId}::uuid and ${where}`);
+  const row = r.rows[0]!;
+  return { debit: dec(row.d), credit: dec(row.c), lines: Number(row.n) };
 }
 
 export interface PlanResult {

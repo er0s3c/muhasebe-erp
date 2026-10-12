@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { dec, todayIso } from '@erp/shared';
+import { dec, defectUsableAreas, patternScaleIssue, todayIso, toneKey } from '@erp/shared';
 import type { Tx } from '../../db/client';
 import { all, one, fail, type LeatherCtx, type Row } from '../leather/common';
 import { productionOrderScope } from '../leather/visibility';
@@ -156,10 +156,32 @@ export async function exceptionAction(
       : createRecord(tx, ctx, 'exception', value, status);
   });
 }
+/**
+ * Dijital kalıp (öneri 73): ölçü kutusuyla ölçek denetlenir; aynı model ve kodla yeni kayıt yeni revizyondur, önceki revizyon
+ * "yerine geçildi" olur. Kesim planı yalnız güncel revizyonu seçer; emirde önceden kullanılan revizyon o emirde korunur.
+ */
 export async function createPattern(tx: Tx, ctx: LeatherCtx, input: Row & { requestKey: string }) {
   return command(tx, ctx, 'pattern', input, async () => {
     await one(tx, sql`select id from leather_models where id=${input.modelId}::uuid`, 'Model');
-    return createRecord(tx, ctx, 'pattern', input, 'active');
+    const scale = patternScaleIssue(input.area, input.widthMm, input.heightMm);
+    if (scale) throw fail(scale, 'PATTERN_SCALE_MISMATCH');
+    const patternCode = String(input.code).trim();
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ctx.companyId + ':pattern:' + patternCode},0))`);
+    const previous = (await listRecords(tx, 'pattern')).filter(
+      (p) => (p.patternCode ?? p.code) === patternCode && p.modelId === input.modelId && p.status === 'active',
+    );
+    const revision = Math.max(0, ...(await listRecords(tx, 'pattern')).filter((p) => (p.patternCode ?? p.code) === patternCode).map((p) => Number(p.revision ?? 1))) + 1;
+    for (const p of previous) {
+      const raw = await getRecord(tx, p.id, 'pattern', true);
+      await updateRecord(tx, p.id, 'superseded', { ...raw.config, supersededAt: new Date().toISOString() });
+    }
+    return createRecord(
+      tx,
+      ctx,
+      'pattern',
+      { ...input, code: revision > 1 ? `${patternCode}-R${revision}` : patternCode, patternCode, revision },
+      'active',
+    );
   });
 }
 export async function cutPlan(tx: Tx, ctx: LeatherCtx, input: Row & { requestKey: string }) {
@@ -183,10 +205,14 @@ export async function cutPlan(tx: Tx, ctx: LeatherCtx, input: Row & { requestKey
     );
     if (activePlans.some((p) => p.pieces.some((id: string) => input.pieces.includes(id))))
       throw fail('Seçilen deri parçası açık bir kesim planında kullanılıyor');
+    // Emrin önceki (iptal edilmemiş) kesim planları: kalıp revizyonu ve ton grubu bu emirde korunur (öneri 73, 74)
+    const orderPlans = (await listRecords(tx, 'cut_plan')).filter((p) => p.orderId === order.id && p.status !== 'cancelled');
     const pieceSnapshots: Row[] = [],
       patternSnapshots: Row[] = [];
     let available = dec(0),
-      required = dec(0);
+      availableVisible = dec(0),
+      required = dec(0),
+      requiredVisible = dec(0);
     for (const pieceId of input.pieces) {
       const piece = await one(
         tx,
@@ -199,14 +225,21 @@ export async function cutPlan(tx: Tx, ctx: LeatherCtx, input: Row & { requestKey
         !['available', 'second'].includes(piece.status)
       )
         throw fail('Kesim parçası üretim malzemesine, depoya ve kaliteye uygun olmalı');
-      available = available.plus(
-        dec(piece.remaining_area).lt(piece.usable_area) ? piece.remaining_area : piece.usable_area,
-      );
+      // Kusur bölgeleri: delik her parçada, diğer kusurlar görünür parçada kullanılamaz (öneri 75)
+      const usableByClass = defectUsableAreas({ area: piece.area, usableArea: piece.usable_area, outline: piece.config.outline, defects: piece.config.defects });
+      const remaining = dec(piece.remaining_area);
+      const hidden = remaining.lt(usableByClass.hiddenUsable) ? remaining : dec(usableByClass.hiddenUsable);
+      const visible = remaining.lt(usableByClass.visibleUsable) ? remaining : dec(usableByClass.visibleUsable);
+      available = available.plus(hidden);
+      availableVisible = availableVisible.plus(visible);
       pieceSnapshots.push({
         id: piece.id,
         itemId: piece.item_id,
         remainingArea: piece.remaining_area,
         usableArea: piece.usable_area,
+        visibleUsable: visible.toFixed(4),
+        hiddenUsable: hidden.toFixed(4),
+        tone: piece.config.tone ?? '',
         grainAngle: piece.config.grainAngle ?? null,
         outline: piece.config.outline ?? null,
         defects: piece.config.defects ?? [],
@@ -222,11 +255,33 @@ export async function cutPlan(tx: Tx, ctx: LeatherCtx, input: Row & { requestKey
         throw fail('Kalıp üretim modeline bağlı olmalı');
       if (pattern.config.direction === 'grain' && pieceSnapshots.some((p) => p.grainAngle === null))
         throw fail('Damar yönü gerektiren kalıp için her parçanın damar açısını kaydedin');
-      required = required.plus(dec(pattern.config.area).times(part.perSet).times(input.sets));
+      const patternCode = pattern.config.patternCode ?? pattern.config.code;
+      const pinned = orderPlans.flatMap((p) => (p.patternSnapshots ?? []) as Row[]).find((s) => (s.patternCode ?? s.code) === patternCode);
+      if (pinned && pinned.id !== pattern.id)
+        throw fail(`${patternCode} kalıbının bu emirde kullanılan revizyonu ${pinned.revision ?? 1}; aynı revizyonla devam edin`, 'PATTERN_REVISION_PINNED');
+      if (!pinned && pattern.status !== 'active')
+        throw fail(`${patternCode} kalıbının bu revizyonu güncel değil; güncel revizyonu seçin`, 'PATTERN_REVISION_SUPERSEDED');
+      const area = dec(pattern.config.area).times(part.perSet).times(input.sets);
+      required = required.plus(area);
+      if ((pattern.config.visibility ?? 'visible') === 'visible') requiredVisible = requiredVisible.plus(area);
       patternSnapshots.push({ ...pattern.config, id: pattern.id, perSet: part.perSet });
     }
     if (required.gt(available) || input.sets > Number(order.quantity))
       throw fail('Kesim hedefi kullanılabilir alanı veya emir miktarını aşamaz');
+    if (requiredVisible.gt(availableVisible))
+      throw fail(
+        `Görünür parçalar için kusursuz alan yetersiz (gerekli ${requiredVisible.toFixed(4)}, kusursuz ${availableVisible.toFixed(4)} m²)`,
+        'LEATHER_DEFECT_AREA',
+      );
+    // Ton uyumu: bir sette ve emrin tüm kesimlerinde aynı ton grubu (öneri 74)
+    const tones = [...new Set(pieceSnapshots.map((p) => toneKey(p.tone)).filter(Boolean))];
+    const orderTones = [...new Set(orderPlans.map((p) => p.toneGroup).filter(Boolean))] as string[];
+    const toneConflict = tones.length > 1 || (tones.length === 1 && orderTones.length > 0 && !orderTones.includes(tones[0]!));
+    if (toneConflict && !input.toneOverrideReason)
+      throw fail(
+        `Kesim parçalarının ton grupları uyuşmuyor (${[...new Set([...orderTones, ...tones])].join(', ')}); aynı ton grubundan parça seçin ya da gerekçe girin`,
+        'LEATHER_TONE_MISMATCH',
+      );
     return createRecord(
       tx,
       ctx,
@@ -236,8 +291,12 @@ export async function cutPlan(tx: Tx, ctx: LeatherCtx, input: Row & { requestKey
         pieceSnapshots,
         patternSnapshots,
         availableArea: available.toFixed(4),
+        availableVisibleArea: availableVisible.toFixed(4),
         requiredArea: required.toFixed(4),
+        requiredVisibleArea: requiredVisible.toFixed(4),
         plannedYield: required.div(available).times(100).toFixed(2),
+        toneGroup: tones.length === 1 ? tones[0] : null,
+        toneOverrideReason: toneConflict ? input.toneOverrideReason : null,
       },
       'planned',
     );

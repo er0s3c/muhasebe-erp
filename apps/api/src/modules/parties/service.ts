@@ -448,18 +448,18 @@ export async function assertAllocatable(tx: Tx, control: PartyControlType, items
 
 /** Fişin cari kalemlerini kapatan etkin işlemler (kasa/banka, çek/senet, fesih). Belge iptali/ters kayıt öncesi denetim için. */
 export async function entrySettlements(tx: Tx, entryId: string) {
-  const r = await tx.execute<{ kind: string; ref: string | null }>(sql`
-    select 'treasury' as kind, t.txn_no as ref
+  const r = await tx.execute<{ kind: string; id: string; ref: string | null }>(sql`
+    select 'treasury' as kind, t.id::text as id, t.txn_no as ref
       from party_allocations a
       join journal_lines l on l.id = a.charge_line_id
       join treasury_transactions t on t.id = a.transaction_id and t.status = 'posted'
      where l.entry_id = ${entryId}
     union all
-    select 'cheque', c.doc_no
+    select 'cheque', c.id::text, c.doc_no
       from cheque_allocations a join journal_lines l on l.id = a.charge_line_id join cheques c on c.id = a.cheque_id
      where l.entry_id = ${entryId}
     union all
-    select 'writeoff', null
+    select case when w.restructure_id is null then 'writeoff' else 'restructure' end, w.entry_id::text, null
       from sales_writeoffs w join journal_lines l on l.id = w.charge_line_id
      where l.entry_id = ${entryId}`);
   return r.rows;
@@ -467,7 +467,7 @@ export async function entrySettlements(tx: Tx, entryId: string) {
 
 /** Kapatmaları kullanıcıya okunur listeler: "TAH-2026-000003 (kasa/banka), 1234 (çek/senet)". */
 export function describeSettlements(rows: readonly { kind: string; ref: string | null }[]): string {
-  const label: Record<string, string> = { treasury: 'tahsilat/ödeme', cheque: 'çek/senet', writeoff: 'fesih kapatması' };
+  const label: Record<string, string> = { treasury: 'tahsilat/ödeme', cheque: 'çek/senet', writeoff: 'fesih kapatması', restructure: 'taksit yapılandırması' };
   const seen = new Set<string>();
   for (const r of rows) seen.add(r.ref ? `${r.ref} (${label[r.kind] ?? r.kind})` : (label[r.kind] ?? r.kind));
   return [...seen].slice(0, 5).join(', ') + (seen.size > 5 ? ` ve ${seen.size - 5} diğer` : '');

@@ -28,7 +28,9 @@ export function CountsPage() {
   const [warehouseId, setWarehouseId] = useState('');
   const [date, setDate] = useState(todayIso());
   const [description, setDescription] = useState('');
-  const [prefill, setPrefill] = useState<'in_stock' | 'empty'>('in_stock');
+  const [prefill, setPrefill] = useState<'in_stock' | 'empty' | 'cycle'>('in_stock');
+  const [blind, setBlind] = useState(false);
+  const [tolerance, setTolerance] = useState('');
   const [error, setError] = useState<string | null>(null);
   const warehouses = (wh?.warehouses ?? []).filter((w) => w.isActive);
 
@@ -37,6 +39,8 @@ export function CountsPage() {
       setDate(todayIso());
       setDescription('');
       setPrefill('in_stock');
+      setBlind(false);
+      setTolerance('');
       setError(null);
       setWarehouseId((cur) => cur || (warehouses.find((w) => w.isDefault) ?? warehouses[0])?.id || '');
     }
@@ -48,7 +52,7 @@ export function CountsPage() {
     (_: void, call) =>
       call<StockCountDetail>('/api/stock-counts', {
         method: 'POST',
-        body: { warehouseId, countDate: date, prefill, ...(description.trim() ? { description: description.trim() } : {}) },
+        body: { warehouseId, countDate: date, prefill, blind, recountTolerancePct: tolerance || null, ...(description.trim() ? { description: description.trim() } : {}) },
       }),
     STOCK_INVALIDATE,
   );
@@ -181,14 +185,21 @@ export function CountsPage() {
           <fieldset>
             <legend className="mb-1.5 text-[13px]">{t('inventory.counts.prefill')}</legend>
             <div className="flex flex-col gap-2 text-sm">
-              {(['in_stock', 'empty'] as const).map((k) => (
+              {(['in_stock', 'cycle', 'empty'] as const).map((k) => (
                 <label key={k} className="flex cursor-pointer items-center gap-2">
                   <input type="radio" name="prefill" className="size-4" checked={prefill === k} onChange={() => setPrefill(k)} />
-                  {k === 'in_stock' ? t('inventory.counts.prefillStock') : t('inventory.counts.prefillEmpty')}
+                  {k === 'in_stock' ? t('inventory.counts.prefillStock') : k === 'cycle' ? 'Döngüsel sayım: en uzun süredir sayılmamış 20 kart' : t('inventory.counts.prefillEmpty')}
                 </label>
               ))}
             </div>
           </fieldset>
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4" checked={blind} onChange={(e) => setBlind(e.target.checked)} />
+            <span>Kör sayım<span className="block text-xs text-muted">Sayan kişi sistem miktarını ve farkı görmez; yalnız stok yöneticisi görür.</span></span>
+          </label>
+          <Field label="Yeniden sayım toleransı (%)" hint="Bu yüzdeyi aşan farkta, ilk sayımı girenden farklı biri yeniden saymadan sayım işlenmez. Boşsa istenmez.">
+            {(id) => <Input id={id} inputMode="decimal" value={tolerance} maxLength={6} onChange={(e) => setTolerance(e.target.value.replace(',', '.').replace(/[^\d.]/g, ''))} />}
+          </Field>
         </div>
       </Modal>
     </>

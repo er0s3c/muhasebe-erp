@@ -1,3 +1,4 @@
+import { OperationsCard } from './OperationsCard';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -174,6 +175,7 @@ export function LicensePage() {
             </Card>
 
             <UpdateCard />
+            <OperationsCard />
 
             <Card>
               <CardHeader title={t('license.offline.title')} />

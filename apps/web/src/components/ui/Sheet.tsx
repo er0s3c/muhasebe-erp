@@ -56,6 +56,16 @@ function enterSubmits(footerRef: RefObject<HTMLElement | null>) {
   };
 }
 
+/**
+ * Alt bilgideki "Vazgeç"/"Kapat" düğmesi pencereyi kapatır; taslak varsa önce onay istenir. Ana/tehlikeli işlem
+ * düğmeleri (ör. iki adımlı doğrulamayı "Kapat") ve sihirbazın "Geri" adımı kapatma sayılmaz.
+ */
+function isDismissButton(target: EventTarget) {
+  const button = (target as HTMLElement).closest('button');
+  if (!button || button.dataset.variant === 'primary' || button.dataset.variant === 'danger') return false;
+  return /^(Vazgeç|Kapat)$/.test(button.textContent?.trim() ?? '');
+}
+
 /** Sağdan açılan yan panel: modal yığını yerine ana bağlamı görünür tutar. */
 export function Sheet({ open, onOpenChange, title, description, wide, footer, children, contentClassName }: SheetProps) {
   const { t } = useTranslation();
@@ -95,8 +105,7 @@ export function Sheet({ open, onOpenChange, title, description, wide, footer, ch
           <div className={cn('min-h-0 flex-1 overflow-y-auto px-6 py-5', contentClassName)}>{children}</div>
           {footer && (
             <div ref={footerRef} onClickCapture={(event) => {
-              const button = (event.target as HTMLElement).closest('button');
-              if (button && /^(Vazgeç|Kapat|Geri)$/.test(button.textContent?.trim() ?? '') && (draft.dirty || draft.pending)) {
+              if (isDismissButton(event.target) && (draft.dirty || draft.pending)) {
                 event.preventDefault(); event.stopPropagation(); changeOpen(false);
               }
             }} className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-surface-2/50 px-6 py-3">
@@ -139,8 +148,7 @@ export function Modal({ open, onOpenChange, title, description, footer, children
           </div>
           {children && <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{children}</div>}
           <div ref={footerRef} onClickCapture={(event) => {
-            const button = (event.target as HTMLElement).closest('button');
-            if (button && /^(Vazgeç|Kapat|Geri)$/.test(button.textContent?.trim() ?? '') && (draft.dirty || draft.pending)) {
+            if (isDismissButton(event.target) && (draft.dirty || draft.pending)) {
               event.preventDefault(); event.stopPropagation(); changeOpen(false);
             }
           }} className="flex shrink-0 flex-wrap justify-end gap-2 px-6 pb-5 pt-2">

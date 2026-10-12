@@ -1,0 +1,2 @@
+ALTER TABLE "bank_statement_lines" DROP CONSTRAINT "bank_statement_lines_match_ck";--> statement-breakpoint
+ALTER TABLE "bank_statement_lines" ADD CONSTRAINT "bank_statement_lines_match_ck" CHECK (("bank_statement_lines"."status" = 'matched') = ("bank_statement_lines"."matched_at" is not null) and ("bank_statement_lines"."journal_line_id" is null or "bank_statement_lines"."status" = 'matched'));

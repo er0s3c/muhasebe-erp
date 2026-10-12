@@ -4,6 +4,7 @@ import {
   isoYear,
   toDbAmount,
   type CreateStockCountInput,
+  type RecountStockCountInput,
   type UpdateStockCountInput,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
@@ -35,7 +36,7 @@ async function getDraftRow(tx: Tx, id: string) {
   return row;
 }
 
-export async function createStockCount(tx: Tx, ctx: StockCtx, input: CreateStockCountInput) {
+export async function createStockCount(tx: Tx, ctx: StockCtx, input: Omit<CreateStockCountInput, 'blind' | 'cycleLimit'> & { blind?: boolean; cycleLimit?: number }) {
   const warehouse = await requireActiveWarehouse(tx, input.warehouseId);
   const [count] = await tx
     .insert(stockCounts)
@@ -44,9 +45,29 @@ export async function createStockCount(tx: Tx, ctx: StockCtx, input: CreateStock
       countDate: input.countDate,
       warehouseId: warehouse.id,
       description: input.description ?? null,
+      blind: input.blind ?? false,
+      recountTolerancePct: input.recountTolerancePct ?? null,
       createdBy: ctx.userId,
     })
     .returning();
+
+  if (input.prefill === 'cycle') {
+    // Döngüsel sayım: depoda bakiyesi olan kartlardan en uzun süredir sayılmamış olanlar, eşitlikte değeri yüksek olan önce
+    const rows = await tx.execute<{ item_id: string }>(sql`
+      select m.item_id
+        from stock_movements m join items i on i.id = m.item_id
+        left join lateral (
+          select max(c.count_date) as last_count from stock_count_lines l join stock_counts c on c.id = l.count_id
+           where l.item_id = m.item_id and c.warehouse_id = ${warehouse.id} and c.status = 'posted' and l.counted_qty is not null) lc on true
+       where m.warehouse_id = ${warehouse.id} and i.is_active and i.kind = 'goods'
+       group by m.item_id, lc.last_count
+      having sum(m.qty) <> 0
+       order by lc.last_count asc nulls first, abs(sum(m.value)) desc, m.item_id
+       limit ${input.cycleLimit ?? 20}`);
+    if (rows.rows.length > 0) {
+      await tx.insert(stockCountLines).values(rows.rows.map((r) => ({ companyId: ctx.companyId, countId: count!.id, itemId: r.item_id })));
+    }
+  }
 
   if (input.prefill === 'in_stock') {
     const rows = await tx.execute<{ item_id: string }>(sql`
@@ -72,6 +93,18 @@ interface CountLineRow extends Record<string, unknown> {
   system_qty: string | null;
   diff_qty: string | null;
   live_qty: string;
+  counted_by: string | null;
+  recount_qty: string | null;
+  recounted_by: string | null;
+}
+
+/** Fark toleransı aşıyor mu: sistem miktarının yüzdesi; sistem sıfırken her fark aşar. */
+export function exceedsTolerance(system: string, counted: string, tolerancePct: string | null): boolean {
+  if (tolerancePct === null) return false;
+  const diff = dec(counted).minus(system).abs();
+  if (diff.isZero()) return false;
+  const base = dec(system).abs();
+  return base.isZero() || diff.gt(base.times(tolerancePct).div(100));
 }
 
 interface CountHead extends Record<string, unknown> {
@@ -80,6 +113,8 @@ interface CountHead extends Record<string, unknown> {
   countDate: string;
   status: 'draft' | 'posted';
   description: string | null;
+  blind: boolean;
+  recountTolerancePct: string | null;
   warehouseId: string;
   warehouseName: string;
   documentId: string | null;
@@ -89,9 +124,14 @@ interface CountHead extends Record<string, unknown> {
   createdAt: Date;
 }
 
-export async function getStockCount(tx: Tx, id: string) {
+/**
+ * Sayım ayrıntısı. Kör sayımda (öneri 45) `reveal` olmayan kullanıcı taslakta sistem miktarını, farkı ve yeniden sayım
+ * gereğini görmez; yalnız kendi girdiği miktarları görür.
+ */
+export async function getStockCount(tx: Tx, id: string, opts: { reveal: boolean } = { reveal: true }) {
   const head = await tx.execute<CountHead>(sql`
     select c.id, c.count_no as "countNo", c.count_date::text as "countDate", c.status, c.description,
+           c.blind, c.recount_tolerance_pct::text as "recountTolerancePct",
            c.warehouse_id as "warehouseId", w.name as "warehouseName",
            c.document_id as "documentId", d.doc_no as "documentNo", d.reversed_by_id as "documentReversedById",
            c.posted_at as "postedAt", c.created_at as "createdAt"
@@ -104,6 +144,7 @@ export async function getStockCount(tx: Tx, id: string) {
 
   const rows = await tx.execute<CountLineRow>(sql`
     select l.item_id, i.code as item_code, i.name as item_name, i.unit, l.counted_qty, l.system_qty, l.diff_qty,
+           l.counted_by, l.recount_qty, l.recounted_by,
            coalesce((select sum(m.qty) from stock_movements m
                      where m.item_id = l.item_id and m.warehouse_id = ${count.warehouseId}), 0) as live_qty
     from stock_count_lines l join items i on i.id = l.item_id
@@ -111,14 +152,17 @@ export async function getStockCount(tx: Tx, id: string) {
     order by i.name collate ${TR}, i.code`);
 
   const posted = count.status === 'posted';
+  const hidden = count.blind && !posted && !opts.reveal;
   let counted = 0;
   let surplus = 0;
   let shortage = 0;
   const lines = rows.rows.map((r) => {
     // Taslakta sistem miktarı canlı okunur; işlenince sayım anındaki değer saklanır
     const systemQty = posted ? r.system_qty : r.live_qty;
+    const effective = r.recount_qty ?? r.counted_qty;
     const diff =
-      posted || r.counted_qty === null ? r.diff_qty : toDbAmount(dec(r.counted_qty).minus(r.live_qty));
+      posted || effective === null ? r.diff_qty : toDbAmount(dec(effective).minus(r.live_qty));
+    const recountRequired = !posted && r.counted_qty !== null && r.recount_qty === null && exceedsTolerance(r.live_qty, r.counted_qty, count.recountTolerancePct);
     if (r.counted_qty !== null) counted += 1;
     if (diff !== null && dec(diff).gt(0)) surplus += 1;
     if (diff !== null && dec(diff).lt(0)) shortage += 1;
@@ -128,14 +172,22 @@ export async function getStockCount(tx: Tx, id: string) {
       itemName: r.item_name,
       unit: r.unit,
       countedQty: r.counted_qty,
-      systemQty,
-      diffQty: diff,
+      countedBy: r.counted_by,
+      recountQty: hidden ? null : r.recount_qty,
+      recountedBy: hidden ? null : r.recounted_by,
+      recountRequired: hidden ? null : recountRequired,
+      systemQty: hidden ? null : systemQty,
+      diffQty: hidden ? null : diff,
     };
   });
   return {
     count,
     lines,
-    summary: { lines: lines.length, counted, uncounted: lines.length - counted, surplus, shortage },
+    summary: {
+      lines: lines.length, counted, uncounted: lines.length - counted,
+      surplus: hidden ? null : surplus, shortage: hidden ? null : shortage,
+      recountRequired: hidden ? null : lines.filter((l) => l.recountRequired).length,
+    },
   };
 }
 
@@ -172,17 +224,39 @@ export async function updateStockCount(tx: Tx, ctx: StockCtx, id: string, input:
       const service = found.find((f) => f.kind !== 'goods');
       if (service) throw unprocessable(`${service.code} hizmet kalemidir, sayılamaz`, 'ITEM_NOT_STOCKED');
     }
+    // Değişmeyen satırın ilk sayımı girenini ve yeniden sayımını korur; miktar değişirse sayımı giren bu kullanıcı olur
+    const previous = new Map((await tx.select().from(stockCountLines).where(eq(stockCountLines.countId, id))).map((l) => [l.itemId, l]));
     await tx.delete(stockCountLines).where(eq(stockCountLines.countId, id));
     if (ids.length > 0) {
       await tx.insert(stockCountLines).values(
-        input.lines.map((l) => ({
-          companyId: ctx.companyId,
-          countId: id,
-          itemId: l.itemId,
-          countedQty: l.countedQty,
-        })),
+        input.lines.map((l) => {
+          const old = previous.get(l.itemId);
+          const same = !!old && (old.countedQty === null ? l.countedQty === null : l.countedQty !== null && dec(old.countedQty).eq(l.countedQty));
+          return {
+            companyId: ctx.companyId,
+            countId: id,
+            itemId: l.itemId,
+            countedQty: l.countedQty,
+            countedBy: same ? old!.countedBy : l.countedQty === null ? null : ctx.userId,
+            recountQty: same ? old!.recountQty : null,
+            recountedBy: same ? old!.recountedBy : null,
+          };
+        }),
       );
     }
+  }
+  return getStockCount(tx, id);
+}
+
+/** Bağımsız yeniden sayım (öneri 45): yalnız sayılmış satıra, ilk sayımı girenden farklı kullanıcı girer. */
+export async function recountStockCount(tx: Tx, ctx: StockCtx, id: string, input: RecountStockCountInput) {
+  await getDraftRow(tx, id);
+  const lines = new Map((await tx.select().from(stockCountLines).where(eq(stockCountLines.countId, id))).map((l) => [l.itemId, l]));
+  for (const r of input.lines) {
+    const line = lines.get(r.itemId);
+    if (!line || line.countedQty === null) throw unprocessable('Yeniden sayım yalnız sayılmış satıra girilir', 'COUNT_RECOUNT_NOT_COUNTED');
+    if (line.countedBy === ctx.userId) throw unprocessable('Yeniden sayımı ilk sayımı girenden farklı biri yapmalı', 'COUNT_RECOUNT_SAME_USER');
+    await tx.update(stockCountLines).set({ recountQty: r.recountQty, recountedBy: ctx.userId }).where(eq(stockCountLines.id, line.id));
   }
   return getStockCount(tx, id);
 }
@@ -221,10 +295,17 @@ export async function postStockCount(tx: Tx, ctx: StockCtx, id: string) {
     warehouseNames: new Map([[warehouse.id, warehouse.name]]),
   });
 
+  // Tolerans aşan fark bağımsız yeniden sayım olmadan işlenmez (öneri 45); yeniden sayım varsa o miktar esas alınır
+  const tolerance = (await tx.select({ t: stockCounts.recountTolerancePct }).from(stockCounts).where(eq(stockCounts.id, id)))[0]?.t ?? null;
+  const missing = counted.filter((l) => l.recountQty === null && exceedsTolerance(planner.available(l.itemId, warehouse.id).toString(), l.countedQty!, tolerance));
+  if (missing.length > 0) {
+    const codes = missing.map((l) => plannerItems.get(l.itemId)!.code);
+    throw unprocessable(`Tolerans dışı farkı olan ${missing.length} kart için bağımsız yeniden sayım gerekli: ${codes.slice(0, 5).join(', ')}`, 'COUNT_RECOUNT_REQUIRED', { items: codes });
+  }
   const diffs = new Map<string, { system: string; diff: string }>();
   for (const [i, line] of counted.entries()) {
     const system = planner.available(line.itemId, warehouse.id);
-    const diff = dec(line.countedQty!).minus(system);
+    const diff = dec(line.recountQty ?? line.countedQty!).minus(system);
     diffs.set(line.itemId, { system: toDbAmount(system), diff: toDbAmount(diff) });
     if (diff.gt(0)) planner.surplus(i + 1, line.itemId, warehouse.id, diff);
     else if (diff.lt(0)) planner.issue(i + 1, line.itemId, warehouse.id, diff.abs());

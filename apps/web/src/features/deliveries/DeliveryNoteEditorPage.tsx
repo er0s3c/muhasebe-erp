@@ -2,6 +2,8 @@ import { Ban, FileText, Printer, Undo2 } from 'lucide-react';
 import { PrintSignatures } from '../../components/print/PrintBlocks';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DocumentChain } from '../sales/DocumentChain';
+import { ReturnInspectionSection } from './ReturnInspectionSection';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DELIVERY_NOTE_TYPES, DELIVERY_NOTE_TYPE_META, dec, todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
@@ -45,7 +47,14 @@ export function DeliveryNoteEditorPage() {
   if (detail.data.note.status === 'draft' && canManage) {
     return <DeliveryNoteForm key={id} type={detail.data.note.type} initial={detail.data} />;
   }
-  return <DeliveryNoteView key={id} data={detail.data} />;
+  const n = detail.data.note;
+  return (
+    <>
+      <DeliveryNoteView key={id} data={detail.data} />
+      {n.type === 'sales_return' && n.inspectionRequired && n.status === 'posted' && <ReturnInspectionSection noteId={id} />}
+      <div className="mt-4"><DocumentChain kind="delivery" id={id} /></div>
+    </>
+  );
 }
 
 function DeliveryNoteView({ data }: { data: DeliveryNoteDetail }) {

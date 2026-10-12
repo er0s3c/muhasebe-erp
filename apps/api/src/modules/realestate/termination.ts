@@ -49,11 +49,17 @@ export async function terminateContract(tx: Tx, ctx: SalesCtx, id: string, input
   const lineIds = new Set(inst.map((i) => i.journalLineId!).filter(Boolean));
   const open = (await openItemsFor(tx, c.partyId, 'receivable', on)).items.filter((o) => lineIds.has(o.lineId));
   const remainingOf = new Map(open.map((o) => [o.lineId, dec(o.remaining)]));
+  // Yeniden yapılandırmayla yeni taksitlere devredilen kalan tahsilat değildir (öneri 92)
+  const moved = new Map(
+    (await tx.execute<{ id: string; amount: string }>(sql`select charge_line_id as id, sum(amount)::text as amount from sales_writeoffs where contract_id = ${id} and restructure_id is not null group by charge_line_id`)).rows.map(
+      (r) => [r.id, dec(r.amount)] as const,
+    ),
+  );
   let collectedPrice = dec(0);
   let collectedFees = dec(0);
   let feesTotal = dec(0);
   for (const i of inst) {
-    const paidI = dec(i.amount).minus(remainingOf.get(i.journalLineId!) ?? 0);
+    const paidI = dec(i.amount).minus(remainingOf.get(i.journalLineId!) ?? 0).minus(moved.get(i.journalLineId!) ?? 0);
     if (i.kind === 'fee') {
       feesTotal = feesTotal.plus(i.amount);
       collectedFees = collectedFees.plus(paidI);

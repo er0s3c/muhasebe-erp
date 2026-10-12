@@ -52,11 +52,16 @@ export const createApprovalRuleSchema = z
     maxAmount: approvalAmount.nullable().optional(),
     separateRequester: z.boolean().default(true),
     steps: z.array(approvalStepInputSchema).min(1, 'En az bir onay adımı gerekir').max(8),
+    /** Her adım için karar süresi (saat); süre önceki karardan (ilk adımda gönderimden) başlar. */
+    dueHours: z.number().int().min(1).max(720).nullable().optional(),
+    /** Süre dolunca bu roldeki onay yetkili üyeler de adımı karara bağlayabilir (gecikme yönlendirmesi). */
+    escalateRole: z.enum(ROLES).nullable().optional(),
   })
   .refine((r) => r.maxAmount == null || Number(r.maxAmount) > Number(r.minAmount), {
     message: 'Üst sınır alt sınırdan büyük olmalı',
     path: ['maxAmount'],
-  });
+  })
+  .refine((r) => !r.escalateRole || !!r.dueHours, { message: 'Yönlendirme için önce karar süresi girin', path: ['escalateRole'] });
 export type CreateApprovalRuleInput = z.infer<typeof createApprovalRuleSchema>;
 
 export const decideApprovalSchema = z.object({

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('hesap güvenliği: posta kapalıyken genel sayfalar; yöneticinin geçici şifresiyle girişte şifre değiştirmeden ilerlenemez', async ({ page, request }) => {
   // 1) Posta yapılandırılmamış kurulum: "Şifremi unuttum" görünmez, sıfırlama sayfası nedenini açıklar
@@ -52,7 +52,7 @@ test('hesap güvenliği: posta kapalıyken genel sayfalar; yöneticinin geçici 
   await expect(page.getByRole('heading', { name: /Merhaba, Mert/ })).toBeVisible();
 
   // Yeni şifreyle yeniden giriş çalışır
-  await page.getByRole('button', { name: /Mert/ }).click();
+  await page.getByRole('button', { name: 'Mert Muhasebeci', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Çıkış yap' }).click();
   await page.getByLabel('E-posta').fill(memberEmail);
   await page.getByLabel('Şifre').fill('Yeni-Kalem-9090!');

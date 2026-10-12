@@ -236,6 +236,8 @@
     "purchaseReturnNotes": "Alış iade irsaliyeleri",
     "salesQuotes": "Satış teklifleri",
     "salesOrders": "Satış siparişleri",
+    "salesReps": "Satış sorumluları",
+    "myEmployee": "Çalışan portalım",
     "batchInvoicing": "Toplu faturalama",
     "priceLists": "Fiyat listeleri",
     "partyPrices": "Cari özel fiyatlar",
@@ -789,6 +791,7 @@
         "invoice": "Fatura",
         "stock_document": "Stok belgesi",
         "asset_depreciation": "Amortisman",
+        "asset_disposal": "Demirbaş elden çıkarma",
         "expense_entry": "Gider fişi",
         "treasury": "Kasa/banka hareketi"
       },
@@ -1115,7 +1118,8 @@
       "tabs": {
         "statement": "Ekstre",
         "openItems": "Açık kalemler",
-        "card": "Kart bilgileri"
+        "card": "Kart bilgileri",
+        "related": "İlişkili kayıtlar"
       },
       "balance": "Bakiye",
       "owesUs": "Bize borçlu",
@@ -1266,7 +1270,8 @@
       "tabs": {
         "statement": "Kart ekstresi",
         "warehouses": "Depolar",
-        "card": "Kart bilgileri"
+        "card": "Kart bilgileri",
+        "related": "İlişkili kayıtlar"
       },
       "onHand": "Eldeki miktar",
       "avgCost": "Ortalama maliyet",
@@ -1614,6 +1619,25 @@
     }
   },
   "deliveries": {
+    "inspection": {
+      "title": "İade kalite kararı",
+      "hint": "Karar bekleyen miktar satış irsaliyesiyle çıkarılamaz. Satışa açılan miktar stokta kalır; hurdaya ayrılan miktar fire stok belgesiyle düşülür. Karar verilmiş iade irsaliyesi iptal edilemez.",
+      "pendingBadge": "{{qty}} karar bekliyor",
+      "done": "Tüm kararlar verildi",
+      "item": "Kart",
+      "quantity": "Miktar",
+      "pending": "Bekleyen",
+      "decisions": "Kararlar",
+      "decide": "Karar ver",
+      "decisionLabel": "Karar",
+      "reasonLabel": "Neden",
+      "note": "Not",
+      "save": "Kararı kaydet",
+      "saved": "Kalite kararı kaydedildi",
+      "scrapHint": "Hurda kararı bugünün tarihiyle fire stok belgesi keser; geri alınamaz.",
+      "decision": { "restock": "Satışa aç", "scrap": "Hurda" },
+      "reason": { "defective": "Kusurlu", "damaged": "Hasarlı", "wrong_item": "Yanlış ürün", "unwanted": "Müşteri vazgeçti", "other": "Diğer" }
+    },
     "salesReturns": {
       "title": "Satış iade irsaliyeleri",
       "subtitle": "Müşteriden geri alınan mal: kayıt stoğa orijinal sevkin maliyetiyle girer; yevmiye yoktur. Değer iadesi için iade faturası kesin.",
@@ -1711,6 +1735,8 @@
       "deleted": "Taslak silindi",
       "returnOf": "Orijinal irsaliye",
       "returnOfHint": "Seçilirse satırlar orijinalden gelir ve iade miktarı teslim edilenle sınırlanır.",
+      "inspectionRequired": "Kalite kararı beklet",
+      "inspectionRequiredHint": "Dönen miktar, kalite kararı verilene kadar satışa kapalı kalır.",
       "returnFree": "Orijinale bağlama (serbest iade)",
       "returnable": "İade edilebilir: {{qty}}",
       "returnQtyExceeded": "İade miktarı, orijinal irsaliyede iade edilebilir miktarı aşıyor."
@@ -2875,6 +2901,7 @@
       "manualIn": "Diğer giriş",
       "payables": "Ödeme",
       "manualOut": "Diğer çıkış",
+      "obligations": "Yükümlülük",
       "net": "Net",
       "closing": "Kapanış bakiyesi"
     },
@@ -2894,7 +2921,8 @@
       "receivable": "Alacak",
       "payable": "Borç",
       "manualIn": "Elle giriş",
-      "manualOut": "Elle çıkış"
+      "manualOut": "Elle çıkış",
+      "obligation": "Düzenli yükümlülük"
     },
     "overdue": "gecikmiş",
     "add": "Kalem ekle",
@@ -5551,7 +5579,33 @@
     "emptyHint": "Kayıtlı alış faturası ya da alış irsaliyesi satırlarını seçip ek maliyetleri girerek başlayın.",
     "tabs": {
       "files": "Dosyalar",
-      "items": "Kart bazında maliyet"
+      "items": "Kart bazında maliyet",
+      "recon": "Ek maliyet mutabakatı"
+    },
+    "recon": {
+      "hint": "Kayıtlı ithalat dosyalarındaki ek maliyetler, bağlandıkları gider faturalarıyla (KDV hariç) ve aktarım hesabının bakiyesiyle karşılaştırılır. Fark varsa dosyayı veya faturayı düzeltin.",
+      "asOf": "Tarih itibarıyla",
+      "noClearing": "Aktarım hesabı eşlemesi (import_cost_clearing) tanımlı değil; Ayarlar > Hesap eşlemesi bölümünden tanımlayın.",
+      "clearing": "Aktarım hesabı",
+      "balance": "Bakiye",
+      "balanced": "Kapalı",
+      "unbalanced": "Açık bakiye var",
+      "balanceHint": "Borç bakiye: faturası gelmiş ama dosyaya dağıtılmamış maliyet. Alacak bakiye: dağıtılmış ama faturası henüz gelmemiş maliyet.",
+      "linked": "Faturaya bağlı maliyetler",
+      "mismatchCount": "{{count}} fark",
+      "invoice": "Fatura",
+      "files": "Dosyalar",
+      "cost": "Dosyadaki maliyet",
+      "invoiceNet": "Fatura tutarı (KDV hariç)",
+      "difference": "Fark",
+      "matched": "Eşit",
+      "unlinked": "Faturası bağlanmamış maliyetler",
+      "description": "Açıklama",
+      "orphans": "Aktarım hesabına yazılmış, dosyaya bağlanmamış faturalar",
+      "date": "Tarih",
+      "amount": "Tutar",
+      "none": "Kayıt yok.",
+      "footnote": "Tutarlar {{currency}} cinsindendir; yalnız kayıtlı dosya ve faturalar dikkate alınır."
     },
     "code": "Dosya no",
     "name": "Dosya adı",

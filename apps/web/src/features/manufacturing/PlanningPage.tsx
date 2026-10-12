@@ -29,6 +29,7 @@ import {
   type Values,
 } from '../leather/common';
 import { CustomValuesPanel } from './SupportPanels';
+import { PlanActualPanel, PlanningRulesPanel } from './PlanningRules';
 import { ScheduleBuilder, type PlanningOrder } from './ScheduleBuilder';
 import {
   PlanningCapacityPanel,
@@ -58,6 +59,7 @@ type Plan = {
   anchor?: string;
   direction?: string;
   previewOnly?: boolean;
+  parentId?: string;
   operations: Operation[];
   jobs: { orderId: string; operationKey: string; resourceId: string; minutes: number }[];
 };
@@ -246,6 +248,8 @@ export function PlanningPage() {
           { key: 'plans', label: 'Planlar' },
           { key: 'capacity', label: 'Kapasite' },
           { key: 'setup', label: 'Takvim ve kaynaklar' },
+          { key: 'actual', label: 'Planlanan–gerçekleşen' },
+          { key: 'rules', label: 'Planlama kuralları' },
         ]}
         value={tab}
         onChange={setTab}
@@ -336,14 +340,19 @@ export function PlanningPage() {
                           can('manufacturing.planning.approve') && (
                             <FormAction
                               title="Planı yayımla"
-                              description="Tarihler yeniden kontrol edilir ve plan kaynak kapasitesine eklenir."
-                              fields={[]}
+                              description={
+                                plan.parentId
+                                  ? 'Tarihler yeniden kontrol edilir. Yayımlı bir planın sürümüyse onun yerine geçer; dondurma penceresindeki değişiklik gerekçe ister.'
+                                  : 'Tarihler yeniden kontrol edilir ve plan kaynak kapasitesine eklenir.'
+                              }
+                              fields={plan.parentId ? [textField('overrideReason', 'Dondurma penceresi gerekçesi (gerekirse)', false)] : []}
                               action="Planı yayımla"
                               submit={(values) =>
                                 save(`/api/manufacturing/planning/schedules/${plan.id}/publish`, {
                                   action: 'publish',
                                   date: todayIso(),
                                   requestKey: values._requestKey,
+                                  ...(values.overrideReason ? { overrideReason: values.overrideReason } : {}),
                                 })
                               }
                             />
@@ -458,6 +467,8 @@ export function PlanningPage() {
       {tab === 'setup' && (
         <PlanningSetup resources={availableResources} loading={resources.isPending} />
       )}
+      {tab === 'actual' && <PlanActualPanel resources={availableResources} />}
+      {tab === 'rules' && <PlanningRulesPanel resources={availableResources} />}
       </TabPanel>
     </>
   );
@@ -585,6 +596,7 @@ function PlanningSetup({ resources, loading }: { resources: Resource[]; loading:
                     { value: 'machine', label: 'Makine' },
                     { value: 'person', label: 'Personel' },
                     { value: 'center', label: 'İş merkezi' },
+                    { value: 'tool', label: 'Kalıp / takım / aparat' },
                   ]),
                   {
                     ...numberField('capacity', 'Aynı anda çalışabilecek iş sayısı', '1'),

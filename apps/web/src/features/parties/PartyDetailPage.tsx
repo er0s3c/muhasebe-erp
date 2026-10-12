@@ -11,6 +11,11 @@ import { Stat } from '../../components/ui/Stat';
 import { Callout, EmptyState, PageLoading } from '../../components/ui/Feedback';
 import { Field, Input } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Sheet';
+import { RelatedRecords } from '../../components/layout/RelatedRecords';
+import { PartyBankAccounts } from './PartyBankAccounts';
+import { PartyReconciliations } from './PartyReconciliations';
+import { PartyDisputes } from './PartyDisputes';
+import { PartySalesRep } from './PartySalesRep';
 import { SegmentedTabs, TabPanel } from '../../components/ui/Tabs';
 import { Table, TableWrap, Td, Th, Tr } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/Toast';
@@ -27,7 +32,7 @@ import { PartyFormSheet } from './PartyFormSheet';
 import { PartyPricingCard } from '../pricing/PartyPricingCard';
 import { RelatedContacts } from '../directory/RelatedContacts';
 
-type Tab = 'statement' | 'openItems' | 'card';
+type Tab = 'statement' | 'openItems' | 'card' | 'related';
 
 export function PartyDetailPage() {
   const { t } = useTranslation();
@@ -142,12 +147,15 @@ export function PartyDetailPage() {
         className="mb-5"
         value={tab}
         onChange={setTab}
-        items={(['statement', 'openItems', 'card'] as const).map((k) => ({ key: k, label: t(`parties.detail.tabs.${k}`) }))}
+        items={(['statement', 'openItems', 'related', 'card'] as const).map((k) => ({ key: k, label: t(`parties.detail.tabs.${k}`) }))}
       />
 
       <TabPanel id="parties-PartyDetailPage-0-panel" labelledBy={"parties-PartyDetailPage-0-" + (tab)}>
 {tab === 'statement' && <StatementTab partyId={party.id} />}
+      {tab === 'statement' && party.kind !== 'employee' && <PartyReconciliations partyId={party.id} partyEmail={party.email ?? null} />}
+      {tab === 'statement' && (party.kind === 'customer' || party.kind === 'both') && <PartyDisputes partyId={party.id} />}
       {tab === 'openItems' && <OpenItemsTab partyId={party.id} />}
+      {tab === 'related' && <RelatedRecords kind="party" id={party.id} />}
       {tab === 'card' && (
         <Card>
           <CardHeader
@@ -200,6 +208,8 @@ export function PartyDetailPage() {
         </Card>
       )}
       {tab === 'card' && party.kind !== 'employee' && <PartyPricingCard partyId={party.id} kind={party.kind} />}
+      {tab === 'card' && party.kind !== 'employee' && <PartyBankAccounts partyId={party.id} />}
+      {tab === 'card' && (party.kind === 'customer' || party.kind === 'both') && <PartySalesRep partyId={party.id} />}
       {tab === 'card' && party.kind !== 'employee' && <div className="mt-5"><RelatedContacts partyId={party.id} /></div>}
 
       <PartyFormSheet open={editing} onOpenChange={setEditing} party={party} onSaved={() => undefined} />

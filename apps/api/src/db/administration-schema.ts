@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { pgTable, uuid, text, timestamp, integer, jsonb, index, check, foreignKey, uniqueIndex,unique,date,boolean } from 'drizzle-orm/pg-core';
-import { companies, users, workItems,invoices,journalEntries } from './schema';
+import { companies, users, workItems,invoices,journalEntries,parties,treasuryAccounts,treasuryTransactions,partyBankAccounts } from './schema';
 
 export const companyOperationsSettings = pgTable('company_operations_settings', {
   companyId: uuid().primaryKey().references(() => companies.id),
@@ -64,6 +64,42 @@ export const assetDepreciation=pgTable('asset_depreciation',{
   amount:text().notNull(),snapshot:jsonb().notNull(),journalEntryId:uuid().notNull(),reversalEntryId:uuid(),
   cancelledAt:timestamp({withTimezone:true}),cancelReason:text(),createdBy:uuid().notNull().references(()=>users.id),createdAt:timestamp({withTimezone:true}).notNull().defaultNow(),
 },t=>[foreignKey({name:'asset_depreciation_asset',columns:[t.assetId,t.companyId],foreignColumns:[fixedAssets.id,fixedAssets.companyId]}),foreignKey({name:'asset_depreciation_journal',columns:[t.journalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),foreignKey({name:'asset_depreciation_reversal',columns:[t.reversalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),uniqueIndex('asset_depreciation_period').on(t.assetId,t.month).where(sql`${t.cancelledAt} is null`),check('asset_depreciation_month',sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),check('asset_depreciation_amount',sql`${t.amount}::numeric>0`)]);
+
+/** Demirbaşın satış ya da hurdaya ayrılması (öneri 60): kayıtlı yevmiyeyle kapanır, iptal ters kayıtla geri alınır. */
+export const assetDisposals=pgTable('asset_disposals',{
+  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),assetId:uuid().notNull(),
+  disposalDate:date({mode:'string'}).notNull(),method:text().$type<'sale'|'scrap'>().notNull(),
+  proceeds:text().notNull(),cost:text().notNull(),accumulated:text().notNull(),bookValue:text().notNull(),gainLoss:text().notNull(),
+  accounts:jsonb().$type<{assetAccountId:string;proceedsAccountId:string|null;gainAccountId:string|null;lossAccountId:string|null}>().notNull(),
+  note:text().notNull().default(''),journalEntryId:uuid().notNull(),reversalEntryId:uuid(),
+  cancelledAt:timestamp({withTimezone:true}),cancelReason:text(),createdBy:uuid().notNull().references(()=>users.id),createdAt:timestamp({withTimezone:true}).notNull().defaultNow(),
+},t=>[foreignKey({name:'asset_disposal_asset',columns:[t.assetId,t.companyId],foreignColumns:[fixedAssets.id,fixedAssets.companyId]}),foreignKey({name:'asset_disposal_journal',columns:[t.journalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),foreignKey({name:'asset_disposal_reversal',columns:[t.reversalEntryId,t.companyId],foreignColumns:[journalEntries.id,journalEntries.companyId]}),uniqueIndex('asset_disposal_active').on(t.assetId).where(sql`${t.cancelledAt} is null`),check('asset_disposal_method',sql`${t.method} in ('sale','scrap')`),check('asset_disposal_proceeds',sql`${t.proceeds}::numeric>=0 and (${t.method}='sale' or ${t.proceeds}::numeric=0)`)]);
+
+/** Düzenli mali yükümlülük (öneri 57): tekrar kuralı, tahmini/sabit tutar ve sorumlu; dönemler ayrı tamamlanır. */
+export const financialObligations=pgTable('financial_obligations',{
+  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),title:text().notNull(),category:text().notNull(),config:jsonb().notNull(),
+  active:boolean().notNull().default(true),version:integer().notNull().default(1),createdBy:uuid().notNull().references(()=>users.id),
+  createdAt:timestamp({withTimezone:true}).notNull().defaultNow(),updatedAt:timestamp({withTimezone:true}).notNull().defaultNow(),
+},t=>[unique('financial_obligation_id_company').on(t.id,t.companyId),check('financial_obligation_category',sql`${t.category} in ('tax','social_security','payroll','rent','loan','insurance','utility','other')`)]);
+export const obligationCompletions=pgTable('obligation_completions',{
+  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),obligationId:uuid().notNull(),periodDate:date({mode:'string'}).notNull(),
+  status:text().$type<'done'|'skipped'>().notNull(),paidAmount:text(),note:text().notNull().default(''),
+  completedBy:uuid().notNull().references(()=>users.id),completedAt:timestamp({withTimezone:true}).notNull().defaultNow(),
+},t=>[foreignKey({name:'obligation_completion_obligation',columns:[t.obligationId,t.companyId],foreignColumns:[financialObligations.id,financialObligations.companyId]}),unique('obligation_completion_period').on(t.obligationId,t.periodDate),check('obligation_completion_status',sql`${t.status} in ('done','skipped')`),check('obligation_completion_amount',sql`${t.paidAmount} is null or ${t.paidAmount}::numeric>=0`)]);
+
+/** Toplu ödeme listesi (öneri 54): hazırlanır, dört gözle onaylanır, banka dosyası alınır, satır başına ödeme kaydedilir. */
+export const paymentBatches=pgTable('payment_batches',{
+  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),batchNo:text().notNull(),accountId:uuid().notNull(),
+  paymentDate:date({mode:'string'}).notNull(),status:text().$type<'draft'|'approved'|'posted'|'cancelled'>().notNull().default('draft'),
+  currency:text().notNull(),total:text().notNull(),note:text().notNull().default(''),
+  createdBy:uuid().notNull().references(()=>users.id),createdAt:timestamp({withTimezone:true}).notNull().defaultNow(),
+  approvedBy:uuid().references(()=>users.id),approvedAt:timestamp({withTimezone:true}),postedBy:uuid().references(()=>users.id),postedAt:timestamp({withTimezone:true}),
+  cancelledBy:uuid().references(()=>users.id),cancelledAt:timestamp({withTimezone:true}),cancelReason:text(),version:integer().notNull().default(1),
+},t=>[unique('payment_batch_id_company').on(t.id,t.companyId),unique('payment_batch_no').on(t.companyId,t.batchNo),foreignKey({name:'payment_batch_account',columns:[t.accountId,t.companyId],foreignColumns:[treasuryAccounts.id,treasuryAccounts.companyId]}),check('payment_batch_status',sql`${t.status} in ('draft','approved','posted','cancelled')`),check('payment_batch_total',sql`${t.total}::numeric>0`)]);
+export const paymentBatchLines=pgTable('payment_batch_lines',{
+  id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),batchId:uuid().notNull(),lineNo:integer().notNull(),partyId:uuid().notNull(),bankAccountId:uuid().notNull(),
+  amount:text().notNull(),items:jsonb().notNull().default([]),description:text().notNull().default(''),treasuryTransactionId:uuid(),
+},t=>[foreignKey({name:'payment_batch_line_batch',columns:[t.batchId,t.companyId],foreignColumns:[paymentBatches.id,paymentBatches.companyId]}),foreignKey({name:'payment_batch_line_party',columns:[t.partyId,t.companyId],foreignColumns:[parties.id,parties.companyId]}),foreignKey({name:'payment_batch_line_bank',columns:[t.bankAccountId],foreignColumns:[partyBankAccounts.id]}),foreignKey({name:'payment_batch_line_txn',columns:[t.treasuryTransactionId,t.companyId],foreignColumns:[treasuryTransactions.id,treasuryTransactions.companyId]}),unique('payment_batch_line_no').on(t.batchId,t.lineNo),unique('payment_batch_line_party_once').on(t.batchId,t.partyId),check('payment_batch_line_amount',sql`${t.amount}::numeric>0`)]);
 
 export const companyBudgets=pgTable('company_budgets',{
   id:uuid().primaryKey(),companyId:uuid().notNull().references(()=>companies.id),seriesId:uuid().notNull(),

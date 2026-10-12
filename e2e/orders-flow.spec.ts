@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { writeXlsx } from '../apps/api/src/files/xlsx-write';
 
 async function signUpWithCompany(page: Page, tag: string) {
@@ -10,9 +11,13 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
+
+/** Şirket saat diliminde (KKTC) bugün, gg.aa.yyyy: ülke vergi profili şirket kurulduğu günden geçerlidir. */
+const todayTr = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Nicosia' }).format(new Date()).split('-').reverse().join('.');
 
 /** Tutarlar YALNIZCA TEST AMAÇLIDIR; KDV oranı sistemin tohumladığı doğrulanmamış varsayılandır. */
 test('satış: teklif → kabul → sipariş → kısmi/tam teslim → toplu faturalama → iade irsaliyesi ve iade faturası; Excel ile fatura içe aktarma', async ({ page }) => {
@@ -76,7 +81,7 @@ test('satış: teklif → kabul → sipariş → kısmi/tam teslim → toplu fat
   await page.getByLabel('Miktar 1').fill('6');
   await page.getByRole('button', { name: 'Kaydet ve stoğa işle' }).click();
   await expect(page.getByRole('heading', { name: /SIR-\d{4}-000001/, level: 1 })).toBeVisible();
-  await page.getByRole('link', { name: /SSP-\d{4}-000001/ }).click();
+  await page.getByRole('link', { name: /^SSP-\d{4}-000001$/ }).click();
   await expect(page.getByText('Teslim: kısmi')).toBeVisible();
 
   // 3) Kalan 4 teslim → tam
@@ -84,7 +89,7 @@ test('satış: teklif → kabul → sipariş → kısmi/tam teslim → toplu fat
   await expect(page.getByLabel('Miktar 1')).toHaveValue('4');
   await page.getByRole('button', { name: 'Kaydet ve stoğa işle' }).click();
   await expect(page.getByRole('heading', { name: /SIR-\d{4}-000002/, level: 1 })).toBeVisible();
-  await page.getByRole('link', { name: /SSP-\d{4}-000001/ }).click();
+  await page.getByRole('link', { name: /^SSP-\d{4}-000001$/ }).click();
   await expect(page.getByText('Teslim: tam')).toBeVisible();
   await expect(page.getByText('Fatura: yok')).toBeVisible();
 
@@ -149,7 +154,7 @@ test('satış: teklif → kabul → sipariş → kısmi/tam teslim → toplu fat
       plain: true,
       columns: ['Belge no', 'Fatura tarihi', 'Cari', 'Stok kartı', 'Miktar', 'Birim fiyat'].map((l) => ({ key: l, label: l, kind: 'text' as const })),
       rows: [
-        { 'Belge no': 'IM-1', 'Fatura tarihi': '15.03.2026', Cari: 'Ömer Çakır', 'Stok kartı': 'ST-000001', Miktar: '3', 'Birim fiyat': '110' },
+        { 'Belge no': 'IM-1', 'Fatura tarihi': todayTr(), Cari: 'Ömer Çakır', 'Stok kartı': 'ST-000001', Miktar: '3', 'Birim fiyat': '110' },
         { 'Belge no': 'IM-1', 'Fatura tarihi': '', Cari: '', 'Stok kartı': 'ST-000001', Miktar: '1', 'Birim fiyat': '110' },
       ],
     },

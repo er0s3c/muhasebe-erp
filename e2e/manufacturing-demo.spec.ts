@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 const password = 'Demo-Sifre-123',
   companyName = 'Ada Üretim ve Toptan Ticaret Demo';
@@ -38,7 +38,12 @@ test('demo hesabında şirket seçimi ve genel üretim ekranları', async ({ pag
       await expect(plan.getByText('URE-000001', { exact: true })).toBeVisible();
       await plan.getByRole('button', { name: 'Tarihe geç', exact: true }).click();
       await plan.getByRole('button', { name: 'Planı kontrol et', exact: true }).click();
-      await expect(plan.getByLabel('Süre (dakika)', { exact: true })).toHaveCount(2);
+      await expect(plan.getByRole('spinbutton', { name: 'Süre (dakika)', exact: true })).toHaveCount(2);
+      // Demo MAK-01'in haftalık bakımı açık (gerçek bitiş girilmedi), kaynağı 2. günden sonra kapatır; plan boş istasyona alınır.
+      // Varsayılan kaynak liste sırasına bağlı olduğundan test kaynağı açıkça seçer.
+      const resourceSelects = plan.getByRole('combobox', { name: /^Kaynak/ });
+      await expect(resourceSelects).toHaveCount(2);
+      for (const select of await resourceSelects.all()) await select.selectOption({ label: 'Parti montaj istasyonu' });
       const created = page.waitForResponse(
         (r) =>
           r.url().endsWith('/api/manufacturing/planning/schedules') &&

@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -10,6 +11,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -116,7 +118,7 @@ test('projeler: iş kırılımı → bütçe onayı → yevmiye, gider faturası
   await pick('İş kalemi 1', '01.02');
   await page.getByRole('button', { name: 'Kaydet ve muhasebeleştir' }).click();
   await expect(page.getByText(/Fatura kaydedildi: GF-\d{4}-000001/)).toBeVisible();
-  await expect(page.getByText(/Proje:.*PRJ-0001.*01\.02/)).toBeVisible();
+  await expect(page.getByText(/Proje:.*PRJ-0001.*01\.02/).first()).toBeVisible();
 
   // 6) Stok çıkışı: 4 çuval × 10 ₺ = 40 ₺ Temel iş kalemine (sarf anında projeye yazılır)
   await nav.getByRole('link', { name: 'Stok kartları' }).click();
@@ -133,7 +135,7 @@ test('projeler: iş kırılımı → bütçe onayı → yevmiye, gider faturası
   await nav.getByRole('link', { name: 'Projeler' }).click();
   await page.getByRole('row', { name: /Güneş Sitesi/ }).click();
   await expect(page.getByRole('heading', { name: 'Güneş Sitesi', level: 1 })).toBeVisible();
-  const summary = page.getByText('Gerçekleşen maliyet', { exact: true }).locator('xpath=ancestor::*[self::div or self::section][1]');
+  const summary = page.getByText('Gerçekleşen maliyet', { exact: true }).locator('xpath=ancestor::*[self::div or self::section][2]');
   await expect(summary).toContainText('50.040,00');
   await expect(page.getByRole('row', { name: /01\.01 Temel/ })).toContainText('40.040,00');
   await expect(page.getByRole('row', { name: /01\.02 Karkas/ })).toContainText('10.000,00');
@@ -148,7 +150,7 @@ test('projeler: iş kırılımı → bütçe onayı → yevmiye, gider faturası
   // Temel: ETC = 100.000 × %50 = 50.000 → EAC 90.040; Karkas: ilerleme yok → ETC = 200.000 − 10.000 = 190.000 → EAC 200.000
   await expect(page.getByRole('row', { name: /01\.01 Temel/ })).toContainText('90.040,00');
   await expect(page.getByRole('row', { name: /01\.02 Karkas/ })).toContainText('200.000,00');
-  await expect(page.getByText('Tahmini toplam maliyet', { exact: true }).locator('xpath=ancestor::*[self::div or self::section][1]')).toContainText('290.040,00');
+  await expect(page.getByText('Tahmini toplam maliyet', { exact: true }).locator('xpath=ancestor::*[self::div or self::section][2]')).toContainText('290.040,00');
 
   // 9) Hareketler sekmesi: etiketli üç kaynak satırı
   await page.getByRole('tab', { name: 'Hareketler' }).click();
@@ -156,7 +158,7 @@ test('projeler: iş kırılımı → bütçe onayı → yevmiye, gider faturası
 
   // 10) Excel dışa aktarma (proje maliyet raporu)
   await page.getByRole('tab', { name: 'Özet' }).click();
-  await page.getByRole('button', { name: 'Dışa aktar' }).click();
+  await page.getByRole('button', { name: 'Dışa aktar', exact: true }).click();
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: /\.xlsx/ }).click()]);
   expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
   const file = await download.path();

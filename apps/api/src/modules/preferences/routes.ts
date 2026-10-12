@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { INVOICE_TYPES } from '@erp/shared';
 import { userUiPreferences } from '../../db/schema';
 import { tenantRoute } from '../../http/context';
 import { badRequest } from '../../http/errors';
@@ -21,6 +22,39 @@ const PREFERENCE_SCHEMAS = {
     })
     .strict(),
   'table.density': z.enum(['comfortable', 'compact']),
+  /** Form başına temel/ayrıntılı giriş görünümü (öneri 24): { invoice: 'basic', party: 'detailed' } */
+  'form.detail': z
+    .record(z.string().regex(/^[a-z][a-z0-9-]{1,40}$/), z.enum(['basic', 'detailed']))
+    .refine((value) => Object.keys(value).length <= 40, 'En fazla 40 form'),
+  /**
+   * Kullanıcıya özel hızlı fatura şablonları (öneri 23): cari ve satırlar. Şablon yalnız formu doldurur; kayıtta bütün
+   * fatura kuralları yeniden uygulanır. Fiyat ve KDV, uygulandığı günün kurallarıyla yeniden denetlenir.
+   */
+  'invoice.templates': z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string().trim().min(1).max(40),
+        type: z.enum(INVOICE_TYPES),
+        partyId: z.string().uuid().nullable(),
+        vatIncluded: z.boolean(),
+        lines: z
+          .array(
+            z.object({
+              itemId: z.string().uuid().nullable(),
+              description: z.string().max(300),
+              quantity: z.string().regex(/^\d{1,15}(\.\d{1,4})?$/),
+              unitPrice: z.string().regex(/^\d{1,15}(\.\d{1,6})?$/).or(z.literal('')),
+              discountPct: z.string().regex(/^\d{1,3}(\.\d{1,4})?$/).or(z.literal('')),
+              vatCode: z.string().max(20).nullable(),
+              accountId: z.string().uuid().nullable(),
+            }).strict(),
+          )
+          .min(1)
+          .max(50),
+      }).strict(),
+    )
+    .max(20),
 } as const;
 type PreferenceKey = keyof typeof PREFERENCE_SCHEMAS;
 const isKey = (key: string): key is PreferenceKey => Object.hasOwn(PREFERENCE_SCHEMAS, key);

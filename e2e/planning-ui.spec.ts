@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const companyId = '019b29e1-7ac3-7000-8000-000000000001';
 const orderId = '019b29e1-7ac3-7000-8000-000000000010';

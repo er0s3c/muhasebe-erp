@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test, withOpenMenu } from './fixtures';
 
 const PASSWORD = 'Sifre-12345-xyz';
 /** Sunucuyla aynı "bugün" (Europe/Nicosia). */
@@ -13,6 +14,7 @@ async function signUpWithCompany(page: Page, tag: string): Promise<string> {
   await page.getByLabel('Şifre').fill(PASSWORD);
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
   return email;
@@ -79,7 +81,7 @@ test('bildirim: veri oluşur → tarama → zil sayacı → liste → okundu/kap
   await expect(page.getByRole('button', { name: 'Bildirimler, 1 okunmamış' })).toBeVisible();
   // Okunmamış süzgeci yalnızca kalanı gösterir; "Etkin" ikisini birden
   await expect(rows).toHaveCount(1);
-  await page.getByRole('tab', { name: 'Etkin' }).click();
+  await page.getByRole('button', { name: 'Etkin' }).click();
   await expect(rows).toHaveCount(2);
 
   // Kapat → listeden kalkar (aynı durum yeniden bildirilmez)
@@ -89,7 +91,7 @@ test('bildirim: veri oluşur → tarama → zil sayacı → liste → okundu/kap
   await post('/api/notifications/scan', {}, 200);
   await page.reload();
   await expect(page.getByText('Okunmamış bildirim yok').first()).toBeVisible(); // varsayılan süzgeç: okunmamış
-  await page.getByRole('tab', { name: 'Etkin' }).click();
+  await page.getByRole('button', { name: 'Etkin' }).click();
   await expect(rows).toHaveCount(1);
 
   // Tıklayınca ilgili ekrana gider (ajanda)
@@ -122,11 +124,11 @@ test('bildirim: veri oluşur → tarama → zil sayacı → liste → okundu/kap
   // Kapatılan türden yeni bildirim üretilmez (tarama sonrası ajanda satırı yok)
   await post('/api/notifications/scan', {}, 200);
   await page.goto('/notifications');
-  await page.getByRole('tab', { name: 'Etkin' }).click();
+  await page.getByRole('button', { name: 'Etkin' }).click();
   await expect(page.getByTestId('notification-row')).toHaveCount(0);
 
   // İzleyici: yalnızca stok bildirimi (izni var); ajanda bildirimi (rehber izni yok) yok
-  const ctx = await browser.newContext({ locale: 'tr-TR', timezoneId: 'Europe/Nicosia' });
+  const ctx = await withOpenMenu(await browser.newContext({ locale: 'tr-TR', timezoneId: 'Europe/Nicosia' }));
   const vp = await ctx.newPage();
   await vp.goto('/login');
   await vp.getByLabel('E-posta').fill(viewerEmail);

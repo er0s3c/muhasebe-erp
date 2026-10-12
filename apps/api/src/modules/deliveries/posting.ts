@@ -26,6 +26,7 @@ import { requireActiveWarehouse } from '../inventory/warehouses';
 import { lineSerials } from '../inventory/serials';
 import { accruePurchaseDelivery, effectiveReturnValue, lockLeatherCosts, reverseDeliveryAccrual, traceStockDocument } from '../leather/costs';
 import { checkReturnLinks, returnedTotals } from './returns';
+import { assertNoHeldIssue, assertNoReturnDecisions } from './inspections';
 import { assertExternalNoFree, getDeliveryNote, loadParty, orderedLines, type DeliveryCtx } from './service';
 
 const TYPE_LABEL: Record<DeliveryNoteType, string> = {
@@ -86,6 +87,8 @@ export async function postDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string) {
   await lockItems(tx, itemIds);
   const states = await loadItemStates(tx, itemIds);
   const whQty = await loadWarehouseQty(tx, itemIds, [wh.id]);
+  // Kalite kararı bekleyen iade miktarı satışa açılmaz (öneri 52)
+  if (type === 'sales') await assertNoHeldIssue(tx, wh.id, stored, whQty);
   const planner = new StockPlanner(states, whQty, {
     allowNegative: ctx.allowNegativeStock,
     items: plannerItems,
@@ -226,6 +229,7 @@ export async function cancelDeliveryNote(tx: Tx, ctx: DeliveryCtx, id: string, i
   const note = await lockNote(tx, id);
   if (note.status === 'cancelled') throw unprocessable('İrsaliye zaten iptal edilmiş', 'DELIVERY_ALREADY_CANCELLED');
   if (note.status !== 'posted') throw unprocessable('Yalnızca kaydedilmiş irsaliye iptal edilebilir', 'DELIVERY_NOT_POSTED');
+  if (note.inspectionRequired) await assertNoReturnDecisions(tx, note.id);
 
   const date = input.date ?? todayIso();
   if (date < note.noteDate) throw unprocessable('İptal tarihi irsaliye tarihinden önce olamaz', 'CANCEL_DATE_BEFORE_DELIVERY');

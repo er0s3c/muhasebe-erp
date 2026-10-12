@@ -115,7 +115,8 @@ export const ledgerRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     '/api/journal-entries',
-    tenantRoute(app, ledger('ledger.post'), async (c) => {
+    // Cevabı kaybolup yeniden gönderilen kayıt ikinci yevmiye oluşturmaz (Idempotency-Key)
+    tenantRoute(app, { ...ledger('ledger.post'), idempotent: true }, async (c) => {
       const input = createJournalSchema.parse(c.req.body);
       const entry = await createJournalEntry(c.tx, toLedgerCtx(c), input);
       void c.reply.code(201);

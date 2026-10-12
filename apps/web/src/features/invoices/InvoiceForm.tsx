@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { EXTERNAL_NO_REQUIRED, INVOICE_TYPE_META, ITEM_UNITS, calcInvoice, calculateDocumentTaxes, calculateDocumentStamp, applyRate, dec, formatTR, todayIso, type DocumentTaxRuleSnapshot, type DocumentTaxCalculation, type MoneyValue } from '@erp/shared';
 import { Button } from '../../components/ui/Button';
+import { ErrorCallout } from '../../components/layout/Blocked';
+import { FormDetailToggle } from '../../components/layout/FormDetailToggle';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { Combobox, type ComboOption } from '../../components/ui/Combobox';
 import { Callout, PageLoading } from '../../components/ui/Feedback';
@@ -16,13 +18,15 @@ import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { FormGuard, markFormSaved } from '../../components/ui/UnsavedChanges';
 import { money, moneyIn } from '../../lib/format';
-import { useCan, useCMutation, useCompanyApi, useCQuery } from '../../lib/queries';
+import { useFormDetail } from '../../lib/personal';
+import { useCan, useCMutation, useCompanyApi, useCQuery, useIdempotencyKey } from '../../lib/queries';
 import type { AccountMapping, PriceResolution, DeliveryNoteDetail, InvoiceableOrderLine, InvoiceDetail, InvoiceType, ItemListRow, OpenDeliveryLine } from '../../lib/types';
-import { useUnitLabel, useWarehouses } from '../inventory/common';
+import { QuantityHint, quantityHintId, useUnitLabel, useWarehouses } from '../inventory/common';
 import { SerialEntry } from '../inventory/SerialEntry';
 import { PROJECT_COST_INVALIDATE, ProjectLineRow, projectFields } from '../projects/common';
 import { INVOICE_INVALIDATE, useLineAccountOptions, usePartyOptions, useTaxRates, vatRateFor } from './common';
 import { DeliveryPicker } from './DeliveryPicker';
+import { InvoiceTemplates } from './InvoiceTemplates';
 import { OrderLinePicker } from './OrderLinePicker';
 import type { DocumentTaxRuleView } from '../settings/DocumentTaxRulesSection';
 import { FX_RATE_TYPES, FX_RATE_TYPE_LABELS, type FxRateLookup, type FxRateType } from '@erp/shared';
@@ -56,6 +60,8 @@ interface LineState {
   /** Proje boyutu (inşaat): yalnızca alış/gider/alış iadesi faturasının stoksuz satırında */
   projectId: string;
   wbsId: string;
+  /** Departman / maliyet merkezi (öneri 11); isteğe bağlı */
+  costCenterId?: string;
   /** Alış faturasında bağlı sipariş satırı (üçlü eşleştirme) ve görünen sipariş kodu */
   orderLineId: string;
   orderCode: string;
@@ -140,6 +146,9 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   // Hesap seçici ve eşlemeler muhasebe okuma izni ister (satış rolünde yok): izin yoksa hiç sorgulanmaz, seçici yerine
   // "varsayılan eşlemeden atanır" notu gösterilir; sunucu boş hesabı şirketin varsayılan eşlemesiyle doldurur (UI-8).
   const canLedger = can('ledger.read');
+  // Temel görünüm boş/varsayılan ikincil alanları gizler; değer taşıyan alan her zaman görünür (öneri 24)
+  const { detailed, mode: detailMode, setMode: setDetailMode } = useFormDetail('invoice');
+  const costCenters = useCQuery<{ costCenters: { id: string; code: string; name: string; isActive: boolean }[] }>(['cost-centers'], '/api/cost-centers').data?.costCenters ?? [];
   const accountOptions = useLineAccountOptions(meta.side, canLedger);
   const { data: mapData } = useCQuery<{ mappings: AccountMapping[] }>(['account-mappings'], '/api/account-mappings', { enabled: canLedger });
   const defaultAccount = mapData?.mappings.find((m) => m.key === (salesSide ? (meta.isReturn ? 'sales_return' : 'sales_revenue') : 'default_expense'))?.accountCode;
@@ -192,6 +201,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         deliveryRemaining: null,
         projectId: l.projectId ?? '',
         wbsId: l.wbsId ?? '',
+        costCenterId: l.costCenterId ?? '',
         orderLineId: l.poLineId ?? '',
         orderCode: l.orderCode ?? '',
         salesOrderLineId: l.salesOrderLineId ?? '',
@@ -477,6 +487,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
       sourceLineId: l.sourceLineId || null,
       deliveryLineId: l.deliveryLineId || null,
       orderLineId: l.orderLineId || null,
+      costCenterId: l.costCenterId || null,
       ...(l.serials && l.serials.length > 0 && !l.deliveryLineId ? { serials: l.serials } : {}),
       ...(type === 'sales' && l.salesOrderLineId ? { salesOrderLineId: l.salesOrderLineId } : {}),
       // Proje yalnızca stoksuz (serbest/hizmet) satırda ve alış tarafında gönderilir
@@ -484,11 +495,12 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     })),
   });
 
+  const command = useIdempotencyKey();
   const save = useCMutation(
     (post: boolean, c) =>
       initial
         ? c<InvoiceDetail>(`/api/invoices/${initial.invoice.id}`, { method: 'PUT', body: bodyOf(post) })
-        : c<InvoiceDetail>('/api/invoices', { method: 'POST', body: bodyOf(post) }),
+        : c<InvoiceDetail>('/api/invoices', { method: 'POST', body: bodyOf(post), idempotencyKey: command.key }),
     [...INVOICE_INVALIDATE, ...PROJECT_COST_INVALIDATE],
   );
   const remove = useCMutation((_: void, c) => c(`/api/invoices/${initial!.invoice.id}`, { method: 'DELETE' }), INVOICE_INVALIDATE);
@@ -504,6 +516,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
     if (post && EXTERNAL_NO_REQUIRED.includes(type) && !externalNo.trim()) return setFieldError(t('invoices.form.externalRequired'));
     save.mutate(post, {
       onSuccess: (res) => {
+        command.renew();
         markFormSaved(document.querySelector('[data-form-guard-scope="invoice-editor"]'));
         toast.success(post ? t('invoices.form.postedMsg', { no: res.invoice.invoiceNo ?? '' }) : t('invoices.form.savedMsg'));
         navigate(`/invoices/${res.invoice.id}`, { replace: true, state: res.warnings?.creditLimit ? { creditLimit: res.warnings.creditLimit } : undefined });
@@ -517,7 +530,6 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
   if (loading) return <PageLoading />;
 
   const gridCols = 'lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_84px_minmax(0,1fr)_68px_140px_minmax(0,1fr)_32px]';
-  const fxNeedsLink = error && (error as { code?: string }).code === 'FX_RATE_MISSING';
 
   return (
     <FormGuard captureAll scopeKey="invoice-editor" pending={save.isPending || remove.isPending}>
@@ -527,29 +539,40 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
         back={{ to: listPath, label: t(`invoices.${meta.side}.title`) }}
         favorite={false}
         recent={initial?.invoice.invoiceNo ? { kind: 'Fatura taslağı', title: `${initial.invoice.invoiceNo} ${initial.invoice.partyName ?? ''}`.trim() } : false}
-        actions={initial && (
+        actions={
           <>
-            <Link to={`/workspace/documents?kind=invoice&id=${initial.invoice.id}`} className="link inline-flex items-center gap-2 text-sm"><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>
-            {type === 'sales' && <Link to="/sales/campaigns" className="link text-sm">Kampanya uygula</Link>}
+            <FormDetailToggle mode={detailMode} onChange={setDetailMode} />
+            {!initial && !returnOfId && !fromDelivery && (
+              <InvoiceTemplates
+                type={type}
+                current={() => ({
+                  partyId: partyId || null,
+                  vatIncluded,
+                  lines: lines.filter((l) => l.itemId || l.description.trim()).map((l) => ({
+                    itemId: l.itemId || null, description: l.description.trim(), quantity: l.quantity || '1', unitPrice: l.unitPrice,
+                    discountPct: l.discountPct, vatCode: l.vatCode || null, accountId: l.accountId || null,
+                  })),
+                })}
+                onApply={(tpl) => {
+                  setPartyId(tpl.partyId ?? '');
+                  setVatIncluded(tpl.vatIncluded);
+                  setLines(tpl.lines.map((l) => ({
+                    ...emptyLine(l.vatCode ?? ''), itemId: l.itemId ?? '', description: l.description, quantity: l.quantity,
+                    unit: (l.itemId && itemById.get(l.itemId)?.unit) || '', unitPrice: l.unitPrice, discountPct: l.discountPct, accountId: l.accountId ?? '',
+                  })));
+                }}
+              />
+            )}
+            {initial && <>
+              <Link to={`/workspace/documents?kind=invoice&id=${initial.invoice.id}`} className="link inline-flex items-center gap-2 text-sm"><Paperclip className="size-4" aria-hidden />Belge ekleri</Link>
+              {type === 'sales' && <Link to="/sales/campaigns" className="link text-sm">Kampanya uygula</Link>}
+            </>}
           </>
-        )}
+        }
       />
 
       <div className="flex flex-col gap-5">
-        {(error || fieldError) && (
-          <Callout
-            tone="danger"
-            action={
-              fxNeedsLink ? (
-                <Link to="/settings/currencies" className="shrink-0 text-sm link">
-                  {t('ledger.journal.enterFx')}
-                </Link>
-              ) : undefined
-            }
-          >
-            {error ? errorMessage(error) : fieldError}
-          </Callout>
-        )}
+        {error ? <ErrorCallout error={error} /> : fieldError && <Callout tone="danger">{fieldError}</Callout>}
         {returnOfId && (
           <Callout>
             {t('invoices.form.returnOf')}{' '}
@@ -569,15 +592,15 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
             <Field label={t('invoices.form.invoiceDate')} required>
               {(id) => <Input id={id} type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />}
             </Field>
-            <Field label={t('invoices.form.dueDate')} hint={!dueDate ? t('invoices.form.dueAuto') : undefined}>
+            {(detailed || dueDate) && <Field label={t('invoices.form.dueDate')} hint={!dueDate ? t('invoices.form.dueAuto') : undefined}>
               {(id) => <Input id={id} type="date" value={dueDate} min={invoiceDate} onChange={(e) => setDueDate(e.target.value)} />}
-            </Field>
+            </Field>}
             {EXTERNAL_NO_REQUIRED.includes(type) && (
               <Field label={t('invoices.form.externalNo')} required>
                 {(id) => <Input id={id} value={externalNo} maxLength={40} onChange={(e) => setExternalNo(e.target.value)} />}
               </Field>
             )}
-            <Field label={t('invoices.form.currency')}>
+            {(detailed || foreign) && <><Field label={t('invoices.form.currency')}>
               {(id) => (
                 <Select id={id} value={currency} onChange={(e) => { setCurrency(e.target.value); setFxRate(''); }}>
                   <CurrencyOptions wide />
@@ -596,13 +619,13 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                   onChange={setFxRate}
                 />
               )}
-            </Field>
+            </Field></>}
             {foreign && <>
               <Field label="Kur türü">{id => <Select id={id} disabled={!!returnFx} value={returnFx?.rateType ?? fxRateType} onChange={event => setFxRateType(event.target.value as FxRateType)}>{FX_RATE_TYPES.map(type => <option key={type} value={type}>{FX_RATE_TYPE_LABELS[type]}</option>)}</Select>}</Field>
               {fxRate && !returnFx && <Field label="Manuel kur gerekçesi" required>{id => <Input id={id} value={fxReason} maxLength={500} onChange={event => setFxReason(event.target.value)} />}</Field>}
               <p className="text-xs text-muted sm:col-span-2">{returnFx ? `Özgün faturanın kuru kullanılacak · kur tarihi: ${returnFx.rateDate} · ${returnFx.provider ?? 'Kayıtlı kur'}` : fxRate ? 'Manuel işlem kuru kullanılacak.' : rateQuery.data?.rateDate ? `Kullanılacak kur tarihi: ${rateQuery.data.rateDate}${rateQuery.data.rateDate !== invoiceDate ? ' · önceki yayımlanan tarih' : ''} · ${rateQuery.data.provider ?? 'Kayıtlı kur'}` : 'Seçilen türde kur bekleniyor.'}</p>
             </>}
-            {hasStock && (
+            {hasStock && (detailed || warehouseId || warehouses.length > 1) && (
               <Field label={t('invoices.form.warehouse')}>
                 {(id) => (
                   <Select id={id} value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
@@ -622,9 +645,9 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                 {t('invoices.form.vatIncluded')}
               </label>
             </div>
-            <Field label={t('common.description')} className="sm:col-span-2 lg:col-span-4">
+            {(detailed || description) && <Field label={t('common.description')} className="sm:col-span-2 lg:col-span-4">
               {(id) => <Input id={id} value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} />}
-            </Field>
+            </Field>}
           </div>
           {fxMissing && <p className="mt-3 text-sm text-warning">{t('invoices.form.fxMissing')}</p>}
         </Card>
@@ -660,7 +683,7 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         onChange={(v) => pickItem(l.key, v)}
                       />
                       <Input className="col-span-2 lg:col-span-1" value={l.description} maxLength={300} aria-label={`${t('common.description')} ${i + 1}`} placeholder={t('common.description')} onChange={(e) => patch(l.key, { description: e.target.value })} />
-                      <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.quantity')} ${i + 1}`} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
+                      <MoneyInput value={l.quantity} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.quantity')} ${i + 1}`} aria-describedby={quantityHintId(`inv-${l.key}`, l.quantity, l.unit)} placeholder={l.unit ? unitLabel(l.unit) : undefined} className="text-right" onChange={(v) => patch(l.key, { quantity: v })} />
                       <MoneyInput value={l.unitPrice} maxDecimals={6} aria-label={`${t('invoices.form.unitPrice')} ${i + 1}`} className="text-right" onChange={(v) => { bumpSuggest(l.key); patch(l.key, { unitPrice: v, priceNote: '' }); }} />
                       <MoneyInput value={l.discountPct} decimals={0} maxDecimals={4} aria-label={`${t('invoices.form.discount')} ${i + 1}`} placeholder="%" className="text-right" onChange={(v) => patch(l.key, { discountPct: v })} />
                       <Select disabled={!!l.taxRuleId || !!l.sourceLineId} className="px-2 pr-6" value={l.vatCode} aria-label={`${t('invoices.form.vat')} ${i + 1}`} onChange={(e) => patch(l.key, { vatCode: e.target.value })}>
@@ -683,14 +706,24 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                         <X className="size-4" />
                       </button>
                     </div>
-                    {(taxRules.length > 0 || l.taxRuleId) && <div className="mt-2 grid gap-2 rounded-lg bg-surface-2 p-3 sm:grid-cols-2">
+                    <QuantityHint id={`quantity-hint-inv-${l.key}`} quantity={l.quantity} unit={l.unit} />
+                    {costCenters.length > 0 && (detailed || l.costCenterId) && (salesSide || it?.kind !== 'goods') && (
+                      <label className="mt-1.5 flex items-center gap-2 pl-1 text-[13px] text-muted">
+                        Maliyet merkezi
+                        <Select className="w-56" value={l.costCenterId ?? ''} aria-label={`Maliyet merkezi ${i + 1}`} onChange={(e) => patch(l.key, { costCenterId: e.target.value })}>
+                          <option value="">Belirtilmedi</option>
+                          {costCenters.filter((cc) => cc.isActive || cc.id === l.costCenterId).map((cc) => <option key={cc.id} value={cc.id}>{cc.code} · {cc.name}</option>)}
+                        </Select>
+                      </label>
+                    )}
+                    {((detailed && taxRules.length > 0) || l.taxRuleId) && <div className="mt-2 grid gap-2 rounded-lg bg-surface-2 p-3 sm:grid-cols-2">
                       <Field label={`İşlem vergisi kuralı ${i + 1}`} className="sm:col-span-2">{id => <Select id={id} value={l.taxRuleId ?? ''} disabled={!!l.sourceLineId} onChange={e => {
                         const rule = taxRules.find(candidate => candidate.id === e.target.value);
                         patch(l.key, { taxRuleId: rule?.id ?? '', taxRuleSnapshot: null, productClass: rule?.productClass ?? '', transactionType: rule?.transactionType ?? '', vatCode: rule?.config.vatCode ?? '' });
                       }}><option value="">Standart KDV oranı</option>{l.taxRuleId && !taxRules.some(rule => rule.id === l.taxRuleId) && <option value={l.taxRuleId}>{l.taxRuleSnapshot?.name ?? 'Önceki seçim'}{l.sourceLineId ? ' · özgün belge kuralı' : ' · bu koşullarda geçersiz'}</option>}{taxRules.map(rule => <option key={rule.id} value={rule.id}>{rule.name} · {rule.version}</option>)}</Select>}</Field>
                       {l.taxRuleId && <><Field label={`Ürün / hizmet sınıfı ${i + 1}`}>{id => <Input id={id} value={l.productClass ?? ''} disabled={!!l.sourceLineId} onChange={e => patch(l.key, { productClass: e.target.value })} />}</Field><Field label={`İşlem türü ${i + 1}`}>{id => <Select id={id} value={l.transactionType ?? ''} disabled={!!l.sourceLineId} onChange={e => patch(l.key, { transactionType: e.target.value })}><option value="">Seçin</option><option value="domestic">Yurt içi</option><option value="export">İhracat</option><option value="import">İthalat</option><option value="other">Diğer</option></Select>}</Field></>}
                     </div>}
-                    {free && projectAllowed && (
+                    {free && projectAllowed && (detailed || l.projectId) && (
                       <ProjectLineRow
                         className="mt-1.5"
                         label={String(i + 1)}
@@ -701,12 +734,12 @@ export function InvoiceForm({ type, initial, original, fromDelivery }: Props) {
                     )}
                     {free || l.returnable || l.deliveryLineId || l.orderLineId || l.priceNote || (it?.tracksSerial && !l.deliveryLineId) ? (
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 pl-1 text-[13px] text-muted">
-                        {free && !canLedger && (
+                        {free && detailed && !canLedger && (
                           <span title={t('invoices.form.accountByDefaultHint')} data-testid="account-by-default">
                             {t('invoices.form.accountByDefault')}
                           </span>
                         )}
-                        {free && canLedger && (
+                        {free && canLedger && (detailed || l.accountId) && (
                           <span className="flex items-center gap-2">
                             {t('invoices.form.account')}
                             <Combobox

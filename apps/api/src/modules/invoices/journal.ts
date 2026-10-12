@@ -55,6 +55,8 @@ export interface JournalInvoiceLine {
   /** Proje boyutu (yalnızca stoksuz alış/gider/alış iadesi satırı): gider satırına yazılır, KDV ve cari satırına yazılmaz. */
   projectId?: string | null;
   wbsId?: string | null;
+  /** Departman / maliyet merkezi (öneri 11): gelir ya da gider satırına yazılır. */
+  costCenterId?: string | null;
 }
 
 export interface BuildJournalInput {
@@ -144,28 +146,29 @@ export function buildInvoiceJournal(i: BuildJournalInput): BuiltJournal {
 
   // 2) Gövde: satış tarafında gelir/iade; alış tarafında stok ve gider
   // Gövde satırları hesap + proje + iş kalemi bazında toplanır: projesiz satırlar eskisi gibi hesap başına tek satır olur
-  const groups = new Map<string, { accountId: string; projectId: string | null; wbsId: string | null; net: MoneyValue; base: MoneyValue }>();
-  const addGroup = (accountId: string, net: MoneyValue, base: MoneyValue, projectId: string | null = null, wbsId: string | null = null) => {
-    const key = `${accountId}|${projectId ?? ''}|${wbsId ?? ''}`;
-    const g = groups.get(key) ?? { accountId, projectId, wbsId, net: dec(0), base: dec(0) };
+  const groups = new Map<string, { accountId: string; projectId: string | null; wbsId: string | null; costCenterId: string | null; net: MoneyValue; base: MoneyValue }>();
+  const addGroup = (accountId: string, net: MoneyValue, base: MoneyValue, projectId: string | null = null, wbsId: string | null = null, costCenterId: string | null = null) => {
+    const key = `${accountId}|${projectId ?? ''}|${wbsId ?? ''}|${costCenterId ?? ''}`;
+    const g = groups.get(key) ?? { accountId, projectId, wbsId, costCenterId, net: dec(0), base: dec(0) };
     g.net = g.net.plus(net);
     g.base = g.base.plus(base);
     groups.set(key, g);
   };
   for (const l of i.lines) {
     if (salesSide) {
-      addGroup(l.accountId ?? acc(meta.isReturn ? 'sales_return' : 'sales_revenue'), l.net, l.netBase);
+      addGroup(l.accountId ?? acc(meta.isReturn ? 'sales_return' : 'sales_revenue'), l.net, l.netBase, null, null, l.costCenterId ?? null);
     } else if (l.isStock) {
       // Alış iadesinde stok satırı, stok defterindeki çıkış değeriyle aşağıda ayrıca yazılır
       if (!meta.isReturn && !l.accruedPurchase) addGroup(l.stockAccountId ?? acc('stock'), l.net, l.netBase);
     } else {
-      addGroup(l.accountId ?? acc('default_expense'), l.net, l.netBase, l.projectId ?? null, l.wbsId ?? null);
+      addGroup(l.accountId ?? acc('default_expense'), l.net, l.netBase, l.projectId ?? null, l.wbsId ?? null, l.costCenterId ?? null);
     }
   }
   for (const g of groups.values()) {
     line(bodySide, g.accountId, g.net, g.base, {
       ...(g.projectId ? { projectId: g.projectId } : {}),
       ...(g.wbsId ? { wbsId: g.wbsId } : {}),
+      ...(g.costCenterId ? { costCenterId: g.costCenterId } : {}),
     });
   }
 

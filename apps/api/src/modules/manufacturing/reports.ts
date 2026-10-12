@@ -110,5 +110,102 @@ export async function costCloseReport(tx: Tx, id: string) {
         : 'current_sku_average_material_only',
     actualSource: 'immutable_cost_shares_at_adjusted_root_values',
     materials: summary.materials,
+    variance: await varianceComponents(tx, order, materialActual, summary.sessions as Row[]),
+  };
+}
+
+const d2 = (v: ReturnType<typeof dec>) => v.toFixed(2);
+
+/**
+ * Üretim maliyet sapmasının bileşenleri (öneri 72). Malzeme: kart başına fiyat sapması (gerçek birim − standart birim) × gerçek
+ * miktar ve miktar sapması (gerçek − standart miktar) × standart birim; ikisinin toplamı kart sapmasıdır. Gerçek değer üretim
+ * çıkış/iade stok belgelerinden okunur; maliyet izi toplamıyla farkı ayrıca gösterilir. İşçilik: operasyon başına standart dakika
+ * (rota dakika/birim × emir miktarı) ile gerçekleşen oturum dakikası; kaynakta saatlik maliyet varsa verimlilik sapması tutarı.
+ * Fason ve genel gider için standart tutulmadığından yalnız gerçekleşen gösterilir.
+ */
+async function varianceComponents(tx: Tx, order: Row, materialActual: ReturnType<typeof dec>, sessions: Row[]) {
+  const std = new Map<string, { quantity: ReturnType<typeof dec>; unitCost: ReturnType<typeof dec> }>();
+  for (const m of (order.config.standardMaterialCosts ?? []) as Row[]) {
+    const cur = std.get(m.itemId);
+    std.set(m.itemId, { quantity: (cur?.quantity ?? dec(0)).plus(m.quantity), unitCost: dec(m.unitCost) });
+  }
+  const actualRows = await all(
+    tx,
+    sql`select m.item_id, coalesce(sum(case when m.kind = 'qty' then -m.qty else 0 end), 0)::text as qty, coalesce(sum(-m.value), 0)::text as value
+          from leather_production_documents d join stock_movements m on m.document_id = d.stock_document_id
+         where d.order_id = ${order.id}::uuid and d.kind in ('issue', 'return')
+         group by m.item_id`,
+  );
+  const labels = await all(tx, sql`select id, code, name from items`);
+  const itemIds = new Set([...std.keys(), ...actualRows.map((r) => r.item_id as string)]);
+  let price = dec(0), usage = dec(0), itemsActual = dec(0), itemsStandard = dec(0);
+  const materials = [...itemIds].map((itemId) => {
+    const s = std.get(itemId);
+    const a = actualRows.find((r) => r.item_id === itemId);
+    const aQty = dec(a?.qty ?? 0), aValue = dec(a?.value ?? 0);
+    const sQty = s?.quantity ?? dec(0), sUnit = s?.unitCost ?? (aQty.gt(0) ? aValue.div(aQty) : dec(0));
+    const priceVar = aValue.minus(aQty.times(sUnit));
+    const usageVar = aQty.minus(sQty).times(sUnit);
+    price = price.plus(priceVar);
+    usage = usage.plus(usageVar);
+    itemsActual = itemsActual.plus(aValue);
+    itemsStandard = itemsStandard.plus(sQty.times(sUnit));
+    const label = labels.find((l) => l.id === itemId);
+    return {
+      itemId,
+      code: label?.code ?? null,
+      name: label?.name ?? null,
+      standardQty: sQty.toFixed(4),
+      standardUnitCost: sUnit.toFixed(4),
+      actualQty: aQty.toFixed(4),
+      actualValue: d2(aValue),
+      priceVariance: d2(priceVar),
+      usageVariance: d2(usageVar),
+      inStandard: s !== undefined,
+    };
+  });
+  const resources = await listRecords(tx, 'resource');
+  const labor = ((order.config.operations ?? []) as Row[]).map((op) => {
+    const mine = sessions.filter((x) => x.operationKey === op.key && ['completed', 'paused'].includes(x.status));
+    const actualMinutes = mine.reduce((s, x) => s.plus(x.minutes ?? 0), dec(0));
+    const resourceId: string | undefined = mine[0]?.resourceId ?? op.resources?.[0]?.resourceId;
+    const route = (op.resources ?? []).find((r: Row) => r.resourceId === resourceId) ?? op.resources?.[0];
+    const standardMinutes = route ? dec(route.minutesPerUnit).times(order.quantity) : dec(op.plannedMinutes ?? 0);
+    const rate = resources.find((r) => r.id === resourceId)?.hourlyCost;
+    const efficiency = rate !== undefined ? actualMinutes.minus(standardMinutes).times(rate).div(60) : null;
+    return {
+      operationKey: op.key,
+      name: op.name,
+      resourceId: resourceId ?? null,
+      standardMinutes: standardMinutes.toFixed(2),
+      actualMinutes: actualMinutes.toFixed(2),
+      minuteVariance: actualMinutes.minus(standardMinutes).toFixed(2),
+      hourlyCost: rate ?? null,
+      efficiencyVariance: efficiency === null ? null : d2(efficiency),
+    };
+  });
+  const other = await all(
+    tx,
+    sql`select kind, sum(current_value)::text as value from leather_cost_roots where order_id=${order.id}::uuid and source_type='production_order' and not coalesce((config->>'cancelled')::boolean,false) group by kind order by kind`,
+  );
+  return {
+    material: {
+      standard: d2(itemsStandard),
+      actual: d2(itemsActual),
+      price: d2(price),
+      usage: d2(usage),
+      total: d2(price.plus(usage)),
+      // Maliyet izi (yansıtılan payların güncel değeri) ile stok belgesi değeri farkı: sonradan düzeltilen alış maliyetleri vb.
+      traceDifference: d2(materialActual.minus(itemsActual)),
+      items: materials,
+    },
+    labor: {
+      operations: labor,
+      minuteVariance: labor.reduce((s, l) => s.plus(l.minuteVariance), dec(0)).toFixed(2),
+      efficiencyVariance: labor.some((l) => l.efficiencyVariance !== null)
+        ? d2(labor.reduce((s, l) => s.plus(l.efficiencyVariance ?? 0), dec(0)))
+        : null,
+    },
+    other: other.map((o) => ({ kind: o.kind, actual: dec(o.value).toFixed(2), standard: null })),
   };
 }

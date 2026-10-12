@@ -13,7 +13,7 @@ import { EXPORTS } from '../exports/registry';
 const groups: [string, Permission, string[]][] = [
   ['core.dashboard','workspace.use',['work_items','work_time_sessions','record_documents','saved_insights']],
   ['core.settings','settings.read',['company_operations_settings','administration_runs','exchange_rates']],
-  ['core.ledger','ledger.read',['journal_entries','journal_lines','accounts','fixed_assets','asset_depreciation','company_budgets']],
+  ['core.ledger','ledger.read',['journal_entries','journal_lines','accounts','fixed_assets','asset_depreciation','asset_disposals','company_budgets']],
   ['core.invoices','invoices.read',['invoices','invoice_lines','sales_campaigns','campaign_applications']],
   ['core.inventory','inventory.read',['items','warehouses','stock_documents','stock_movements']],
   ['core.parties','parties.read',['parties','party_contacts']],
@@ -43,7 +43,7 @@ const groups: [string, Permission, string[]][] = [
 const safeFields = ['title','name','code','full_name','description','status','priority','due_date','owner_id','version','doc_no','invoice_no','txn_no','entry_no','event_date','work_date','normal_hours','overtime_hours','amount','currency_code','quantity','total','net_total','gross_total','expiry_date','filename','size','updated_at','created_at','started_at','stopped_at','note','debit','credit','debit_base','credit_base','exchange_rate','rate','unit_price','vat_total','vat_rate','discount_rate','project_id','wbs_id','record_kind','record_id','linked_kind','linked_id'];
 const detailColumns:Record<string,string[]>={operation_entries:['payload'],construction_workflows:['payload'],company_operations_settings:['settings'],cheques:['amount_base','fx_rate'],cheque_batches:['total_base'],agenda_items:['start_time','end_time','all_day','remind_before_minutes'],recurring_templates:['recurrence','next_date','generated','error'],saved_insights:['config','archived'],sales_campaigns:['config'],campaign_applications:['snapshot'],expense_entries:['payment_kind','employee_id','advance_id','advance_applied_amount','net','vat','withholding','payable','cancel_reason'],employee_advances:['advance_date','settled_amount','purpose'],employee_advance_settlements:['kind','settled_date','expense_entry_id','reversed_at','reverse_reason']};
 const sensitiveKey=/(password|secret|token|base64|content|cipher|(?:^|_)enc$)/i;
-Object.assign(detailColumns,{fixed_assets:['config','active'],asset_depreciation:['snapshot','month','asset_id','journal_entry_id','reversal_entry_id','cancelled_at','cancel_reason']});
+Object.assign(detailColumns,{fixed_assets:['config','active'],asset_depreciation:['snapshot','month','asset_id','journal_entry_id','reversal_entry_id','cancelled_at','cancel_reason'],asset_disposals:['asset_id','disposal_date','method','proceeds','book_value','gain_loss','journal_entry_id','reversal_entry_id','cancelled_at','cancel_reason']});
 Object.assign(detailColumns,{company_budgets:['config','revision','series_id','approved_by','approved_at']});
 function safeDetail(value:unknown,depth=0):unknown {
   if(depth>5)return '[ayrıntı sınırı]';

@@ -1,3 +1,5 @@
+import { LotTraceForward } from '../leather/LeatherInsights';
+import { WmsGuidance } from './WmsGuidance';
 import { errorMessage } from '../../lib/errors';
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -522,13 +524,19 @@ export function ManufacturingWarehousePage() {
                   ? 'Yerleştirilen miktar'
                   : 'Başlangıç miktarı',
           },
-          ...(selection === 'lots' ? [{ key: 'remainingQty', label: 'Kalan miktar' }] : []),
+          ...(selection === 'lots'
+            ? [
+                { key: 'remainingQty', label: 'Kalan miktar' },
+                { key: 'expiryDate', label: 'Son kullanma' },
+              ]
+            : []),
           { key: 'status', label: 'Durum' },
         ]}
         actions={(r) =>
           selection === 'lots' &&
           can('manufacturing.quality.approve') &&
           can('inventory.wms.manage') ? (
+            <>
             <OperationForm
               title="Kalite kararı"
               fields={[
@@ -545,6 +553,17 @@ export function ManufacturingWarehousePage() {
                 })
               }
             />
+            <OperationForm
+              title="Son kullanma tarihi"
+              fields={[
+                { name: 'expiryDate', label: 'Son kullanma tarihi (boş: tarihsiz)', type: 'date', value: String(r.expiryDate ?? '') },
+                textField('reason', 'Düzeltme nedeni', true),
+              ]}
+              submit={(v) =>
+                save(`/api/wms/lots/${r.id}/expiry`, { expiryDate: v.expiryDate || null, reason: v.reason })
+              }
+            />
+            </>
           ) : null
         }
       />
@@ -562,8 +581,10 @@ export function ManufacturingWarehousePage() {
                   options(lookups.data?.warehouses ?? [], (r) => String(r.name)),
                 ),
                 numberField('capacity', 'Kapasite', '0'),
+                numberField('pickSequence', 'Toplama sırası', '0'),
+                selectField('allowedItemId', 'Yalnız bu karta ayrılmış (isteğe bağlı)', options(lookups.data?.items ?? [], (r) => String(r.name)), false),
               ]}
-              submit={(v) => save('/api/wms/bins', v)}
+              submit={({ allowedItemId, ...v }) => save('/api/wms/bins', { ...v, allowedItemIds: allowedItemId ? [allowedItemId] : [] })}
             />
           )}
           {selection === 'lots' && (
@@ -587,8 +608,14 @@ export function ManufacturingWarehousePage() {
                   options(lookups.data?.documents ?? [], (r) => String(r.code)),
                 ),
                 numberField('quantity', 'Miktar'),
+                {
+                  name: 'expiryDate',
+                  label: 'Son kullanma tarihi',
+                  type: 'date',
+                  hint: 'Boş bırakılırsa stok kartındaki raf ömründen önerilir.',
+                },
               ]}
-              submit={(v) => save('/api/wms/lots', v)}
+              submit={(v) => save('/api/wms/lots', { ...v, expiryDate: v.expiryDate || null })}
             />
           )}
           {selection === 'placements' && (
@@ -610,6 +637,8 @@ export function ManufacturingWarehousePage() {
               submit={(v) => save('/api/wms/placements', { ...v, requestKey: v._requestKey })}
             />
           )}
+          {selection === 'placements' && <WmsGuidance lots={lots.data?.records ?? []} onPlaced={() => void queries.invalidateQueries()} />}
+          {selection === 'lots' && <LotTraceForward lots={lots.data?.records ?? []} />}
         </>
       )}
       </TabPanel>

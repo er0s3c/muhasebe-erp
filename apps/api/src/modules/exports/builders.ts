@@ -1711,10 +1711,11 @@ export async function cashForecastTable(ctx: BuildCtx, q: Pick<CashForecastQuery
         col('manualIn', `Diğer giriş (${b})`, 'money', undefined, b),
         col('payables', `Ödeme (${b})`, 'money', undefined, b),
         col('manualOut', `Diğer çıkış (${b})`, 'money', undefined, b),
+        col('obligations', `Düzenli yükümlülük (${b})`, 'money', undefined, b),
         col('net', `Net (${b})`, 'money', undefined, b),
         col('closing', `Kapanış bakiyesi (${b})`, 'money', undefined, b),
       ],
-      rows: d.buckets.map((x) => ({ week: x.week, start: x.start, end: x.end, receivables: x.receivables, manualIn: x.manualIn, payables: x.payables, manualOut: x.manualOut, net: x.net, closing: x.closing })),
+      rows: d.buckets.map((x) => ({ week: x.week, start: x.start, end: x.end, receivables: x.receivables, manualIn: x.manualIn, payables: x.payables, manualOut: x.manualOut, obligations: x.obligations, net: x.net, closing: x.closing })),
     },
     {
       key: 'nakit-kalemleri',
@@ -1734,7 +1735,7 @@ export async function cashForecastTable(ctx: BuildCtx, q: Pick<CashForecastQuery
         col('amountBase', `Karşılık (${b})`, 'money', undefined, b),
         col('overdue', 'Gecikmiş', 'text', 10),
       ],
-      rows: d.items.map((i) => ({ date: i.date, dueDate: i.dueDate ?? i.date, basis: i.timingSource === 'payment_history' ? 'Gerçek ödeme geçmişi' : i.timingSource === 'conservative_history' ? 'İhtiyatlı ödeme geçmişi' : i.timingSource === 'manual' ? 'Elle girilen' : i.timingSource === 'cheque' ? 'Çek/senet vadesi' : 'Sözleşme vadesi', week: i.week, source: i.source === 'receivable' ? 'Alacak' : i.source === 'payable' ? 'Borç' : i.direction === 'in' ? 'Elle giriş' : 'Elle çıkış', party: i.partyName, description: i.description, currency: i.currencyCode, amount: i.direction === 'in' ? i.amount : `${i.amount}`, amountBase: i.direction === 'in' ? i.amountBase : dec(i.amountBase).neg().toFixed(2), overdue: i.overdue ? 'Evet' : null })),
+      rows: d.items.map((i) => ({ date: i.date, dueDate: i.dueDate ?? i.date, basis: i.timingSource === 'payment_history' ? 'Gerçek ödeme geçmişi' : i.timingSource === 'conservative_history' ? 'İhtiyatlı ödeme geçmişi' : i.timingSource === 'manual' ? 'Elle girilen' : i.timingSource === 'cheque' ? 'Çek/senet vadesi' : i.timingSource === 'obligation' ? 'Yükümlülük takvimi' : 'Sözleşme vadesi', week: i.week, source: i.source === 'receivable' ? 'Alacak' : i.source === 'payable' ? 'Borç' : i.source === 'obligation' ? 'Düzenli yükümlülük' : i.direction === 'in' ? 'Elle giriş' : 'Elle çıkış', party: i.partyName, description: i.description, currency: i.currencyCode, amount: i.direction === 'in' ? i.amount : `${i.amount}`, amountBase: i.direction === 'in' ? i.amountBase : dec(i.amountBase).neg().toFixed(2), overdue: i.overdue ? 'Evet' : null })),
     },
   ];
 }

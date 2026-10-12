@@ -98,6 +98,7 @@ const routes: RouteObject[] = [
                 children: [
                   { index: true, ...page(() => import('../features/dashboard/DashboardPage'), 'DashboardPage', null) },
                   { path: 'workspace', ...page(() => import('../features/workspace/WorkPage'), 'WorkPage', null) },
+                  { path: 'me/employee', ...page(() => import('../features/hr/EmployeePortalPage'), 'EmployeePortalPage', null) },
                   { path: 'workspace/offline', ...page(() => import('../features/offline/OfflineSetupPage'), 'OfflineSetupPage', 'workspace.use') },
                   { element: <RequireModule module="core.integrations" />, children: [{ path: 'settings/integrations', ...hub('IntegrationsHub', 'core.integrations.read') }] },
                   moved('integrations', '/settings/integrations?tab=channels'),
@@ -169,6 +170,7 @@ const routes: RouteObject[] = [
                     children: [
                       { path: 'sales/quotes', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesQuotesPage', 'invoices.read') },
                       { path: 'sales/orders', ...page(() => import('../features/sales/SalesDocsPage'), 'SalesOrdersPage', 'invoices.read') },
+                      { path: 'sales/reps', ...page(() => import('../features/sales/SalesRepsPage'), 'SalesRepsPage', 'invoices.read') },
                       { path: 'sales/docs/new', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage', 'invoices.manage') },
                       { path: 'sales/docs/:id', ...page(() => import('../features/sales/SalesDocPage'), 'SalesDocPage', 'invoices.read') },
                     ],

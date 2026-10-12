@@ -4,6 +4,8 @@ import {
   createDeliveryNoteSchema,
   idParam,
   listDeliveryNotesQuerySchema,
+  listReturnInspectionsQuerySchema,
+  returnDecisionSchema,
   openDeliveryLinesQuerySchema,
   returnableLinesQuerySchema,
   updateDeliveryNoteSchema,
@@ -14,6 +16,7 @@ import { lockItems } from '../inventory/balances';
 import { lockDeliveryLines } from '../invoices/delivery-link';
 import { lockOrderLines } from '../sales/usage';
 import { returnableLines } from './returns';
+import { decideReturn, listReturnInspections } from './inspections';
 import { cancelDeliveryNote, postDeliveryNote } from './posting';
 import {
   createDeliveryDraft,
@@ -52,6 +55,16 @@ export const deliveryRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.get('/api/delivery-notes/summary', tenantRoute(app, read, async ({ tx }) => deliverySummary(tx)));
+
+  // İade kalite kararı (öneri 52): bekleyen iade satırları ve son karar (satışa aç / hurda)
+  app.get(
+    '/api/return-inspections',
+    tenantRoute(app, read, async ({ tx, req }) => listReturnInspections(tx, listReturnInspectionsQuerySchema.parse(req.query))),
+  );
+  app.post(
+    '/api/return-inspections/decide',
+    tenantRoute(app, { ...post, idempotent: true }, async (c) => decideReturn(c.tx, deliveryCtx(c), returnDecisionSchema.parse(c.req.body))),
+  );
 
   app.get(
     '/api/delivery-notes/open-lines',

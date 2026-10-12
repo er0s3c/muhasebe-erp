@@ -13,6 +13,7 @@ import { assertDocumentNotPending } from './document-gate';
 import { financialSnapshot } from './financial-snapshot';
 import { captureInvoice, captureQuote } from './source-snapshot';
 import {
+  activeDelegations,
   canDecideRequest,
   getRequest,
   registerApprovalHandler,
@@ -283,5 +284,5 @@ export async function generalRequest(c: TenantCtx, id: string) {
     request.docType as 'invoice' | 'sales_quote' | 'payment' | 'expense',
     'read',
   );
-  return { ...request, canDecide: canDecideRequest(request, approvalContext(c)) };
+  return { ...request, canDecide: canDecideRequest(request, approvalContext(c), await activeDelegations(c.tx, approvalContext(c))) };
 }

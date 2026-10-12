@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowLeftRight, Landmark, Pencil, Plus, Power, Repeat, Wallet } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { todayIso } from '@erp/shared';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -46,7 +46,11 @@ export function AccountDetailPage() {
   );
 
   const [editing, setEditing] = useState(false);
-  const [tab, setTab] = useState<'statement' | 'bank'>('statement');
+  const [searchParams] = useSearchParams();
+  // Ekstre eşleşmesi engelinin çözüm bağlantısı (?tab=bank) doğrudan banka ekstresi sekmesini açar
+  const [tab, setTab] = useState<'statement' | 'bank'>(() => (searchParams.get('tab') === 'bank' ? 'bank' : 'statement'));
+  const tabParam = searchParams.get('tab');
+  useEffect(() => { if (tabParam === 'bank') setTab('bank'); }, [tabParam]);
   const [newType, setNewType] = useState<TreasuryTxnType | null>(null);
   const [openTxn, setOpenTxn] = useState<string | null>(null);
   const toggleActive = useCMutation((v: { isActive: boolean }, call) => call(`/api/treasury/accounts/${id}`, { method: 'PATCH', body: v }), TREASURY_INVALIDATE);

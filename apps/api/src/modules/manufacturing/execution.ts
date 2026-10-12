@@ -7,6 +7,7 @@ import { requireOpenPeriod } from '../settings/periods';
 import { command } from './commands';
 import { createRecord, getRecord, recordShape, updateRecord } from './service';
 import { createQuality } from '../leather/workflows';
+import { assertOperatorSkills } from './planning-rules';
 
 export async function executionSummary(tx: Tx, id: string) {
   const order = await getProduction(tx, id);
@@ -298,7 +299,9 @@ export async function workCommand(
       if (sessions.length) throw fail('Operasyon zaten çalışıyor');
       if (!input.resourceId) throw fail('Çalışma kaynağı gerekli');
       const r = await getRecord(tx, input.resourceId, 'resource');
-      if (r.status !== 'active') throw fail('Aktif kaynak gerekli');
+      if (r.status !== 'active' || r.config.type === 'tool') throw fail('Aktif kaynak gerekli');
+      // Operatör becerisi ve sertifikası (öneri 65)
+      await assertOperatorSkills(tx, ctx.userId, r);
       const now = new Date().toISOString();
       const calendar = await one(
         tx,

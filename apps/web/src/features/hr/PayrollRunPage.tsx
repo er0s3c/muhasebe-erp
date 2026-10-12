@@ -20,6 +20,7 @@ import type { PayrollItemRow, PayrollLineRow, PayrollRunDetail } from '../../lib
 import { AdvanceDeductionModal } from './AdvanceDeductionModal';
 import { formatParamValue, PAYROLL_INVALIDATE, PayrollStatusBadge, UnverifiedBadge, useWarningText } from './payroll-common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
 
 type DoneKey = 'payroll.run.approved' | 'payroll.run.paid' | 'payroll.run.unpaid' | 'payroll.run.cancelled';
 type Dlg = null | 'approve' | 'pay' | 'unpay' | 'cancel' | 'delete';
@@ -329,8 +330,9 @@ function AdjustModal({ runId, line, detail, onClose }: { runId: string; line: Pa
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_8rem_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setAmount(''); setNote(''); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setAmount(''); setNote(''); }, onError: setError });
             }}
           >
             <Field label={t('payroll.adjust.item')}>

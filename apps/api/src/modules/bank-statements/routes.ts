@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { createFromLineSchema, idParam, ignoreLineSchema, matchLineSchema, reconciliationQuerySchema } from '@erp/shared';
+import { createFromLineSchema, idParam, ignoreLineSchema, matchGroupSchema, matchLineSchema, reconciliationQuerySchema } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
 import type { LedgerCtx } from '../ledger/journal';
-import { autoMatch, createTransactionFromLine, deleteStatement, ignoreLine, matchLine, reconciliation, restoreLine, unmatchLine } from './service';
+import { autoMatch, createTransactionFromLine, deleteStatement, ignoreLine, matchGroup, matchLine, reconciliation, restoreLine, unmatchLine } from './service';
 
 const ledgerCtx = ({ company, user }: TenantCtx): LedgerCtx => ({
   companyId: company.id,
@@ -35,6 +35,13 @@ export const bankStatementRoutes: FastifyPluginAsync = async (app) => {
     '/api/bank-statement-lines/:id/match',
     tenantRoute(app, post, async (c) => ({
       line: await matchLine(c.tx, ledgerCtx(c), idParam.parse(c.req.params).id, matchLineSchema.parse(c.req.body).journalLineId),
+    })),
+  );
+
+  app.post(
+    '/api/bank-statement-lines/:id/match-group',
+    tenantRoute(app, post, async (c) => ({
+      line: await matchGroup(c.tx, ledgerCtx(c), idParam.parse(c.req.params).id, matchGroupSchema.parse(c.req.body).journalLineIds),
     })),
   );
 

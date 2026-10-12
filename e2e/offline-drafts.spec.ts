@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const companyId = '019b29e1-7ac3-7000-8000-000000000001', userId = '019b29e1-7ac3-7000-8000-000000000002';
 const warehouseId = '019b29e1-7ac3-7000-8000-000000000003', itemId = '019b29e1-7ac3-7000-8000-000000000004';
@@ -36,6 +37,9 @@ async function prepare(page: Page) {
   await page.getByRole('button', { name: 'Paketi indir / yenile' }).click();
   await expect(page.getByText('Paket hazır.', { exact: false })).toBeVisible();
   await page.getByRole('link', { name: 'Çevrimdışı taslakları aç' }).click();
+  // Kurulum sayfasında da "Cihaz kodu" alanı var; tembel yüklenen taslak sayfası açılmadan doldurulmamalı
+  await expect(page).toHaveURL(/\/offline-drafts$/);
+  await expect(page.getByRole('button', { name: 'Paketi aç', exact: true })).toBeVisible();
   await page.getByLabel('Cihaz kodu', { exact: true }).fill('Depo-Cihaz-123');
   await page.getByRole('button', { name: 'Paketi aç', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Taslak kuyruğu' })).toBeVisible();

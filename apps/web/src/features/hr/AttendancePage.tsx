@@ -1,3 +1,4 @@
+import { CorrectionRequestsPanel } from './StaffPanels';
 import { todayIso } from '@erp/shared';
 import { ChevronLeft, ChevronRight, Lock, LockOpen } from 'lucide-react';
 import { useState } from 'react';
@@ -51,6 +52,8 @@ export function AttendancePage() {
           </div>
         }
       />
+
+      <CorrectionRequestsPanel />
 
       {data && closed && (
         <div className="mb-4">

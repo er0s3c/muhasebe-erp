@@ -73,6 +73,9 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
   const [vatIncluded, setVatIncluded] = useState(initial?.doc.vatIncluded ?? false);
   const [warehouseId, setWarehouseId] = useState(initial?.doc.warehouseId ?? '');
   const [notes, setNotes] = useState(initial?.doc.notes ?? '');
+  // Boş: carinin satış sorumlusu (F6: öneri 13)
+  const [salesRepId, setSalesRepId] = useState(initial?.doc.salesRepId ?? '');
+  const { data: repData } = useCQuery<{ reps: { id: string; name: string }[] }>(['sales-reps'], '/api/sales-reps');
   const [lines, setLines] = useState<LineState[]>(() =>
     initial
       ? initial.lines.map((l) => ({
@@ -155,6 +158,7 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
     vatIncluded,
     warehouseId: warehouseId || null,
     notes: notes.trim() || undefined,
+    salesRepId: salesRepId || undefined,
     lines: lines.map((l) => ({
       itemId: l.itemId || null,
       description: l.description.trim() || undefined,
@@ -240,6 +244,18 @@ export function SalesDocForm({ kind, initial }: { kind: SalesDocKind; initial?: 
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label="Satış sorumlusu">
+              {(id) => (
+                <Select id={id} value={salesRepId} onChange={(e) => setSalesRepId(e.target.value)}>
+                  <option value="">Carinin sorumlusu</option>
+                  {(repData?.reps ?? []).map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
                     </option>
                   ))}
                 </Select>

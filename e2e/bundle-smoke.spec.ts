@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // Yalnızca üretim paketi modunda (E2E_TARGET=bundle) koşar: arayüzü API sunar, CSP ve önbellek başlıkları gerçektir.
 test.skip(process.env.E2E_TARGET !== 'bundle', 'Üretim paketi modunda çalışır');

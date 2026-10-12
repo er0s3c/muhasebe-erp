@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DelegationsSection } from '../approvals/DelegationsSection';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { ROLES } from '@erp/shared';
@@ -31,6 +32,8 @@ interface Rule {
   maxAmount: string | null;
   isActive: boolean;
   projectId: string | null;
+  dueHours: number | null;
+  escalateRole: string | null;
   steps: {
     stepNo: number;
     approverRole: string | null;
@@ -166,6 +169,8 @@ export function DocumentApprovalsPage() {
     [max, setMax] = useState(''),
     [projectId, setProjectId] = useState(''),
     [steps, setSteps] = useState([{ role: 'accountant', userId: '', label: '' }]),
+    [dueHours, setDueHours] = useState(''),
+    [escalateRole, setEscalateRole] = useState(''),
     [error, setError] = useState<string | null>(null);
   const projectOptions = useProjectOptions();
   const members = useCQuery<{ members: { userId: string; fullName: string; role: string }[] }>(
@@ -183,6 +188,8 @@ export function DocumentApprovalsPage() {
           minAmount: min,
           maxAmount: max || null,
           separateRequester: true,
+          dueHours: dueHours ? Number(dueHours) : null,
+          escalateRole: dueHours && escalateRole ? escalateRole : null,
           steps: steps.map((step) => ({
             ...(step.userId ? { userId: step.userId } : { role: step.role }),
             label: step.label.trim() || null,
@@ -212,6 +219,8 @@ export function DocumentApprovalsPage() {
               onClick={() => {
                 setError(null);
                 setSteps([{ role: 'accountant', userId: '', label: '' }]);
+                setDueHours('');
+                setEscalateRole('');
                 setOpen(true);
               }}
             >
@@ -239,6 +248,7 @@ export function DocumentApprovalsPage() {
           <p className="text-sm text-muted">Sıradaki adımı size ait bekleyen talep yok.</p>
         )}
       </section>
+      <DelegationsSection />
       <FinancialDraftList />
       <Card className="my-5 flex flex-col gap-3 p-4">
         <h2 className="text-base">Onay kuralları</h2>
@@ -271,6 +281,12 @@ export function DocumentApprovalsPage() {
                   )
                   .join(' → ')}
               </p>
+              {rule.dueHours && (
+                <p className="text-xs text-muted">
+                  Her adım {rule.dueHours} saat içinde
+                  {rule.escalateRole && ` · gecikince ${t(`roles.${rule.escalateRole}` as never)} da karar verebilir`}
+                </p>
+              )}
             </div>
             {canManage && (
               <Button
@@ -444,6 +460,19 @@ export function DocumentApprovalsPage() {
               )}
             </Card>
           ))}
+          <Field label="Adım başına karar süresi (saat)" hint="Süre önceki karardan, ilk adımda gönderimden başlar. Boş bırakılırsa süre izlenmez.">
+            {(id) => <Input id={id} inputMode="numeric" value={dueHours} onChange={(e) => setDueHours(e.target.value.replace(/\D/g, '').slice(0, 3))} />}
+          </Field>
+          {dueHours && (
+            <Field label="Gecikince yönlendir" hint="Süre dolunca bu roldeki onay yetkili üyeler de adımı karara bağlayabilir.">
+              {(id) => (
+                <Select id={id} value={escalateRole} onChange={(e) => setEscalateRole(e.target.value)}>
+                  <option value="">Yönlendirme yok</option>
+                  {ROLES.map((role) => <option key={role} value={role}>{t(`roles.${role}`)}</option>)}
+                </Select>
+              )}
+            </Field>
+          )}
           {steps.length < 8 && (
             <Button
               onClick={() =>

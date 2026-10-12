@@ -73,3 +73,34 @@ export function calcInvoice(lines: readonly CalcLineInput[], vatIncluded: boolea
     byRate: [...groups.values()].sort((a, b) => dec(a.rate).comparedTo(b.rate)),
   };
 }
+
+export interface CalcStep {
+  label: string;
+  /** Okunur işlem, ör. "4 × 100,00 × (1 − %10)". Sayılar nokta ondalıklı ham değerdir; biçimlendirme gösterende yapılır. */
+  formula: string;
+  value: string;
+}
+
+/**
+ * Satır tutarının adım adım açıklaması (öneri 29). Değerler `calcLine` ile aynı yoldan üretilir; açıklama ile kaydedilen
+ * tutar ayrışamaz. Yuvarlama (2 ondalık) yapılan adım ayrıca belirtilir.
+ */
+export function explainLine(line: CalcLineInput, vatIncluded: boolean): CalcStep[] {
+  const c = calcLine(line, vatIncluded);
+  const discount = dec(line.discountPct || 0);
+  const rate = dec(line.vatRate || 0);
+  const raw = dec(line.quantity).times(line.unitPrice).times(dec(100).minus(discount)).div(100);
+  const base = `${dec(line.quantity).toString()} × ${dec(line.unitPrice).toString()}${discount.isZero() ? '' : ` × (1 − %${discount.toString()})`}`;
+  const steps: CalcStep[] = [];
+  const rounded = !raw.eq(roundMoney(raw));
+  if (vatIncluded) {
+    steps.push({ label: 'KDV dahil satır tutarı', formula: base + (rounded ? ' (2 ondalığa yuvarlandı)' : ''), value: c.gross.toFixed(2) });
+    steps.push({ label: 'KDV hariç tutar', formula: `${c.gross.toFixed(2)} ÷ (1 + %${rate.toString()})`, value: c.net.toFixed(2) });
+    steps.push({ label: 'KDV', formula: `${c.gross.toFixed(2)} − ${c.net.toFixed(2)}`, value: c.vat.toFixed(2) });
+  } else {
+    steps.push({ label: 'Satır tutarı (KDV hariç)', formula: base + (rounded ? ' (2 ondalığa yuvarlandı)' : ''), value: c.net.toFixed(2) });
+    steps.push({ label: 'KDV', formula: `${c.net.toFixed(2)} × %${rate.toString()}`, value: c.vat.toFixed(2) });
+    steps.push({ label: 'KDV dahil', formula: `${c.net.toFixed(2)} + ${c.vat.toFixed(2)}`, value: c.gross.toFixed(2) });
+  }
+  return steps;
+}

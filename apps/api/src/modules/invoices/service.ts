@@ -27,6 +27,7 @@ import { accounts, invoiceLines, invoices, items, parties, taxRates, warehouses 
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import { lineSerials, saveLineSerials } from '../inventory/serials';
 import { validateDimensions } from '../projects/dimension';
+import { validateCostCenters } from '../ledger/journal';
 import { uuidList } from '../inventory/balances';
 import { requireActiveWarehouse } from '../inventory/warehouses';
 import { checkOrderLinks } from '../sales/usage';
@@ -72,6 +73,8 @@ export interface PreparedLine {
   /** Proje boyutu (yalnızca stoksuz alış/gider/alış iadesi satırı). */
   projectId: string | null;
   wbsId: string | null;
+  /** Departman / maliyet merkezi (öneri 11). */
+  costCenterId: string | null;
   net: MoneyValue;
   vat: MoneyValue;
   gross: MoneyValue;
@@ -97,6 +100,7 @@ export type LineSource = Pick<
   | 'salesOrderLineId'
   | 'projectId'
   | 'wbsId'
+  | 'costCenterId'
 >;
 
 export async function loadParty(tx: Tx, partyId: string, type: InvoiceType) {
@@ -198,6 +202,9 @@ export async function prepareLines(
         throw unprocessable(`${label}: stoklu kalem projeye doğrudan yazılamaz; malzeme stoktan projeye sarf edilir`, 'PROJECT_ON_STOCK_LINE');
       }
     }
+    if (l.costCenterId && isStock && meta.side === 'purchases') {
+      throw unprocessable(`${label}: stoklu alış satırına maliyet merkezi yazılmaz; stok sarfında belirlenir`, 'COST_CENTER_ON_STOCK_LINE');
+    }
     if (vatCode && !vatRate) {
       throw unprocessable(`${label}: ${vatCode} KDV kodu ${invoiceDate} tarihinde geçerli değil`, 'VAT_CODE_INVALID');
     }
@@ -239,6 +246,7 @@ export async function prepareLines(
       salesOrderLineId: l.salesOrderLineId ?? null,
       projectId: l.projectId ?? null,
       wbsId: l.wbsId ?? null,
+      costCenterId: l.costCenterId ?? null,
     };
   });
   // Proje/iş kalemi etiketleri (yalnızca etiketli satır varsa sorgu yapar)
@@ -247,6 +255,7 @@ export async function prepareLines(
     companyId,
     prepared.map((p) => ({ label: `Satır ${p.lineNo}`, projectId: p.projectId, wbsId: p.wbsId })),
   );
+  await validateCostCenters(tx, prepared.map((p) => p.costCenterId));
 
   const totals = calcInvoice(
     prepared.map((p) => ({ quantity: p.quantity, unitPrice: p.unitPrice, discountPct: p.discountPct, vatRate: p.vatRate })),
@@ -508,6 +517,7 @@ async function writeDraft(tx: Tx, ctx: InvoiceCtx, type: InvoiceType, input: Dra
       salesOrderLineId: l.salesOrderLineId,
       projectId: l.projectId,
       wbsId: l.wbsId,
+      costCenterId: l.costCenterId,
     })),
   ).returning({ id: invoiceLines.id, lineNo: invoiceLines.lineNo });
   // Seri takipli kartın doğrudan stok hareketi yapan satırında seri no'lar (irsaliyeye bağlı satırda seri irsaliyededir)
@@ -630,6 +640,8 @@ interface LineRowOut extends Record<string, unknown> {
   projectName: string | null;
   wbsId: string | null;
   wbsCode: string | null;
+  costCenterId: string | null;
+  costCenterCode: string | null;
   wbsName: string | null;
 }
 
@@ -674,8 +686,10 @@ export async function getInvoice(tx: Tx, id: string) {
            l.sales_order_line_id as "salesOrderLineId", so.id as "salesOrderId", so.doc_no as "salesOrderNo", dn.id as "deliveryNoteId", dn.note_no as "deliveryNoteNo",
            dl.line_no as "deliveryLineNo",
            l.project_id as "projectId", pr.code as "projectCode", pr.name as "projectName",
-           l.wbs_id as "wbsId", pw.code as "wbsCode", pw.name as "wbsName"
+           l.wbs_id as "wbsId", pw.code as "wbsCode", pw.name as "wbsName",
+           l.cost_center_id as "costCenterId", cc.code as "costCenterCode"
     from invoice_lines l
+    left join cost_centers cc on cc.id = l.cost_center_id
     left join items it on it.id = l.item_id
     left join accounts a on a.id = l.account_id
     left join projects pr on pr.id = l.project_id

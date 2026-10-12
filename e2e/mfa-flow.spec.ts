@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 function totp(secretBase32: string, offset = 0): string {

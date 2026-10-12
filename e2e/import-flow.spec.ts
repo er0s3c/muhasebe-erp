@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { writeXlsx } from '../apps/api/src/files/xlsx-write';
 
 async function signUpWithCompany(page: Page, tag: string) {
@@ -10,6 +11,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -55,6 +57,8 @@ test('içe aktarma: cari (hatalı dosya engellenir → düzeltilmiş dosya), sto
   await dialog.getByRole('button', { name: 'Ön izleme' }).click();
   await expect(dialog.getByText('CR-000100 kodlu cari zaten var; atlandı')).toBeVisible();
   await page.keyboard.press('Escape');
+  // İçe aktarılmayan önizleme taslak sayılır; kapatırken onay istenir
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Değişiklikleri bırak' }).click();
 
   // 2) Stok kartları: xlsx dosyası (başlık satırı yok sayılmaz; kategori yoksa açılır)
   const xlsx = writeXlsx([

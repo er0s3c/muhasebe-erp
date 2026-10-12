@@ -76,9 +76,16 @@ export function UpdateCard() {
     onError: (e) => toast.error(errorMessage(e)),
   });
 
-  if (error) return null;
   const o = data?.offer;
   const canRequest = o && data.updaterReady && ['offered', 'failed', 'rolled_back', 'cancelled'].includes(o.status);
+  // Güncelleme öncesi uyumluluk denetimi (öneri 119)
+  const preflight = useQuery({
+    queryKey: ['system', 'update', o?.id ?? '', 'preflight'],
+    queryFn: () => api<{ ready: boolean; checks: { key: string; ok: boolean; blocking: boolean; message: string }[] }>(`/api/system/update/${o!.id}/preflight`),
+    enabled: !error && !!canRequest,
+    retry: false,
+  });
+  if (error) return null;
   return (
     <Card>
       <CardHeader
@@ -104,6 +111,15 @@ export function UpdateCard() {
             {o.status === 'requested' && o.scheduledFor && <p>{t('license.update.scheduled', { at: fmtDateTime(o.scheduledFor) })}</p>}
             {(o.status === 'downloading' || o.status === 'applying') && <Callout tone="warning">{t('license.update.applyingHint')}</Callout>}
             {o.message && (o.status === 'failed' || o.status === 'rolled_back') && <Callout tone="danger">{o.message}</Callout>}
+            {canRequest && preflight.data && (
+              <ul aria-label="Güncelleme öncesi denetim" className="space-y-0.5 text-xs">
+                {preflight.data.checks.map((c) => (
+                  <li key={c.key} className={c.ok ? 'text-muted' : c.blocking ? 'text-danger' : 'text-warning'}>
+                    {c.ok ? '✓' : c.blocking ? '✗' : '!'} {c.message}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="flex flex-wrap gap-2">
               {canRequest && (
                 <>

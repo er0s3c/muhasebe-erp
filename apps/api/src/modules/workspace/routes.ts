@@ -1,3 +1,4 @@
+import { relatedQuerySchema, relatedRecords } from './related';
 import type { FastifyPluginAsync } from 'fastify';
 import { createHash } from 'node:crypto';
 import { uuidv7 } from 'uuidv7';
@@ -67,6 +68,8 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     }),
   );
   app.get('/api/workspace/alerts', tenantRoute(app, access, workAlerts));
+  // Cari, ürün ve proje için modüller arası ilişkili kayıtlar (öneri 4); her bölüm kendi izniyle
+  app.get('/api/related', tenantRoute(app, { permission: 'workspace.use' }, async (c) => relatedRecords(c, relatedQuerySchema.parse(c.req.query))));
   app.post(
     '/api/workspace/alerts/state',
     tenantRoute(app, access, async (c) => {

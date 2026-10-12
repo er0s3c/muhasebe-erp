@@ -48,6 +48,7 @@ export const EDITOR_FIELDS: Record<WorkflowKind, EditorField[]> = {
   calendar: [
     f('weekdays', 'Çalışma günleri', 'days', { default: [1, 2, 3, 4, 5] }),
     f('holidays', 'Çalışılmayan tarihler', 'dates', { default: [] }),
+    f('crews', 'Ekip kapasiteleri (dengeleme)', 'rows', { optional: true, default: [], fields: [f('name', 'Ekip'), f('size', 'Kişi sayısı', 'number')] }),
   ],
   baseline: [notes('note', 'Plan açıklaması')],
   readiness: [
@@ -282,6 +283,19 @@ export const EDITOR_FIELDS: Record<WorkflowKind, EditorField[]> = {
       ],
     }),
     notes('maintenance', 'Bakım talimatları'),
+  ],
+  handover_check: [
+    ref('unitId', 'Birim', 'units'),
+    f('stage', 'Kontrol aşaması', 'select', {
+      options: [
+        ['pre_inspection', 'Ön kontrol'],
+        ['snag_fix', 'Eksik giderme'],
+        ['reinspection', 'Yeniden kontrol'],
+        ['customer_walkthrough', 'Müşteriyle gezi'],
+      ],
+    }),
+    f('items', 'Kontrol maddeleri', 'rows', { fields: [f('label', 'Madde'), f('ok', 'Tamam', 'checkbox'), notes('note', 'Not')] }),
+    assets('photoIds', 'Fotoğraflar', 'photos'),
   ],
 };
 export function fieldDefaults(

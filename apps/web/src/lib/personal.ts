@@ -7,7 +7,7 @@ import { useCompany, useSession } from './session';
  * Kişisel arayüz tercihleri: favoriler, pano düzeni, tablo yoğunluğu. Sunucuda kullanıcı + şirket kapsamında saklanır
  * (cihazlar arası aynı görünür); iş verisi taşımaz. Son ziyaretler ise yalnız bu tarayıcıda tutulur.
  */
-export type PreferenceKey = 'favorites' | 'dashboard.layout' | 'table.density';
+export type PreferenceKey = 'favorites' | 'dashboard.layout' | 'table.density' | 'form.detail' | 'invoice.templates';
 type Preferences = Partial<Record<PreferenceKey, unknown>>;
 const PREF_KEY = ['me', 'preferences'] as const;
 
@@ -19,7 +19,7 @@ export function usePreference<T>(key: PreferenceKey, parse: (value: unknown) => 
   const { data, isLoading } = usePreferences();
   const company = useCompany();
   const qc = useQueryClient();
-  const raw = data?.preferences[key];
+  const raw = data?.preferences?.[key];
   const value = raw === undefined ? fallback : (parse(raw) ?? fallback);
   const mutation = useCMutation<{ value: unknown }, T>((next, call) =>
     call(`/api/me/preferences/${encodeURIComponent(key)}`, { method: 'PUT', body: { value: next } }),
@@ -174,4 +174,37 @@ export function useRecordRecent(item: Omit<RecentItem, 'at'> | null | undefined)
 export type TableDensity = 'comfortable' | 'compact';
 export function useTableDensity() {
   return usePreference<TableDensity>('table.density', v => (v === 'compact' || v === 'comfortable' ? v : null), 'comfortable');
+}
+
+// ---- Form görünümü: temel / ayrıntılı (öneri 24) ----
+
+export type FormDetailMode = 'basic' | 'detailed';
+export function parseFormDetail(value: unknown): Record<string, FormDetailMode> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, FormDetailMode] =>
+    /^[a-z][a-z0-9-]{1,40}$/.test(entry[0]) && (entry[1] === 'basic' || entry[1] === 'detailed')).slice(0, 40));
+}
+/**
+ * Formun temel/ayrıntılı görünümü kullanıcı + şirket başına saklanır; tanımsızsa ayrıntılı (bugünkü tam form) açılır.
+ * Temel görünüm yalnız boş ve varsayılan değerli ikincil alanları gizler; değer taşıyan veya hatalı alan her zaman görünür.
+ */
+export function useFormDetail(formId: string) {
+  const { value, save, saving } = usePreference('form.detail', parseFormDetail, {});
+  const mode: FormDetailMode = value[formId] ?? 'detailed';
+  const setMode = useCallback((next: FormDetailMode) => save({ ...value, [formId]: next }).catch(() => undefined), [formId, save, value]);
+  return { detailed: mode === 'detailed', mode, setMode, saving };
+}
+
+// ---- Hızlı fatura şablonları (öneri 23) ----
+
+export interface InvoiceTemplateLine { itemId: string | null; description: string; quantity: string; unitPrice: string; discountPct: string; vatCode: string | null; accountId: string | null }
+export interface InvoiceTemplate { id: string; name: string; type: string; partyId: string | null; vatIncluded: boolean; lines: InvoiceTemplateLine[] }
+export const INVOICE_TEMPLATES_MAX = 20;
+export function parseInvoiceTemplates(value: unknown): InvoiceTemplate[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((t): t is InvoiceTemplate => !!t && typeof t.id === 'string' && typeof t.name === 'string' && typeof t.type === 'string' && Array.isArray(t.lines)).slice(0, INVOICE_TEMPLATES_MAX);
+}
+/** Kullanıcının bu şirketteki fatura şablonları (sunucuda tercihlerde; başka cihazda da açılır). */
+export function useInvoiceTemplates() {
+  return usePreference<InvoiceTemplate[]>('invoice.templates', parseInvoiceTemplates, []);
 }

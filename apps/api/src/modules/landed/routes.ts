@@ -1,3 +1,4 @@
+import { landedReconciliation } from './reconciliation';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
@@ -9,6 +10,7 @@ import {
   listImportSourcesQuerySchema,
   postImportSchema,
   saveImportFileSchema,
+  todayIso,
   uuid,
 } from '@erp/shared';
 import { tenantRoute, type TenantCtx } from '../../http/context';
@@ -48,6 +50,8 @@ export const landedRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/api/import-files', tenantRoute(app, read, async ({ tx, req }) => listImportFiles(tx, listImportFilesQuerySchema.parse(req.query))));
   app.get('/api/import-files/sources', tenantRoute(app, read, async ({ tx, req }) => listSources(tx, listImportSourcesQuerySchema.parse(req.query))));
+  // Ek maliyet fark mutabakatı (öneri 51): dosya ↔ fatura ↔ aktarım hesabı
+  app.get('/api/import-files/reports/reconciliation', tenantRoute(app, read, async ({ tx, req }) => landedReconciliation(tx, z.object({ asOf: isoDate.optional() }).parse(req.query).asOf ?? todayIso())));
   app.get('/api/import-files/reports/by-item', tenantRoute(app, read, async ({ tx, req }) => importLandedByItem(tx, itemReportQuery.parse(req.query))));
   app.get('/api/import-files/:id', tenantRoute(app, read, async ({ tx, req }) => getImportFile(tx, idParam.parse(req.params).id)));
   app.get('/api/import-files/:id/report', tenantRoute(app, read, async ({ tx, req }) => importFileReport(tx, idParam.parse(req.params).id)));

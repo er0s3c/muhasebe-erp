@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import { type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import { expect, test, withOpenMenu } from './fixtures';
 
 /**
  * Kullanıcı bazlı modül erişimi (uçtan uca): sahip, bir üyenin "Fatura ve irsaliye" modülünü Sadece görüntüle → Erişim yok → rol varsayılanı
@@ -36,7 +37,7 @@ async function loginUi(page: Page, email: string) {
 }
 
 async function newSession(browser: Browser, email: string) {
-  const ctx = await browser.newContext({ locale: 'tr-TR', timezoneId: 'Europe/Nicosia' });
+  const ctx = await withOpenMenu(await browser.newContext({ locale: 'tr-TR', timezoneId: 'Europe/Nicosia' }));
   const page = await ctx.newPage();
   await loginUi(page, email);
   return { ctx, page };

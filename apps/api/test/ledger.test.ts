@@ -141,7 +141,7 @@ describe('genel muhasebe', async () => {
 
     const closed = await c.post('/api/journal-entries', { entryDate: day(3, 6), description: 'Geç kalmış', lines, post: true });
     expect(closed.statusCode).toBe(422);
-    expect(closed.json().error.code).toBe('PERIOD_CLOSED');
+    expect(closed.json().error).toMatchObject({ code: 'PERIOD_CLOSED', details: { date: day(3, 6), month: 3 } });
     // Kapalı dönemdeki kaydı ters çevirmek de mümkün değil (ters kayıt açık bir tarihe yazılır)
     expect((await c.post(`/api/journal-entries/${draft.id}/reverse`, { entryDate: day(3, 20) })).json().error.code).toBe('PERIOD_CLOSED');
     const inApril = await c.post(`/api/journal-entries/${draft.id}/reverse`, { entryDate: day(4, 2) });

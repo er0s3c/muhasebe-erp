@@ -1,3 +1,4 @@
+import { useAutoSyncOnReconnect } from '../../lib/online';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { offlineDraftPayloadSchema, type OfflineDraftReceipt } from '@erp/shared';
@@ -71,11 +72,13 @@ export function OfflineDraftPage() {
     catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); }
   };
   const pending = data?.queue.filter(row => !row.receipt).length ?? 0;
+  // Bağlantı gelince bekleyenler kendiliğinden eşitlenir (öneri 17)
+  const online = useAutoSyncOnReconnect(!!data && !busy && session.status === 'authenticated', pending, sync);
   return <main className="min-h-svh bg-bg px-4 py-6 text-text sm:px-8"><div className="mx-auto max-w-4xl space-y-5">
     <PageHeader title="Çevrimdışı taslaklar" description={data ? data.companyName : 'Bu cihazda hazırlanan şifreli depo ve saha paketini açın.'} actions={<Link className="text-sm underline" to="/workspace/offline">Paket hazırlama</Link>} />
     {error && <Callout tone="danger">{error}</Callout>}
     {!data ? <Card className="max-w-md space-y-4 p-5"><Field label="Cihaz kodu">{id => <Input id={id} type="password" autoComplete="current-password" maxLength={128} value={password} onChange={event => setPassword(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && password.length >= 8 && !busy) void unlock(); }} />}</Field><Button loading={busy} disabled={password.length < 8} onClick={() => void unlock()}>Paketi aç</Button><p className="text-xs text-muted">Kod yalnız bu ekranda bellekte tutulur. İşiniz bittiğinde ekranı kilitleyin.</p></Card> : <>
-      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted">{pending} taslak eşitleme bekliyor · {data.branchSelection === 'all' ? 'Tüm erişilebilir şubeler' : data.branchSelection === 'unassigned' ? 'Şubeye atanmamış' : 'Seçilen şube'}</p><Button size="sm" disabled={busy} onClick={() => { setData(null); setPassword(''); }}>Ekranı kilitle</Button></div>
+      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted"><span className={online ? 'text-success' : 'text-warning'}>{online ? 'Çevrimiçi' : 'Çevrimdışı — bağlantı gelince eşitlenir'}</span> · {pending} taslak eşitleme bekliyor · {data.branchSelection === 'all' ? 'Tüm erişilebilir şubeler' : data.branchSelection === 'unassigned' ? 'Şubeye atanmamış' : 'Seçilen şube'}</p><Button size="sm" disabled={busy} onClick={() => { setData(null); setPassword(''); }}>Ekranı kilitle</Button></div>
       {data.expiresAt <= Date.now() && <Callout tone="warning">Paketin süresi doldu. Yeni kayıt için paketi yenileyin. Kuyruktaki taslakları eşitleyebilirsiniz.</Callout>}
       {data.truncated && <Callout tone="warning">Paket ilk 200 depoyu ve 2.000 aktif stok kartını içeriyor. Listede olmayan kayıt için çevrimiçi ekranı kullanın.</Callout>}
       <Card className="space-y-4 p-5">

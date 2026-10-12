@@ -33,6 +33,18 @@ export function ChannelExecutionPanel({
     warehouseName: string;
     channelSku: string;
     connectionId: string;
+    status: string;
+    lastCheck?: { adaQuantity: number; channelQuantity: number; difference: number; at: string };
+    health?: { ok: boolean; issues: string[]; lastErrorKind: string | null };
+  };
+  const ISSUE: Record<string, string> = {
+    paused: 'Duraklatıldı',
+    retired: 'Emekli',
+    item_inactive: 'Ürün pasif',
+    warehouse_inactive: 'Depo pasif',
+    connection_not_configured: 'Bağlantı yapılandırılmamış',
+    last_send_failed: 'Son gönderim başarısız',
+    stock_difference: 'Stok farkı var',
   };
   const mappings = useCQuery<{ records: Mapping[]; items: Ref[]; warehouses: Ref[] }>(
     ['integrations', 'mappings'],
@@ -46,6 +58,7 @@ export function ChannelExecutionPanel({
       status: string;
       attempts: number;
       error?: string;
+      errorHint?: string;
       retryAfter?: string;
     })[];
   }>(['integrations', 'outbox'], '/api/integrations/inventory-outbox');
@@ -72,7 +85,50 @@ export function ChannelExecutionPanel({
           { label: 'Ada ürünü', render: (r) => r.itemName },
           { label: 'Depo', render: (r) => r.warehouseName },
           { label: 'Kanal ürün kodu', render: (r) => r.channelSku },
+          { label: 'Durum', render: (r) => <Status value={r.status} /> },
+          {
+            label: 'Sağlık',
+            render: (r) => (r.health?.ok ? 'Sorun yok' : (r.health?.issues ?? []).map((i) => ISSUE[i] ?? i).join(', ')),
+          },
+          {
+            label: 'Son kontrol (Ada / kanal)',
+            render: (r) => (r.lastCheck ? `${r.lastCheck.adaQuantity} / ${r.lastCheck.channelQuantity}${r.lastCheck.difference ? ` (fark ${r.lastCheck.difference})` : ''}` : '—'),
+          },
         ]}
+        action={
+          can('core.integrations.manage')
+            ? (r) =>
+                r.status !== 'retired' && (
+                  <div className="flex flex-wrap gap-1">
+                    {r.status === 'active' && (
+                      <OperationForm
+                        title="Kanal stok farkını kontrol et"
+                        description="Kanaldaki miktar okunur ve Ada'nın kullanılabilir miktarıyla karşılaştırılır. Seçerseniz Ada miktarı yayın kuyruğuna alınır."
+                        fields={[selectField('queue', 'Fark varsa', [{ value: 'no', label: 'Yalnız kontrol et' }, { value: 'yes', label: 'Ada miktarını kuyruğa al' }])]}
+                        submit={(v) => save(`/api/integrations/channel-mappings/${r.id}/check`, { requestKey: crypto.randomUUID(), queue: v.queue === 'yes' })}
+                      />
+                    )}
+                    <OperationForm
+                      title="Eşleme durumunu değiştir"
+                      description="Duraklatılan eşleme stok yayını yapmaz. Emekli eşleme yeniden açılamaz."
+                      fields={[
+                        selectField(
+                          'status',
+                          'Yeni durum',
+                          [
+                            { value: 'active', label: 'Etkin' },
+                            { value: 'paused', label: 'Duraklat' },
+                            { value: 'retired', label: 'Emekliye ayır' },
+                          ].filter((o) => o.value !== r.status),
+                        ),
+                        reason,
+                      ]}
+                      submit={(v) => save(`/api/integrations/channel-mappings/${r.id}/status`, { status: v.status, reason: v.reason })}
+                    />
+                  </div>
+                )
+            : undefined
+        }
       />
       {can('core.integrations.manage') && (
         <OperationForm
@@ -128,7 +184,7 @@ export function ChannelExecutionPanel({
           { label: 'Durum', render: (r) => <Status value={r.status} /> },
           { label: 'Deneme', numeric: true, render: (r) => r.attempts },
           { label: 'Sonraki deneme', render: (r) => displayDateTime(r.retryAfter) },
-          { label: 'Sonuç', render: (r) => r.error ?? '—' },
+          { label: 'Sonuç', render: (r) => (r.error ? `${r.error}${r.errorHint ? ` — ${r.errorHint}` : ''}` : '—') },
         ]}
         action={
           can('core.integrations.manage')
@@ -164,6 +220,11 @@ export function ProductionCostClosePanel({ orderId }: { orderId: string }) {
     materialActualValue: string;
     materialVariance: string;
     standardSource: string;
+    variance?: {
+      material: { standard: string; actual: string; price: string; usage: string; total: string; traceDifference: string; items: { itemId: string; code: string | null; name: string | null; standardQty: string; standardUnitCost: string; actualQty: string; actualValue: string; priceVariance: string; usageVariance: string }[] };
+      labor: { operations: { operationKey: string; name: string; standardMinutes: string; actualMinutes: string; minuteVariance: string; hourlyCost: string | null; efficiencyVariance: string | null }[]; minuteVariance: string; efficiencyVariance: string | null };
+      other: { kind: string; actual: string }[];
+    };
   }>(
     ['manufacturing', 'cost-close', orderId],
     `/api/manufacturing/production/orders/${orderId}/cost-close`,
@@ -221,6 +282,40 @@ export function ProductionCostClosePanel({ orderId }: { orderId: string }) {
               },
             ]}
           />
+          {report.data.variance && (
+            <details className="text-sm" open>
+              <summary className="cursor-pointer py-1 font-medium">Sapma bileşenleri</summary>
+              <p className="my-2 text-xs text-muted">
+                Fiyat sapması = (gerçek birim − tahmini birim) × gerçek miktar; miktar sapması = (gerçek − tahmini miktar) × tahmini birim. Gerçek değer üretim çıkış/iade belgelerinden;
+                maliyet izi farkı {moneyIn(report.data.variance.material.traceDifference, company.baseCurrency)}. Fason ve genel gider için tahmin tutulmaz.
+              </p>
+              <Records
+                rows={report.data.variance.material.items.map((m) => ({ id: m.itemId, ...m }))}
+                columns={[
+                  { label: 'Malzeme', render: (r) => `${r.code ?? ''} ${r.name ?? ''}`.trim() },
+                  { label: 'Tahmini miktar', numeric: true, render: (r) => r.standardQty },
+                  { label: 'Gerçek miktar', numeric: true, render: (r) => r.actualQty },
+                  { label: 'Fiyat sapması', numeric: true, render: (r) => moneyIn(r.priceVariance, company.baseCurrency) },
+                  { label: 'Miktar sapması', numeric: true, render: (r) => moneyIn(r.usageVariance, company.baseCurrency) },
+                ]}
+              />
+              <Records
+                rows={report.data.variance.labor.operations.map((o) => ({ id: o.operationKey, ...o }))}
+                columns={[
+                  { label: 'Operasyon', render: (r) => r.name },
+                  { label: 'Tahmini dk', numeric: true, render: (r) => r.standardMinutes },
+                  { label: 'Gerçek dk', numeric: true, render: (r) => r.actualMinutes },
+                  { label: 'Dakika farkı', numeric: true, render: (r) => r.minuteVariance },
+                  { label: 'Verimlilik sapması', numeric: true, render: (r) => (r.efficiencyVariance === null ? 'Saatlik maliyet yok' : moneyIn(r.efficiencyVariance, company.baseCurrency)) },
+                ]}
+              />
+              {report.data.variance.other.length > 0 && (
+                <p className="mt-2 text-xs text-muted">
+                  Diğer gerçekleşen: {report.data.variance.other.map((o) => `${o.kind} ${moneyIn(o.actual, company.baseCurrency)}`).join(' · ')}
+                </p>
+              )}
+            </details>
+          )}
         </>
       )}
     </section>

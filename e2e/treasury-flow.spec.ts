@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 async function signUpWithCompany(page: Page, tag: string) {
   const email = `e2e-${tag}-${Date.now()}@example.com`;
@@ -9,6 +10,7 @@ async function signUpWithCompany(page: Page, tag: string) {
   await page.getByLabel('Şifre').fill('Sifre-12345-xyz');
   await page.getByRole('button', { name: 'Hesap oluştur' }).click();
   await page.getByLabel('Şirket unvanı').fill('Yücel İnşaat Ltd.');
+  await page.getByLabel('Şirketin ülkesi').selectOption('KKTC');
   await page.getByRole('button', { name: 'Şirketi oluştur' }).click();
   await expect(page.getByRole('heading', { name: 'Merhaba, Selin' })).toBeVisible();
 }
@@ -20,7 +22,7 @@ test('kasa ve banka: dövizli fatura → farklı kurlu tahsilat (kur kârı) →
 
   // 1) Bugünün kuru: 1 GBP = 45 TRY (tahsilat günü kuru)
   await nav.getByRole('link', { name: 'Para birimi ve kurlar' }).click();
-  await page.getByLabel('Alış', { exact: true }).first().fill('45');
+  await page.getByLabel('Döviz alış', { exact: true }).first().fill('45');
   await page.getByRole('button', { name: 'Kaydet' }).click();
   await expect(page.getByText('Kur kaydedildi')).toBeVisible();
 
@@ -39,6 +41,8 @@ test('kasa ve banka: dövizli fatura → farklı kurlu tahsilat (kur kârı) →
   await page.getByRole('listbox').getByRole('option').first().click();
   await page.getByLabel('Para birimi', { exact: true }).selectOption('GBP');
   await page.getByLabel('Kur', { exact: true }).fill('40');
+  // Resmî kurdan farklı işlem kuru gerekçe ister
+  await page.getByLabel('Manuel kur gerekçesi').fill('Müşteriyle anlaşılan kur');
   await page.getByLabel('Açıklama 1').fill('Seramik satışı');
   await page.getByLabel('Miktar 1').fill('1');
   await page.getByLabel('Birim fiyat 1').fill('100');

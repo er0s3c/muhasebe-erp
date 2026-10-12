@@ -583,7 +583,7 @@ export async function cancelRun(tx: Tx, ctx: PayrollCtx, id: string, input: { re
   await requireNoLaterPostedCountryRun(tx, run);
   if (run.jurisdiction) {
     const [declaration] = await tx.select({ id: socialDeclarations.id }).from(socialDeclarations).where(and(eq(socialDeclarations.payrollRunId, id), eq(socialDeclarations.status, 'finalized'))).limit(1);
-    if (declaration) throw conflict('Bu bordronun sosyal bildirimi kesinleşmiş; iptalden önce bildirimi yeniden açın', 'PAYROLL_COUNTRY_FINALIZED_DECLARATION');
+    if (declaration) throw conflict('Bu bordronun sosyal güvenlik bildirimi kesinleşmiş; iptalden önce bildirimi yeniden açın', 'PAYROLL_COUNTRY_FINALIZED_DECLARATION');
   }
   const reversal = await reverseJournalEntry(tx, ledgerCtx(ctx), run.entryId!, {
     entryDate: input.entryDate ?? todayIso(),

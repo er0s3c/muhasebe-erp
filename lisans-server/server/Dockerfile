@@ -17,10 +17,10 @@ COPY packages packages
 COPY lisans-server/core lisans-server/core
 COPY lisans-server/server lisans-server/server
 COPY lisans-server/deploy/migrations-policy.json lisans-server/deploy/migrations-policy.json
-# Yönetim paneli: ortak arayüz bileşenleri web uygulamasından alınır (vite alias @ui)
+# Yönetim paneli: ortak arayüz bileşenleri web uygulamasından alınır (vite alias @ui). Bileşenler web'in lib/,
+# layout/, i18n/ modüllerini ve public/ görsellerini de kullandığından web uygulaması bütün olarak kopyalanır.
 COPY lisans-server/panel lisans-server/panel
-COPY apps/web/src/components/ui apps/web/src/components/ui
-COPY apps/web/src/lib/cn.ts apps/web/src/lib/cn.ts
+COPY apps/web apps/web
 RUN npm run build -w @erp/license-admin && npm run build -w @erp/license-server
 
 FROM node:${NODE_VERSION}-bookworm-slim AS deps

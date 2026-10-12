@@ -193,6 +193,7 @@ const SOURCES: Record<string, { labelKey: string; module: string; to: (id: strin
   stock_document: { labelKey: 'ledger.journal.source.stock_document', module: 'core.inventory', to: (id) => `/inventory/movements?open=${id}` },
   treasury: { labelKey: 'ledger.journal.source.treasury', module: 'core.treasury', to: (id) => `/treasury/transactions?open=${id}` },
   asset_depreciation: { labelKey: 'ledger.journal.source.asset_depreciation', module: 'core.ledger', to: () => '/accounting/fixed-assets' },
+  asset_disposal: { labelKey: 'ledger.journal.source.asset_disposal', module: 'core.ledger', to: () => '/accounting/fixed-assets' },
   expense_entry: { labelKey: 'ledger.journal.source.expense_entry', module: 'treasury.expenses', to: () => '/treasury/expenses' },
 };
 

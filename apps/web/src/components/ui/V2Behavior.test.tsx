@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { Field, Input } from './Field';
 import { SegmentedTabs, TabPanel } from './Tabs';
-import { readSavedViews, savedViewsKey, SavedViews } from './SavedViews';
+import { readSavedViews, sanitizeViewFilters, savedViewsKey, SavedViews } from './SavedViews';
 import { FormGuard, markFormSaved, RouteChangeGuard, UnsavedChangesProvider, useUnsavedChanges } from './UnsavedChanges';
 import { MoneyInput } from './MoneyInput';
 import { useConfirmation } from './useConfirmation';
@@ -67,22 +67,30 @@ describe('V2 erişilebilirlik ve kayıtlı görünümler', () => {
     expect(host.querySelector('[role="tablist"]')).toBeNull();
     expect(host.querySelector('button')!.getAttribute('aria-pressed')).toBe('true');
   });
-  it('yerel görünümleri kullanıcı/şirket/şube/sayfa ayırır ve yalnız açık seçimle uygular', async () => {
+  it('eski yerel görünümler kapsam başına okunur; sunucu görünümleri kendi/ekip ayrımıyla gösterilir ve yalnız açık seçimle uygulanır', async () => {
     const scope = ['u1', 'c1', 'b1', 'parties'];
     const key = savedViewsKey(scope);
     expect(savedViewsKey(['u1', 'c2', 'b1', 'parties'])).not.toBe(key);
     expect(savedViewsKey(['u1', 'c1', 'b2', 'parties'])).not.toBe(key);
     localStorage.setItem(key, JSON.stringify([{ id: 'v1', name: 'Müşteriler', filters: { kind: 'customer', password: 'excluded' } }]));
-    expect(readSavedViews(key, { kind: '' })[0].filters).toEqual({ kind: 'customer' });
-    const apply = vi.fn();
-    await mount(<SavedViews scope={scope} filters={{ kind: '' }} onApply={apply} />);
-    expect(apply).not.toHaveBeenCalled();
-    await act(async () => {
-      const select = host.querySelector('select')!; select.value = 'v1'; select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    expect(apply).toHaveBeenCalledWith({ kind: 'customer' });
+    expect(readSavedViews(key, { kind: '' })[0]!.filters).toEqual({ kind: 'customer' });
     localStorage.setItem(key, 'bad-json');
     expect(readSavedViews(key, { kind: '' })).toEqual([]);
+    expect(sanitizeViewFilters({ kind: 5 }, { kind: '' })).toBeNull();
+
+    const apply = vi.fn();
+    const views = [
+      { id: 'v1', name: 'Müşteriler', filters: { kind: 'customer' }, shared: false, mine: true, ownerName: null },
+      { id: 'v2', name: 'Borçlular', filters: { kind: 'supplier' }, shared: true, mine: false, ownerName: 'Ayşe' },
+    ];
+    await mount(<SavedViews views={views} onApply={apply} onSave={async () => true} onRemove={() => undefined} onShare={() => undefined} />);
+    expect(apply).not.toHaveBeenCalled();
+    expect([...host.querySelectorAll('optgroup')].map((g) => g.getAttribute('label'))).toEqual(['Görünümlerim', 'Ekip görünümleri']);
+    expect(host.textContent).toContain('Borçlular — Ayşe');
+    await act(async () => {
+      const select = host.querySelector('select')!; select.value = 'v2'; select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(apply).toHaveBeenCalledWith({ kind: 'supplier' });
   });
 });
 
@@ -97,6 +105,23 @@ describe('V2 anlamlı taslak koruması', () => {
     expect(host.querySelector('output')?.textContent).toBe('false/false');
     await enter(host.querySelector('input')!, 'Kaydedilmiş Ada');
     await act(async () => markFormSaved(host.querySelector('input')));
+    expect(host.querySelector('output')?.textContent).toBe('false/false');
+  });
+  it('aynı sayfada kaydedilen form yalnız kendi taslağını kapatır; diğer formun değişikliği korunur', async () => {
+    function TwoForms() {
+      const [first, setFirst] = useState(''), [second, setSecond] = useState('');
+      return <FormGuard>
+        <form><Input aria-label="Birinci" value={first} onChange={event => setFirst(event.target.value)} /></form>
+        <form><Input aria-label="İkinci" value={second} onChange={event => setSecond(event.target.value)} /></form>
+      </FormGuard>;
+    }
+    await mount(<UnsavedChangesProvider><TwoForms /><Probe /></UnsavedChangesProvider>);
+    const [first, second] = [...host.querySelectorAll('input')];
+    await enter(first!, 'eklenecek');
+    await enter(second!, 'yarım kalan');
+    await act(async () => markFormSaved(first));
+    expect(host.querySelector('output')?.textContent).toBe('true/false');
+    await act(async () => markFormSaved(second));
     expect(host.querySelector('output')?.textContent).toBe('false/false');
   });
   it('parasal alanın yalnız biçim değişimi kaydedilmemiş değişiklik oluşturmaz', async () => {

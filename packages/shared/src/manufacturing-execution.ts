@@ -149,6 +149,11 @@ export const manufacturingPatternSchema = manufacturingCommandSchema.extend({
   name: text,
   area: positiveQuantity,
   direction: z.enum(['any', 'grain']).default('any'),
+  /** Dış ölçü kutusu (mm): verilirse alanla ölçek tutarlılığı denetlenir (öneri 73). */
+  widthMm: z.number().int().min(1).max(10000).optional(),
+  heightMm: z.number().int().min(1).max(10000).optional(),
+  /** Görünür (dış) parça kusursuz alan ister; gizli (iç/astar) parça çizik/ton kusurlu alanı kullanabilir (öneri 75). */
+  visibility: z.enum(['visible', 'hidden']).default('visible'),
 });
 export const manufacturingCutPlanSchema = manufacturingCommandSchema.extend({
   orderId: uuid,
@@ -158,6 +163,18 @@ export const manufacturingCutPlanSchema = manufacturingCommandSchema.extend({
     .array(z.object({ patternId: uuid, perSet: z.number().int().min(1).max(1000) }))
     .min(1)
     .max(100),
+  /** Farklı ton gruplarını aynı sete bilerek karıştırmanın gerekçesi (öneri 74). */
+  toneOverrideReason: z.string().trim().min(5).max(300).optional(),
+});
+/** Kalan deri parçası arama (öneri 76). */
+export const leatherRemnantSearchSchema = z.object({
+  itemId: uuid.optional(),
+  warehouseId: uuid.optional(),
+  minArea: quantityString.default('0'),
+  tone: z.string().trim().max(80).optional(),
+  grade: z.enum(['A', 'B', 'C']).optional(),
+  visibility: z.enum(['visible', 'hidden']).default('visible'),
+  remnantsOnly: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 });
 export const manufacturingExceptionSchema = manufacturingCommandSchema.extend({
   sourceKey: text,

@@ -15,7 +15,7 @@ import {
   type ReconciliationQuery,
 } from '@erp/shared';
 import type { Tx } from '../../db/client';
-import { bankStatementLines, bankStatements } from '../../db/schema';
+import { bankStatementLineMatches, bankStatementLines, bankStatements } from '../../db/schema';
 import { conflict, notFound, unprocessable } from '../../http/errors';
 import type { LedgerCtx } from '../ledger/journal';
 import { getTreasuryAccountRow, glBalance, type TreasuryAccountRow } from '../treasury/accounts';
@@ -64,6 +64,8 @@ export async function ledgerCandidates(tx: Tx, ta: TreasuryAccountRow, from: str
       and e.status = 'posted' and e.reversed_by_id is null and e.reversal_of_id is null
       and e.entry_date between ${from}::date and ${to}::date
       and not exists (select 1 from bank_statement_lines b where b.journal_line_id = l.id and b.status = 'matched')
+      and not exists (select 1 from bank_statement_line_matches m join bank_statement_lines b on b.id = m.statement_line_id and b.company_id = m.company_id
+                      where m.journal_line_id = l.id and b.status = 'matched')
     order by e.entry_date, e.entry_no, l.line_no`);
   return r.rows.map((x) => ({
     journalLineId: x.journal_line_id,
@@ -139,6 +141,24 @@ export async function reconciliation(tx: Tx, accountId: string, q: Reconciliatio
     where b.account_id = ${ta.id} and b.txn_date between ${from}::date and ${to}::date
     order by b.txn_date, b.statement_id, b.line_no`);
 
+  // Çoktan bire eşleşmelerin defter satırları (öneri 55)
+  const groupRows = await tx.execute<{ statement_line_id: string; journal_line_id: string; entry_id: string; entry_no: string; entry_date: string; amount: string; txn_no: string | null; description: string | null }>(sql`
+    select m.statement_line_id, l.id as journal_line_id, e.id as entry_id, e.entry_no, e.entry_date::text as entry_date, (l.debit - l.credit)::text as amount,
+           t.txn_no, coalesce(nullif(l.description, ''), e.description) as description
+      from bank_statement_line_matches m
+      join bank_statement_lines b on b.id = m.statement_line_id and b.company_id = m.company_id
+      join journal_lines l on l.id = m.journal_line_id
+      join journal_entries e on e.id = l.entry_id
+      left join treasury_transactions t on t.journal_entry_id = e.id and t.status = 'posted'
+     where b.account_id = ${ta.id} and b.txn_date between ${from}::date and ${to}::date and b.status = 'matched'
+     order by e.entry_date, e.entry_no`);
+  const groups = new Map<string, BankLine['group']>();
+  for (const g of groupRows.rows) {
+    const list = groups.get(g.statement_line_id) ?? [];
+    list.push({ journalLineId: g.journal_line_id, entryId: g.entry_id, entryNo: g.entry_no, entryDate: g.entry_date, amount: toDbAmount(g.amount), txnNo: g.txn_no, description: g.description ?? '' });
+    groups.set(g.statement_line_id, list);
+  }
+
   const candidates = await ledgerCandidates(tx, ta, shift(from, -MATCH_TOLERANCE_DAYS), shift(to, MATCH_TOLERANCE_DAYS));
   const open = lineRows.rows.filter((l) => l.status === 'open');
   const suggestions = suggestMatches(
@@ -161,6 +181,7 @@ export async function reconciliation(tx: Tx, accountId: string, q: Reconciliatio
     journalLineId: l.journal_line_id,
     transactionId: l.transaction_id,
     match: l.m_entry_id ? { entryId: l.m_entry_id, entryNo: l.m_entry_no!, entryDate: l.m_entry_date!, txnNo: l.m_txn_no, description: l.m_description ?? '' } : null,
+    group: groups.get(l.id) ?? [],
     suggestions: suggestions.get(l.id) ?? [],
   }));
 
@@ -229,7 +250,8 @@ export async function matchLine(tx: Tx, ctx: LedgerCtx, lineId: string, journalL
     .select({ id: bankStatementLines.id })
     .from(bankStatementLines)
     .where(and(eq(bankStatementLines.journalLineId, journalLineId), eq(bankStatementLines.status, 'matched')));
-  if (taken) throw conflict('Bu defter satırı başka bir ekstre satırıyla zaten eşleşmiş', 'LEDGER_LINE_ALREADY_MATCHED');
+  const [grouped] = await tx.select({ id: bankStatementLineMatches.id }).from(bankStatementLineMatches).where(eq(bankStatementLineMatches.journalLineId, journalLineId));
+  if (taken || grouped) throw conflict('Bu defter satırı başka bir ekstre satırıyla zaten eşleşmiş', 'LEDGER_LINE_ALREADY_MATCHED');
 
   const [row] = await tx
     .update(bankStatementLines)
@@ -252,6 +274,36 @@ export async function unmatchLine(tx: Tx, lineId: string): Promise<Line> {
   const [row] = await tx
     .update(bankStatementLines)
     .set({ status: 'open', journalLineId: null, transactionId: null, matchedAt: null, matchedBy: null })
+    .where(eq(bankStatementLines.id, lineId))
+    .returning();
+  // Grup eşleşmesi satır açıldıktan sonra kaldırılır (veritabanı eşleşmiş satırın grubunu değiştirtmez)
+  await tx.delete(bankStatementLineMatches).where(eq(bankStatementLineMatches.statementLineId, lineId));
+  return row!;
+}
+
+/**
+ * Çoktan bire eşleştirme (öneri 55): toplu yatırılan tahsilatlar ya da tek havalede birden çok ödeme gibi, bir ekstre satırı
+ * toplamı tutarına eşit olan birden çok defter satırıyla eşleşir. Defter satırlarının hesabı, durumu ve toplamı veritabanında
+ * yeniden denetlenir; bir defter satırı yalnız bir eşleşmede yer alır.
+ */
+export async function matchGroup(tx: Tx, ctx: LedgerCtx, lineId: string, journalLineIds: readonly string[]): Promise<Line> {
+  const line = await lockLine(tx, lineId);
+  if (line.status !== 'open') throw unprocessable('Yalnızca açık ekstre satırı eşleştirilebilir', 'LINE_NOT_OPEN');
+  const rows = await tx.execute<{ id: string; amount: string; taken: boolean }>(sql`
+    select l.id, (l.debit - l.credit)::text as amount,
+           (exists (select 1 from bank_statement_lines b where b.journal_line_id = l.id and b.status = 'matched')
+            or exists (select 1 from bank_statement_line_matches m where m.journal_line_id = l.id)) as taken
+      from journal_lines l where l.id = any(array[${sql.join(journalLineIds.map((id) => sql`${id}::uuid`), sql`, `)}]::uuid[])`);
+  if (rows.rows.length !== journalLineIds.length) throw notFound('Defter satırı');
+  if (rows.rows.some((r) => r.taken)) throw conflict('Seçilen defter satırlarından biri başka bir ekstre satırıyla zaten eşleşmiş', 'LEDGER_LINE_ALREADY_MATCHED');
+  const total = rows.rows.reduce((sum, r) => sum.plus(r.amount), dec(0));
+  if (!total.eq(line.amount)) throw unprocessable(`Seçilen satırların toplamı (${total.toFixed(2)}) ekstre tutarına (${dec(line.amount).toFixed(2)}) eşit değil`, 'GROUP_TOTAL_MISMATCH', { total: total.toFixed(2), amount: dec(line.amount).toFixed(2) });
+  // Önceki yarım kalmış deneme varsa temizlenir (satır açık olduğu için silinebilir)
+  await tx.delete(bankStatementLineMatches).where(eq(bankStatementLineMatches.statementLineId, lineId));
+  await tx.insert(bankStatementLineMatches).values(journalLineIds.map((journalLineId) => ({ companyId: line.companyId, statementLineId: lineId, journalLineId })));
+  const [row] = await tx
+    .update(bankStatementLines)
+    .set({ status: 'matched', journalLineId: null, transactionId: null, matchedAt: new Date(), matchedBy: ctx.userId, ignoreReason: null })
     .where(eq(bankStatementLines.id, lineId))
     .returning();
   return row!;

@@ -399,6 +399,29 @@ describe('ithalat maliyet dağıtımı (Faz X4)', async () => {
     const itemX = await x.c.get('/api/exports/import-landed-items?format=csv');
     expect(itemX.statusCode).toBe(200);
   });
+  it('ek maliyet fark mutabakatı: dosya ↔ fatura ↔ aktarım hesabı (öneri 51)', async () => {
+    const x = await world('IthMutabakat');
+    const { c, ids } = x;
+    // Nakliyecinin faturası aktarım hesabına (632) yazılır ve navlun kalemine bağlanır; ayrıca bağlanmamış bir fatura
+    const freightInv = await k.invPosted(c, { type: 'expense', partyId: x.forwarder.id, invoiceDate: day(3, 12), externalNo: 'NAK-1', lines: [k.invLine(null, '1', '150', { description: 'Navlun', accountId: ids['632'] })] });
+    await k.invPosted(c, { type: 'expense', partyId: x.forwarder.id, invoiceDate: day(3, 13), externalNo: 'NAK-2', lines: [k.invLine(null, '1', '70', { description: 'Liman', accountId: ids['632'] })] });
+    const a = await x.src(x.itemA.id), b = await x.src(x.itemB.id);
+    const f = await x.save({
+      name: 'Mutabakat sevkiyatı', reference: 'BEYAN-M', fileDate: day(3, 10), method: 'value',
+      lines: [{ sourceKind: 'invoice', sourceLineId: a.sourceLineId }, { sourceKind: 'invoice', sourceLineId: b.sourceLineId }],
+      costLines: [x.cost('freight', '150', { partyId: x.forwarder.id, invoiceId: freightInv.invoice.id }), x.cost('customs_duty', '300')],
+    });
+    await x.ok(x.alloc(f.file.id));
+    await x.ok(x.post(f.file.id));
+    const r = await x.ok(c.get(`/api/import-files/reports/reconciliation?asOf=${day(3, 31)}`));
+    expect(r.clearingAccount.code).toBe('632');
+    expect(r.linked).toEqual([expect.objectContaining({ invoiceId: freightInv.invoice.id, costBase: '150.0000', invoiceNetBase: '150.0000', matched: true })]);
+    expect(r.unlinkedCosts).toEqual([expect.objectContaining({ amountBase: '300.0000' })]);
+    expect(r.orphanInvoices.map((o: { amountBase: string }) => o.amountBase)).toEqual(['70.0000']);
+    // Aktarım hesabı: faturalar 150 + 70 borç, dosya 450 alacak → −230 (faturası gelmemiş gümrük 300, dağıtılmamış liman 70)
+    expect(r.clearingBalance).toBe('-230.0000');
+    expect(r.summary).toMatchObject({ mismatched: 0, unlinkedCosts: 1, orphanInvoices: 1, balanced: false });
+  });
 });
 
 async function asOwnerExec(sql: string, params: unknown[]) {

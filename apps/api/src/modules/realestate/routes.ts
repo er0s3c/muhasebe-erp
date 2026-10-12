@@ -14,6 +14,7 @@ import {
   idParam,
   salesContractListQuerySchema,
   terminateContractSchema,
+  restructureContractSchema,
   unitListQuerySchema,
   updateSalesContractSchema,
   updateUnitSchema,
@@ -24,6 +25,7 @@ import { pageOf } from '../../http/paging';
 import { activateContract, cancelContract, createContract, getContract, handoverContract, listContracts, listInstallments, loadSalesCtx, salesSummary, updateContract } from './contracts';
 import { createFeeSchedule, deleteFeeSchedule, feeEstimate, listFeeSchedules, verifyFeeSchedule } from './fees';
 import { terminateContract } from './termination';
+import { contractRestructures, restructureContract } from './restructure';
 import { bulkCreateUnits, createUnit, deleteUnit, getUnit, listUnits, updateUnit, type RealEstateCtx } from './units';
 
 const rctx = ({ company, user }: TenantCtx): RealEstateCtx => ({ companyId: company.id, userId: user.id, baseCurrency: company.baseCurrency });
@@ -120,4 +122,7 @@ export const realEstateRoutes: FastifyPluginAsync = async (app) => {
   app.post('/api/sales-contracts/:id/activate', tenantRoute(app, approve, async (c) => activateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, activateContractSchema.parse(c.req.body ?? {}).date)));
   app.post('/api/sales-contracts/:id/handover', tenantRoute(app, approve, async (c) => handoverContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, handoverContractSchema.parse(c.req.body ?? {}).date)));
   app.post('/api/sales-contracts/:id/cancel', tenantRoute(app, approve, async (c) => cancelContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, cancelContractSchema.parse(c.req.body).reason)));  app.post('/api/sales-contracts/:id/terminate', tenantRoute(app, approve, async (c) => terminateContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, terminateContractSchema.parse(c.req.body))));
+  // Taksit yeniden yapılandırma (öneri 92)
+  app.post('/api/sales-contracts/:id/restructure', tenantRoute(app, approve, async (c) => restructureContract(c.tx, await sctx(c), idParam.parse(c.req.params).id, restructureContractSchema.parse(c.req.body))));
+  app.get('/api/sales-contracts/:id/restructures', tenantRoute(app, read, async (c) => ({ restructures: await contractRestructures(c.tx, idParam.parse(c.req.params).id) })));
 };

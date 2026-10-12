@@ -153,6 +153,15 @@ export function FormGuard({ children, scopeKey, dirty, pending = false, captureA
       if (button) focusError();
     };
     const reset = () => { baselines.current.clear(); setChanged(false); clear(); };
+    // Kaydedilen tek form bildirildiyse yalnız onun taslağı kapanır; aynı sayfadaki diğer formların taslağı korunur.
+    // captureAll kipinde (yan panel/pencere) taslak bütün alana aittir; tamamı kapanır.
+    const saved = (event: Event) => {
+      const form = (event as CustomEvent<Element | null>).detail;
+      if (!captureAll && form instanceof HTMLElement && form !== container && container.contains(form)) {
+        baselines.current.delete(form);
+        inspect();
+      } else reset();
+    };
     const observer = new MutationObserver(inspect);
     observer.observe(container, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-busy', 'data-form-pending', 'value', 'checked'] });
     ['focusin', 'pointerdown', 'keydown', 'beforeinput'].forEach((event) => container.addEventListener(event, beforeEdit, true));
@@ -160,7 +169,7 @@ export function FormGuard({ children, scopeKey, dirty, pending = false, captureA
     container.addEventListener('reset', reset);
     container.addEventListener('submit', submitted);
     container.addEventListener('click', clicked);
-    container.addEventListener('erp-form-saved', reset);
+    container.addEventListener('erp-form-saved', saved);
     window.addEventListener('erp-session-cleared', reset);
     return () => {
       observer.disconnect();
@@ -169,15 +178,18 @@ export function FormGuard({ children, scopeKey, dirty, pending = false, captureA
       container.removeEventListener('reset', reset);
       container.removeEventListener('submit', submitted);
       container.removeEventListener('click', clicked);
-      container.removeEventListener('erp-form-saved', reset);
+      container.removeEventListener('erp-form-saved', saved);
       window.removeEventListener('erp-session-cleared', reset);
     };
   }, [scopeKey, captureAll, clear]);
   return <div ref={root} className={className} data-form-guard-boundary data-form-guard-scope={scopeKey}>{children}</div>;
 }
 
-/** Notify the nearest form guard after a confirmed successful save. */
+/**
+ * Notify the nearest form guard after a confirmed successful save. An element inside a `<form>` clears only that
+ * form's draft (other forms on the page stay protected); a boundary element or none clears the whole guard.
+ */
 export function markFormSaved(element?: Element | null) {
   const root = element?.closest('[data-form-guard-boundary]') ?? document.querySelector('main [data-form-guard-boundary]');
-  root?.dispatchEvent(new Event('erp-form-saved', { bubbles: false }));
+  root?.dispatchEvent(new CustomEvent('erp-form-saved', { bubbles: false, detail: element?.closest('form') ?? null }));
 }

@@ -17,6 +17,7 @@ import { useCan, useCMutation, useCQuery } from '../../lib/queries';
 import type { ForeignDocTypeRow, ForeignParamRow } from '../../lib/types';
 import { FOREIGN_INVALIDATE, ForeignUnverifiedBadge } from './foreign-common';
 import { MoneyInput } from '../../components/ui/MoneyInput';
+import { markFormSaved } from '../../components/ui/UnsavedChanges';
 
 /** Yabancı işçi ayarları: belge türü kataloğu ve tarihli parametreler (uyarı günü, teminat tutarı; varsayılan kapalı, doğrulanmadı). */
 export function ForeignSettingsPage() {
@@ -80,8 +81,9 @@ function TypesCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[10rem_1fr_auto]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setCode(''); setName(''); toast.success(t('foreign.settings.types.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setCode(''); setName(''); toast.success(t('foreign.settings.types.added')); }, onError: setError });
             }}
           >
             <Field label={t('foreign.settings.types.code')}>{(id) => <Input id={id} maxLength={30} value={code} onChange={(e) => setCode(e.target.value)} />}</Field>
@@ -181,8 +183,9 @@ function ParamsCard() {
             className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1.4fr_8rem_7rem_9rem_7rem]"
             onSubmit={(e) => {
               e.preventDefault();
+              const form = e.currentTarget;
               setError(null);
-              add.mutate(undefined, { onSuccess: () => { setValue(''); setSource(''); setEnabled(false); toast.success(t('foreign.settings.params.added')); }, onError: setError });
+              add.mutate(undefined, { onSuccess: () => { markFormSaved(form); setValue(''); setSource(''); setEnabled(false); toast.success(t('foreign.settings.params.added')); }, onError: setError });
             }}
           >
             <Field label={t('foreign.settings.params.key')}>

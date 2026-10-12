@@ -11,11 +11,12 @@ import { callGemini } from '../src/modules/ai/gemini';
 import { toolRegistry } from '../src/modules/ai/tools';
 
 const context: AiSessionContext = { user: { id: 'u', role: 'owner' }, company: { id: 'c', name: 'Firma', sector: 'COMMERCE', baseCurrency: 'TRY' }, today: '2026-10-09', allowedTools: new Set(['list_critical_stock']) };
-const request = { apiKey: 'test-key', model: 'test-model', systemInstruction: 'Read-only', message: 'Stok durumu?', context, tx: {} as Tx };
+// Rota her aracı kendi kısa işleminde çalıştırır; burada aynı yürütücü sahte işlemle çağrılır
+const request = { apiKey: 'test-key', model: 'test-model', systemInstruction: 'Read-only', message: 'Stok durumu?', context, runTool: (name: string, args: Record<string, unknown>) => toolRegistry.execute(name, args, context, {} as Tx) };
 beforeEach(() => { vi.restoreAllMocks(); provider.generate.mockReset(); });
 
 describe('Asistan sağlayıcı yürütmesi', () => {
-  it('aynı DB oturumunda araçlar sırayla çalışır; sekiz çağrı sınırından sonra SQL aracı yürütülmez', async () => {
+  it('araçlar sırayla çalışır; sekiz çağrı sınırından sonra SQL aracı yürütülmez', async () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const execute = vi.spyOn(toolRegistry, 'execute').mockImplementation(async (name) => {
@@ -27,7 +28,7 @@ describe('Asistan sağlayıcı yürütmesi', () => {
     await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
     expect(provider.generate).toHaveBeenCalledTimes(1);
     release();
-    expect(await response).toEqual({ success: true, answer: 'Stok özeti' });
+    expect(await response).toEqual({ success: true, answer: 'Stok özeti', sources: [] });
     expect(execute).toHaveBeenCalledTimes(8);
     const followUp = provider.generate.mock.calls[1]![0];
     expect(followUp.config.tools).toBeUndefined();
@@ -42,6 +43,15 @@ describe('Asistan sağlayıcı yürütmesi', () => {
     expect(response.success).toBe(false);
     expect(JSON.stringify(response)).not.toMatch(/SECRET-KEY|raw-provider-detail|test-key/);
     expect(provider.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('yanıt kullanılan aracın kaynağını, tarihini ve sınırını taşır (öneri 18)', async () => {
+    const source = { tool: 'list_critical_stock', label: 'Stok durumu (kritik seviye)', path: '/reports/stock-status', asOf: '2026-10-09', scope: 'Firma · owner yetkisiyle görülen kayıtlar', shown: 50, total: 120 };
+    vi.spyOn(toolRegistry, 'execute').mockResolvedValue({ name: 'list_critical_stock', result: { urunler: [] }, source });
+    provider.generate
+      .mockResolvedValueOnce({ functionCalls: [{ name: 'list_critical_stock', args: {} }, { name: 'list_critical_stock', args: {} }], candidates: [{ content: { role: 'model', parts: [] } }] })
+      .mockResolvedValueOnce({ text: 'Kritik stok listesi' });
+    expect(await callGemini(request)).toEqual({ success: true, answer: 'Kritik stok listesi', sources: [source] });
   });
 
   it('araç cevabından sonra boş sağlayıcı yanıtı başarı olarak gösterilmez', async () => {

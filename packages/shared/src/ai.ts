@@ -57,8 +57,21 @@ export interface AiToolCall {
   args: Record<string, unknown>;
 }
 
+/** AI yanıtının dayandığı veri kaynağı (öneri 18): ekran, tarih, kapsam ve kayıt sınırı. */
+export interface AiSource {
+  tool: string;
+  label: string;
+  path: string;
+  asOf: string;
+  scope: string;
+  /** Araç listeyi sınırladıysa gösterilen ve toplam kayıt sayısı. */
+  shown?: number;
+  total?: number;
+}
+
 export interface AiToolResult {
   name: string;
   result?: unknown;
   error?: string;
+  source?: AiSource;
 }

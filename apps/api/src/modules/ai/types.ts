@@ -1,4 +1,4 @@
-import type { AiChatMessage, AiToolDefinition, AiToolCall, AiToolResult } from '@erp/shared';
+import type { AiChatMessage, AiSource, AiToolDefinition, AiToolCall, AiToolResult } from '@erp/shared';
 
 export interface AiSessionContext {
   user: {
@@ -18,7 +18,11 @@ export interface AiSessionContext {
   pendingApprovalTypes?: readonly string[];
 }
 
-import type { Tx } from '../../db/client';
+/**
+ * Bir ERP aracını kendi kısa, salt okunur işleminde çalıştırır; yetki o anda yeniden denetlenir.
+ * Sağlayıcı çağrıları sırasında veritabanı işlemi açık tutulmaz.
+ */
+export type AiToolRunner = (name: string, args: Record<string, unknown>) => Promise<AiToolResult>;
 
 export interface GenerateAiOptions {
   message: string;
@@ -26,7 +30,7 @@ export interface GenerateAiOptions {
   context: AiSessionContext;
   apiKey?: string;
   model?: string;
-  tx?: Tx;
+  runTool?: AiToolRunner;
 }
 
 export interface AiExecutionResult {
@@ -34,6 +38,8 @@ export interface AiExecutionResult {
   answer?: string;
   error?: string;
   code?: string;
+  /** Yanıtta kullanılan ERP verilerinin kaynağı (öneri 18). */
+  sources?: AiSource[];
 }
 
 export type { AiChatMessage, AiToolDefinition, AiToolCall, AiToolResult };

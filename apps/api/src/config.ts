@@ -127,6 +127,9 @@ const envSchema = z
     NOTIFY_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(90),
     /** E-posta özetinin gönderileceği ilk yerel saat (Europe/Nicosia, 0–23). */
     NOTIFY_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(8),
+    /** Kalıcı e-posta outbox göndericisi (yalnız server.ts başlatır; posta kapalıysa çalışmaz) ve tur aralığı. */
+    OUTBOX_ENABLED: flag(true),
+    OUTBOX_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(3600).default(30),
     /**
      * Otomatik resmî kur çekimi: yalnız ayarı açık şirketler, hafta içi. Yayın saati VARSAYILMAZ (docs/LEGAL-NOTES §6):
      * bülten tarihi bugüne eşit olunca kaydedilir. İsteğe bağlı SS:DD eşiği yalnız gereksiz indirmeyi azaltmak içindir.
