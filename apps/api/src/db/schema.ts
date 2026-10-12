@@ -6672,3 +6672,48 @@ export const employeeChecklists = pgTable(
     check('employee_checklists_status_ck', sql`(${t.status} = 'completed') = (${t.completedAt} is not null)`),
   ],
 );
+
+/**
+ * Arka planda hazırlanan büyük rapor (öneri 20): kuyruğa alınır, tek işlemde (tutarlı görünüm) üretilir, ilerleme ve iptal
+ * izlenir; dosya süreli tutulur ve yalnız isteyen kullanıcı indirir.
+ */
+export const reportJobs = pgTable(
+  'report_jobs',
+  {
+    id: id(),
+    companyId: uuid()
+      .notNull()
+      .references(() => companies.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    reportKey: text().notNull(),
+    format: text().notNull(),
+    params: jsonb().$type<Record<string, unknown>>().notNull(),
+    status: text().$type<'queued' | 'running' | 'completed' | 'failed' | 'cancelled'>().notNull().default('queued'),
+    progress: integer().notNull().default(0),
+    rowCount: integer(),
+    fileName: text(),
+    /** Base64 dosya içeriği; süresi dolunca silinir. */
+    content: text(),
+    error: text(),
+    createdAt: createdAt(),
+    startedAt: timestamp({ withTimezone: true }),
+    finishedAt: timestamp({ withTimezone: true }),
+    expiresAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    index('report_jobs_user_idx').on(t.companyId, t.userId, t.createdAt),
+    check('report_jobs_status_ck', sql`${t.status} in ('queued','running','completed','failed','cancelled')`),
+    check('report_jobs_format_ck', sql`${t.format} in ('xlsx','csv')`),
+    check('report_jobs_progress_ck', sql`${t.progress} between 0 and 100`),
+  ],
+);
+
+/** Veritabanı istatistik anlık görüntüsü (öneri 114): kurulum geneli; kiracı verisi değil, tablo/sorgu sayaçları taşır. */
+export const dbStatSnapshots = pgTable('db_stat_snapshots', {
+  id: id(),
+  takenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  takenBy: uuid().references(() => users.id),
+  payload: jsonb().$type<Record<string, unknown>>().notNull(),
+});

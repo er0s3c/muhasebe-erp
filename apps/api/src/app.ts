@@ -32,6 +32,8 @@ import { platformIntegrationRoutes } from './modules/platform-integrations/route
 import { secureWebhookTransport,type WebhookTransport } from './modules/platform-integrations/transport';
 import { treasuryRoutes } from './modules/treasury/routes';
 import { exportRoutes } from './modules/exports/routes';
+import { reportJobRoutes } from './modules/exports/report-jobs';
+import { observabilityRoutes, registerTracing } from './modules/system/observability';
 import { importRoutes } from './modules/imports/routes';
 import { bankStatementRoutes } from './modules/bank-statements/routes';
 import { projectRoutes } from './modules/projects/routes';
@@ -167,6 +169,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   app.addHook('onRequest', async (req, reply) => {
     void reply.header('x-request-id', req.id);
   });
+  // Uçtan uca teknik iz (öneri 113): traceparent, server-timing ve yavaş istek kaydı
+  registerTracing(app);
   // Lisans kapısı (genel): lisanssız kurulumda yalnızca etkinleştirme akışı, salt-okunur modda yalnızca okuma açık.
   // Aynı denetim authedRoute/tenantRoute içinde de yapılır (bağımsız ikinci kapı).
   app.addHook('onRequest', async (req) => {
@@ -324,6 +328,8 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await app.register(consolidationRoutes);
   await app.register(treasuryRoutes);
   await app.register(exportRoutes);
+  await app.register(reportJobRoutes);
+  await app.register(observabilityRoutes);
   await app.register(importRoutes);
   await app.register(bankStatementRoutes);
   await app.register(projectRoutes);

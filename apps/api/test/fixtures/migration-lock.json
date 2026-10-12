@@ -566,5 +566,9 @@
   "0141_employee_portal": {
     "sha256": "2e4f047b55a1cae38c1290f5c9f13a3630faae8ff0dc51c62c9b0a513657670b",
     "when": 1791759036093
+  },
+  "0142_report_jobs": {
+    "sha256": "d33af8842a77c82ccc59d9ee9b8fe865414709a662fcfd7078b1e789e8e1da4f",
+    "when": 1791772051044
   }
 }
