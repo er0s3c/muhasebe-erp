@@ -25,10 +25,11 @@ export interface RawTable {
 
 const fail = (code: string, message: string) => unprocessable(message, code);
 
+const CONTROL_CHARS_REGEX = new RegExp(String.raw`[\x00-\x08\x0b\x0c\x0e-\x1f]`, 'g');
+
 /** Hücre metnini temizler: NUL ve kontrol karakterleri atılır, NBSP boşluğa dönüşür, uçlar kırpılır. */
 export function cleanCell(value: string): string {
-  // eslint-disable-next-line no-control-regex
-  return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/\u00a0/g, ' ').trim();
+  return value.replace(CONTROL_CHARS_REGEX, '').replace(/\u00a0/g, ' ').trim();
 }
 
 export function decodeText(bytes: Uint8Array): string {
