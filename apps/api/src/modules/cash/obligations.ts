@@ -97,7 +97,7 @@ export async function obligationCalendar(tx: Tx, from: string, to: string, today
 
 async function validate(c: TenantCtx, input: ObligationInput) {
   if (input.responsibleUserId) {
-    const member = (await c.tx.execute(sql`select 1 from memberships where company_id=${c.company.id}::uuid and user_id=${input.responsibleUserId}::uuid and is_active`)).rows[0];
+    const member = (await c.tx.execute(sql`select 1 from memberships m join users u on u.id=m.user_id where m.company_id=${c.company.id}::uuid and m.user_id=${input.responsibleUserId}::uuid and u.is_active`)).rows[0];
     if (!member) throw badRequest('Sorumlu kişi şirket üyesi olmalı.', 'OBLIGATION_RESPONSIBLE');
   }
 }

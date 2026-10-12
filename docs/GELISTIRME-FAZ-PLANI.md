@@ -274,11 +274,11 @@ Tamamlanma ölçütü: Fatura–cari–stok–yevmiye tutarlılığı ve geçmi�
 | 59 | Cari mutabakat mektubu ve cevap takibi | İlk kapsam | Genişletilecek | Cari açık kalemler (`parties/service.ts`) | İlk kapsam tamam: tarihli bakiye görüntüsüyle mutabakat mektubu, isteğe bağlı e-posta, cevap ve fark takibi; gecikme işareti. Karşı tarafın çevrimiçi cevabı genişletmede |
 | 10 | Türkiye/KKTC doğrulanmış ülke kapsamı | Paralel dış hat | Dış erişim bekliyor | Ülke profili, tarihli vergi kuralları; mali pilot bekliyor (COUNTRY-IMPLEMENTATION) | Bekliyor |
 | 12 | Karar karşılaştırmalı nakit projeksiyonu | Genişletme | Genişletilecek | Sözleşme vadesi ve ödeme geçmişine dayalı projeksiyon | Bekliyor |
-| 54 | Toplu ödeme hazırlama | Genişletme | Yeni | Toplu ödeme/ödeme paketi ve banka dosyası yok; tekil ödeme ve çek/senet toplu tahsil var | Bekliyor |
+| 54 | Toplu ödeme hazırlama | Genişletme | Yeni | Toplu ödeme/ödeme paketi ve banka dosyası yok; tekil ödeme ve çek/senet toplu tahsil var | Genişletme tamam: vadesi gelen tedarikçi borçlarından öneri, dört göz onayı (tek kullanıcılı şirket hariç), yalnız doğrulanmış IBAN, EFT/havale CSV dosyası, satır başına açık kalem kapatan ödeme. Banka özel dosya biçimleri (MT101, banka şablonları) sonraya |
 | 56 | Banka masraflarının hizmet bazında analizi | Genişletme | Yeni | Banka masrafı ayrı izlenmiyor; gider kartları ve banka ekstresi eşleştirmesi temel olabilir | Bekliyor |
-| 57 | Düzenli mali yükümlülük takvimi | Genişletme | Genişletilecek | `/settings/recurring` takvimli taslaklar | Bekliyor |
+| 57 | Düzenli mali yükümlülük takvimi | Genişletme | Genişletilecek | `/settings/recurring` takvimli taslaklar | Genişletme tamam: tekrar kurallı yükümlülükler (vergi, SGK, maaş, kira, kredi…), hafta sonu kaydırma, dönem bazında ödendi/atlandı/geri al, gecikmiş–yaklaşan özeti; tutarlı açık dönemler nakit projeksiyonunda ayrı çıkış. Resmî tatil takvimi ve bildirim taraması sonraya |
 | 58 | Kaynakları açıklanan döviz pozisyonu | Genişletme | Genişletilecek | Döviz pozisyonu raporu var (`consolidation/fx-position.ts`); varsayımsal kur senaryosu yok | Bekliyor |
-| 60 | Demirbaş satış ve elden çıkarma | Genişletme | Genişletilecek | Demirbaş kartı ve amortisman var; elden çıkarma yok | Bekliyor |
+| 60 | Demirbaş satış ve elden çıkarma | Genişletme | Genişletilecek | Demirbaş kartı ve amortisman var; elden çıkarma yok | Genişletme tamam: satış ve hurda; kayıtlı birikmiş amortismanla defter değeri, kâr/zarar yevmiyesi, eksik/taslak amortisman engeli, ters kayıtla iptal; veritabanı korumaları. KDV'li satış faturası bağlantısı sonraya |
 | 61 | Varlık kullanımının gerçek maliyetle ilişkisi | Genişletme | Yeni | Kullanım bazlı maliyet yok; temel: demirbaş kartı, inşaat ekipman rezervasyonu ve bakım kayıtları | Bekliyor |
 | 62 | Şirketler arası mutabakat ve mahsuplaşma | Genişletme | Genişletilecek | `consolidation` modülü | Bekliyor |
 
@@ -307,7 +307,7 @@ Tamamlanma ölçütü: Yerleştirme/toplama ikinci stok hareketi oluşturmuyor; 
 | 51 | Alış ek maliyetleri ve fark mutabakatı | İlk kapsam | Genişletilecek | `landed` modülü | İlk kapsam tamam: dosya maliyeti ↔ fatura ↔ aktarım hesabı mutabakatı (ithalat ekranında sekme) |
 | 52 | İade kabulünden son karara iş akışı | İlk kapsam | Genişletilecek | İade akışları (returns testleri) | İlk kapsam tamam: kalite kararı beklenen satış iadesi satışa ve üretim kullanılabilirliğine kapalı; satışa aç / hurda kararı |
 | 46 | Talep değişkenliğine göre stok önerileri | Genişletme | Genişletilecek | `procurement/replenishment.ts` min–hedef önerisi | Bekliyor |
-| 47 | Son kullanma ve raf ömrü riski | Genişletme | Yeni | Son kullanma/raf ömrü alanı yok; lot statüleri (serbest/hasarlı/bloke) var | Bekliyor |
+| 47 | Son kullanma ve raf ömrü riski | Genişletme | Yeni | Son kullanma/raf ömrü alanı yok; lot statüleri (serbest/hasarlı/bloke) var | Genişletme tamam: kart raf ömrü, partiye önerilen son kullanma tarihi (devir/iade kaynaktan), gerekçeli düzeltme, FEFO seçim, üretimde süresi geçmiş parti engeli, değerli risk paneli. Partisiz (ticaret) stokta tarih izleme sonraya |
 | 48 | Açık ağırlıklarla tedarikçi değerlendirme | Genişletme | Genişletilecek | Malzeme bazında tedarikçi kabul geçmişi (örnek sayısı, ortalama süre/fiyat), inşaat firma performansı; ağırlıklı puan yok | Bekliyor |
 | 49 | Çerçeve satın alma anlaşmaları | Genişletme | Yeni | Çerçeve anlaşma yok; `procurement/commitments.ts` proje taahhüdüdür | Bekliyor |
 | 50 | Tedarik teslimat randevuları | Genişletme | Yeni | Tedarik teslim randevusu yok; inşaatta garanti/servis randevusu var | Bekliyor |
@@ -541,6 +541,12 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 122 öneri, 14 faza (F0, F1, F2a, F2b, F3–F12) birer kez atanmıştır: F0 2, F1 9, F2a 4, F2b 10, F3 8, F4 14, F5 10, F6 11, F7 11, F8 11, F9 11, F10 7, F11 9, F12 5 = 122. Öneri numaraları önceki yanıtlardaki numaralarla aynıdır. Teknik ve mali ortak kabul koşulları, ana fazı farklı olan işlerde de uygulanır.
 
 ## Değişiklik kaydı
+
+**12 Ekim 2026 — İlk genişletme paketi: 60, 47, 57, 54**
+
+- Dört sektörün ortak finans ve stok tabanından başlandı: demirbaş elden çıkarma (60), raf ömrü ve son kullanma riski (47), düzenli mali yükümlülük takvimi (57), onaylı toplu tedarikçi ödemesi (54).
+- CI iki gerçek ayrıntı yakaladı: tekdüzende 6 sınıfı (ör. 689) "income" türündedir, demirbaş zarar hesabı buna izin verir; WMS parti listesinde kod okunabilir biçime çevrildiğinden testler partiyi kaynak belgeyle bulur.
+- F12 arka plan raporu düzeltmesi: dönüştürücü sorgu şemalarının çıktısı yeniden ayrıştırılamaz; kuyruk ham sorguyu saklar ve iş isteyenin şube görünümüyle çalışır.
 
 **12 Ekim 2026 — F11 ve F12 ilk teslimi; tüm fazların ilk kapsamı tamam**
 

@@ -65,7 +65,7 @@ async function lines(c: TenantCtx, id: string) {
 }
 /** Tek etkin üyeli şirkette dört göz kuralı uygulanamaz; hazırlayan onaylayabilir. */
 async function singleMember(c: TenantCtx) {
-  const r = (await c.tx.execute<{ n: number }>(sql`select count(*)::int as n from memberships where company_id=${c.company.id}::uuid and is_active`)).rows[0]!;
+  const r = (await c.tx.execute<{ n: number }>(sql`select count(*)::int as n from memberships m join users u on u.id=m.user_id where m.company_id=${c.company.id}::uuid and u.is_active`)).rows[0]!;
   return r.n <= 1;
 }
 async function assertVerified(c: TenantCtx, id: string) {
