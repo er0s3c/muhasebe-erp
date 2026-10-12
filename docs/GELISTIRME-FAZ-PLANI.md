@@ -485,12 +485,12 @@ Tamamlanma ölçütü: AI/OCR doğrudan mali kesinleştirme yapmıyor; yetki kay
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 18 | Kaynak ve kapsam açıklayan AI yanıtları | İlk kapsam | Genişletilecek | `ai` modülü kontrollü araçlarla veri okuyor (ADA-AI) | Bekliyor |
-| 103 | Alan kaynaklı OCR doğrulaması | İlk kapsam | Genişletilecek | Proje 360 OCR yardımcısı (PDF/görüntü, insan doğrulamalı taslak); alan bazında kaynak işareti yok, genel fatura OCR ertelendi | Bekliyor |
-| 104 | İçerik üzerinden belge tekrar kontrolü | İlk kapsam | Genişletilecek | Dosya hash kontrolü | Bekliyor |
-| 108 | Kanallar arası stok farkı çözümü | İlk kapsam | Genişletilecek | `platform-integrations`, elle stok gönderimi | Bekliyor |
-| 109 | SKU/lokasyon eşleme yaşam döngüsü | İlk kapsam | Genişletilecek | Kanal eşlemeleri | Bekliyor |
-| 110 | Entegrasyon hata ve yetki senaryoları | İlk kapsam | Genişletilecek | Shopify HMAC, olay kimliği/sürümü, backoff, dead-letter ve elle tekrar; sistematik hata senaryosu seti yok | Bekliyor |
+| 18 | Kaynak ve kapsam açıklayan AI yanıtları | İlk kapsam | Genişletilecek | `ai` modülü kontrollü araçlarla veri okuyor (ADA-AI) | İlk kapsam tamam: her araç sonucu ekran, tarih, kapsam ve liste sınırı taşır; yanıt altında kaynak olarak gösterilir, model sınırlı listeyi tam sunmaz |
+| 103 | Alan kaynaklı OCR doğrulaması | İlk kapsam | Genişletilecek | Proje 360 OCR yardımcısı (PDF/görüntü, insan doğrulamalı taslak); alan bazında kaynak işareti yok, genel fatura OCR ertelendi | İlk kapsam tamam: OCR alanları bulunduğu satır ve metinle döner; tutar sayıya çevrilir; insan doğrulamalı taslak korunur |
+| 104 | İçerik üzerinden belge tekrar kontrolü | İlk kapsam | Genişletilecek | Dosya hash kontrolü | İlk kapsam tamam: aynı belge no, aynı tarih+toplam ya da aynı içerikli başka OCR işi bulunursa fatura taslağı bilerek onay ister |
+| 108 | Kanallar arası stok farkı çözümü | İlk kapsam | Genişletilecek | `platform-integrations`, elle stok gönderimi | İlk kapsam tamam: Shopify'da kanal miktarı okunup Ada ile karşılaştırılır; istenirse Ada miktarı kuyruğa alınır, otomatik gönderim yok |
+| 109 | SKU/lokasyon eşleme yaşam döngüsü | İlk kapsam | Genişletilecek | Kanal eşlemeleri | İlk kapsam tamam: etkin/duraklatıldı/emekli yaşam döngüsü, gerekçeli geçmiş ve eşleme sağlığı (pasif kart/depo, son gönderim, stok farkı) |
+| 110 | Entegrasyon hata ve yetki senaryoları | İlk kapsam | Genişletilecek | Shopify HMAC, olay kimliği/sürümü, backoff, dead-letter ve elle tekrar; sistematik hata senaryosu seti yok | İlk kapsam tamam: hata türü sınıflaması (yetki hatası tekrar beklemeden incelemeye), sahte bağlantıyla senaryo test seti |
 | 105 | Açıklanabilir olağan dışı işlem incelemesi | Genişletme | Yeni | Olağan dışı işlem analizi yok | Bekliyor |
 | 106 | Doğal dilden rapor filtresi | Genişletme | Yeni | Doğal dilden filtre yok; Ada AI yalnız okuma araçlarıyla yanıtlıyor | Bekliyor |
 | 107 | Onaylı işletme içi bilgi araması | Genişletme | Genişletilecek | Proje 360 kaynaklı yerel asistan (kayıt/belge/OCR arama); şirket geneli onaylı bilgi kaynağı yok | Bekliyor |
@@ -514,10 +514,10 @@ Tamamlanma ölçütü: Tanımlı veri hacminde süre/bellek hedefi sağlanıyor;
 
 | Öneri | İş | Teslimat | Sınıf | Mevcut temel | Durum |
 |---|---|---|---|---|---|
-| 20 | Arka planda büyük rapor hazırlama | İlk kapsam | Genişletilecek | XLSX akışla yazılıyor; rapor sorguları belleğe alınıyor (ENTERPRISE-EXPANSION) | Bekliyor |
-| 113 | Uçtan uca teknik izleme | İlk kapsam | Yeni | Yok (OpenTelemetry yok) | Bekliyor |
-| 114 | Veritabanı performans eğilimleri | İlk kapsam | Yeni | Yok (pg_stat_statements kullanılmıyor); PERFORMANCE kaydı | Bekliyor |
-| 119 | Güncelleme öncesi uyumluluk/deneme kurulumu | İlk kapsam | Genişletilecek | `system/updates.ts` | Bekliyor |
+| 20 | Arka planda büyük rapor hazırlama | İlk kapsam | Genişletilecek | XLSX akışla yazılıyor; rapor sorguları belleğe alınıyor (ENTERPRISE-EXPANSION) | İlk kapsam tamam: kuyruk, REPEATABLE READ tek görüntü, ilerleme, iptal, 24 saatlik indirme; dışa aktarma menüsünden başlatılır |
+| 113 | Uçtan uca teknik izleme | İlk kapsam | Yeni | Yok (OpenTelemetry yok) | İlk kapsam tamam: W3C traceparent, server-timing, yol şablonuyla yavaş istek kaydı (kurulum sahibi görür); tam OpenTelemetry dışa aktarımı yok |
+| 114 | Veritabanı performans eğilimleri | İlk kapsam | Yeni | Yok (pg_stat_statements kullanılmıyor); PERFORMANCE kaydı | İlk kapsam tamam: veritabanı büyüklüğü, tablo tarama/ölü satır, pg_stat_statements varsa sorgu özeti, anlık görüntü eğilimi |
+| 119 | Güncelleme öncesi uyumluluk/deneme kurulumu | İlk kapsam | Genişletilecek | `system/updates.ts` | İlk kapsam tamam: başka güncelleme, PostgreSQL sürümü, boş disk ve veritabanı yoğunluğu ön denetimi; host üzerinde deneme kurulumu güncelleyicide |
 | 115 | Dosya ve işlem kapasitesi bütçesi | Genişletme | Yeni | Kullanım/kota takibi yok | Bekliyor |
 
 ## Paralel dış hat
@@ -541,6 +541,13 @@ Her uygulama kartı şu bilgileri içerir: faz/öneri numarası, tek kullanıcı
 122 öneri, 14 faza (F0, F1, F2a, F2b, F3–F12) birer kez atanmıştır: F0 2, F1 9, F2a 4, F2b 10, F3 8, F4 14, F5 10, F6 11, F7 11, F8 11, F9 11, F10 7, F11 9, F12 5 = 122. Öneri numaraları önceki yanıtlardaki numaralarla aynıdır. Teknik ve mali ortak kabul koşulları, ana fazı farklı olan işlerde de uygulanır.
 
 ## Değişiklik kaydı
+
+**12 Ekim 2026 — F11 ve F12 ilk teslimi; tüm fazların ilk kapsamı tamam**
+
+- F11 ilk kapsamı (18, 103, 104, 108, 109, 110) ve F12 ilk kapsamı (20, 113, 114, 119) `claude/f2b-baslangic` dalında. Planın on dört fazının ilk teslimat önerileri kod olarak tamamlandı; kalan işler "Genişletme" satırlarıdır.
+- F10 E2E'si bir adlandırma çakışması yakaladı: "Personel portalım" menü öğesi "Personel" bağlantısını arayan akışlarla çakışıyordu; öğe "Çalışan portalım" oldu.
+- Kanal yetki hatası (401/403) artık beş kez denenmez, doğrudan elle incelemeye düşer.
+- Açık işler: canlı sağlayıcı kabulleri (Shopify/Ticimax, Gemini, OCR çalışma zamanı) pilotta ayrıca doğrulanmalı; OpenTelemetry dışa aktarımı ve dosya/işlem kotası (115) genişletmede.
 
 **12 Ekim 2026 — F10 ilk teslimi**
 
