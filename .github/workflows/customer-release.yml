@@ -42,7 +42,7 @@ jobs:
           git merge-base --is-ancestor "$sha" origin/main
           git checkout --detach "$sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: PGPASSWORD=postgres psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f infra/postgres/init.sql
@@ -64,11 +64,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: { ref: '${{ needs.validate.outputs.sha }}' }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with: { node-version: 22, cache: npm }
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with: { python-version: '3.12' }
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         if: runner.os == 'Windows'
         with: { dotnet-version: '10.0.x' }
       - run: npm ci
@@ -104,9 +104,9 @@ jobs:
       RELEASE_NOTES: ${{ inputs.notes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with: { node-version: 22 }
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with: { path: .runtime/release-artifacts }
       - run: |
           mapfile -d '' files < <(find .runtime/release-artifacts -type f \( -name 'muhasebe-erp-*-win-x64.zip' -o -name 'muhasebe-erp-*-linux-x64.tar.gz' -o -name 'MuhasebeERP-Kurulum.exe' \) -print0)
