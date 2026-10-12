@@ -133,7 +133,7 @@ async function measurementDiffs(c: TenantCtx, projectId: string) {
   await requireRecord(c, 'project', projectId);
   const rows = await c.tx.execute<{ id: string; title: string; status: string; payload: Record<string, unknown>; computed: Record<string, unknown>; transferred: string; subcontract_code: string | null }>(
     sql`select w.id, w.title, w.status, w.payload, w.computed,
-               coalesce((select sum(a.quantity) from construction_production_allocations a join progress_payments pp on pp.id = a.payment_id where a.production_id = w.id and pp.status <> 'cancelled'), 0)::text as transferred,
+               coalesce((select sum(a.quantity::numeric) from construction_production_allocations a join progress_payments pp on pp.id = a.payment_id where a.production_id = w.id and pp.status <> 'cancelled'), 0)::text as transferred,
                s.code as subcontract_code
           from construction_workflows w left join subcontracts s on s.id = (w.payload->>'subcontractId')::uuid
          where w.project_id=${projectId}::uuid and w.kind='production' and w.status in ('approved','closed')
