@@ -6,11 +6,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // Demo zaman çizelgesi "bugün"e göre kurulur (modül yüklenirken okunur): beklenen sayılar için tarih sabitlenir (yalnızca Date taklit
 // edilir; zamanlayıcılar gerçek kalır). Bu ayar içe aktarmalardan önce çalışır.
-const PINNED_NOW = '2026-10-05T09:00:00Z';
-vi.hoisted(() => {
+const { PINNED_NOW } = vi.hoisted(() => {
+  const PINNED_NOW = '2026-10-05T09:00:00Z';
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-05T09:00:00Z'));
+  vi.setSystemTime(new Date(PINNED_NOW));
+  return { PINNED_NOW };
 });
+import { todayIso } from '@erp/shared';
 import { createDb, withContext } from '../src/db/client';
 import { DEMO_EMAIL, seedDemo } from '../src/db/demo';
 import { runMigrations } from '../src/db/migrate';
@@ -468,13 +470,15 @@ describe('demo aracı', () => {
         ]),
       );
       expect(await n('invoice_batches')).toBe(1);
-      // Bu ayın satışları dolu (gösterge panosu): ay başından bugüne kaydedilmiş satış faturası
-      expect(
-        await n(
-          'invoices',
-          `type = 'sales' and status = 'posted' and invoice_date >= date_trunc('month', current_date)`,
-        ),
-      ).toBeGreaterThan(0);
+      // Faturaları veritabanının gerçek takvimine değil, demo testinin sabit ayına göre say.
+      const demoToday = todayIso(new Date(PINNED_NOW));
+      const demoMonthStart = `${demoToday.slice(0, 7)}-01`;
+      const { rows: demoSales } = await c.query<{ n: number }>(
+        `select count(*)::int as n from invoices
+         where type = 'sales' and status = 'posted' and invoice_date between $1::date and $2::date`,
+        [demoMonthStart, demoToday],
+      );
+      expect(demoSales[0].n).toBeGreaterThan(0);
       // Ülke kuralları doğrulanmadan demo yüzdeleriyle mali bordro üretilmez.
       expect(await q(`select status from payroll_runs`)).toEqual([]);
       expect(await n('payroll_lines')).toBe(0);
